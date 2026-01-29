@@ -312,53 +312,136 @@ describe("Stop Hook Command", () => {
 	});
 
 	describe("Enhanced Stop Reason Instructions", () => {
-		it("should include console log path when provided", () => {
-			const logPath = "/path/to/gauntlet_logs/console.5.log";
-			const instructions = getStopReasonInstructions(logPath);
-			expect(instructions).toContain(logPath);
-			expect(instructions).toContain("**Console log:**");
+		it("should list failed check log paths", () => {
+			const gateResults = [
+				{
+					jobId: "check:root:eslint",
+					status: "fail" as const,
+					logPath: "/path/to/gauntlet_logs/check_root_eslint.1.log",
+				},
+			];
+			const instructions = getStopReasonInstructions(gateResults);
+			expect(instructions).toContain("**Failed gate logs:**");
 			expect(instructions).toContain(
-				"Read this file for full execution output",
+				"Check: `/path/to/gauntlet_logs/check_root_eslint.1.log`",
 			);
 		});
 
-		it("should not include console log section when path is null", () => {
-			const instructions = getStopReasonInstructions(null);
-			expect(instructions).not.toContain("**Console log:**");
+		it("should list failed review json paths", () => {
+			const gateResults = [
+				{
+					jobId: "review:src:claude-review",
+					status: "fail" as const,
+					subResults: [
+						{
+							nameSuffix: "(claude@1)",
+							status: "fail" as const,
+							logPath:
+								"/path/to/gauntlet_logs/review_src_claude-review_claude@1.1.json",
+						},
+					],
+				},
+			];
+			const instructions = getStopReasonInstructions(gateResults);
+			expect(instructions).toContain("**Failed gate logs:**");
+			expect(instructions).toContain(
+				"Review: `/path/to/gauntlet_logs/review_src_claude-review_claude@1.1.json`",
+			);
+		});
+
+		it("should not include failed gate logs section when no results", () => {
+			const instructions = getStopReasonInstructions(undefined);
+			expect(instructions).not.toContain("**Failed gate logs:**");
 		});
 
 		it("should NOT include instruction to run agent-gauntlet run", () => {
-			const instructions = getStopReasonInstructions(null);
+			const instructions = getStopReasonInstructions(undefined);
 			// The instruction to manually run agent-gauntlet should be removed
 			// because the stop hook auto-re-triggers
 			expect(instructions).not.toContain("Run `agent-gauntlet run` to verify");
 		});
 
 		it("should include urgent fix directive", () => {
-			const instructions = getStopReasonInstructions(null);
+			const instructions = getStopReasonInstructions(undefined);
 			expect(instructions).toContain("GAUNTLET FAILED");
 			expect(instructions).toContain("YOU MUST FIX ISSUES NOW");
 			expect(instructions).toContain("cannot stop until the gauntlet passes");
 			expect(instructions).toContain("stop hook will automatically re-run");
 		});
 
-		it("should include trust level guidance", () => {
-			const instructions = getStopReasonInstructions(null);
-			expect(instructions).toContain("Review trust level: medium");
-			expect(instructions).toContain("Fix issues you reasonably agree with");
-			expect(instructions).toContain("Skip issues that are purely stylistic");
+		it("should include trust level guidance only when review failures exist", () => {
+			// No gate results — no trust level
+			const noResults = getStopReasonInstructions(undefined);
+			expect(noResults).not.toContain("Review trust level: medium");
+
+			// Only check failures — no trust level
+			const checkOnly = getStopReasonInstructions([
+				{
+					jobId: "check:root:eslint",
+					status: "fail" as const,
+					logPath: "/path/to/check.log",
+				},
+			]);
+			expect(checkOnly).not.toContain("Review trust level: medium");
+
+			// Review failures — trust level shown
+			const withReview = getStopReasonInstructions([
+				{
+					jobId: "review:src:claude-review",
+					status: "fail" as const,
+					subResults: [
+						{
+							nameSuffix: "(claude@1)",
+							status: "fail" as const,
+							logPath: "/path/to/review.json",
+						},
+					],
+				},
+			]);
+			expect(withReview).toContain("Review trust level: medium");
+			expect(withReview).toContain("Fix issues you reasonably agree with");
+			expect(withReview).toContain("Skip issues that are purely stylistic");
 		});
 
-		it("should include violation handling instructions", () => {
-			const instructions = getStopReasonInstructions(null);
-			expect(instructions).toContain('"status": "fixed"');
-			expect(instructions).toContain('"status": "skipped"');
-			expect(instructions).toContain('"result"');
-			expect(instructions).toContain("For REVIEW violations");
+		it("should include violation handling instructions only for review failures", () => {
+			// No results — no review instructions
+			const noResults = getStopReasonInstructions(undefined);
+			expect(noResults).not.toContain("For REVIEW violations");
+			expect(noResults).not.toContain("For CHECK failures");
+
+			// Check-only failures — only check instructions
+			const checkOnly = getStopReasonInstructions([
+				{
+					jobId: "check:root:eslint",
+					status: "fail" as const,
+					logPath: "/path/to/check.log",
+				},
+			]);
+			expect(checkOnly).toContain("For CHECK failures");
+			expect(checkOnly).not.toContain("For REVIEW violations");
+
+			// Review failures — includes review instructions
+			const withReview = getStopReasonInstructions([
+				{
+					jobId: "review:src:claude-review",
+					status: "fail" as const,
+					subResults: [
+						{
+							nameSuffix: "(claude@1)",
+							status: "fail" as const,
+							logPath: "/path/to/review.json",
+						},
+					],
+				},
+			]);
+			expect(withReview).toContain("For REVIEW failures");
+			expect(withReview).toContain('"status": "fixed"');
+			expect(withReview).toContain('"status": "skipped"');
+			expect(withReview).toContain("For REVIEW violations");
 		});
 
 		it("should include all termination conditions", () => {
-			const instructions = getStopReasonInstructions(null);
+			const instructions = getStopReasonInstructions(undefined);
 			expect(instructions).toContain("Status: Passed");
 			expect(instructions).toContain("Status: Passed with warnings");
 			expect(instructions).toContain("Status: Retry limit exceeded");
@@ -988,16 +1071,16 @@ describe("Stop Hook Command", () => {
 			expect(sourceFile).not.toContain("shouldRunBasedOnInterval");
 		});
 
-		it("should use consoleLogPath from RunResult instead of duplicate findLatestConsoleLog call", async () => {
-			// Read source file to verify we use result.consoleLogPath
+		it("should use gateResults from RunResult for failure instructions", async () => {
+			// Read source file to verify we use result.gateResults
 			const { readFileSync } = await import("node:fs");
 			const sourceFile = readFileSync(
 				path.join(originalCwd, "src/commands/stop-hook.ts"),
 				"utf-8",
 			);
 
-			// Should use result.consoleLogPath
-			expect(sourceFile).toContain("result.consoleLogPath");
+			// Should use result.gateResults
+			expect(sourceFile).toContain("result.gateResults");
 		});
 
 		it("should have only six pre-checks before calling executeRun", async () => {

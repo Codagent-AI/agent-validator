@@ -516,6 +516,7 @@ export async function executeRun(
 			gatesRun: jobs.length,
 			gatesFailed: outcome.allPassed ? 0 : jobs.length,
 			consoleLogPath: consoleLogPath ?? undefined,
+			gateResults: outcome.gateResults,
 		};
 	} catch (error: unknown) {
 		// Do not write execution state on error - no gates completed successfully

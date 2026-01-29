@@ -201,35 +201,117 @@ async function getDebugLogConfig(
 	}
 }
 
+interface FailedGateLog {
+	/** Log file paths for failed check gates */
+	checkLogs: string[];
+	/** JSON file paths for failed review gates */
+	reviewJsons: string[];
+}
+
+/**
+ * Extract failed gate log paths from gate results.
+ */
+function getFailedGateLogs(
+	gateResults?: RunResult["gateResults"],
+): FailedGateLog {
+	const checkLogs: string[] = [];
+	const reviewJsons: string[] = [];
+
+	if (!gateResults) return { checkLogs, reviewJsons };
+
+	for (const gate of gateResults) {
+		if (gate.status === "pass") continue;
+
+		const isReview = gate.jobId.startsWith("review:");
+
+		if (gate.subResults) {
+			for (const sub of gate.subResults) {
+				if (sub.status === "pass" || !sub.logPath) continue;
+				if (isReview) {
+					reviewJsons.push(sub.logPath);
+				} else {
+					checkLogs.push(sub.logPath);
+				}
+			}
+		} else if (isReview) {
+			// Review gate without subResults — check logPaths then logPath
+			const paths = gate.logPaths ?? (gate.logPath ? [gate.logPath] : []);
+			for (const p of paths) {
+				if (p.endsWith(".json")) {
+					reviewJsons.push(p);
+				} else {
+					checkLogs.push(p);
+				}
+			}
+		} else {
+			// Check gate
+			const logPath = gate.logPath ?? gate.logPaths?.[0];
+			if (logPath) {
+				checkLogs.push(logPath);
+			}
+		}
+	}
+
+	return { checkLogs, reviewJsons };
+}
+
 /**
  * Get the enhanced stop reason instructions for the agent.
- * Includes trust level guidance, violation handling, termination conditions,
- * and path to the console log file for debugging.
+ * Includes trust level guidance (when reviews fail), violation handling,
+ * termination conditions, and paths to failed gate log files.
  */
-function getStopReasonInstructions(consoleLogPath: string | null): string {
-	const logPathSection = consoleLogPath
-		? `\n**Console log:** \`${consoleLogPath}\` — Read this file for full execution output and error details.`
+function getStopReasonInstructions(
+	gateResults?: RunResult["gateResults"],
+): string {
+	const { checkLogs, reviewJsons } = getFailedGateLogs(gateResults);
+	const hasReviewFailures = reviewJsons.length > 0;
+
+	const trustLevelSection = hasReviewFailures
+		? `\n**Review trust level: medium** — Fix issues you reasonably agree with or believe the human wants fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed.\n`
 		: "";
+
+	let failedLogsSection = "";
+	if (checkLogs.length > 0 || reviewJsons.length > 0) {
+		failedLogsSection = "\n\n**Failed gate logs:**";
+		for (const logPath of checkLogs) {
+			failedLogsSection += `\n- Check: \`${logPath}\``;
+		}
+		for (const jsonPath of reviewJsons) {
+			failedLogsSection += `\n- Review: \`${jsonPath}\``;
+		}
+	}
+
+	const hasCheckFailures = checkLogs.length > 0;
+
+	// Build failure instructions conditionally based on what types of failures exist
+	const failureSteps: string[] = [];
+	if (hasCheckFailures) {
+		failureSteps.push(
+			"For CHECK failures: Read the `.log` file path listed below.",
+		);
+	}
+	if (hasReviewFailures) {
+		failureSteps.push(
+			"For REVIEW failures: Read the `.json` file path listed below.",
+		);
+		failureSteps.push(
+			'For REVIEW violations: Update the `"status"` and `"result"` fields in the JSON file:\n   - Set `"status": "fixed"` with a brief description in `"result"` for issues you fix.\n   - Set `"status": "skipped"` with a brief reason in `"result"` for issues you skip.',
+		);
+	}
+
+	const addressSection =
+		failureSteps.length > 0
+			? `\n**To address failures:**\n${failureSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n`
+			: "";
 
 	return `**GAUNTLET FAILED — YOU MUST FIX ISSUES NOW**
 
 You cannot stop until the gauntlet passes or a termination condition is met. The stop hook will automatically re-run to verify your fixes.
-${logPathSection}
-
-**Review trust level: medium** — Fix issues you reasonably agree with or believe the human wants fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed.
-
-**To address failures:**
-1. Identify the failed gates from the console output.
-2. For CHECK failures: Read the \`.log\` file path provided in the output.
-3. For REVIEW failures: Read the \`.json\` file path provided in the "Review: <path>" output.
-4. For REVIEW violations: Update the \`"status"\` and \`"result"\` fields in the JSON file:
-   - Set \`"status": "fixed"\` with a brief description in \`"result"\` for issues you fix.
-   - Set \`"status": "skipped"\` with a brief reason in \`"result"\` for issues you skip.
-
+${trustLevelSection}${addressSection}
 **Termination conditions:**
 - "Status: Passed" — All gates passed
 - "Status: Passed with warnings" — Remaining issues were skipped
-- "Status: Retry limit exceeded" — Run \`agent-gauntlet clean\` to archive the session and stop. This is the only case requiring manual clean; it signals unresolvable issues that need human review.`;
+- "Status: Retry limit exceeded" — Run \`agent-gauntlet clean\` to archive the session and stop. This is the only case requiring manual clean; it signals unresolvable issues that need human review.${failedLogsSection}`;
 }
 
 /**
@@ -500,11 +582,11 @@ export function registerStopHookCommand(program: Command): void {
 					result.status,
 				);
 
-				// Use consoleLogPath from result (executor already finds it)
+				// Use gate results from executor for detailed failure instructions
 				outputHookResponse(result.status, {
 					reason:
 						result.status === "failed"
-							? getStopReasonInstructions(result.consoleLogPath ?? null)
+							? getStopReasonInstructions(result.gateResults)
 							: undefined,
 					errorMessage: result.errorMessage,
 					intervalMinutes: result.intervalMinutes,

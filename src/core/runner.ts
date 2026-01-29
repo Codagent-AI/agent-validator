@@ -51,6 +51,8 @@ export interface RunnerOutcome {
 	anyErrors: boolean;
 	/** Iteration statistics for debug logging */
 	stats: IterationStats;
+	/** Individual gate results */
+	gateResults: GateResult[];
 }
 
 /**
@@ -134,6 +136,7 @@ export class Runner {
 				retryLimitExceeded: true,
 				anyErrors: false,
 				stats: { fixed: 0, skipped: 0, failed: 0 },
+				gateResults: [],
 			};
 		}
 
@@ -185,6 +188,7 @@ export class Runner {
 				retryLimitExceeded: true,
 				anyErrors,
 				stats,
+				gateResults: this.results,
 			};
 		}
 
@@ -196,6 +200,7 @@ export class Runner {
 			retryLimitExceeded: false,
 			anyErrors,
 			stats,
+			gateResults: this.results,
 		};
 	}
 

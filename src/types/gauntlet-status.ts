@@ -33,6 +33,18 @@ export interface RunResult {
 	errorMessage?: string;
 	/** Interval minutes (when status is "interval_not_elapsed") */
 	intervalMinutes?: number;
+	/** Individual gate results (available when gates were executed) */
+	gateResults?: Array<{
+		jobId: string;
+		status: "pass" | "fail" | "error";
+		logPath?: string;
+		logPaths?: string[];
+		subResults?: Array<{
+			nameSuffix: string;
+			status: "pass" | "fail" | "error";
+			logPath?: string;
+		}>;
+	}>;
 }
 
 /**
