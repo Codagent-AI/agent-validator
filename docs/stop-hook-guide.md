@@ -142,14 +142,16 @@ Example output:
 [gauntlet] Gauntlet failed, blocking stop
 ```
 
-### Console Log Files
+### Failed Gate Log Files
 
-The gauntlet writes detailed execution logs to `{log_dir}/console.N.log` files. When the stop hook blocks, it includes the path to the latest console log in its response.
+When the stop hook blocks, it includes paths to the specific failed gate log files in its response:
+- **Check failures**: `.log` files containing the check command output
+- **Review failures**: `.json` files containing review violations to address
 
 To manually inspect logs:
 ```bash
-# View the latest console log
-ls -t gauntlet_logs/console.*.log | head -1 | xargs cat
+# List all gate log files
+ls gauntlet_logs/
 ```
 
 ## Troubleshooting with Debug Logs
@@ -253,8 +255,8 @@ Fields:
 **Symptoms**: Agent can't stop even after fixing issues.
 
 **Checks**:
-1. Read the console log file mentioned in the stop reason
-2. Look for remaining gate failures in the output
+1. Read the failed gate log files listed in the stop reason
+2. Look for remaining gate failures in the log output
 3. For review violations, ensure all issues have `"status": "fixed"` or `"status": "skipped"` in the JSON files
 4. If stuck, run `agent-gauntlet clean` to archive the session and start fresh
 
