@@ -1,4 +1,3 @@
-
 command: semgrep scan --config auto --error src
 working_directory: .
 parallel: true
