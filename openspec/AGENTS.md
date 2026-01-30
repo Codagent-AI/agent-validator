@@ -203,17 +203,20 @@ lists targeted refactorings to complete **before** the main implementation work.
 
 The scope is strictly **files touched by this change** — not all hotspots in the project.
 
-**How to populate the Pre-factoring section:**
+**How to populate the Pre-factoring section (requires CodeScene MCP server):**
 1. Determine which source files will be modified by the change (from the Impact section of `proposal.md`).
-2. **If the CodeScene MCP server is available**, check **only those files** for hotspots:
-   - `list_technical_debt_hotspots_for_project_file` — check each affected file individually.
-   - `list_technical_debt_hotspots_for_project` — alternatively, list all hotspots and filter to only the files this change touches.
-3. For each affected file that **is** a hotspot, use CodeScene tools to get refactoring priorities:
-   - `code_health_review` — get the full Code Health review for the file.
+2. For each affected file, run `code_health_score` to get its Code Health score (1.0–10.0).
+   - **Score ≤ 8.0** → the file is a hotspot candidate. Proceed to step 3.
+   - **Score > 8.0** → the file is healthy. No pre-factoring needed for it.
+3. For each file scoring ≤ 8.0, get refactoring priorities:
+   - `code_health_review` — get the full Code Health review listing code smells.
    - `code_health_auto_refactor` — get an automated refactoring recommendation for the worst-scoring function.
-4. Record the results in the Pre-factoring section. If none of the files touched by this change are hotspots, write "No hotspots modified."
+4. Optionally, cross-reference with project-level data if available:
+   - `list_technical_debt_hotspots_for_project_file` — check if the file is a known project hotspot (requires `CS_MOUNT_PATH`).
+   - `list_technical_debt_hotspots_for_project` — list all project hotspots and filter to affected files.
+5. Record the results in the Pre-factoring section. If none of the files touched by this change score ≤ 8.0, write "No hotspots modified."
 
-> **Note:** The CodeScene MCP server must be configured for hotspot detection. If it is not available, write "CodeScene not available — hotspot analysis skipped." in the Pre-factoring section and proceed with implementation. See the [CodeScene MCP server documentation](https://github.com/codescene-oss/codescene-mcp) for setup instructions.
+> **Note:** If the CodeScene MCP server is not available, write "CodeScene not available — hotspot analysis skipped." in the Pre-factoring section and proceed with implementation. See the [CodeScene MCP server documentation](https://github.com/codescene-oss/codescene-mcp) for setup instructions.
 
 ```markdown
 ## 0. Pre-factoring

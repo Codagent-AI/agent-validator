@@ -39,11 +39,23 @@ This document lists the configuration files Agent Gauntlet loads and all support
     Whether to enable debug logging.
   - **max_size_mb**: number (default: `10`)
     Maximum size of the debug log file in megabytes. When exceeded, the current log is rotated to `.debug.log.1` and a new log is started.
+- **logging**: object (optional)
+  Configuration for structured logging via LogTape.
+  - **level**: `"debug"` | `"info"` | `"warning"` | `"error"` (default: `"debug"`)
+    Minimum log level to capture.
+  - **console**: object (optional)
+    Console logging output settings.
+    - **enabled**: boolean (default: `true`)
+    - **format**: `"pretty"` | `"json"` (default: `"pretty"`)
+  - **file**: object (optional)
+    File logging output settings.
+    - **enabled**: boolean (default: `true`)
+    - **format**: `"text"` | `"json"` (default: `"text"`)
 - **stop_hook**: object (optional)
   Configuration for the stop hook behavior. These settings can be overridden by environment variables (see [Environment Variable Overrides](#environment-variable-overrides)).
   - **enabled**: boolean (optional; default from global config, typically `true`)
     Whether the stop hook gauntlet is enabled for this project. Set to `false` to disable stop hook validation entirely.
-  - **run_interval_minutes**: number (optional; default from global config, typically `10`)
+  - **run_interval_minutes**: number (optional; default from global config, typically `5`)
     Minimum minutes between gauntlet runs. Set to `0` to always run the gauntlet on every stop attempt.
 - **entry_points**: array (required)  
   Declares which parts of the repo are “scopes” for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs.

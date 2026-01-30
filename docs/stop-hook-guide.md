@@ -67,7 +67,7 @@ User-level settings are stored in `~/.config/agent-gauntlet/config.yml`:
 ```yaml
 stop_hook:
   enabled: true               # Whether stop hook is active (default: true)
-  run_interval_minutes: 10    # Minimum time between gauntlet runs
+  run_interval_minutes: 5     # Minimum time between gauntlet runs
 ```
 
 ### Project Configuration
@@ -100,7 +100,7 @@ GAUNTLET_STOP_HOOK_ENABLED=false claude
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `stop_hook.enabled` | `true` | Whether stop hook validation runs. Set to `false` to disable entirely. |
-| `stop_hook.run_interval_minutes` | `10` | Minimum minutes between gauntlet runs. Set to `0` to always run. Prevents excessive re-runs during active development. |
+| `stop_hook.run_interval_minutes` | `5` | Minimum minutes between gauntlet runs. Set to `0` to always run. Prevents excessive re-runs during active development. |
 
 ## How It Works
 
@@ -144,7 +144,18 @@ Example output:
 
 ### Failed Gate Log Files
 
-When the stop hook blocks, it includes paths to the specific failed gate log files in its response:
+When the stop hook blocks, it returns a JSON response with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `decision` | `"block"` \| `"approve"` | Whether the stop is allowed or blocked |
+| `reason` | string (optional) | Prompt fed back to the agent when blocking |
+| `stopReason` | string | Detailed instructions displayed to the user when blocking |
+| `systemMessage` | string (optional) | Human-friendly status message always displayed to the user |
+| `status` | string | Machine-readable status code (e.g. `passed`, `failed`, `interval_not_elapsed`) |
+| `message` | string | Human-friendly explanation of the decision |
+
+The response also includes paths to the specific failed gate log files:
 - **Check failures**: `.log` files containing the check command output
 - **Review failures**: `.json` files containing review violations to address
 
