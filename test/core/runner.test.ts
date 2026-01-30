@@ -4,6 +4,7 @@ import type { Job } from "../../src/core/job";
 import { Runner, type IterationStats } from "../../src/core/runner";
 import type { ConsoleReporter } from "../../src/output/console";
 import type { Logger } from "../../src/output/logger";
+import type { DebugLogger } from "../../src/utils/debug-log";
 
 // Mock dependencies
 const mockLogger = {
@@ -188,6 +189,109 @@ describe("Runner", () => {
 			expect(outcome.stats.fixed).toBe(0);
 			expect(outcome.stats.skipped).toBe(0);
 			expect(outcome.stats.failed).toBe(0);
+		});
+	});
+
+	describe("preflight debug logging", () => {
+		it("should call debug logger preflight methods when logger is provided", async () => {
+			const mockDebugLogger = {
+				logPreflightStart: mock(async () => {}),
+				logPreflightResult: mock(async () => {}),
+				logPreflightEnd: mock(async () => {}),
+				logGateResult: mock(async () => {}),
+			} as unknown as DebugLogger;
+
+			const runner = new Runner(
+				mockConfig,
+				mockLogger,
+				mockReporter,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				mockDebugLogger,
+			);
+
+			// biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+			(runner as any).checkAdapter = mock(async () => true);
+
+			const job: Job = {
+				id: "review-job",
+				type: "review",
+				entryPoint: "src",
+				gateConfig: {
+					name: "review",
+					cli_preference: ["mock"],
+					// biome-ignore lint/suspicious/noExplicitAny: Partial mock config for testing
+				} as any,
+				workingDirectory: ".",
+				name: "review",
+			};
+
+			await runner.run([job]);
+
+			expect(mockDebugLogger.logPreflightStart).toHaveBeenCalledWith(1);
+			expect(mockDebugLogger.logPreflightResult).toHaveBeenCalled();
+			expect(mockDebugLogger.logPreflightEnd).toHaveBeenCalled();
+		});
+
+		it("should log preflight failures with reason", async () => {
+			const mockDebugLogger = {
+				logPreflightStart: mock(async () => {}),
+				logPreflightResult: mock(async () => {}),
+				logPreflightEnd: mock(async () => {}),
+				logGateResult: mock(async () => {}),
+			} as unknown as DebugLogger;
+
+			const runner = new Runner(
+				mockConfig,
+				mockLogger,
+				mockReporter,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				mockDebugLogger,
+			);
+
+			// Mock adapter check to fail
+			// biome-ignore lint/suspicious/noExplicitAny: Accessing private method for testing
+			(runner as any).checkAdapter = mock(async () => false);
+
+			// Suppress console.error during this test
+			const originalError = console.error;
+			console.error = () => {};
+
+			const job: Job = {
+				id: "review-job",
+				type: "review",
+				entryPoint: "src",
+				gateConfig: {
+					name: "review",
+					cli_preference: ["mock"],
+					// biome-ignore lint/suspicious/noExplicitAny: Partial mock config for testing
+				} as any,
+				workingDirectory: ".",
+				name: "review",
+			};
+
+			await runner.run([job]);
+
+			console.error = originalError;
+
+			expect(mockDebugLogger.logPreflightResult).toHaveBeenCalledWith(
+				"review-job",
+				"fail",
+				expect.stringContaining("no healthy adapters"),
+			);
+		});
+	});
+
+	describe("preflight timeout", () => {
+		it("should have a PREFLIGHT_TIMEOUT_MS static property", () => {
+			// Verify the timeout constant exists on the Runner class
+			// biome-ignore lint/suspicious/noExplicitAny: Accessing private static for testing
+			expect((Runner as any).PREFLIGHT_TIMEOUT_MS).toBe(60 * 1000);
 		});
 	});
 });

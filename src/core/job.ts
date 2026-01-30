@@ -42,18 +42,20 @@ export class JobGenerator {
 					if (isCI && !checkConfig.run_in_ci) continue;
 					if (!isCI && !checkConfig.run_locally) continue;
 
-					const workingDirectory = checkConfig.working_directory || ep.path;
-					// Include entry point in key to ensure each entry point/check pair is distinct
-					const jobKey = `check:${ep.path}:${checkName}:${workingDirectory}`;
+					const workingDirectory =
+						checkConfig.working_directory === "entrypoint"
+							? ep.path
+							: checkConfig.working_directory || ep.path;
+					const jobKey = `check:${checkName}:${workingDirectory}`;
 
-					// Skip if we've already created a job for this exact entry point/check combination
+					// Skip if we've already created a job for this check/working-directory combination
 					if (seenJobs.has(jobKey)) {
 						continue;
 					}
 					seenJobs.add(jobKey);
 
 					jobs.push({
-						id: `check:${ep.path}:${checkName}`,
+						id: `check:${workingDirectory}:${checkName}`,
 						type: "check",
 						name: checkName,
 						entryPoint: ep.path,

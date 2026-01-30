@@ -34,8 +34,8 @@ Execute the autonomous verification suite.
 5. Repeat steps 2-5 until one of the following termination conditions is met:
    - "Status: Passed" appears in the output (logs are automatically archived)
    - "Status: Passed with warnings" appears in the output (remaining issues were skipped)
-   - Still failing after 3 attempts -> Run `bun src/index.ts clean` to archive logs and reset state.
+   - "Status: Retry limit exceeded" appears in the output -> Run `agent-gauntlet clean` to archive logs for the session record. Do NOT retry after cleaning.
 6. Provide a summary of the session:
    - Issues Fixed: (list key fixes)
    - Issues Skipped: (list skipped items and reasons)
-   - Outstanding Failures: (if any, explain why they couldn't be resolved)
+   - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)

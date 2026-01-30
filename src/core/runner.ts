@@ -277,67 +277,149 @@ export class Runner {
 		}
 	}
 
+	/**
+	 * Timeout for the entire preflight phase (60 seconds).
+	 * If any individual check hangs, the timeout fires and marks remaining
+	 * jobs as preflight failures.
+	 */
+	private static readonly PREFLIGHT_TIMEOUT_MS = 60 * 1000;
+
 	private async preflight(
 		jobs: Job[],
 	): Promise<{ runnableJobs: Job[]; preflightResults: GateResult[] }> {
+		const startMs = Date.now();
+		await this.debugLogger?.logPreflightStart(jobs.length);
+
+		// Shared arrays so both the check loop and timeout handler
+		// can see partial progress
 		const runnableJobs: Job[] = [];
 		const preflightResults: GateResult[] = [];
-		const cliCache = new Map<string, boolean>();
+		let timedOut = false;
 
-		for (const job of jobs) {
-			if (this.shouldStop) break;
-			if (job.type === "check") {
-				const commandName = this.getCommandName(
-					(job.gateConfig as LoadedCheckGateConfig).command,
-				);
-				if (!commandName) {
-					const msg = "Unable to parse command";
-					console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
-					preflightResults.push(await this.recordPreflightFailure(job, msg));
-					if (this.shouldFailFast(job)) this.shouldStop = true;
-					continue;
-				}
+		const doPreflightChecks = async () => {
+			const cliCache = new Map<string, boolean>();
 
-				const available = await this.commandExists(
-					commandName,
-					job.workingDirectory,
-				);
-				if (!available) {
-					const msg = `Missing command: ${commandName}`;
-					console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
-					preflightResults.push(await this.recordPreflightFailure(job, msg));
-					if (this.shouldFailFast(job)) this.shouldStop = true;
-					continue;
-				}
-			} else {
-				const reviewConfig = job.gateConfig as ReviewGateConfig &
-					ReviewPromptFrontmatter;
-
-				// Only need at least 1 healthy adapter (round-robin handles the rest)
-				let hasHealthy = false;
-				for (const toolName of reviewConfig.cli_preference || []) {
-					const cached = cliCache.get(toolName);
-					const isAvailable = cached ?? (await this.checkAdapter(toolName));
-					cliCache.set(toolName, isAvailable);
-					if (isAvailable) {
-						hasHealthy = true;
-						break;
+			for (const job of jobs) {
+				if (this.shouldStop || timedOut) break;
+				if (job.type === "check") {
+					const commandName = this.getCommandName(
+						(job.gateConfig as LoadedCheckGateConfig).command,
+					);
+					if (!commandName) {
+						const msg = "Unable to parse command";
+						console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
+						preflightResults.push(await this.recordPreflightFailure(job, msg));
+						await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
+						if (this.shouldFailFast(job)) this.shouldStop = true;
+						continue;
 					}
+
+					const available = await this.commandExists(
+						commandName,
+						job.workingDirectory,
+					);
+					if (!available) {
+						const msg = `Missing command: ${commandName}`;
+						console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
+						preflightResults.push(await this.recordPreflightFailure(job, msg));
+						await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
+						if (this.shouldFailFast(job)) this.shouldStop = true;
+						continue;
+					}
+
+					await this.debugLogger?.logPreflightResult(
+						job.id,
+						"pass",
+						`command found: ${commandName}`,
+					);
+				} else {
+					const reviewConfig = job.gateConfig as ReviewGateConfig &
+						ReviewPromptFrontmatter;
+
+					// Only need at least 1 healthy adapter (round-robin handles the rest)
+					let hasHealthy = false;
+					for (const toolName of reviewConfig.cli_preference || []) {
+						const cached = cliCache.get(toolName);
+						const isAvailable = cached ?? (await this.checkAdapter(toolName));
+						cliCache.set(toolName, isAvailable);
+						if (isAvailable) {
+							hasHealthy = true;
+							break;
+						}
+					}
+
+					if (!hasHealthy) {
+						const msg = "Preflight failed: no healthy adapters available";
+						console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
+						preflightResults.push(await this.recordPreflightFailure(job, msg));
+						await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
+						if (this.shouldFailFast(job)) this.shouldStop = true;
+						continue;
+					}
+
+					await this.debugLogger?.logPreflightResult(
+						job.id,
+						"pass",
+						"adapter healthy",
+					);
 				}
 
-				if (!hasHealthy) {
-					const msg = "Preflight failed: no healthy adapters available";
-					console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
-					preflightResults.push(await this.recordPreflightFailure(job, msg));
-					if (this.shouldFailFast(job)) this.shouldStop = true;
-					continue;
+				// Re-check timedOut before pushing to avoid a race where the timeout
+				// fires between the loop guard (line 303) and this push, which would
+				// cause the job to be both executed and marked as a timeout failure.
+				if (!timedOut) {
+					runnableJobs.push(job);
 				}
 			}
 
-			runnableJobs.push(job);
+			return { runnableJobs, preflightResults };
+		};
+
+		// Race the preflight checks against a timeout
+		let timeoutId: ReturnType<typeof setTimeout> | undefined;
+		const timeoutPromise = new Promise<{
+			runnableJobs: Job[];
+			preflightResults: GateResult[];
+		}>((resolve) => {
+			timeoutId = setTimeout(() => {
+				timedOut = true;
+				this.shouldStop = true;
+				console.error("[PREFLIGHT] Preflight timed out");
+				// Resolve with current partial results
+				resolve({ runnableJobs, preflightResults });
+			}, Runner.PREFLIGHT_TIMEOUT_MS);
+		});
+
+		const result = await Promise.race([doPreflightChecks(), timeoutPromise]);
+
+		// Always clear the timeout to prevent it firing during gate execution
+		if (timeoutId) clearTimeout(timeoutId);
+
+		// If timed out, mark remaining unchecked jobs as preflight failures
+		if (timedOut) {
+			const checkedJobIds = new Set([
+				...result.runnableJobs.map((j) => j.id),
+				...result.preflightResults.map((r) => r.jobId),
+			]);
+			for (const job of jobs) {
+				if (!checkedJobIds.has(job.id)) {
+					const msg = "Preflight timed out";
+					preflightResults.push(await this.recordPreflightFailure(job, msg));
+					await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
+				}
+			}
+			// Reset shouldStop so gate execution can proceed for jobs that passed preflight
+			this.shouldStop = false;
 		}
 
-		return { runnableJobs, preflightResults };
+		const durationMs = Date.now() - startMs;
+		await this.debugLogger?.logPreflightEnd(
+			result.runnableJobs.length,
+			result.preflightResults.length,
+			durationMs,
+		);
+
+		return result;
 	}
 
 	private async recordPreflightFailure(

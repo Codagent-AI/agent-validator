@@ -51,6 +51,7 @@ interface InitOptions {
 }
 
 interface InitConfig {
+	baseBranch: string;
 	sourceDir: string;
 	lintCmd: string | null; // null means not selected, empty string means selected but blank (TODO)
 	testCmd: string | null; // null means not selected, empty string means selected but blank (TODO)
@@ -96,6 +97,7 @@ export function registerInitCommand(program: Command): void {
 
 			if (options.yes) {
 				config = {
+					baseBranch: "origin/main",
 					sourceDir: ".",
 					lintCmd: null,
 					testCmd: null,
@@ -296,6 +298,13 @@ async function promptForConfig(
 			}
 		}
 
+		// Base Branch
+		console.log();
+		const baseBranchInput = await question(
+			"Enter your base branch (e.g., origin/main, origin/develop) [default: origin/main]: ",
+		);
+		const baseBranch = baseBranchInput || "origin/main";
+
 		// Source Directory
 		console.log();
 		const sourceDirInput = await question(
@@ -325,6 +334,7 @@ async function promptForConfig(
 
 		rl.close();
 		return {
+			baseBranch,
 			sourceDir,
 			lintCmd,
 			testCmd,
@@ -356,7 +366,7 @@ function generateConfigYml(config: InitConfig): string {
     reviews:
       - code-quality`;
 
-	return `base_branch: origin/main
+	return `base_branch: ${config.baseBranch}
 log_dir: gauntlet_logs
 
 # Run gates in parallel when possible (default: true)

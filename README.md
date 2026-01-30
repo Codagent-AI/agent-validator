@@ -1,4 +1,4 @@
-# Agent Gauntlet
+![Agent Gauntlet logo](docs/images/logo2.png)
 
 [![CI](https://github.com/pacaplan/agent-gauntlet/actions/workflows/gauntlet.yml/badge.svg)](https://github.com/pacaplan/agent-gauntlet/actions/workflows/gauntlet.yml)
 [![npm](https://img.shields.io/npm/v/agent-gauntlet)](https://www.npmjs.com/package/agent-gauntlet)
@@ -22,63 +22,29 @@ For AI reviews, it uses the CLI tool of your choice: Gemini, Codex, Claude Code,
 - **Leverage existing subscriptions**: Agent Gauntlet is *free* and tool-agnostic, leveraging the AI CLI tools you already have installed.
 - **Easy CI setup**: Define your checks once, run them locally and in GitHub.
 
-## Usage Patterns
+### vs AI Code Review Tools
 
-Agent Gauntlet supports three primary usage patterns, each suited for different development workflows:
-1. Run CLI: `agent-gauntlet run`
-2. Run agent command: `/gauntlet`
-3. Automatically run after agent completes task
+Unlike traditional code review tools designed for PR workflows, Agent Gauntlet provides real-time feedback loops for autonomous coding agents.
 
-The use cases below illustrate when each of these patterns may be used.
+| Use Case | Recommended |
+| :--- | :--- |
+| Autonomous agent development | **Agent Gauntlet** |
+| Traditional PR review with human reviewers | Other tools |
+| IDE-integrated review while coding | Other tools |
+| Enterprise with strict compliance requirements | Other tools |
+| Budget-conscious teams with existing AI CLI tools | **Agent Gauntlet** |
 
-### 1. Planning Mode
+[Full comparison →](docs/feature_comparison.md)
 
-**Use case:** Generate and review high-level implementation plans before coding.
+## Common Workflows
 
-**Problem Gauntlet solves:** Catch architectural issues and requirement misunderstandings before coding to avoid costly rework.
+Agent Gauntlet supports three workflows, ranging from simple CLI execution to fully autonomous agentic integration:
 
-**Workflow:**
+- **CLI Mode** — Run checks via command line; ideal for CI pipelines and scripts.
+- **Assistant Mode** — AI assistant runs validation loop, fixing issues iteratively.
+- **Agentic Mode** — Autonomous agent validates and fixes in real-time via stop hook.
 
-1. Create a plan document in your project directory
-2. Run `agent-gauntlet run` from the terminal
-3. Gauntlet detects the new or modified plan and invokes configured AI CLIs to review it
-4. *(Optional)* Ask your assistant to refine the plan based on review feedback
-
-**Note:** Review configuration and prompts are fully customizable. Example prompt: *"Review this plan for completeness and potential issues."*
-
-### 2. AI-Assisted Development
-
-**Use case:** Pair with an AI coding assistant to implement features with continuous quality checks.
-
-**Problem Gauntlet solves:** Catch AI-introduced bugs and quality issues through automated checks and multi-LLM review.
-
-**Workflow:**
-
-1. Collaborate with your assistant to implement code changes
-2. Run `/gauntlet` from chat
-3. Gauntlet detects changed files and runs configured checks (linter, tests, type checking, etc.)
-4. Simultaneously, Gauntlet invokes AI CLIs for code review
-5. Assistant reviews results, fixes identified issues, and runs `agent-gauntlet run` again
-6. Gauntlet detects existing logs, switches to verification mode, and checks fixes
-7. Process repeats automatically (up to 3 iterations) until all gates pass
-
-### 3. Agentic Implementation
-
-**Use case:** Delegate well-defined tasks to a coding agent for autonomous implementation.
-
-**Problem Gauntlet solves:** Enable autonomous agent development with built-in quality gates, eliminating the validation gap when humans aren't in the loop.
-
-**Workflow:**
-
-1. Configure your agent to automatically run `/gauntlet` after completing implementation:
-   - **Rules files:** Add to `.cursorrules`, `AGENT.md`, or similar
-   - **Custom commands:** Create a `/my-dev-workflow` that includes gauntlet
-   - **Git hooks:** Use pre-commit hooks to trigger gauntlet
-   - **Agent hooks:** Leverage platform features (e.g., Claude's Stop event)
-2. Assign the task to your agent and step away
-3. When you return: the task is complete, reviewed by a different LLM, all issues fixed, and CI checks passing
-
-**Benefit:** Fully autonomous quality assurance without manual intervention.
+![Agent Gauntlet Workflows](docs/images/workflows.png)
 
 ## Quick Start
 
@@ -95,4 +61,5 @@ For basic usage and configuration guide, see the [Quick Start Guide](docs/quick-
 - [Configuration Reference](docs/config-reference.md) — all configuration fields + defaults
 - [Stop Hook Guide](docs/stop-hook-guide.md) — integrate with Claude Code's stop hook
 - [CLI Invocation Details](docs/cli-invocation-details.md) — how we securely invoke AI CLIs
+- [Feature Comparison](docs/feature_comparison.md) — how Agent Gauntlet compares to other tools
 - [Development Guide](docs/development.md) — how to build and develop this project

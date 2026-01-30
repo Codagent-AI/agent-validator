@@ -148,7 +148,7 @@ describe("stop-hook-config", () => {
 		it("uses global config when no project config or env vars", () => {
 			const result = resolveStopHookConfig(undefined, DEFAULT_GLOBAL_CONFIG);
 			expect(result.enabled).toBe(true);
-			expect(result.run_interval_minutes).toBe(10);
+			expect(result.run_interval_minutes).toBe(5);
 		});
 
 		it("project config overrides global config", () => {
@@ -173,7 +173,7 @@ describe("stop-hook-config", () => {
 			const projectConfig = { run_interval_minutes: 5 };
 			const globalConfig = {
 				...DEFAULT_GLOBAL_CONFIG,
-				stop_hook: { enabled: false, run_interval_minutes: 10 },
+				stop_hook: { enabled: false, run_interval_minutes: 5 },
 			};
 			const result = resolveStopHookConfig(projectConfig, globalConfig);
 			expect(result.enabled).toBe(true); // from env var

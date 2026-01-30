@@ -1,9 +1,5 @@
 ---
 num_reviews: 2
-cli_preference:
-  - codex
-  - claude
-  - gemini
 ---
 
 # Code Quality Review

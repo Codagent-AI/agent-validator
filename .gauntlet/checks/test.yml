@@ -1,4 +1,3 @@
-
 command: bun test
 working_directory: .
 parallel: true

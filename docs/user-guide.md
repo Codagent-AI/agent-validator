@@ -2,11 +2,89 @@
 
 Agent Gauntlet runs **quality gates** (checks + AI reviews) for **only the parts of your repo that changed**, based on a configurable set of **entry points**.
 
-## Concepts
+## Core Concepts
 
-- **Entry point**: A path (or a `dir/*` wildcard) that defines a scope in the repository. If files under that scope changed, the entry point becomes active.
-- **Check gate**: A deterministic shell command (tests, lint, typecheck, etc.). Passes if the command exits `0`.
-- **Review gate**: An AI-driven review run via one or more supported CLI tools. Passes/fails based on regex matching of the tool output.
+Agent Gauntlet is a feedback runner designed to provide comprehensive validation feedback. This feedback comes in two primary forms: Checks and Reviews.
+
+![Agent Gauntlet Core Concepts](images/core_concepts.png)
+
+### Forms of Feedback
+
+#### Checks
+Checks are deterministic validations executed via shell commands.
+- **Outcome**: They result in a binary `pass` or `fail` status. (Future support for "warnings" is planned).
+- **Examples**: Building, linting, testing, or any static analysis tool validation.
+
+#### Reviews
+Reviews are AI-generated assessments running via a CLI tool.
+- **Execution**: The user must have a CLI capable of running a prompt (e.g., Claude Code, Codex, etc).
+- **Configuration**: The primary configuration for a review is the prompt text itself.
+
+### Configuration Structure
+
+Agent Gauntlet determines what feedback to run based on a configuration file.
+
+#### Entry Points
+- **Definition**: An entry point is a path (e.g., project root or a specific subfolder).
+- **Scope**: You can define one or more entry points.
+- **Assignment**: For each entry point, you specify which Checks and Reviews to execute.
+- **Wildcard support**: Use `dir/*` wildcards to match multiple subdirectories.
+
+#### Definitions
+Each Check and Review has a definition:
+- **Check Definition**: Specifies the shell command to run (`.gauntlet/checks/*.yml`).
+- **Review Definition**: Specifies the prompt for the AI to process (`.gauntlet/reviews/*.md`).
+
+### Configuration Examples
+
+Here are simple specific examples of the configuration files described above.
+
+#### Main Configuration (`.gauntlet/config.yml`)
+
+This file maps your project structure to specific checks and reviews.
+
+```yaml
+entry_points:
+  # Run these validations for any changes in the 'src' directory
+  - path: "src"
+    checks:
+      - build
+    reviews:
+      - code-review
+```
+
+#### Check Definition (`.gauntlet/checks/test.yml`)
+
+A deterministic command that either passes (exit code 0) or fails.
+
+```yaml
+# The shell command to execute
+command: npm run test
+
+# Optional: Run in parallel with other checks
+parallel: true
+```
+
+#### Review Definition (`.gauntlet/reviews/code-review.md`)
+
+A prompt that guides the AI agent's review process.
+
+```markdown
+---
+# Simple frontmatter configuration
+cli_preference:
+  - claude
+  - gemini
+---
+
+# Code Review Instructions
+
+You are a helpful code review assistant. Please check the code for:
+1. Logic errors
+2. Missing error handling
+
+If the code looks good, please reply with "LGTM!" (Looks Good To Me).
+```
 
 ## Getting started
 

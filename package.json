@@ -1,6 +1,6 @@
 {
   "name": "agent-gauntlet",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A CLI tool for testing AI coding agents",
   "license": "Apache-2.0",
   "author": "Paul Caplan",

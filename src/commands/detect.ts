@@ -68,18 +68,19 @@ export function registerDetectCommand(program: Command): void {
 
 				console.log(chalk.bold(`Would run ${jobs.length} gate(s):\n`));
 
-				// Group jobs by entry point for better display
-				const jobsByEntryPoint = new Map<string, Job[]>();
+				// Group jobs by working directory for better display
+				const jobsByWorkDir = new Map<string, Job[]>();
 				for (const job of jobs) {
-					if (!jobsByEntryPoint.has(job.entryPoint)) {
-						jobsByEntryPoint.set(job.entryPoint, []);
+					const key = job.workingDirectory;
+					if (!jobsByWorkDir.has(key)) {
+						jobsByWorkDir.set(key, []);
 					}
-					jobsByEntryPoint.get(job.entryPoint)?.push(job);
+					jobsByWorkDir.get(key)?.push(job);
 				}
 
-				for (const [entryPoint, entryJobs] of jobsByEntryPoint.entries()) {
-					console.log(chalk.cyan(`Entry point: ${entryPoint}`));
-					for (const job of entryJobs) {
+				for (const [workDir, wdJobs] of jobsByWorkDir.entries()) {
+					console.log(chalk.cyan(`Working directory: ${workDir}`));
+					for (const job of wdJobs) {
 						const typeLabel =
 							job.type === "check"
 								? chalk.yellow("check")

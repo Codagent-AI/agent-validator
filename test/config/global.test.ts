@@ -27,7 +27,7 @@ describe("Global Configuration", () => {
 			// This avoids interference from user's actual global config file
 			expect(DEFAULT_GLOBAL_CONFIG.stop_hook).toBeDefined();
 			expect(DEFAULT_GLOBAL_CONFIG.stop_hook.enabled).toBe(true);
-			expect(DEFAULT_GLOBAL_CONFIG.stop_hook.run_interval_minutes).toBe(10);
+			expect(DEFAULT_GLOBAL_CONFIG.stop_hook.run_interval_minutes).toBe(5);
 		});
 	});
 

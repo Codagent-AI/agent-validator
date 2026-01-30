@@ -1,4 +1,5 @@
-base_branch: development
+name: agent-gauntlet
+base_branch: main
 log_dir: gauntlet_logs
 allow_parallel: true
 cli:
@@ -8,6 +9,9 @@ cli:
     - claude
   check_usage_limit: true
 entry_points:
+  - path: "."
+    reviews:
+      - code-quality
   - path: "src"
     checks:
       - build
@@ -15,8 +19,6 @@ entry_points:
       - test
       - security-code
       - schema-validate
-    reviews:
-      - code-quality
   - path: "package.json"
     checks:
       - build
