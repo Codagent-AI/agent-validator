@@ -3,10 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getAdapter } from "../cli-adapters/index.js";
-import type {
-	ReviewGateConfig,
-	ReviewPromptFrontmatter,
-} from "../config/types.js";
+import type { LoadedReviewGateConfig } from "../config/types.js";
 import { getCategoryLogger } from "../output/app-logger.js";
 import {
 	type DiffFileRange,
@@ -67,8 +64,7 @@ If NO violations are found:
 }
 `;
 
-type ReviewConfig = ReviewGateConfig &
-	ReviewPromptFrontmatter & { promptContent?: string };
+type ReviewConfig = LoadedReviewGateConfig;
 
 interface ReviewJsonOutput {
 	status: "pass" | "fail";

@@ -9,6 +9,7 @@ import {
 	entryPointSchema,
 	gauntletConfigSchema,
 	reviewPromptFrontmatterSchema,
+	reviewYamlSchema,
 } from "./schema.js";
 import type {
 	CheckGateConfig,
@@ -48,6 +49,7 @@ export async function validateConfig(
 	let projectConfig: GauntletConfig | null = null;
 	const checks: Record<string, CheckGateConfig> = {};
 	const reviews: Record<string, ReviewPromptFrontmatter> = {};
+	const reviewSourceFiles: Record<string, string> = {}; // reviewName -> filePath
 
 	try {
 		if (await fileExists(configPath)) {
@@ -175,17 +177,41 @@ export async function validateConfig(
 	if (await dirExists(reviewsPath)) {
 		try {
 			const reviewFiles = await fs.readdir(reviewsPath);
+
+			// Detect duplicate names across formats
+			const reviewNameSources = new Map<string, string[]>();
+			for (const file of reviewFiles) {
+				if (
+					file.endsWith(".md") ||
+					file.endsWith(".yml") ||
+					file.endsWith(".yaml")
+				) {
+					const name = path.basename(file, path.extname(file));
+					const sources = reviewNameSources.get(name) || [];
+					sources.push(file);
+					reviewNameSources.set(name, sources);
+				}
+			}
+			for (const [name, sources] of reviewNameSources) {
+				if (sources.length > 1) {
+					issues.push({
+						file: reviewsPath,
+						severity: "error",
+						message: `Duplicate review name "${name}" found across files: ${sources.join(", ")}`,
+					});
+				}
+			}
+
 			for (const file of reviewFiles) {
 				if (file.endsWith(".md")) {
 					const filePath = path.join(reviewsPath, file);
 					const reviewName = path.basename(file, ".md");
-					existingReviewNames.add(reviewName); // Track that this review file exists
+					existingReviewNames.add(reviewName);
 					filesChecked.push(filePath);
 					try {
 						const content = await fs.readFile(filePath, "utf-8");
 						const { data: frontmatter, content: _promptBody } = matter(content);
 
-						// Check if frontmatter exists
 						if (!frontmatter || Object.keys(frontmatter).length === 0) {
 							issues.push({
 								file: filePath,
@@ -195,156 +221,36 @@ export async function validateConfig(
 							continue;
 						}
 
-						// Validate CLI tools even if schema validation fails
-						if (
-							frontmatter.cli_preference &&
-							Array.isArray(frontmatter.cli_preference)
-						) {
-							for (let i = 0; i < frontmatter.cli_preference.length; i++) {
-								const toolName = frontmatter.cli_preference[i];
-								if (
-									typeof toolName === "string" &&
-									!getValidCLITools().includes(toolName)
-								) {
-									issues.push({
-										file: filePath,
-										severity: "error",
-										message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(", ")}`,
-										field: `cli_preference[${i}]`,
-									});
-								}
-							}
-						}
+						validateCliPreferenceTools(frontmatter, filePath, issues);
 
 						const parsedFrontmatter =
 							reviewPromptFrontmatterSchema.parse(frontmatter);
 						const name = path.basename(file, ".md");
 						reviews[name] = parsedFrontmatter;
+						reviewSourceFiles[name] = filePath;
 
-						// Semantic validation
-						// cli_preference is optional; if missing, it defaults to project-level default_preference during load.
-						// See src/config/loader.ts loadConfig() for default merging logic.
-						// However, if explicitly provided, it must not be empty.
-						if (parsedFrontmatter.cli_preference !== undefined) {
-							if (parsedFrontmatter.cli_preference.length === 0) {
-								issues.push({
-									file: filePath,
-									severity: "error",
-									message:
-										"cli_preference if provided cannot be an empty array. Remove it to use defaults.",
-									field: "cli_preference",
-								});
-							} else {
-								// Validate each CLI tool name (double-check after parsing)
-								for (
-									let i = 0;
-									i < parsedFrontmatter.cli_preference.length;
-									i++
-								) {
-									const toolName = parsedFrontmatter.cli_preference[i];
-									if (!getValidCLITools().includes(toolName)) {
-										issues.push({
-											file: filePath,
-											severity: "error",
-											message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(", ")}`,
-											field: `cli_preference[${i}]`,
-										});
-									}
-								}
-							}
-						}
-
-						if (
-							parsedFrontmatter.num_reviews !== undefined &&
-							parsedFrontmatter.num_reviews < 1
-						) {
-							issues.push({
-								file: filePath,
-								severity: "error",
-								message: "num_reviews must be at least 1",
-								field: "num_reviews",
-							});
-						}
-
-						if (
-							parsedFrontmatter.timeout !== undefined &&
-							parsedFrontmatter.timeout <= 0
-						) {
-							issues.push({
-								file: filePath,
-								severity: "error",
-								message: "timeout must be greater than 0",
-								field: "timeout",
-							});
-						}
+						validateReviewSemantics(parsedFrontmatter, filePath, issues);
 					} catch (error: unknown) {
-						if (error instanceof ZodError) {
-							error.errors.forEach((err) => {
-								const fieldPath =
-									err.path && Array.isArray(err.path)
-										? err.path.join(".")
-										: undefined;
-								const message =
-									err.message || `Invalid value for ${fieldPath || "field"}`;
-								issues.push({
-									file: filePath,
-									severity: "error",
-									message,
-									field: fieldPath,
-								});
-							});
-						} else {
-							const err = error as { name?: string; message?: string };
-							if (
-								err.name === "YAMLSyntaxError" ||
-								err.message?.includes("YAML")
-							) {
-								issues.push({
-									file: filePath,
-									severity: "error",
-									message: `Malformed YAML frontmatter: ${
-										err.message || "Unknown YAML error"
-									}`,
-								});
-							} else {
-								// Try to parse error message from stringified error
-								const errorMessage = err.message || String(error);
-								try {
-									const parsed = JSON.parse(errorMessage);
-									if (Array.isArray(parsed)) {
-										// Handle array of Zod errors
-										parsed.forEach(
-											(err: { path: string[]; message: string }) => {
-												const fieldPath =
-													err.path && Array.isArray(err.path)
-														? err.path.join(".")
-														: undefined;
-												issues.push({
-													file: filePath,
-													severity: "error",
-													message:
-														err.message ||
-														`Invalid value for ${fieldPath || "field"}`,
-													field: fieldPath,
-												});
-											},
-										);
-									} else {
-										issues.push({
-											file: filePath,
-											severity: "error",
-											message: errorMessage,
-										});
-									}
-								} catch {
-									issues.push({
-										file: filePath,
-										severity: "error",
-										message: errorMessage,
-									});
-								}
-							}
-						}
+						handleReviewValidationError(error, filePath, issues);
+					}
+				} else if (file.endsWith(".yml") || file.endsWith(".yaml")) {
+					const filePath = path.join(reviewsPath, file);
+					const reviewName = path.basename(file, path.extname(file));
+					existingReviewNames.add(reviewName);
+					filesChecked.push(filePath);
+					try {
+						const content = await fs.readFile(filePath, "utf-8");
+						const raw = YAML.parse(content);
+
+						validateCliPreferenceTools(raw, filePath, issues);
+
+						const parsed = reviewYamlSchema.parse(raw);
+						reviews[reviewName] = parsed;
+						reviewSourceFiles[reviewName] = filePath;
+
+						validateReviewSemantics(parsed, filePath, issues);
+					} catch (error: unknown) {
+						handleReviewValidationError(error, filePath, issues);
 					}
 				}
 			}
@@ -506,18 +412,18 @@ export async function validateConfig(
 				}
 
 				// Validate review preferences against defaults
-				// We need to re-scan reviews here because we need the project config to be loaded first
-				// Ideally we would do this in the review loop, but we didn't have project config then.
-				// Instead, we'll iterate over the parsed reviews we collected.
 				const allowedTools = new Set(defaults);
 				for (const [reviewName, reviewConfig] of Object.entries(reviews)) {
 					const pref = reviewConfig.cli_preference;
 					if (pref && Array.isArray(pref)) {
+						const reviewFile =
+							reviewSourceFiles[reviewName] ||
+							path.join(reviewsPath, `${reviewName}.md`);
 						for (let i = 0; i < pref.length; i++) {
 							const tool = pref[i];
 							if (!allowedTools.has(tool)) {
 								issues.push({
-									file: path.join(reviewsPath, `${reviewName}.md`),
+									file: reviewFile,
 									severity: "error",
 									message: `CLI tool "${tool}" is not in project-level default_preference. Review gates can only use tools enabled in config.yml`,
 									field: `cli_preference[${i}]`,
@@ -532,6 +438,139 @@ export async function validateConfig(
 
 	const valid = issues.filter((i) => i.severity === "error").length === 0;
 	return { valid, issues, filesChecked };
+}
+
+function validateCliPreferenceTools(
+	data: Record<string, unknown>,
+	filePath: string,
+	issues: ValidationIssue[],
+): void {
+	if (data.cli_preference && Array.isArray(data.cli_preference)) {
+		for (let i = 0; i < data.cli_preference.length; i++) {
+			const toolName = data.cli_preference[i];
+			if (
+				typeof toolName === "string" &&
+				!getValidCLITools().includes(toolName)
+			) {
+				issues.push({
+					file: filePath,
+					severity: "error",
+					message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(", ")}`,
+					field: `cli_preference[${i}]`,
+				});
+			}
+		}
+	}
+}
+
+function validateReviewSemantics(
+	parsed: { cli_preference?: string[]; num_reviews?: number; timeout?: number },
+	filePath: string,
+	issues: ValidationIssue[],
+): void {
+	if (parsed.cli_preference !== undefined) {
+		if (parsed.cli_preference.length === 0) {
+			issues.push({
+				file: filePath,
+				severity: "error",
+				message:
+					"cli_preference if provided cannot be an empty array. Remove it to use defaults.",
+				field: "cli_preference",
+			});
+		} else {
+			for (let i = 0; i < parsed.cli_preference.length; i++) {
+				const toolName = parsed.cli_preference[i];
+				if (!getValidCLITools().includes(toolName)) {
+					issues.push({
+						file: filePath,
+						severity: "error",
+						message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(", ")}`,
+						field: `cli_preference[${i}]`,
+					});
+				}
+			}
+		}
+	}
+
+	if (parsed.num_reviews !== undefined && parsed.num_reviews < 1) {
+		issues.push({
+			file: filePath,
+			severity: "error",
+			message: "num_reviews must be at least 1",
+			field: "num_reviews",
+		});
+	}
+
+	if (parsed.timeout !== undefined && parsed.timeout <= 0) {
+		issues.push({
+			file: filePath,
+			severity: "error",
+			message: "timeout must be greater than 0",
+			field: "timeout",
+		});
+	}
+}
+
+function handleReviewValidationError(
+	error: unknown,
+	filePath: string,
+	issues: ValidationIssue[],
+): void {
+	if (error instanceof ZodError) {
+		error.errors.forEach((err) => {
+			const fieldPath =
+				err.path && Array.isArray(err.path) ? err.path.join(".") : undefined;
+			const message =
+				err.message || `Invalid value for ${fieldPath || "field"}`;
+			issues.push({
+				file: filePath,
+				severity: "error",
+				message,
+				field: fieldPath,
+			});
+		});
+	} else {
+		const err = error as { name?: string; message?: string };
+		if (err.name === "YAMLSyntaxError" || err.message?.includes("YAML")) {
+			issues.push({
+				file: filePath,
+				severity: "error",
+				message: `Malformed YAML: ${err.message || "Unknown YAML error"}`,
+			});
+		} else {
+			const errorMessage = err.message || String(error);
+			try {
+				const parsed = JSON.parse(errorMessage);
+				if (Array.isArray(parsed)) {
+					parsed.forEach((err: { path: string[]; message: string }) => {
+						const fieldPath =
+							err.path && Array.isArray(err.path)
+								? err.path.join(".")
+								: undefined;
+						issues.push({
+							file: filePath,
+							severity: "error",
+							message:
+								err.message || `Invalid value for ${fieldPath || "field"}`,
+							field: fieldPath,
+						});
+					});
+				} else {
+					issues.push({
+						file: filePath,
+						severity: "error",
+						message: errorMessage,
+					});
+				}
+			} catch {
+				issues.push({
+					file: filePath,
+					severity: "error",
+					message: errorMessage,
+				});
+			}
+		}
+	}
 }
 
 async function fileExists(path: string): Promise<boolean> {

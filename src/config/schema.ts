@@ -13,20 +13,37 @@ export const checkGateSchema = z
 		run_locally: z.boolean().default(true),
 		timeout: z.number().optional(),
 		fail_fast: z.boolean().optional(),
-		fix_instructions: z.string().optional(), // Path relative to .gauntlet/
+		fix_instructions: z.string().optional(), // Deprecated alias for fix_instructions_file
+		fix_instructions_file: z.string().optional(),
+		fix_with_skill: z.string().optional(),
 	})
-	.refine(
-		(data) => {
-			// fail_fast can only be used when parallel is false
-			if (data.fail_fast === true && data.parallel === true) {
-				return false;
-			}
-			return true;
-		},
-		{
-			message: "fail_fast can only be used when parallel is false",
-		},
-	);
+	.superRefine((data, ctx) => {
+		// fail_fast can only be used when parallel is false
+		if (data.fail_fast === true && data.parallel === true) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "fail_fast can only be used when parallel is false",
+			});
+		}
+		// Cannot specify both deprecated fix_instructions and fix_instructions_file
+		if (data.fix_instructions && data.fix_instructions_file) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message:
+					"Cannot specify both 'fix_instructions' (deprecated) and 'fix_instructions_file'. Use only 'fix_instructions_file'.",
+			});
+		}
+		// fix_instructions_file (or its deprecated alias) and fix_with_skill are mutually exclusive
+		const effectiveFixFile =
+			data.fix_instructions_file || data.fix_instructions;
+		if (effectiveFixFile && data.fix_with_skill) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message:
+					"'fix_instructions_file' and 'fix_with_skill' are mutually exclusive. Specify only one.",
+			});
+		}
+	});
 
 export const reviewGateSchema = z.object({
 	name: z.string().min(1),
@@ -39,15 +56,43 @@ export const reviewGateSchema = z.object({
 	timeout: z.number().optional(),
 });
 
-export const reviewPromptFrontmatterSchema = z.object({
-	model: z.string().optional(),
-	cli_preference: z.array(z.string().min(1)).optional(),
-	num_reviews: z.number().default(1),
-	parallel: z.boolean().default(true),
-	run_in_ci: z.boolean().default(true),
-	run_locally: z.boolean().default(true),
-	timeout: z.number().optional(),
-});
+export const reviewPromptFrontmatterSchema = z
+	.object({
+		model: z.string().optional(),
+		cli_preference: z.array(z.string().min(1)).optional(),
+		num_reviews: z.number().default(1),
+		parallel: z.boolean().default(true),
+		run_in_ci: z.boolean().default(true),
+		run_locally: z.boolean().default(true),
+		timeout: z.number().optional(),
+		prompt_file: z.string().optional(),
+		skill_name: z.string().optional(),
+	})
+	.refine((data) => !(data.prompt_file && data.skill_name), {
+		message:
+			"'prompt_file' and 'skill_name' are mutually exclusive. Specify only one.",
+	});
+
+export const reviewYamlSchema = z
+	.object({
+		model: z.string().optional(),
+		cli_preference: z.array(z.string().min(1)).optional(),
+		num_reviews: z.number().default(1),
+		parallel: z.boolean().default(true),
+		run_in_ci: z.boolean().default(true),
+		run_locally: z.boolean().default(true),
+		timeout: z.number().optional(),
+		prompt_file: z.string().optional(),
+		skill_name: z.string().optional(),
+	})
+	.refine((data) => !(data.prompt_file && data.skill_name), {
+		message:
+			"'prompt_file' and 'skill_name' are mutually exclusive. Specify only one.",
+	})
+	.refine((data) => data.prompt_file || data.skill_name, {
+		message:
+			"YAML review files must specify exactly one of 'prompt_file' or 'skill_name'.",
+	});
 
 export const entryPointSchema = z.object({
 	path: z.string().min(1),

@@ -236,7 +236,7 @@ The scope is strictly **files touched by this change** — not all hotspots in t
 - [ ] 2.3 ... (one test per scenario in spec)
 ```
 
-**Test coverage rule:** Include at least one test (unit or integration) for each scenario in the spec. This ensures all specified behaviors are verified.
+**Test coverage rule:** Make sure there are tests cases for all code paths and core functionality.
 
 Always include the following as the final validation instructions in `tasks.md` Example:
 ```markdown

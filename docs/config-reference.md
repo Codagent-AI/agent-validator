@@ -10,7 +10,8 @@ This document lists the configuration files Agent Gauntlet loads and all support
   checks/
     *.yml                 # check gate definitions (optional)
   reviews/
-    *.md                  # review gate prompts (optional; filename is gate name)
+    *.md                  # review gate prompts as markdown (optional; filename is gate name)
+    *.yml                 # review gate configs as YAML (optional; filename is gate name)
 ```
 
 ## Project config: `.gauntlet/config.yml`
@@ -118,29 +119,34 @@ GAUNTLET_STOP_HOOK_ENABLED=true GAUNTLET_STOP_HOOK_INTERVAL_MINUTES=5 claude
 
 ## Check gates: `.gauntlet/checks/*.yml`
 
+Check gate names are derived from the filename (e.g. `lint.yml` → gate name `lint`).
+
 ### Schema
 
-- **name**: string (required)  
-  Unique identifier for this check gate. Entry points reference this name in their `checks` lists.
-- **command**: string (required)  
+- **command**: string (required)
   Shell command to execute for the check (e.g. tests, lint, typecheck). The gate passes if the command exits with code `0`.
-- **working_directory**: string (optional; default: entry point path)  
+- **working_directory**: string (optional; default: entry point path)
   Directory to run the command in (`cwd`). If omitted, the command runs in the entry point directory for the job.
-- **parallel**: boolean (default: `false`)  
+- **parallel**: boolean (default: `false`)
   If `true` (and project-level `allow_parallel` is enabled), this gate may run concurrently with other parallel gates. If `false`, it runs in the sequential lane.
-- **run_in_ci**: boolean (default: `true`)  
+- **run_in_ci**: boolean (default: `true`)
   Whether this check gate runs when CI mode is detected (e.g. GitHub Actions). If `false`, the gate is skipped in CI.
-- **run_locally**: boolean (default: `true`)  
+- **run_locally**: boolean (default: `true`)
   Whether this check gate runs in local (non-CI) execution. If `false`, the gate is skipped locally.
-- **timeout**: number seconds (optional)  
+- **timeout**: number seconds (optional)
   Maximum time allowed for the command; if exceeded, the check is marked as failed due to timeout. Timeouts are enforced per job.
-- **fail_fast**: boolean (optional; can only be used when `parallel` is `false`)  
+- **fail_fast**: boolean (optional; can only be used when `parallel` is `false`)
   If `true`, a failure/error in this gate stops scheduling subsequent work. Note: the current implementation enforces fail-fast at scheduling time; parallel jobs may already be running.
+- **fix_instructions_file**: string (optional)
+  Path to a file containing instructions for fixing failures. Relative paths resolve from `.gauntlet/`. Absolute paths are allowed but log a security warning. Mutually exclusive with `fix_with_skill`.
+- **fix_with_skill**: string (optional)
+  Name of a CLI skill to use for fixing failures. When the check fails, the skill name is included in the gate result for consumers. Mutually exclusive with `fix_instructions_file`.
+- **fix_instructions**: string (optional; **deprecated**)
+  Deprecated alias for `fix_instructions_file`. Cannot be specified alongside `fix_instructions_file`.
 
 ### Example
 
 ```yaml
-name: lint
 command: bun test
 working_directory: .
 parallel: false
@@ -148,37 +154,52 @@ run_in_ci: true
 run_locally: true
 timeout: 300
 fail_fast: false
+fix_instructions_file: fix-guides/test-failures.md
 ```
 
-## Review gates: `.gauntlet/reviews/*.md`
+## Review gates: `.gauntlet/reviews/*.md` and `.gauntlet/reviews/*.yml`
 
-Review gates are defined by Markdown files with YAML frontmatter.
+Review gates can be defined as either Markdown files (`.md`) or YAML files (`.yml`/`.yaml`).
 
-- The gate name is the **filename without `.md`**.
-- The review prompt is the Markdown content after the frontmatter.
+- The gate name is the **filename without extension** (e.g. `security.md` or `security.yml` → `security`).
+- If both a `.md` and `.yml`/`.yaml` file share the same base name, the system rejects the configuration with an error.
 
-### Frontmatter schema
+### Markdown reviews (`.md`)
+
+The review prompt is the Markdown content after the YAML frontmatter. Optionally, `prompt_file` or `skill_name` can be specified in frontmatter to override the body.
+
+### YAML reviews (`.yml`/`.yaml`)
+
+YAML review files must specify exactly one of `prompt_file` or `skill_name`.
+
+### Schema (frontmatter for `.md`, top-level for `.yml`)
 
 - **cli_preference**: string[] (optional)
   Ordered list of review CLI tools to try (e.g. `gemini`, `codex`, `claude`, `github-copilot`). If omitted, the project-level `cli.default_preference` is used.
-- **num_reviews**: number (default: `1`)  
+- **num_reviews**: number (default: `1`)
   How many tools to run for this review gate. If greater than 1, multiple CLIs are executed and the gate fails if any of them fail pass/fail evaluation.
-- **parallel**: boolean (default: `true`)  
+- **parallel**: boolean (default: `true`)
   If `true` (and project `allow_parallel` is enabled), this review gate may run concurrently with other parallel gates. If `false`, it runs in the sequential lane.
-- **run_in_ci**: boolean (default: `true`)  
+- **run_in_ci**: boolean (default: `true`)
   Whether this review gate runs when CI mode is detected. If `false`, the review gate is skipped in CI.
-- **run_locally**: boolean (default: `true`)  
+- **run_locally**: boolean (default: `true`)
   Whether this review gate runs in local (non-CI) execution. If `false`, the review gate is skipped locally.
-- **timeout**: number seconds (optional)  
+- **timeout**: number seconds (optional)
   Maximum time allowed for each CLI execution for this review gate. If exceeded, the job is marked as an error.
-- **model**: string (optional)  
-  Optional model hint passed to adapters that support it. Adapters that don’t support model selection will ignore this value.
+- **model**: string (optional)
+  Optional model hint passed to adapters that support it. Adapters that don't support model selection will ignore this value.
+- **prompt_file**: string (optional)
+  Path to an external file containing the review prompt. Relative paths resolve from `.gauntlet/`. Absolute paths are allowed but log a security warning. For `.md` files, this overrides the markdown body. For `.yml` files, this is one of two required prompt sources. Mutually exclusive with `skill_name`.
+- **skill_name**: string (optional)
+  Name of a CLI skill to delegate the review to. When set, no prompt content is loaded. For `.yml` files, this is one of two required prompt sources. Mutually exclusive with `prompt_file`.
 
 **JSON Output format**
 
-All reviews are automatically instructed to output strict JSON. You do not need to prompt the model for formatting. 
+All reviews are automatically instructed to output strict JSON. You do not need to prompt the model for formatting.
 
-### Example
+### Examples
+
+**Markdown review with inline prompt:**
 
 ```markdown
 ---
@@ -194,4 +215,29 @@ timeout: 120
 # Code quality review
 
 Review the diff for code quality issues. Focus on readability and maintainability.
+```
+
+**Markdown review with external prompt file:**
+
+```markdown
+---
+prompt_file: prompts/security-review.md
+cli_preference:
+  - claude
+---
+```
+
+**YAML review with external prompt file:**
+
+```yaml
+prompt_file: prompts/security-review.md
+cli_preference:
+  - claude
+```
+
+**YAML review with skill:**
+
+```yaml
+skill_name: code-review
+num_reviews: 2
 ```
