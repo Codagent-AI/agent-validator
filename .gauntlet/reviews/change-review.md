@@ -28,6 +28,8 @@ The specification lives at `openspec/changes/*/spec.md`
 
 ### 3. Task Plan Review (The "Plan")
 The task plan lives at `openspec/changes/*/tasks.md`
+*   **Pre-factoring Section:** Does `tasks.md` begin with a `## 0. Pre-factoring` section? It MUST always be present — either listing CodeScene hotspot refactorings or stating "No hotspots modified."
+*   **Pre-factoring Design:** If pre-factoring tasks are listed, does `design.md` exist and contain a `## Pre-factoring` section documenting the hotspot scores, code smells, and refactoring strategy?
 *   **Completeness:** Do the tasks map 1:1 to the Spec requirements?
 *   **Actionability:** Are the tasks broken down enough to be safe and clear?
 *   **Validation:** Do the validation steps cover the critical user paths?

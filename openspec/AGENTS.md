@@ -196,7 +196,35 @@ The system SHALL provide...
 If multiple capabilities are affected, create multiple delta files under `changes/[change-id]/specs/<capability>/spec.md`—one per capability.
 
 4. **Create tasks.md:**
+
+Every `tasks.md` MUST begin with a **Pre-factoring** section. This section checks
+whether any files **that this change will modify** are CodeScene hotspots and, if so,
+lists targeted refactorings to complete **before** the main implementation work.
+
+The scope is strictly **files touched by this change** — not all hotspots in the project.
+
+**How to populate the Pre-factoring section:**
+1. Determine which source files will be modified by the change (from the Impact section of `proposal.md`).
+2. **If the CodeScene MCP server is available**, check **only those files** for hotspots:
+   - `list_technical_debt_hotspots_for_project_file` — check each affected file individually.
+   - `list_technical_debt_hotspots_for_project` — alternatively, list all hotspots and filter to only the files this change touches.
+3. For each affected file that **is** a hotspot, use CodeScene tools to get refactoring priorities:
+   - `code_health_review` — get the full Code Health review for the file.
+   - `code_health_auto_refactor` — get an automated refactoring recommendation for the worst-scoring function.
+4. Record the results in the Pre-factoring section. If none of the files touched by this change are hotspots, write "No hotspots modified."
+
+> **Note:** The CodeScene MCP server must be configured for hotspot detection. If it is not available, write "CodeScene not available — hotspot analysis skipped." in the Pre-factoring section and proceed with implementation. See the [CodeScene MCP server documentation](https://github.com/codescene-oss/codescene-mcp) for setup instructions.
+
 ```markdown
+## 0. Pre-factoring
+<!-- Always present. Lists refactorings for CodeScene hotspots touched by this change. -->
+<!-- If no hotspots are modified, state: "No hotspots modified." -->
+
+- [ ] 0.1 Refactor `processPayment` in `src/billing.ts` (Code Health: 3.2 — Complex Method, Large Method)
+- [ ] 0.2 Refactor `validateOrder` in `src/orders.ts` (Code Health: 4.1 — Deep Nested Complexity)
+
+<!-- or: No hotspots modified. -->
+
 ## 1. Implementation
 - [ ] 1.1 Create database schema
 - [ ] 1.2 Implement API endpoint
@@ -223,6 +251,11 @@ Create `design.md` if any of the following apply; otherwise omit it:
 - New external dependency or significant data model changes
 - Security, performance, or migration complexity
 - Ambiguity that benefits from technical decisions before coding
+- **Pre-factoring required** — when the Pre-factoring section in `tasks.md` lists any refactorings (i.e., hotspots will be modified), `design.md` is **required**. Include a `## Pre-factoring` section in the design doc that documents:
+  - Which files are hotspots and their current Code Health scores
+  - The specific code smells identified by CodeScene (e.g., Complex Method, Bumpy Road)
+  - The refactoring strategy for each (extracted from `code_health_review` / `code_health_auto_refactor`)
+  - Why the refactoring is necessary before the main implementation
 
 Minimal `design.md` skeleton:
 ```markdown
