@@ -107,7 +107,7 @@ describe("DebugLogger", () => {
 			}, 4);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-;
+			const content = await fs.readFile(logPath, "utf-8");
 			expect(content).toContain("RUN_START mode=full");
 			expect(content).toContain("base_ref=origin/main");
 			expect(content).toContain("files_changed=10");
