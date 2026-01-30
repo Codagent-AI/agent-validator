@@ -107,7 +107,7 @@ describe("DebugLogger", () => {
 			}, 4);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
+			const content = await fs.readFile(logPath, "utf-;
 			expect(content).toContain("RUN_START mode=full");
 			expect(content).toContain("base_ref=origin/main");
 			expect(content).toContain("files_changed=10");
@@ -199,7 +199,7 @@ describe("DebugLogger", () => {
 				enabled: true,
 				maxSizeMb: 10,
 			});
-			await logger.logGateResult("check:src:lint", "pass", 1.234, 0);
+			await logger.logGateResult("check:src:lint", "pass", 1234, 0);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
 			const content = await fs.readFile(logPath, "utf-8");

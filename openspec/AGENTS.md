@@ -212,7 +212,7 @@ The scope is strictly **files touched by this change** — not all hotspots in t
    - `code_health_review` — get the full Code Health review listing code smells.
    - `code_health_auto_refactor` — get an automated refactoring recommendation for the worst-scoring function.
 4. Optionally, cross-reference with project-level data if available:
-   - `list_technical_debt_hotspots_for_project_file` — check if the file is a known project hotspot (requires `CS_MOUNT_PATH`).
+   - `list_technical_debt_hotspots_for_project_file` — check if the file is a known project hotspot.
    - `list_technical_debt_hotspots_for_project` — list all project hotspots and filter to affected files.
 5. Record the results in the Pre-factoring section. If none of the files touched by this change score ≤ 8.0, write "No hotspots modified."
 
