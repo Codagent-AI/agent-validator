@@ -1,9 +1,7 @@
 ---
 num_reviews: 1
 cli_preference:
-  - codex
-  - gemini
-  - claude
+  - claude # trying to save my Codex and Gemini tokens
 ---
 
 # Tasks Review

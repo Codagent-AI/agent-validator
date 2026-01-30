@@ -96,6 +96,39 @@ export class DebugLogger {
 	}
 
 	/**
+	 * Log the start of preflight checks.
+	 */
+	async logPreflightStart(jobCount: number): Promise<void> {
+		await this.write(`PREFLIGHT_START jobs=${jobCount}`);
+	}
+
+	/**
+	 * Log the result of a single preflight check.
+	 */
+	async logPreflightResult(
+		jobId: string,
+		status: "pass" | "fail",
+		reason?: string,
+	): Promise<void> {
+		// TODO enable at debug level with logtape
+		// const reasonStr = reason ? ` reason=${reason}` : "";
+		// await this.write(`PREFLIGHT_CHECK ${jobId} status=${status}${reasonStr}`);
+	}
+
+	/**
+	 * Log the end of preflight checks.
+	 */
+	async logPreflightEnd(
+		runnable: number,
+		failed: number,
+		durationMs: number,
+	): Promise<void> {
+		await this.write(
+			`PREFLIGHT_END runnable=${runnable} failed=${failed} duration=${durationMs}ms`,
+		);
+	}
+
+	/**
 	 * Log the result of a gate execution.
 	 */
 	async logGateResult(
@@ -148,7 +181,7 @@ export class DebugLogger {
 	 * Log stop hook diagnostic information.
 	 * Used to debug duplicate/unexpected stop hook invocations.
 	 */
-	async logStopHookDiagnostics(_diagnostics: {
+	async logStopHookDiagnostics(diagnostics: {
 		pid: number;
 		ppid: number;
 		envVarSet: boolean;
@@ -159,20 +192,34 @@ export class DebugLogger {
 		stdinCwd?: string;
 		stdinHookEventName?: string;
 	}): Promise<void> {
-		// TODO convert this class to use logtape and log this at debug level
-		// Format as key=value pairs, escaping values that might contain spaces
-		// const parts = [
-		// 	"STOP_HOOK_DIAG",
-		// 	`pid=${diagnostics.pid}`,
-		// 	`ppid=${diagnostics.ppid}`,
-		// 	`env_var_set=${diagnostics.envVarSet}`,
-		// 	`session_id=${diagnostics.stdinSessionId ?? "none"}`,
-		// 	`stop_hook_active=${diagnostics.stdinStopHookActive ?? "none"}`,
-		// 	`hook_event=${diagnostics.stdinHookEventName ?? "none"}`,
-		// 	`stdin_cwd=${diagnostics.stdinCwd ?? "none"}`,
-		// 	`process_cwd=${diagnostics.processCwd}`,
-		// ];
-		// await this.write(parts.join(" "));
+		const parts = [
+			"STOP_HOOK_DIAG",
+			`pid=${diagnostics.pid}`,
+			`ppid=${diagnostics.ppid}`,
+			`env_var_set=${diagnostics.envVarSet}`,
+			`session_id=${diagnostics.stdinSessionId ?? "none"}`,
+			`stop_hook_active=${diagnostics.stdinStopHookActive ?? "none"}`,
+			`hook_event=${diagnostics.stdinHookEventName ?? "none"}`,
+			`stdin_cwd=${diagnostics.stdinCwd ?? "none"}`,
+			`process_cwd=${diagnostics.processCwd}`,
+		];
+		await this.write(parts.join(" "));
+	}
+
+	/**
+	 * Log a stop hook early exit decision.
+	 * These exits happen before full initialization, so a specific event
+	 * is needed to distinguish which code path was taken.
+	 */
+	async logStopHookEarlyExit(
+		source: string,
+		status: string,
+		detail?: string,
+	): Promise<void> {
+		const detailStr = detail ? ` detail=${detail}` : "";
+		await this.write(
+			`STOP_HOOK_EARLY_EXIT source=${source} status=${status}${detailStr}`,
+		);
 	}
 
 	/**

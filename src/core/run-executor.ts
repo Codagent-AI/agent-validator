@@ -62,8 +62,41 @@ export interface ExecuteRunOptions {
 }
 
 /**
+ * Maximum age for a lock file before it's considered stale (10 minutes).
+ * Matches the stale marker threshold in stop-hook.ts.
+ */
+const STALE_LOCK_MS = 10 * 60 * 1000;
+
+/**
+ * Check if a process with the given PID is still alive.
+ */
+function isProcessAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0); // Signal 0 = check existence without killing
+		return true;
+	} catch (err: unknown) {
+		// EPERM means the process exists but we lack permission to signal it
+		if (
+			typeof err === "object" &&
+			err !== null &&
+			"code" in err &&
+			(err as { code: string }).code === "EPERM"
+		) {
+			return true;
+		}
+		// ESRCH or other errors mean the process doesn't exist
+		return false;
+	}
+}
+
+/**
  * Acquire the lock file. Returns true if successful, false if lock exists.
  * Unlike acquireLock() in shared.ts, this doesn't call process.exit().
+ *
+ * If the lock file already exists, checks for staleness:
+ * - If the PID in the lock file is no longer alive, removes the lock and retries.
+ * - If the lock file is older than STALE_LOCK_MS, removes the lock and retries.
+ * This prevents zombie processes from holding locks indefinitely.
  */
 async function tryAcquireLock(logDir: string): Promise<boolean> {
 	await fs.mkdir(logDir, { recursive: true });
@@ -78,6 +111,36 @@ async function tryAcquireLock(logDir: string): Promise<boolean> {
 			"code" in err &&
 			(err as { code: string }).code === "EEXIST"
 		) {
+			// Lock exists — check if the holding process is still alive
+			try {
+				const lockContent = await fs.readFile(lockPath, "utf-8");
+				const lockPid = parseInt(lockContent.trim(), 10);
+				const lockStat = await fs.stat(lockPath);
+				const lockAgeMs = Date.now() - lockStat.mtimeMs;
+
+				const pidValid = !Number.isNaN(lockPid);
+				const pidDead = pidValid && !isProcessAlive(lockPid);
+				// Only use time-based staleness when we can't determine the PID
+				// (e.g. lock file is empty or contains non-numeric content).
+				// If the PID is valid and alive, never steal the lock regardless of age.
+				const lockStale = !pidValid && lockAgeMs > STALE_LOCK_MS;
+
+				if (pidDead || lockStale) {
+					// Stale lock — remove and retry once
+					await fs.rm(lockPath, { force: true });
+					try {
+						await fs.writeFile(lockPath, String(process.pid), {
+							flag: "wx",
+						});
+						return true;
+					} catch {
+						// Another process beat us to it
+						return false;
+					}
+				}
+			} catch {
+				// Can't read/stat lock file — treat as active lock
+			}
 			return false;
 		}
 		throw err;
@@ -315,214 +378,226 @@ export async function executeRun(
 			};
 		}
 
-		// Initialize Logger early to get unified run number for console log
-		const logger = new Logger(config.project.log_dir);
-		await logger.init();
-		const runNumber = logger.getRunNumber();
+		// Lock acquired — wrap in try/finally to guarantee release on all paths
+		try {
+			// Initialize Logger early to get unified run number for console log
+			const logger = new Logger(config.project.log_dir);
+			await logger.init();
+			const runNumber = logger.getRunNumber();
 
-		consoleLogHandle = await startConsoleLog(config.project.log_dir, runNumber);
+			consoleLogHandle = await startConsoleLog(
+				config.project.log_dir,
+				runNumber,
+			);
 
-		let failuresMap: Map<string, Map<string, PreviousViolation[]>> | undefined;
-		let changeOptions:
-			| { commit?: string; uncommitted?: boolean; fixBase?: string }
-			| undefined;
+			let failuresMap:
+				| Map<string, Map<string, PreviousViolation[]>>
+				| undefined;
+			let changeOptions:
+				| { commit?: string; uncommitted?: boolean; fixBase?: string }
+				| undefined;
 
-		let passedSlotsMap: Map<string, Map<number, PassedSlot>> | undefined;
+			let passedSlotsMap: Map<string, Map<number, PassedSlot>> | undefined;
 
-		if (isRerun) {
-			log.debug("Existing logs detected — running in verification mode...");
-			const { failures: previousFailures, passedSlots } =
-				await findPreviousFailures(config.project.log_dir, options.gate, true);
+			if (isRerun) {
+				log.debug("Existing logs detected — running in verification mode...");
+				const { failures: previousFailures, passedSlots } =
+					await findPreviousFailures(
+						config.project.log_dir,
+						options.gate,
+						true,
+					);
 
-			failuresMap = new Map();
-			for (const gateFailure of previousFailures) {
-				const adapterMap = new Map<string, PreviousViolation[]>();
-				for (const af of gateFailure.adapterFailures) {
-					const key = af.reviewIndex ? String(af.reviewIndex) : af.adapterName;
-					adapterMap.set(key, af.violations);
+				failuresMap = new Map();
+				for (const gateFailure of previousFailures) {
+					const adapterMap = new Map<string, PreviousViolation[]>();
+					for (const af of gateFailure.adapterFailures) {
+						const key = af.reviewIndex
+							? String(af.reviewIndex)
+							: af.adapterName;
+						adapterMap.set(key, af.violations);
+					}
+					failuresMap.set(gateFailure.jobId, adapterMap);
 				}
-				failuresMap.set(gateFailure.jobId, adapterMap);
-			}
 
-			passedSlotsMap = passedSlots;
+				passedSlotsMap = passedSlots;
 
-			if (previousFailures.length > 0) {
-				const totalViolations = previousFailures.reduce(
-					(sum, gf) =>
-						sum +
-						gf.adapterFailures.reduce((s, af) => s + af.violations.length, 0),
-					0,
-				);
-				log.warn(
-					`Found ${previousFailures.length} gate(s) with ${totalViolations} previous violation(s)`,
-				);
-			}
-
-			changeOptions = { uncommitted: true };
-			const executionState = await readExecutionState(config.project.log_dir);
-			if (executionState?.working_tree_ref) {
-				changeOptions.fixBase = executionState.working_tree_ref;
-			}
-		} else if (!logsExist) {
-			const executionState = await readExecutionState(config.project.log_dir);
-			if (executionState) {
-				const resolved = await resolveFixBase(
-					executionState,
-					effectiveBaseBranch,
-				);
-				if (resolved.warning) {
-					log.warn(`Warning: ${resolved.warning}`);
+				if (previousFailures.length > 0) {
+					const totalViolations = previousFailures.reduce(
+						(sum, gf) =>
+							sum +
+							gf.adapterFailures.reduce((s, af) => s + af.violations.length, 0),
+						0,
+					);
+					log.warn(
+						`Found ${previousFailures.length} gate(s) with ${totalViolations} previous violation(s)`,
+					);
 				}
-				if (resolved.fixBase) {
-					changeOptions = { fixBase: resolved.fixBase };
+
+				changeOptions = { uncommitted: true };
+				const executionState = await readExecutionState(config.project.log_dir);
+				if (executionState?.working_tree_ref) {
+					changeOptions.fixBase = executionState.working_tree_ref;
+				}
+			} else if (!logsExist) {
+				const executionState = await readExecutionState(config.project.log_dir);
+				if (executionState) {
+					const resolved = await resolveFixBase(
+						executionState,
+						effectiveBaseBranch,
+					);
+					if (resolved.warning) {
+						log.warn(`Warning: ${resolved.warning}`);
+					}
+					if (resolved.fixBase) {
+						changeOptions = { fixBase: resolved.fixBase };
+					}
 				}
 			}
-		}
 
-		// Allow explicit commit or uncommitted options to override fixBase
-		if (options.commit || options.uncommitted) {
-			changeOptions = {
-				commit: options.commit,
-				uncommitted: options.uncommitted,
-				fixBase: changeOptions?.fixBase,
-			};
-		}
+			// Allow explicit commit or uncommitted options to override fixBase
+			if (options.commit || options.uncommitted) {
+				changeOptions = {
+					commit: options.commit,
+					uncommitted: options.uncommitted,
+					fixBase: changeOptions?.fixBase,
+				};
+			}
 
-		const changeDetector = new ChangeDetector(
-			effectiveBaseBranch,
-			changeOptions || {
-				commit: options.commit,
-				uncommitted: options.uncommitted,
-			},
-		);
-		const expander = new EntryPointExpander();
-		const jobGen = new JobGenerator(config);
+			const changeDetector = new ChangeDetector(
+				effectiveBaseBranch,
+				changeOptions || {
+					commit: options.commit,
+					uncommitted: options.uncommitted,
+				},
+			);
+			const expander = new EntryPointExpander();
+			const jobGen = new JobGenerator(config);
 
-		log.debug("Detecting changes...");
-		const changes = await changeDetector.getChangedFiles();
+			log.debug("Detecting changes...");
+			const changes = await changeDetector.getChangedFiles();
 
-		if (changes.length === 0) {
-			log.info("No changes detected.");
-			// Do not write execution state - no gates ran
-			await releaseLock(config.project.log_dir);
+			if (changes.length === 0) {
+				log.info("No changes detected.");
+				// Do not write execution state - no gates ran
+				consoleLogHandle?.restore();
+				if (loggerInitializedHere) {
+					await resetLogger();
+				}
+				return {
+					status: "no_changes",
+					message: getStatusMessage("no_changes"),
+					gatesRun: 0,
+				};
+			}
+
+			log.debug(`Found ${changes.length} changed files.`);
+
+			const entryPoints = await expander.expand(
+				config.project.entry_points,
+				changes,
+			);
+			let jobs = jobGen.generateJobs(entryPoints);
+
+			if (options.gate) {
+				jobs = jobs.filter((j) => j.name === options.gate);
+			}
+
+			if (jobs.length === 0) {
+				log.warn("No applicable gates for these changes.");
+				// Do not write execution state - no gates ran
+				consoleLogHandle?.restore();
+				if (loggerInitializedHere) {
+					await resetLogger();
+				}
+				return {
+					status: "no_applicable_gates",
+					message: getStatusMessage("no_applicable_gates"),
+					gatesRun: 0,
+				};
+			}
+
+			log.debug(`Running ${jobs.length} gates...`);
+
+			// Compute diff stats and log run start
+			const runMode = isRerun ? "verification" : "full";
+			const diffStats = await computeDiffStats(
+				effectiveBaseBranch,
+				changeOptions || {
+					commit: options.commit,
+					uncommitted: options.uncommitted,
+				},
+			);
+			await debugLogger?.logRunStartWithDiff(runMode, diffStats, jobs.length);
+
+			const reporter = new ConsoleReporter();
+			const runner = new Runner(
+				config,
+				logger,
+				reporter,
+				failuresMap,
+				changeOptions,
+				effectiveBaseBranch,
+				passedSlotsMap,
+				debugLogger ?? undefined,
+			);
+
+			const outcome = await runner.run(jobs);
+
+			// Log run end with actual statistics from runner
+			await debugLogger?.logRunEnd(
+				outcome.allPassed ? "pass" : "fail",
+				outcome.stats.fixed,
+				outcome.stats.skipped,
+				outcome.stats.failed,
+				logger.getRunNumber(),
+			);
+
+			// Write execution state before releasing lock
+			await writeExecutionState(config.project.log_dir);
+
+			const consoleLogPath = await findLatestConsoleLog(config.project.log_dir);
+
+			// Determine the correct status based on runner outcome
+			let status: GauntletStatus;
+			if (outcome.retryLimitExceeded) {
+				status = "retry_limit_exceeded";
+			} else if (outcome.allPassed && outcome.anySkipped) {
+				status = "passed_with_warnings";
+			} else if (outcome.allPassed) {
+				status = "passed";
+			} else {
+				status = "failed";
+			}
+
+			// Clean logs only on full success (not passed_with_warnings)
+			if (status === "passed") {
+				await debugLogger?.logClean("auto", "all_passed");
+				await cleanLogs(config.project.log_dir);
+			}
+
 			consoleLogHandle?.restore();
+
+			// Clean up logger if we initialized it
 			if (loggerInitializedHere) {
 				await resetLogger();
 			}
+
 			return {
-				status: "no_changes",
-				message: getStatusMessage("no_changes"),
-				gatesRun: 0,
+				status,
+				message: getStatusMessage(status),
+				gatesRun: jobs.length,
+				gatesFailed: outcome.allPassed ? 0 : jobs.length,
+				consoleLogPath: consoleLogPath ?? undefined,
 			};
-		}
-
-		log.debug(`Found ${changes.length} changed files.`);
-
-		const entryPoints = await expander.expand(
-			config.project.entry_points,
-			changes,
-		);
-		let jobs = jobGen.generateJobs(entryPoints);
-
-		if (options.gate) {
-			jobs = jobs.filter((j) => j.name === options.gate);
-		}
-
-		if (jobs.length === 0) {
-			log.warn("No applicable gates for these changes.");
-			// Do not write execution state - no gates ran
+		} finally {
+			// Guarantee lock release regardless of how we exit the post-lock section
 			await releaseLock(config.project.log_dir);
-			consoleLogHandle?.restore();
-			if (loggerInitializedHere) {
-				await resetLogger();
-			}
-			return {
-				status: "no_applicable_gates",
-				message: getStatusMessage("no_applicable_gates"),
-				gatesRun: 0,
-			};
 		}
-
-		log.debug(`Running ${jobs.length} gates...`);
-
-		// Compute diff stats and log run start
-		const runMode = isRerun ? "verification" : "full";
-		const diffStats = await computeDiffStats(
-			effectiveBaseBranch,
-			changeOptions || {
-				commit: options.commit,
-				uncommitted: options.uncommitted,
-			},
-		);
-		await debugLogger?.logRunStartWithDiff(runMode, diffStats, jobs.length);
-
-		const reporter = new ConsoleReporter();
-		const runner = new Runner(
-			config,
-			logger,
-			reporter,
-			failuresMap,
-			changeOptions,
-			effectiveBaseBranch,
-			passedSlotsMap,
-			debugLogger ?? undefined,
-		);
-
-		const outcome = await runner.run(jobs);
-
-		// Log run end with actual statistics from runner
-		await debugLogger?.logRunEnd(
-			outcome.allPassed ? "pass" : "fail",
-			outcome.stats.fixed,
-			outcome.stats.skipped,
-			outcome.stats.failed,
-			logger.getRunNumber(),
-		);
-
-		// Write execution state before releasing lock
-		await writeExecutionState(config.project.log_dir);
-
-		const consoleLogPath = await findLatestConsoleLog(config.project.log_dir);
-
-		// Determine the correct status based on runner outcome
-		let status: GauntletStatus;
-		if (outcome.retryLimitExceeded) {
-			status = "retry_limit_exceeded";
-		} else if (outcome.allPassed && outcome.anySkipped) {
-			status = "passed_with_warnings";
-		} else if (outcome.allPassed) {
-			status = "passed";
-		} else {
-			status = "failed";
-		}
-
-		// Clean logs only on full success (not passed_with_warnings)
-		if (status === "passed") {
-			await debugLogger?.logClean("auto", "all_passed");
-			await cleanLogs(config.project.log_dir);
-		}
-
-		await releaseLock(config.project.log_dir);
-		consoleLogHandle?.restore();
-
-		// Clean up logger if we initialized it
-		if (loggerInitializedHere) {
-			await resetLogger();
-		}
-
-		return {
-			status,
-			message: getStatusMessage(status),
-			gatesRun: jobs.length,
-			gatesFailed: outcome.allPassed ? 0 : jobs.length,
-			consoleLogPath: consoleLogPath ?? undefined,
-		};
 	} catch (error: unknown) {
 		// Do not write execution state on error - no gates completed successfully
-		// Only release lock if it was acquired
-		if (config && lockAcquired) {
-			await releaseLock(config.project.log_dir);
-		}
+		// Lock release is handled by the inner finally block if lock was acquired.
+		// If error occurred before lock acquisition, no release needed.
 		consoleLogHandle?.restore();
 
 		// Clean up logger if we initialized it

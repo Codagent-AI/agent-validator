@@ -837,7 +837,7 @@ describe("Stop Hook Command", () => {
 		});
 
 		it("should not log when stop_hook_active is set in stdin input", async () => {
-			// Read source to verify no debug logging happens for stop_hook_active case
+			// Read source to verify the stdin stop_hook_active path logs before exiting
 			const { readFileSync } = await import("node:fs");
 			const sourceFile = readFileSync(
 				path.join(originalCwd, "src/commands/stop-hook.ts"),
@@ -847,28 +847,26 @@ describe("Stop Hook Command", () => {
 			// Find action handler
 			const actionStart = sourceFile.indexOf(".action(async ()");
 
-			// Find stop_hook_active check from input
+			// Find stop_hook_active check from stdin input
 			const stopHookActiveCheck = sourceFile.indexOf(
 				"hookInput.stop_hook_active",
 				actionStart,
 			);
 
-			// Find where debug logger is initialized
+			// The debug logger should be initialized BEFORE the stdin stop_hook_active check
+			// so we can log the early exit event for diagnostics
 			const debugLoggerInit = sourceFile.indexOf(
 				"new DebugLogger",
 				actionStart,
 			);
+			expect(debugLoggerInit).toBeLessThan(stopHookActiveCheck);
 
-			// stop_hook_active check should come BEFORE debug logger initialization
-			// This means no debug logging happens for this case
-			expect(stopHookActiveCheck).toBeLessThan(debugLoggerInit);
-
-			// Verify the stop_hook_active block doesn't contain debugLogger calls
+			// The stdin stop_hook_active block should log before exiting
 			const stopHookActiveBlock = sourceFile.slice(
 				stopHookActiveCheck,
 				sourceFile.indexOf("return;", stopHookActiveCheck) + 10,
 			);
-			expect(stopHookActiveBlock).not.toContain("debugLogger");
+			expect(stopHookActiveBlock).toContain("logStopHookEarlyExit");
 		});
 
 		it("should not initialize debug logger when child process detected", async () => {
@@ -907,10 +905,57 @@ describe("Stop Hook Command", () => {
 		});
 	});
 
+	describe("self-timeout safety net", () => {
+		it("should have a self-timeout that fires outputHookResponse and exits", async () => {
+			// Read source file to verify the self-timeout is present
+			const { readFileSync } = await import("node:fs");
+			const sourceFile = readFileSync(
+				path.join(originalCwd, "src/commands/stop-hook.ts"),
+				"utf-8",
+			);
+
+			// Should have the self-timeout constant
+			expect(sourceFile).toContain("STOP_HOOK_TIMEOUT_MS");
+			expect(sourceFile).toContain("5 * 60 * 1000");
+
+			// Should set up setTimeout at the start of the action handler
+			const actionStart = sourceFile.indexOf(".action(async ()");
+			const selfTimeoutSetup = sourceFile.indexOf(
+				"setTimeout(",
+				actionStart,
+			);
+			const stdinRead = sourceFile.indexOf("readStdin", actionStart);
+
+			// Self-timeout should be set BEFORE stdin read
+			expect(selfTimeoutSetup).toBeLessThan(stdinRead);
+
+			// Should call process.exit(0) in the timeout handler
+			expect(sourceFile).toContain("process.exit(0)");
+
+			// Should unref the timer so it doesn't keep the process alive
+			expect(sourceFile).toContain("selfTimeout.unref()");
+		});
+
+		it("should clear the self-timeout in a finally block", async () => {
+			const { readFileSync } = await import("node:fs");
+			const sourceFile = readFileSync(
+				path.join(originalCwd, "src/commands/stop-hook.ts"),
+				"utf-8",
+			);
+
+			// Should clear the timeout in a finally block
+			expect(sourceFile).toContain("clearTimeout(selfTimeout)");
+			// The finally block should exist
+			expect(sourceFile).toContain("} finally {");
+		});
+	});
+
 	describe("simplified architecture (stop-hook delegates to executor)", () => {
 		it("should check config BEFORE stdin parsing (avoid 5s timeout)", async () => {
 			// Read source file to verify order of operations
 			const { readFileSync } = await import("node:fs");
+		
+			// TODO wow really Claude? remove all of these assertions about the source code of the class
 			const sourceFile = readFileSync(
 				path.join(originalCwd, "src/commands/stop-hook.ts"),
 				"utf-8",
@@ -1000,7 +1045,7 @@ describe("Stop Hook Command", () => {
 			expect(sourceFile).toContain("result.consoleLogPath");
 		});
 
-		it("should have only six pre-checks before calling executeRun", async () => {
+		it("should have only seven pre-checks before calling executeRun", async () => {
 			// Read source file to count pre-checks
 			const { readFileSync } = await import("node:fs");
 			const sourceFile = readFileSync(
@@ -1013,20 +1058,22 @@ describe("Stop Hook Command", () => {
 			const executeRunCall = sourceFile.indexOf("executeRun", actionStart);
 			const actionSection = sourceFile.slice(actionStart, executeRunCall);
 
-			// Pre-checks: env var, quick config, marker file, stdin parsing, stop_hook_active, no_config at cwd
+			// Pre-checks: self-timeout, env var, quick config, marker file (fresh + stale fallback), stdin parsing, stop_hook_active, no_config at cwd
 			// Count outputHookResponse calls (early returns)
 			const earlyReturns = (
 				actionSection.match(/outputHookResponse\(/g) || []
 			).length;
 
-			// Should have exactly 6 early returns before executeRun:
-			// 1. env var check (before stdin - fast exit for child processes)
-			// 2. quick config check at process.cwd() (before stdin - avoid timeout for non-gauntlet)
-			// 3. marker file check (before stdin - fast exit for nested stop-hooks)
-			// 4. invalid_input (after stdin parse failure)
-			// 5. stop_hook_active (from stdin input)
-			// 6. no_config at hookInput.cwd (when cwd differs from process.cwd())
-			expect(earlyReturns).toBe(6);
+			// Should have exactly 8 outputHookResponse calls before executeRun:
+			// 1. self-timeout handler (outputHookResponse in setTimeout callback)
+			// 2. env var check (before stdin - fast exit for child processes)
+			// 3. quick config check at process.cwd() (before stdin - avoid timeout for non-gauntlet)
+			// 4. marker file check - fresh marker (before stdin - fast exit for nested stop-hooks)
+			// 5. marker file check - stat/rm error fallback (treat as active)
+			// 6. invalid_input (after stdin parse failure)
+			// 7. stop_hook_active (from stdin input)
+			// 8. no_config at hookInput.cwd (when cwd differs from process.cwd())
+			expect(earlyReturns).toBe(8);
 		});
 	});
 });

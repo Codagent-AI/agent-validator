@@ -324,11 +324,30 @@ function getStopHookLogger() {
 export { getStopReasonInstructions, outputHookResponse, getStatusMessage };
 export type { GauntletStatus as StopHookStatus, HookResponse };
 
+/**
+ * Hard ceiling for the stop hook process.
+ * If the process runs longer than this, it outputs an allow response and exits.
+ * This prevents zombie processes when Claude Code times out reading stdout
+ * but the process keeps running.
+ */
+const STOP_HOOK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
 export function registerStopHookCommand(program: Command): void {
 	program
 		.command("stop-hook")
 		.description("Claude Code stop hook - validates gauntlet completion")
 		.action(async () => {
+			// Self-timeout: kill this process if it runs too long.
+			// Claude Code may timeout reading stdout, but the process keeps running
+			// as a zombie holding the lock and marker file.
+			const selfTimeout = setTimeout(() => {
+				outputHookResponse("error", {
+					errorMessage: "stop hook timed out",
+				});
+				process.exit(0);
+			}, STOP_HOOK_TIMEOUT_MS);
+			selfTimeout.unref(); // Don't keep process alive just for this timer
+
 			let debugLogger: DebugLogger | null = null;
 			let loggerInitialized = false;
 			let markerFilePath: string | null = null; // Track marker file for cleanup
@@ -349,7 +368,7 @@ export function registerStopHookCommand(program: Command): void {
 
 			try {
 				// ============================================================
-				// FAST EXIT CHECKS (no stdin read, no debug logging)
+				// FAST EXIT CHECKS (no stdin read, minimal logging)
 				// These checks allow quick exit without the 5-second stdin timeout
 				// ============================================================
 
@@ -358,6 +377,8 @@ export function registerStopHookCommand(program: Command): void {
 				// 1. Check env var FIRST - fast exit for child Claude processes
 				// When gauntlet spawns Claude for reviews, child processes have this set
 				if (process.env[GAUNTLET_STOP_HOOK_ACTIVE_ENV]) {
+					// No debug logging: we don't know the log dir yet, and child
+					// processes are expected to hit this path every time
 					outputHookResponse("stop_hook_active");
 					return;
 				}
@@ -372,9 +393,37 @@ export function registerStopHookCommand(program: Command): void {
 				);
 				if (!(await fileExists(quickConfigCheck))) {
 					// Not a gauntlet project - allow stop without reading stdin
+					// No debug logging: not a gauntlet project
 					outputHookResponse("no_config");
 					return;
 				}
+
+				// ============================================================
+				// EARLY DEBUG LOGGER INIT (before marker/stdin checks)
+				// We now know it's a gauntlet project, so init the debug logger
+				// early to capture every subsequent decision point.
+				// ============================================================
+				const earlyLogDir = path.join(
+					process.cwd(),
+					await getLogDir(process.cwd()),
+				);
+				try {
+					const globalConfig = await loadGlobalConfig();
+					const projectDebugLogConfig = await getDebugLogConfig(process.cwd());
+					const debugLogConfig = mergeDebugLogConfig(
+						projectDebugLogConfig,
+						globalConfig.debug_log,
+					);
+					debugLogger = new DebugLogger(earlyLogDir, debugLogConfig);
+				} catch (initErr: unknown) {
+					// Debug logger init failed — continue without it.
+					// This should never break the stop hook.
+					log.warn(
+						`Debug logger init failed: ${(initErr as { message?: string }).message ?? "unknown"}`,
+					);
+				}
+
+				await debugLogger?.logCommand("stop-hook", []);
 
 				// 3. Check marker file - fast exit for nested stop-hooks
 				// This catches child Claude processes whose stop hooks fire during gauntlet
@@ -386,15 +435,49 @@ export function registerStopHookCommand(program: Command): void {
 					STOP_HOOK_MARKER_FILE,
 				);
 				if (await fileExists(markerPath)) {
-					outputHookResponse("stop_hook_active");
-					return;
+					// Check staleness: if the marker is older than 10 minutes, the previous
+					// stop-hook process was likely killed before its finally block could clean up.
+					// Remove the stale marker and proceed instead of blocking indefinitely.
+					const STALE_MARKER_MS = 10 * 60 * 1000;
+					try {
+						const stat = await fs.stat(markerPath);
+						const ageMs = Date.now() - stat.mtimeMs;
+						if (ageMs > STALE_MARKER_MS) {
+							await debugLogger?.logStopHookEarlyExit(
+								"marker_stale",
+								"proceeding",
+								`age=${Math.round(ageMs / 1000)}s threshold=${Math.round(STALE_MARKER_MS / 1000)}s`,
+							);
+							await fs.rm(markerPath, { force: true });
+							// Fall through — marker was stale, proceed normally
+						} else {
+							await debugLogger?.logStopHookEarlyExit(
+								"marker_fresh",
+								"stop_hook_active",
+								`age=${Math.round(ageMs / 1000)}s`,
+							);
+							outputHookResponse("stop_hook_active");
+							return;
+						}
+					} catch (markerErr: unknown) {
+						const errMsg =
+							(markerErr as { message?: string }).message ?? "unknown";
+						await debugLogger?.logStopHookEarlyExit(
+							"marker_stat_error",
+							"stop_hook_active",
+							`error=${errMsg}`,
+						);
+						// If we can't stat/remove, treat as active to be safe
+						outputHookResponse("stop_hook_active");
+						return;
+					}
 				}
 
 				// ============================================================
 				// STDIN PARSING (only for gauntlet projects)
 				// ============================================================
 
-				// 3. Read stdin JSON - now we know it's a gauntlet project
+				// 4. Read stdin JSON - now we know it's a gauntlet project
 				const input = await readStdin();
 				diagnostics.rawStdin = input;
 
@@ -408,16 +491,26 @@ export function registerStopHookCommand(program: Command): void {
 						diagnostics.stdinCwd = hookInput.cwd;
 						diagnostics.stdinHookEventName = hookInput.hook_event_name;
 					}
-				} catch {
+				} catch (parseErr: unknown) {
 					// Invalid JSON - allow stop to avoid blocking on parse errors
-					log.info("Invalid hook input, allowing stop");
+					const errMsg =
+						(parseErr as { message?: string }).message ?? "unknown";
+					log.info(`Invalid hook input (${errMsg}), allowing stop`);
+					await debugLogger?.logStopHookEarlyExit(
+						"stdin_parse_error",
+						"invalid_input",
+						`error=${errMsg}`,
+					);
 					outputHookResponse("invalid_input");
 					return;
 				}
 
-				// 4. Check stop_hook_active from stdin (Claude Code's loop prevention)
-				// No debug logging here - would pollute logs with hook cycle entries
+				// 5. Check stop_hook_active from stdin (Claude Code's loop prevention)
 				if (hookInput.stop_hook_active) {
+					await debugLogger?.logStopHookEarlyExit(
+						"stdin_stop_hook_active",
+						"stop_hook_active",
+					);
 					outputHookResponse("stop_hook_active");
 					return;
 				}
@@ -428,19 +521,24 @@ export function registerStopHookCommand(program: Command): void {
 
 				log.info("Starting gauntlet validation...");
 
-				// 5. Determine project directory (use hook-provided cwd if different)
+				// 6. Determine project directory (use hook-provided cwd if different)
 				// Re-check config if cwd differs from process.cwd()
 				const projectCwd = hookInput.cwd ?? process.cwd();
 				if (hookInput.cwd && hookInput.cwd !== process.cwd()) {
 					const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
 					if (!(await fileExists(configPath))) {
 						log.info("No gauntlet config found at hook cwd, allowing stop");
+						await debugLogger?.logStopHookEarlyExit(
+							"no_config_at_cwd",
+							"no_config",
+							`cwd=${projectCwd}`,
+						);
 						outputHookResponse("no_config");
 						return;
 					}
 				}
 
-				// 6. Get log directory from project config (for debug logging)
+				// 7. Get log directory from project config (for debug logging)
 				const logDir = path.join(projectCwd, await getLogDir(projectCwd));
 
 				// Initialize app logger in stop-hook mode (file-only, no console output)
@@ -450,26 +548,31 @@ export function registerStopHookCommand(program: Command): void {
 				});
 				loggerInitialized = true;
 
-				// Initialize debug logger for stop-hook
-				const globalConfig = await loadGlobalConfig();
-				const projectDebugLogConfig = await getDebugLogConfig(projectCwd);
-				const debugLogConfig = mergeDebugLogConfig(
-					projectDebugLogConfig,
-					globalConfig.debug_log,
-				);
-				debugLogger = new DebugLogger(logDir, debugLogConfig);
+				// Re-init debug logger with the final logDir if cwd differed
+				if (logDir !== earlyLogDir) {
+					try {
+						const globalCfg = await loadGlobalConfig();
+						const projDbgCfg = await getDebugLogConfig(projectCwd);
+						const dbgCfg = mergeDebugLogConfig(projDbgCfg, globalCfg.debug_log);
+						debugLogger = new DebugLogger(logDir, dbgCfg);
+					} catch (reinitErr: unknown) {
+						log.warn(
+							`Debug logger re-init failed: ${(reinitErr as { message?: string }).message ?? "unknown"}`,
+						);
+					}
+				}
 
 				// Log diagnostic info to help debug duplicate stop-hook triggers
-				await debugLogger.logStopHookDiagnostics(diagnostics);
+				await debugLogger?.logStopHookDiagnostics(diagnostics);
 
-				await debugLogger.logCommand("stop-hook", []);
-
-				// 7. Create marker file to signal nested stop-hooks to fast-exit
+				// 8. Create marker file to signal nested stop-hooks to fast-exit
 				markerFilePath = path.join(logDir, STOP_HOOK_MARKER_FILE);
 				try {
 					await fs.writeFile(markerFilePath, `${process.pid}`, "utf-8");
-				} catch {
-					// Ignore - marker is best-effort
+				} catch (mkErr: unknown) {
+					// Marker is best-effort, but log the error
+					const errMsg = (mkErr as { message?: string }).message ?? "unknown";
+					log.warn(`Failed to create marker file: ${errMsg}`);
 					markerFilePath = null;
 				}
 
@@ -486,8 +589,10 @@ export function registerStopHookCommand(program: Command): void {
 					if (markerFilePath) {
 						try {
 							await fs.rm(markerFilePath, { force: true });
-						} catch {
-							// Ignore
+						} catch (rmErr: unknown) {
+							const errMsg =
+								(rmErr as { message?: string }).message ?? "unknown";
+							log.warn(`Failed to remove marker file: ${errMsg}`);
 						}
 						markerFilePath = null;
 					}
@@ -514,8 +619,10 @@ export function registerStopHookCommand(program: Command): void {
 				if (loggerInitialized) {
 					try {
 						await resetLogger();
-					} catch {
-						// Ignore cleanup errors
+					} catch (resetErr: unknown) {
+						const resetMsg =
+							(resetErr as { message?: string }).message ?? "unknown";
+						log.warn(`Logger reset failed: ${resetMsg}`);
 					}
 				}
 			} catch (error: unknown) {
@@ -530,8 +637,10 @@ export function registerStopHookCommand(program: Command): void {
 				if (markerFilePath) {
 					try {
 						await fs.rm(markerFilePath, { force: true });
-					} catch {
-						// Ignore
+					} catch (rmErr: unknown) {
+						// Log but don't throw — error handler must not fail
+						const rmMsg = (rmErr as { message?: string }).message ?? "unknown";
+						log.warn(`Failed to remove marker file in error handler: ${rmMsg}`);
 					}
 				}
 
@@ -539,10 +648,18 @@ export function registerStopHookCommand(program: Command): void {
 				if (loggerInitialized) {
 					try {
 						await resetLogger();
-					} catch {
-						// Ignore cleanup errors
+					} catch (resetErr: unknown) {
+						// Log to stderr as last resort
+						const resetMsg =
+							(resetErr as { message?: string }).message ?? "unknown";
+						process.stderr.write(
+							`stop-hook: logger reset failed: ${resetMsg}\n`,
+						);
 					}
 				}
+			} finally {
+				// Always clear the self-timeout so the process can exit normally
+				clearTimeout(selfTimeout);
 			}
 		});
 }
