@@ -27,6 +27,7 @@ export interface GateResult {
 	logPath?: string; // path to full log
 	logPaths?: string[]; // paths to multiple logs (e.g. per-agent logs)
 	fixInstructions?: string; // Markdown content for fixing failures
+	fixWithSkill?: string; // CLI skill name for fixing failures
 	errorCount?: number; // Number of active failures/violations
 	fixedCount?: number; // Number of violations marked as fixed
 	skipped?: Array<{

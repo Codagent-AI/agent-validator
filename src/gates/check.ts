@@ -65,13 +65,10 @@ export class CheckGateExecutor {
 					duration: Date.now() - startTime,
 					message: `Timed out after ${config.timeout}s`,
 					fixInstructions: config.fixInstructionsContent,
+					fixWithSkill: config.fixWithSkill,
 				};
 				await logger(`Result: ${result.status} - ${result.message}\n`);
-				if (config.fixInstructionsContent) {
-					await logger(
-						`\n--- Fix Instructions ---\n${config.fixInstructionsContent}\n`,
-					);
-				}
+				await this.logFixInfo(config, logger);
 				return result;
 			}
 
@@ -83,13 +80,10 @@ export class CheckGateExecutor {
 					duration: Date.now() - startTime,
 					message: `Exited with code ${err.code}`,
 					fixInstructions: config.fixInstructionsContent,
+					fixWithSkill: config.fixWithSkill,
 				};
 				await logger(`Result: ${result.status} - ${result.message}\n`);
-				if (config.fixInstructionsContent) {
-					await logger(
-						`\n--- Fix Instructions ---\n${config.fixInstructionsContent}\n`,
-					);
-				}
+				await this.logFixInfo(config, logger);
 				return result;
 			}
 
@@ -100,14 +94,25 @@ export class CheckGateExecutor {
 				duration: Date.now() - startTime,
 				message: err.message || "Unknown error",
 				fixInstructions: config.fixInstructionsContent,
+				fixWithSkill: config.fixWithSkill,
 			};
 			await logger(`Result: ${result.status} - ${result.message}\n`);
-			if (config.fixInstructionsContent) {
-				await logger(
-					`\n--- Fix Instructions ---\n${config.fixInstructionsContent}\n`,
-				);
-			}
+			await this.logFixInfo(config, logger);
 			return result;
+		}
+	}
+
+	private async logFixInfo(
+		config: LoadedCheckGateConfig,
+		logger: (output: string) => Promise<void>,
+	): Promise<void> {
+		if (config.fixInstructionsContent) {
+			await logger(
+				`\n--- Fix Instructions ---\n${config.fixInstructionsContent}\n`,
+			);
+		}
+		if (config.fixWithSkill) {
+			await logger(`\n--- Fix Skill: ${config.fixWithSkill} ---\n`);
 		}
 	}
 

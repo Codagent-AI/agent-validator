@@ -7,8 +7,7 @@ import { getAdapter } from "../cli-adapters/index.js";
 import type {
 	LoadedCheckGateConfig,
 	LoadedConfig,
-	ReviewGateConfig,
-	ReviewPromptFrontmatter,
+	LoadedReviewGateConfig,
 } from "../config/types.js";
 import { CheckGateExecutor } from "../gates/check.js";
 import type { GateResult } from "../gates/result.js";
@@ -235,7 +234,7 @@ export class Runner {
 					this.baseBranchOverride || this.config.project.base_branch;
 				result = await this.reviewExecutor.execute(
 					job.id,
-					job.gateConfig as ReviewGateConfig & ReviewPromptFrontmatter,
+					job.gateConfig as LoadedReviewGateConfig,
 					job.entryPoint,
 					loggerFactory,
 					effectiveBaseBranch,
@@ -333,8 +332,7 @@ export class Runner {
 						`command found: ${commandName}`,
 					);
 				} else {
-					const reviewConfig = job.gateConfig as ReviewGateConfig &
-						ReviewPromptFrontmatter;
+					const reviewConfig = job.gateConfig as LoadedReviewGateConfig;
 
 					// Only need at least 1 healthy adapter (round-robin handles the rest)
 					let hasHealthy = false;

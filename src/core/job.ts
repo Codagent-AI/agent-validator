@@ -1,8 +1,7 @@
 import type {
 	CheckGateConfig,
 	LoadedConfig,
-	ReviewGateConfig,
-	ReviewPromptFrontmatter,
+	LoadedReviewGateConfig,
 } from "../config/types.js";
 import type { ExpandedEntryPoint } from "./entry-point.js";
 
@@ -13,7 +12,7 @@ export interface Job {
 	type: JobType;
 	name: string;
 	entryPoint: string;
-	gateConfig: CheckGateConfig | (ReviewGateConfig & ReviewPromptFrontmatter);
+	gateConfig: CheckGateConfig | LoadedReviewGateConfig;
 	workingDirectory: string;
 }
 
