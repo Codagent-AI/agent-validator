@@ -1,5 +1,35 @@
 # agent-gauntlet
 
+## 0.7.0
+
+### Minor Changes
+
+- [#19](https://github.com/pacaplan/agent-gauntlet/pull/19) [`cf9d924`](https://github.com/pacaplan/agent-gauntlet/commit/cf9d924a6b1d215e1200b8950f30c60403258e19) Thanks [@pacaplan](https://github.com/pacaplan)! - ### Features
+
+  - Add structured logging via LogTape with stop-hook support
+  - Extend stop hook configuration with `enabled` flag and environment variable overrides
+  - Adopt Changesets for release workflow
+  - Lower default run interval
+  - Ask for base branch during init
+  - Add prompt configurability
+
+  ### Fixes
+
+  - Harden stop hook against race conditions and improve diagnostics
+  - Add `run_in_ci` default to test helper for CI stability
+  - De-dupe jobs by working directory
+  - Suppress LogTape meta logger stdout and expose `intervalMinutes` in stop-hook
+  - Add status icons and `systemMessage` to stop-hook output
+
+  ### Refactors
+
+  - Simplify stop-hook by delegating interval check to executor
+  - CodeScene hotspot pre-factoring
+
+  ### CI
+
+  - Add GitHub Releases on publish
+
 ## 0.6.0
 
 ### Minor Changes
