@@ -19,6 +19,7 @@ entry_points:
       - test
       - security-code
       - schema-validate
+      - code-health
   - path: "package.json"
     checks:
       - build
