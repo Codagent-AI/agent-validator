@@ -19,6 +19,7 @@ import {
 	type RunResult,
 } from "../types/gauntlet-status.js";
 import { DebugLogger, mergeDebugLogConfig } from "../utils/debug-log.js";
+import { writeExecutionState } from "../utils/execution-state.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -520,6 +521,7 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
 async function postGauntletPRCheck(
 	projectCwd: string,
 	gauntletStatus: GauntletStatus,
+	options: { logDir: string },
 ): Promise<{ finalStatus: GauntletStatus; pushPRReason?: string }> {
 	if (
 		gauntletStatus !== "passed" &&
@@ -539,6 +541,12 @@ async function postGauntletPRCheck(
 	}
 
 	if (!prStatus.prExists || !prStatus.upToDate) {
+		// Refresh execution state so files created during PR push are captured
+		try {
+			await writeExecutionState(options.logDir);
+		} catch {
+			// Non-fatal; stale state won't block the next run
+		}
 		return {
 			finalStatus: "pr_push_required",
 			pushPRReason: getPushPRInstructions({
@@ -866,15 +874,13 @@ export function registerStopHookCommand(program: Command): void {
 					}
 				}
 
-				// 9. Handle results using unified GauntletStatus directly
 				log.info(`Gauntlet completed with status: ${result.status}`);
 
-				// 10. Post-gauntlet PR check: when gates pass and auto_push_pr is enabled,
-				// verify a PR exists and is up to date before allowing stop.
-				// Only triggers on direct success statuses (passed, passed_with_warnings).
+				// 10. Post-gauntlet PR check: verify PR exists and is up to date (passed/passed_with_warnings only)
 				const { finalStatus, pushPRReason } = await postGauntletPRCheck(
 					projectCwd,
 					result.status,
+					{ logDir },
 				);
 
 				await debugLogger?.logStopHook(

@@ -265,6 +265,26 @@ export async function gitObjectExists(sha: string): Promise<boolean> {
 }
 
 /**
+ * When a commit has been merged, check if working_tree_ref still scopes valid changes.
+ */
+async function resolveFixBaseForMergedCommit(
+	working_tree_ref: string | undefined,
+): Promise<{ fixBase: string | null; warning?: string }> {
+	if (!working_tree_ref) {
+		return { fixBase: null };
+	}
+	const refExists = await gitObjectExists(working_tree_ref);
+	if (!refExists) {
+		return { fixBase: null };
+	}
+	return {
+		fixBase: working_tree_ref,
+		warning:
+			"Commit merged into base branch, using working tree ref for diff scope",
+	};
+}
+
+/**
  * Resolve the fixBase for change detection based on execution state.
  * Used for post-clean runs to scope diffs to changes since the last passing run.
  *
@@ -282,8 +302,7 @@ export async function resolveFixBase(
 	// Check if commit has been merged into base branch (state is stale)
 	const commitMerged = await isCommitInBranch(commit, baseBranch);
 	if (commitMerged) {
-		// State is stale - our work was merged, use base branch
-		return { fixBase: null };
+		return resolveFixBaseForMergedCommit(working_tree_ref);
 	}
 
 	// Check if working_tree_ref exists
