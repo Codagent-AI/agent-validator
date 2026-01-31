@@ -4,9 +4,9 @@ log_dir: gauntlet_logs
 allow_parallel: true
 cli:
   default_preference:
-    - codex
     - gemini
     - claude
+    - codex
 stop_hook:
   auto_push_pr: true
 entry_points:
