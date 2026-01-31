@@ -116,7 +116,7 @@ GAUNTLET_STOP_HOOK_ENABLED=false claude
 
 4. **Interval not elapsed**: If less than `run_interval_minutes` since the last run (and interval > 0), the hook allows the stop without re-running gates.
 
-5. **Gates pass**: If `agent-gauntlet run` succeeds, the hook allows the stop.
+5. **Gates pass**: If `agent-gauntlet run` succeeds, the hook allows the stop (or proceeds to PR check if `auto_push_pr` is enabled).
 
 6. **Gates fail**: The hook blocks the stop and returns instructions to the agent for fixing issues.
 
@@ -126,7 +126,50 @@ The agent can stop when any of these conditions are met:
 
 - **"Status: Passed"** — All gates passed successfully
 - **"Status: Passed with warnings"** — Some issues were skipped (marked as `status: "skipped"`)
-- **"Status: Retry limit exceeded"** — Too many fix attempts; requires `agent-gauntlet clean` to archive and reset
+- **"Status: Retry limit exceeded"** — Too many fix attempts (`max_retries`, default 3); requires `agent-gauntlet clean` to archive and reset
+
+### Retry Limits
+
+The `max_retries` setting (default: `3`) controls how many additional runs the gauntlet allows after the initial run. After the initial run plus `max_retries` re-runs, the gauntlet reports "Retry limit exceeded" and allows the agent to stop. At that point, run `agent-gauntlet clean` to archive the session.
+
+### Review Trust Level
+
+When the stop hook blocks due to review failures, it includes a **trust level** directive in the feedback to the agent. This is currently hardcoded to `medium`, meaning: fix issues you reasonably agree with or believe the human wants fixed; skip issues that are purely stylistic, subjective, or that you believe the human would not want changed.
+
+### Auto Push PR
+
+When `stop_hook.auto_push_pr` is enabled, an additional check runs after gates pass:
+
+1. Uses `gh pr view` to check whether a PR exists for the current branch
+2. Compares the PR's head SHA against the local `HEAD` to verify all commits are pushed
+3. If no PR exists or the PR is out of date, the stop is blocked with instructions to commit, push, and create/update the PR
+4. If `gh` CLI is unavailable or any error occurs, the check is skipped gracefully (does not block)
+
+### Adapter Health and Cooldown
+
+Review gates dispatch work to CLI adapters (e.g., codex, gemini, claude). If an adapter hits a usage limit or quota error during a review, it is marked **unhealthy** for a 1-hour cooldown period. This prevents wasting time retrying adapters that are temporarily unavailable.
+
+**How it works:**
+
+1. **Detection**: When an adapter process exits with an error, the system checks the error output for usage-limit phrases (e.g., "usage limit", "quota exceeded", "credit balance is too low").
+2. **Marking**: If a usage limit is detected, the adapter is written to the `unhealthy_adapters` map in `gauntlet_logs/.execution_state` with a `marked_at` timestamp and `reason`.
+3. **Skipping**: On each subsequent run, before dispatching reviews, the system checks the unhealthy map. Adapters within the 1-hour cooldown are skipped.
+4. **Recovery**: After the cooldown expires, the adapter's binary is probed. If healthy, the flag is cleared and the adapter rejoins the pool.
+5. **Round-robin fallback**: The `num_reviews` round-robin assignment uses only healthy adapters. If `num_reviews: 2` but only one adapter is healthy, both review slots are assigned to that adapter.
+6. **No mid-execution failover**: If an adapter fails during a run, that review slot is lost for the current iteration. The adapter is marked unhealthy and skipped on the next rerun.
+7. **No healthy adapters**: If all configured adapters are unhealthy or unavailable, the review gate returns an error immediately.
+
+**Example**: With `cli_preference: [codex, gemini]` and `num_reviews: 2`, if codex hits a rate limit:
+- Current run: codex@1 errors, gemini@2 passes → gate fails (incomplete)
+- Next run: codex is cooling down, skipped → gemini@1 and gemini@2 both assigned → gate can pass
+
+### Review Rerun Behavior
+
+When the gauntlet re-runs after a failure, it uses **verification mode** to avoid redundant work:
+
+- **Checks**: Only failed checks are re-run; passed checks are skipped.
+- **Reviews**: For `num_reviews > 1`, review slots that previously passed with the same adapter are skipped. Only failed or errored slots are re-dispatched.
+- **Safety latch**: If all review slots previously passed (e.g., the failure was from a check gate, not a review), a single slot is re-run as a verification check to confirm the fix didn't introduce regressions.
 
 ## Viewing Hook Output
 
@@ -310,7 +353,7 @@ The hook has built-in infinite loop prevention. If `stop_hook_active: true` is s
 
 3. **Handle skipped issues**: Use `"status": "skipped"` with a reason for issues you intentionally don't fix. This allows the gauntlet to pass with warnings.
 
-4. **Clean between branches**: Run `agent-gauntlet clean` when switching branches to avoid confusion from stale logs.
+4. **Clean between branches**: Run `agent-gauntlet clean` when switching branches to avoid confusion from stale logs. This archives log files and deletes execution state (including unhealthy adapter entries).
 
 ## Related Documentation
 
