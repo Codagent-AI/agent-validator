@@ -20,4 +20,17 @@ This change depends on `add-auto-push-pr` being implemented first.
 ## Impact
 
 - Affected specs: stop-hook, agent-command, init-hook-install
-- Affected code: `src/types/gauntlet-status.ts`, `src/config/schema.ts`, `src/config/global.ts`, `src/config/stop-hook-config.ts`, `src/commands/wait-ci.ts` (new), `src/commands/index.ts`, `src/index.ts`, `src/commands/stop-hook.ts`, `src/commands/init.ts`, `src/templates/fix_pr.template.md` (new)
+- Affected code:
+  - `src/types/gauntlet-status.ts` — add CI status values
+  - `src/config/schema.ts` — add `auto_fix_pr` to schema
+  - `src/config/global.ts` — add `auto_fix_pr` to global config
+  - `src/config/stop-hook-config.ts` — add `GAUNTLET_AUTO_FIX_PR` env var and resolution
+  - `src/commands/wait-ci.ts` (new) — CI polling command
+  - `src/commands/index.ts` — register wait-ci command
+  - `src/index.ts` — register wait-ci command
+  - `src/hooks/stop-hook-handler.ts` — CI workflow logic in handler
+  - `src/hooks/adapters/types.ts` — add `ciFixReason`, `ciPendingReason` to `StopHookResult`
+  - `src/hooks/adapters/claude-stop-hook.ts` — handle CI statuses in `formatOutput()`
+  - `src/hooks/adapters/cursor-stop-hook.ts` — handle CI statuses in `formatOutput()`
+  - `src/commands/init.ts` — install fix_pr.md template
+  - `src/templates/fix_pr.template.md` (new) — fix-pr instructions template

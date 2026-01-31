@@ -36,16 +36,21 @@ Hotspot modified by this change: `stop-hook.ts` (7.07, cc=36). Refactoring defer
 - [ ] Handle `gh` CLI not installed with clear error
 - [ ] Register command in `src/commands/index.ts` and `src/index.ts`
 
-### Stop Hook CI Workflow
+### Stop Hook CI Workflow (in `src/hooks/stop-hook-handler.ts`)
 - [ ] Add `readCIWaitAttempts(logDir)` helper — reads `.ci-wait-attempts` marker file
 - [ ] Add `writeCIWaitAttempts(logDir, count)` helper — writes attempt count
 - [ ] Add `cleanCIWaitAttempts(logDir)` helper — removes marker file
 - [ ] Add `runWaitCI(cwd)` helper — spawns `agent-gauntlet wait-ci` and parses JSON output
-- [ ] Add `getCIFixInstructions(ciResult)` helper — generates fix-pr prompt with skill-first lookup and failure details
+- [ ] Add `getCIFixInstructions(ciResult)` helper — generates fix-pr prompt with failure details (follows simplified pattern like `getPushPRInstructions`)
 - [ ] Add `getCIPendingInstructions(ciResult, attemptNumber)` helper — generates wait-and-retry prompt with attempt count and ~30 second wait
 - [ ] Add `getStatusMessage()` cases for `ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`
-- [ ] Add CI workflow branching in stop-hook: when PR exists and is up to date + auto_fix_pr enabled, run wait-ci and handle result (auto_push_pr flow runs first if PR is missing/stale)
+- [ ] Extend `StopHookHandler.execute()` with CI workflow: when PR exists and is up to date + auto_fix_pr enabled, run wait-ci and handle result (auto_push_pr flow runs first if PR is missing/stale)
 - [ ] Implement 3-attempt retry limit for ci_pending; on max attempts, approve with `ci_timeout` status and message indicating CI wait exhausted
+
+### Adapter Updates
+- [ ] Add `ciFixReason` and `ciPendingReason` fields to `StopHookResult` interface in `src/hooks/adapters/types.ts`
+- [ ] Update `ClaudeStopHookAdapter.formatOutput()` to handle `ci_pending` and `ci_failed` statuses (use `ciFixReason`/`ciPendingReason` for `reason` field)
+- [ ] Update `CursorStopHookAdapter.formatOutput()` to handle `ci_pending` and `ci_failed` statuses (use `ciFixReason`/`ciPendingReason` for `followup_message` field)
 
 ### Template Command
 - [ ] Create `src/templates/fix_pr.template.md` — simplified fix-pr instructions (renamed from address-pr)
@@ -71,10 +76,31 @@ Hotspot modified by this change: `stop-hook.ts` (7.07, cc=36). Refactoring defer
   - [ ] Mixed state: some failed + some pending → immediate failure
 - [ ] Add tests for `runWaitCI()` helper: JSON parsing of wait-ci output, handling of spawn failures
 - [ ] Add tests for CI wait attempt marker file read/write/clean
-- [ ] Add tests for fix-pr and pending instruction content (including attempt numbers and ~30s wait)
+- [ ] Add tests for fix-pr instruction content (includes failure details, fix-and-push guidance)
+- [ ] Add tests for pending instruction content (includes attempt numbers and ~30s wait)
 - [ ] Add tests for init creating fix_pr.md template
-- [ ] Add integration tests in `test/commands/stop-hook.test.ts` for CI wait workflow: auto_push_pr flow completes before CI wait; CI passed approves; CI failed blocks with fix instructions; CI pending increments marker; max attempts approves with ci_timeout
+- [ ] Add tests in `test/hooks/adapters/claude-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed` use `ciFixReason`/`ciPendingReason` in `reason` field)
+- [ ] Add tests in `test/hooks/adapters/cursor-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed` use `ciFixReason`/`ciPendingReason` in `followup_message` field)
 
-## 3. Validation
+Note: Full integration tests for the CI wait workflow in `StopHookHandler` are deferred — the workflow involves external dependencies (`gh` CLI, GitHub API, actual CI state) that are impractical to mock reliably. The Manual Verification section covers end-to-end testing.
 
-There are no validation tasks that need to be explicitly run. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
+## 3. Manual Verification
+
+These steps verify basic functionality that cannot be easily unit tested. They must be performed by the agent before marking the task complete.
+
+### wait-ci command
+- [ ] 3.1 Run `bun src/index.ts wait-ci --help` — verify command is registered and shows `--timeout` and `--poll-interval` options
+- [ ] 3.2 Run `bun src/index.ts wait-ci` in this repo (no PR on current branch) — verify exit code 1 and JSON output with `ci_status: "error"`
+
+### Marker file behavior
+- [ ] 3.3 Verify marker file helpers work correctly:
+  - Create `gauntlet_logs/.ci-wait-attempts` with `{"count":2}`
+  - Call `readCIWaitAttempts()` — verify returns 2
+  - Call `writeCIWaitAttempts(3)` — verify file updated
+  - Call `cleanCIWaitAttempts()` — verify file removed
+
+## 4. Validation
+
+There are no additional validation tasks. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
+
+If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.

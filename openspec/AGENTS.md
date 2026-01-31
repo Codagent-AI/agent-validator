@@ -255,9 +255,10 @@ The scope is strictly **files touched by this change** — not all hotspots in t
 Always include the following as the final validation instructions in `tasks.md` Example:
 ```markdown
 ## 8. Validation
-There are no validation tasks that need to be explicitly run. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
 
 If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.
+
+There are no automated validation tasks that need to be explicitly run. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
 ```
 **Do not** include linting, tests, build, etc. in the validation; the gauntlet suite runs all of this.
 
