@@ -136,7 +136,9 @@ export class CodexAdapter implements CLIAdapter {
 								if (code === 0 || code === null) {
 									resolve(chunks.join(""));
 								} else {
-									reject(processExitError(code, getStderr));
+									reject(
+										processExitError(code, getStderr, () => chunks.join("")),
+									);
 								}
 							});
 						});

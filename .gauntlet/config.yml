@@ -1,12 +1,15 @@
 name: agent-gauntlet
 base_branch: origin/main
 log_dir: gauntlet_logs
+debug_log:
+  enabled: true
+  max_size_mb: 10
 allow_parallel: true
 cli:
   default_preference:
+    - claude
     - codex
     - gemini
-    - claude
 stop_hook:
   auto_push_pr: true
 entry_points:

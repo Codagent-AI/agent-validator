@@ -1,9 +1,25 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { getDebugLogger } from "./debug-log.js";
 
 const EXECUTION_STATE_FILENAME = ".execution_state";
 const SESSION_REF_FILENAME = ".session_ref";
+
+function extractUnhealthyAdapters(
+	rawData: Record<string, unknown> | null,
+): Record<string, UnhealthyAdapter> | undefined {
+	if (!rawData || typeof rawData.unhealthy_adapters !== "object") {
+		return undefined;
+	}
+	return rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>;
+}
+
+async function logExecutionStateEvent(message: string): Promise<void> {
+	const logger = getDebugLogger();
+	if (!logger) return;
+	await logger.logExecutionState(message);
+}
 
 export interface UnhealthyAdapter {
 	marked_at: string;
@@ -125,12 +141,21 @@ export async function createWorkingTreeRef(): Promise<string> {
  * Also cleans up legacy .session_ref file if it exists.
  */
 export async function writeExecutionState(logDir: string): Promise<void> {
-	const [branch, commit, workingTreeRef, existing] = await Promise.all([
+	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+	const [branch, commit, workingTreeRef, rawState] = await Promise.all([
 		getCurrentBranch(),
 		getCurrentCommit(),
 		createWorkingTreeRef(),
-		readExecutionState(logDir),
+		readRawState(statePath),
 	]);
+	const existingUnhealthy = extractUnhealthyAdapters(rawState);
+
+	const existingAdapters = existingUnhealthy
+		? Object.keys(existingUnhealthy)
+		: [];
+	await logExecutionStateEvent(
+		`write start existing_unhealthy=${existingAdapters.join(",") || "none"}`,
+	);
 
 	const state: ExecutionState = {
 		last_run_completed_at: new Date().toISOString(),
@@ -140,13 +165,19 @@ export async function writeExecutionState(logDir: string): Promise<void> {
 	};
 
 	// Preserve unhealthy_adapters from existing state
-	if (existing?.unhealthy_adapters) {
-		state.unhealthy_adapters = existing.unhealthy_adapters;
+	if (existingUnhealthy) {
+		state.unhealthy_adapters = existingUnhealthy;
 	}
+
+	const finalAdapters = state.unhealthy_adapters
+		? Object.keys(state.unhealthy_adapters)
+		: [];
+	await logExecutionStateEvent(
+		`write final_unhealthy=${finalAdapters.join(",") || "none"}`,
+	);
 
 	// Ensure the log directory exists
 	await fs.mkdir(logDir, { recursive: true });
-	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
 	await fs.writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
 
 	// Clean up legacy .session_ref file if it exists
@@ -347,8 +378,9 @@ export function isAdapterCoolingDown(entry: UnhealthyAdapter): boolean {
 export async function getUnhealthyAdapters(
 	logDir: string,
 ): Promise<Record<string, UnhealthyAdapter>> {
-	const state = await readExecutionState(logDir);
-	return state?.unhealthy_adapters ?? {};
+	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+	const rawState = await readRawState(statePath);
+	return extractUnhealthyAdapters(rawState) ?? {};
 }
 
 /**
@@ -380,11 +412,17 @@ export async function markAdapterUnhealthy(
 
 	const adapters =
 		(rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>) ?? {};
+	const existingAdapters = Object.keys(adapters);
 	adapters[adapterName] = {
 		marked_at: new Date().toISOString(),
 		reason,
 	};
 	rawData.unhealthy_adapters = adapters;
+
+	const updatedAdapters = Object.keys(adapters);
+	await logExecutionStateEvent(
+		`mark_unhealthy adapter=${adapterName} existing=${existingAdapters.join(",") || "none"} updated=${updatedAdapters.join(",") || "none"}`,
+	);
 
 	await fs.mkdir(logDir, { recursive: true });
 	await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), "utf-8");

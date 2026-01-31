@@ -24,15 +24,20 @@ export function collectStderr(
 }
 
 /**
- * Builds an Error for a non-zero process exit, including stderr if available.
+ * Builds an Error for a non-zero process exit, including stdout and stderr if available.
+ * Both stdout and stderr are included to ensure usage limit messages are captured
+ * regardless of which stream the CLI writes them to.
  */
 export function processExitError(
 	code: number | null,
 	getStderr: () => string,
+	getStdout?: () => string,
 ): Error {
 	const stderr = getStderr();
+	const stdout = getStdout?.() ?? "";
+	const output = [stdout, stderr].filter(Boolean).join("\n");
 	return new Error(
-		`Process exited with code ${code}${stderr ? `\n${stderr}` : ""}`,
+		`Process exited with code ${code}${output ? `\n${output}` : ""}`,
 	);
 }
 
