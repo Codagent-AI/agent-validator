@@ -5,22 +5,12 @@
 
 ### Features
 - feat: implement auto-fix-pr feature for autonomous CI monitoring
-- feat: add cursor stop hook
 
 ### Fixes
-- fix: gate checkPRStatus on open PRs only
-- fix: resolve merge conflict and update rerun_new_issue_threshold docs
-- fix: include stderr in adapter error messages for usage limit detection
-- fix: prevent stale execution state from causing false auto-clean and phantom diffs
+- fix: correct wait-ci API response parsing and add docs
 
 ### Other Changes
 - chore: change cli pref
 - spec: update the proposal
 - spec: update the proposal
 - spec: archive changes
-- docs: add code health guidance for agents
-- refactor: improve code health in stop-hook-handler
-- chore: add changeset
-- spec: update cursor stop hook spec
-- chore: add changeset
-- spec: cursor stop hook
