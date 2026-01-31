@@ -33,3 +33,9 @@ The review gate MUST assign reviews to adapters using round-robin over the list 
 ### Requirement: Preflight Phase
 **Reason**: Preflight checks are removed. Command-existence checks for check gates are redundant (execution-time failures produce clear errors). Adapter health probes are replaced by runtime usage-limit detection and cooldown tracking.
 **Migration**: No user action required. The system no longer runs a preflight phase. Check gates that reference missing commands will fail at execution time with a clear error message. Adapter usage limits are detected from actual review output.
+
+#### Scenario: Command failure at execution time (migration)
+- **GIVEN** a check gate references a missing command (e.g. `tsc` not installed)
+- **WHEN** the check gate executes
+- **THEN** the gate SHALL fail with a clear error message indicating the command was not found
+- **AND** no preflight phase runs before gate execution
