@@ -6,15 +6,7 @@
 ### Features
 - feat: replace preflight phase with runtime cooldown-based adapter filtering
 
-### Fixes
-- fix: add timeout for adapters
-
 ### Other Changes
-- chore: auto-generate changesets
-- chore: add run duration to debug log
+- chore: add changeset for remove-pre-flight
 - spec: add migration scenario to REMOVED preflight requirement
 - spec: remove preflight checks
-- spec: archive changes
-- chore: add codescene health check
-- chore: fix test
-- chore: fix test
