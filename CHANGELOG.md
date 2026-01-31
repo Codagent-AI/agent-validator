@@ -1,5 +1,21 @@
 # agent-gauntlet
 
+## 0.7.1
+
+### Patch Changes
+
+- [#21](https://github.com/pacaplan/agent-gauntlet/pull/21) [`50efe13`](https://github.com/pacaplan/agent-gauntlet/commit/50efe13ef843746a62dbdeb224badaa232b96c44) Thanks [@pacaplan](https://github.com/pacaplan)! - ### Fixes
+
+  - fix: add timeout for adapters
+
+  ### Other Changes
+
+  - chore: add run duration to debug log
+  - spec: archive changes
+  - chore: add codescene health check
+  - chore: fix test
+  - chore: fix test
+
 ## 0.7.0
 
 ### Minor Changes
