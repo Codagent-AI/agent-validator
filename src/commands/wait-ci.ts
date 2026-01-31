@@ -93,7 +93,10 @@ async function getChecks(cwd?: string): Promise<Array<{
 	state: string;
 	link: string;
 }> | null> {
-	const result = await runGh(["pr", "checks", "--json", "name,state,link"], cwd);
+	const result = await runGh(
+		["pr", "checks", "--json", "name,state,link"],
+		cwd,
+	);
 	if (result.code !== 0) {
 		return null;
 	}
