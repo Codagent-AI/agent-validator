@@ -26,14 +26,22 @@ The stop-hook command MUST support multiple IDE protocols through an adapter-bas
 
 When using the Cursor protocol, the stop-hook MUST output responses in Cursor's expected format using `followup_message` for continuation.
 
-#### Scenario: Blocking response for Cursor
+#### Scenario: Blocking response for Cursor (failed status)
 - **GIVEN** gates have failed and the protocol is Cursor
 - **WHEN** the stop-hook outputs the decision
 - **THEN** the JSON SHALL include a `followup_message` field with fix instructions
 - **AND** the format SHALL be `{ "followup_message": "<instructions>" }`
 
+#### Scenario: Blocking response for Cursor (pr_push_required status)
+- **GIVEN** gates have passed but PR needs to be created/updated and the protocol is Cursor
+- **AND** the status is `pr_push_required`
+- **WHEN** the stop-hook outputs the decision
+- **THEN** the JSON SHALL include a `followup_message` field with push-PR instructions
+- **AND** the format SHALL be `{ "followup_message": "<push-pr-instructions>" }`
+
 #### Scenario: Allowing response for Cursor
 - **GIVEN** gates have passed (or other non-blocking status) and the protocol is Cursor
+- **AND** the status is NOT `pr_push_required`
 - **WHEN** the stop-hook outputs the decision
 - **THEN** the JSON SHALL be an empty object `{}`
 - **AND** no `followup_message` field SHALL be present
@@ -74,9 +82,29 @@ The system MUST define a `StopHookAdapter` interface that protocol-specific impl
 - **GIVEN** a `StopHookAdapter` implementation and a `StopHookResult`
 - **WHEN** `formatOutput(result)` is called
 - **THEN** it SHALL return a JSON string in the protocol's expected format
+- **AND** for blocking status `failed`, it SHALL use `result.instructions`
+- **AND** for blocking status `pr_push_required`, it SHALL use `result.pushPRReason`
 
 #### Scenario: Adapter early exit check
 - **GIVEN** a `StopHookAdapter` implementation and a `StopHookContext`
 - **WHEN** `shouldSkipExecution(ctx)` is called
 - **THEN** it SHALL return a `StopHookResult` if execution should be skipped
 - **AND** it SHALL return `null` if execution should proceed
+
+### Requirement: PR Push Required Status Handling
+
+Both Claude Code and Cursor adapters MUST handle the `pr_push_required` status returned by the handler when `auto_push_pr` is enabled and gates pass but no PR exists or PR is not up to date.
+
+#### Scenario: Claude Code adapter handles pr_push_required
+- **GIVEN** the handler returns status `pr_push_required` with `pushPRReason`
+- **AND** the protocol is Claude Code
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL have `decision: "block"`
+- **AND** `reason` SHALL contain the `pushPRReason` instructions
+- **AND** `stopReason` SHALL contain the `pushPRReason` instructions
+
+#### Scenario: Cursor adapter handles pr_push_required
+- **GIVEN** the handler returns status `pr_push_required` with `pushPRReason`
+- **AND** the protocol is Cursor
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL be `{ "followup_message": "<pushPRReason>" }`

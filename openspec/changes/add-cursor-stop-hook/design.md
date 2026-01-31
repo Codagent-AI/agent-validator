@@ -2,22 +2,31 @@
 
 ### CodeScene Analysis
 
-**File:** `src/commands/stop-hook.ts` — Code Health: **7.07** (Yellow - problematic technical debt)
+**File:** `src/commands/stop-hook.ts` — Code Health: **~6.5** (Yellow - problematic technical debt)
+
+*Note: Since PR #25 merged, the file has grown from ~240 lines to ~360 lines with additional PR detection logic (`postGauntletPRCheck`, `checkPRStatus`, `shouldCheckPR`, `getPushPRInstructions`). This reinforces the need for the adapter architecture.*
 
 | Code Smell | Function | Details | Severity |
 |------------|----------|---------|----------|
-| Bumpy Road Ahead | `registerStopHookCommand` | 2 bumps of nested conditional logic | High |
-| Complex Method | `registerStopHookCommand` | CC = 36 (threshold: 9) | High |
-| Large Method | `registerStopHookCommand` | 240 lines (threshold: 70) | High |
-| Complex Method | `getStatusMessage` | CC = 17 (threshold: 9) | Medium |
-| Code Duplication | `getLogDir`, `getDebugLogConfig` | Similar config-reading patterns | Low |
+| Bumpy Road Ahead | `registerStopHookCommand` | 2+ bumps of nested conditional logic | High |
+| Complex Method | `registerStopHookCommand` | CC ~40+ (threshold: 9) | High |
+| Large Method | `registerStopHookCommand` | ~360 lines (threshold: 70) | High |
+| Complex Method | `getStatusMessage` | CC ~19 (threshold: 9) - includes `pr_push_required` | Medium |
+| Code Duplication | `getLogDir`, `getDebugLogConfig`, `shouldCheckPR` | Similar config-reading patterns | Medium |
 
 ### Why Pre-factoring is Necessary
 
-The `registerStopHookCommand` function is a 240-line monolith with cyclomatic complexity of 36. Adding Cursor protocol support directly would:
+The `registerStopHookCommand` function has grown to ~360 lines with cyclomatic complexity around 40 after PR #25 added:
+- `auto_push_pr` configuration resolution
+- Post-gauntlet PR check step (`postGauntletPRCheck`)
+- PR status detection (`checkPRStatus` using `gh` CLI)
+- New `pr_push_required` blocking status handling
+
+Adding Cursor protocol support directly would:
 1. Increase complexity further (more conditional branches)
 2. Make the bumpy road worse (deeper nesting for protocol detection)
 3. Create maintenance burden when either protocol changes
+4. Complicate the post-gauntlet PR check logic for Cursor output format
 
 ### Refactoring Strategy
 
@@ -25,15 +34,16 @@ The planned adapter architecture **naturally addresses all CodeScene issues** as
 
 | Code Smell | How Adapter Pattern Resolves It |
 |------------|--------------------------------|
-| Large Method (240 lines) | Split into: entry point (~100 lines), handler (~300 lines), adapters (~80 lines each) |
-| Complex Method (CC=36) | Protocol branching moves to `adapter.detect()` polymorphism |
-| Bumpy Road (2 bumps) | Nested conditionals eliminated by adapter delegation |
+| Large Method (~360 lines) | Split into: entry point (~100 lines), handler (~400 lines), adapters (~80 lines each) |
+| Complex Method (CC~40) | Protocol branching moves to `adapter.detect()` polymorphism |
+| Bumpy Road (2+ bumps) | Nested conditionals eliminated by adapter delegation |
 | Complex Method in `getStatusMessage` | Moved to `StopHookHandler`, can be further simplified |
+| Config reading duplication | Consolidated in handler initialization |
 
 **No separate pre-factoring phase needed** — the adapter refactoring IS the refactoring. After implementation:
 - Entry point: ~100 lines, CC < 5
 - Each adapter: ~80 lines, CC < 10
-- Handler: larger but focused on single responsibility
+- Handler: larger but focused on single responsibility (including post-gauntlet PR check)
 
 ## Context
 
@@ -73,8 +83,24 @@ Separate protocol-specific adapters from shared core logic:
                     ┌─────────▼─────────┐
                     │    executeRun()   │
                     │  (Gauntlet exec)  │
+                    └─────────┬─────────┘
+                              │
+                    ┌─────────▼─────────┐
+                    │postGauntletPRCheck│
+                    │(if auto_push_pr)  │
+                    └─────────┬─────────┘
+                              │
+                    ┌─────────▼─────────┐
+                    │ adapter.format()  │
+                    │ (Protocol output) │
                     └───────────────────┘
 ```
+
+The `postGauntletPRCheck` step runs after gauntlet execution when:
+- Status is `passed` or `passed_with_warnings`
+- `auto_push_pr` is enabled in config
+
+If no PR exists or PR is not up to date, the handler returns `pr_push_required` status with push-PR instructions. This is protocol-agnostic logic that lives in the handler.
 
 ## Key Protocol Differences
 
@@ -87,6 +113,13 @@ Separate protocol-specific adapters from shared core logic:
 | Config location | `.claude/settings.json`        | `.cursor/hooks.json`                 |
 | Working dir     | `cwd` field                    | `workspace_roots[0]`                 |
 | Session ID      | `session_id`                   | `conversation_id`                    |
+
+### Shared Gauntlet Features (Protocol-Agnostic)
+
+The following features are gauntlet-level and work identically regardless of protocol:
+- **`auto_push_pr` configuration**: 3-tier resolution (env var > project > global)
+- **`pr_push_required` status**: When gates pass but no PR exists or PR is not up to date
+- **Post-gauntlet PR check**: Uses `gh` CLI to verify PR state after gates pass
 
 ## Decisions
 
@@ -162,7 +195,8 @@ export interface StopHookContext {
 export interface StopHookResult {
   status: GauntletStatus;
   shouldBlock: boolean;
-  instructions?: string;      // Fix instructions when blocking
+  instructions?: string;      // Fix instructions when blocking (for failed status)
+  pushPRReason?: string;      // PR push instructions when blocking (for pr_push_required status)
   message: string;            // Human-friendly status message
   intervalMinutes?: number;
   gateResults?: RunResult["gateResults"];
@@ -195,8 +229,31 @@ export class StopHookHandler {
   private async runGauntlet(cwd: string): Promise<RunResult>;
   private getStatusMessage(status: GauntletStatus, context?: {...}): string;
   private getStopReasonInstructions(gateResults?: RunResult["gateResults"]): string;
+  
+  // Post-gauntlet PR check (from PR #25)
+  private async shouldCheckPR(cwd: string): Promise<boolean>;
+  private async checkPRStatus(cwd: string): Promise<PRStatusResult>;
+  private async postGauntletPRCheck(cwd: string, status: GauntletStatus): Promise<{
+    finalStatus: GauntletStatus;
+    pushPRReason?: string;
+  }>;
+  private getPushPRInstructions(options?: { hasWarnings?: boolean }): string;
+}
+
+interface PRStatusResult {
+  prExists: boolean;
+  upToDate: boolean;
+  error?: string;
+  prNumber?: number;
 }
 ```
+
+The handler's `execute()` method flow:
+1. Check gauntlet config exists
+2. Check marker file (nested hook detection)
+3. Run gauntlet via `executeRun()`
+4. **Post-gauntlet PR check** (if `auto_push_pr` enabled and status is `passed`/`passed_with_warnings`)
+5. Build and return `StopHookResult` with final status
 
 ### Claude Adapter (`src/hooks/adapters/claude-stop-hook.ts`)
 
@@ -221,13 +278,20 @@ export class ClaudeStopHookAdapter implements StopHookAdapter {
   
   formatOutput(result: StopHookResult): string {
     // Output: { decision: "block"|"approve", reason, stopReason, status, message, ... }
+    // Determine the appropriate reason/stopReason based on status
+    const blockReason = result.status === "failed" 
+      ? result.instructions 
+      : result.status === "pr_push_required" 
+        ? result.pushPRReason 
+        : undefined;
+    
     const response = {
       decision: result.shouldBlock ? "block" : "approve",
-      stopReason: result.shouldBlock && result.instructions ? result.instructions : result.message,
+      stopReason: result.shouldBlock && blockReason ? blockReason : result.message,
       systemMessage: result.message,
       status: result.status,
       message: result.message,
-      ...(result.shouldBlock && result.instructions ? { reason: result.instructions } : {}),
+      ...(result.shouldBlock && blockReason ? { reason: blockReason } : {}),
     };
     return JSON.stringify(response);
   }
@@ -270,8 +334,16 @@ export class CursorStopHookAdapter implements StopHookAdapter {
   formatOutput(result: StopHookResult): string {
     // Output: { followup_message?: "..." } or {}
     if (result.shouldBlock) {
-      // Always return followup_message when blocking, fallback to message if instructions missing
-      return JSON.stringify({ followup_message: result.instructions || result.message });
+      // Determine the appropriate message based on status
+      // For `failed` status, use fix instructions
+      // For `pr_push_required` status, use push-PR instructions
+      const blockMessage = result.status === "failed"
+        ? (result.instructions || result.message)
+        : result.status === "pr_push_required"
+          ? (result.pushPRReason || result.message)
+          : result.message;
+      
+      return JSON.stringify({ followup_message: blockMessage });
     }
     return "{}";  // Empty = allow stop
   }
@@ -334,11 +406,13 @@ export function registerStopHookCommand(program: Command): void {
         return;
       }
       
-      // 5. Execute handler (includes debug logging internally)
+      // 5. Execute handler (includes gauntlet run + post-gauntlet PR check)
       const handler = new StopHookHandler();
       const result = await handler.execute(ctx);
+      // result.status may be "pr_push_required" if auto_push_pr is enabled
+      // and gates passed but no PR exists or PR is not up to date
       
-      // 6. Output result
+      // 6. Output result (adapter handles protocol-specific formatting)
       console.log(adapter.formatOutput(result));
     } catch (error) {
       // Always output valid JSON on error to prevent IDE hang
@@ -352,6 +426,11 @@ export function registerStopHookCommand(program: Command): void {
   });
 }
 ```
+
+The handler's `execute()` method internally:
+1. Runs the gauntlet via `executeRun()`
+2. If status is `passed` or `passed_with_warnings` and `auto_push_pr` is enabled, runs `postGauntletPRCheck()`
+3. Returns `StopHookResult` with final status (may be `pr_push_required`) and appropriate instructions
 
 ## Configuration Examples
 
