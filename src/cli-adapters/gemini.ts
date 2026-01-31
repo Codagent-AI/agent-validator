@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { type CLIAdapter, isUsageLimit } from "./index.js";
+import type { CLIAdapter } from "./index.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -20,7 +20,7 @@ export class GeminiAdapter implements CLIAdapter {
 		}
 	}
 
-	async checkHealth(options?: { checkUsageLimit?: boolean }): Promise<{
+	async checkHealth(): Promise<{
 		available: boolean;
 		status: "healthy" | "missing" | "unhealthy";
 		message?: string;
@@ -34,71 +34,7 @@ export class GeminiAdapter implements CLIAdapter {
 			};
 		}
 
-		if (options?.checkUsageLimit) {
-			try {
-				const { stdout, stderr } = await execAsync(
-					'echo "hello" | gemini --sandbox --output-format text',
-					{ timeout: 30000 },
-				);
-
-				const combined = (stdout || "") + (stderr || "");
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				return { available: true, status: "healthy", message: "Installed" };
-			} catch (error: unknown) {
-				const execError = error as {
-					stderr?: string;
-					stdout?: string;
-					message?: string;
-					code?: number | string;
-					signal?: string;
-				};
-
-				// Check for timeout
-				if (execError.signal === "SIGTERM" && execError.code === null) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Error: Health check timed out",
-					};
-				}
-
-				const stderr = execError.stderr || "";
-				const stdout = execError.stdout || "";
-				const combined = stderr + stdout;
-
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				// Since we sent a valid prompt ("hello"), any other error implies the tool is broken
-				const cleanError =
-					combined.split("\n")[0]?.trim() ||
-					execError.message ||
-					"Command failed";
-				return {
-					available: true,
-					status: "unhealthy",
-					message: `Error: ${cleanError}`,
-				};
-			}
-		}
-
-		return {
-			available,
-			status: available ? "healthy" : "missing",
-			message: available ? "Installed" : "Command not found",
-		};
+		return { available: true, status: "healthy", message: "Installed" };
 	}
 
 	getProjectCommandDir(): string | null {

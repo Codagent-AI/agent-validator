@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { type CLIAdapter, isUsageLimit } from "./index.js";
+import type { CLIAdapter } from "./index.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -20,7 +20,7 @@ export class CodexAdapter implements CLIAdapter {
 		}
 	}
 
-	async checkHealth(options?: { checkUsageLimit?: boolean }): Promise<{
+	async checkHealth(): Promise<{
 		available: boolean;
 		status: "healthy" | "missing" | "unhealthy";
 		message?: string;
@@ -34,58 +34,7 @@ export class CodexAdapter implements CLIAdapter {
 			};
 		}
 
-		if (options?.checkUsageLimit) {
-			try {
-				const repoRoot = process.cwd();
-				// Try a lightweight command to check if we're rate limited
-				const cmd = `echo "hello" | codex exec --cd "${repoRoot}" --sandbox read-only -c 'ask_for_approval="never"' -`;
-				const { stdout, stderr } = await execAsync(cmd, { timeout: 10000 });
-
-				const combined = (stdout || "") + (stderr || "");
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				return { available: true, status: "healthy", message: "Installed" };
-			} catch (error: unknown) {
-				const execError = error as {
-					stderr?: string;
-					stdout?: string;
-					message?: string;
-				};
-				const stderr = execError.stderr || "";
-				const stdout = execError.stdout || "";
-				const combined = stderr + stdout;
-
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				const cleanError =
-					combined.split("\n")[0]?.trim() ||
-					execError.message ||
-					"Command failed";
-				return {
-					available: true,
-					status: "unhealthy",
-					message: `Error: ${cleanError}`,
-				};
-			}
-		}
-
-		return {
-			available,
-			status: available ? "healthy" : "missing",
-			message: available ? "Installed" : "Command not found",
-		};
+		return { available: true, status: "healthy", message: "Installed" };
 	}
 
 	getProjectCommandDir(): string | null {

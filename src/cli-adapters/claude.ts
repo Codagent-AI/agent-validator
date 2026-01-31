@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { GAUNTLET_STOP_HOOK_ACTIVE_ENV } from "../commands/stop-hook.js";
-import { type CLIAdapter, isUsageLimit } from "./index.js";
+import type { CLIAdapter } from "./index.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -21,7 +21,7 @@ export class ClaudeAdapter implements CLIAdapter {
 		}
 	}
 
-	async checkHealth(options?: { checkUsageLimit?: boolean }): Promise<{
+	async checkHealth(): Promise<{
 		available: boolean;
 		status: "healthy" | "missing" | "unhealthy";
 		message?: string;
@@ -33,69 +33,6 @@ export class ClaudeAdapter implements CLIAdapter {
 				status: "missing",
 				message: "Command not found",
 			};
-		}
-
-		if (options?.checkUsageLimit) {
-			try {
-				// Try a lightweight command to check if we're rate limited
-				// We use a simple "hello" prompt to avoid "No messages returned" errors from empty input
-				const { stdout, stderr } = await execAsync(
-					'echo "hello" | claude -p --max-turns 1',
-					{ timeout: 30000 },
-				);
-
-				const combined = (stdout || "") + (stderr || "");
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				return { available: true, status: "healthy", message: "Ready" };
-			} catch (error: unknown) {
-				const execError = error as {
-					stderr?: string;
-					stdout?: string;
-					message?: string;
-					code?: number | string;
-					signal?: string;
-				};
-
-				// Check for timeout
-				if (execError.signal === "SIGTERM" && execError.code === null) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Error: Health check timed out",
-					};
-				}
-
-				const stderr = execError.stderr || "";
-				const stdout = execError.stdout || "";
-				const combined = stderr + stdout;
-
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				// Since we sent a valid prompt ("hello"), any other error implies the tool is broken
-				// Extract a brief error message if possible
-				const cleanError =
-					combined.split("\n")[0]?.trim() ||
-					execError.message ||
-					"Command failed";
-				return {
-					available: true,
-					status: "unhealthy",
-					message: `Error: ${cleanError}`,
-				};
-			}
 		}
 
 		return { available: true, status: "healthy", message: "Ready" };

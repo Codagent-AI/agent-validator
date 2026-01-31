@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	mock,
+	spyOn,
+} from "bun:test";
 import * as childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
@@ -9,10 +17,15 @@ import {
 	getCurrentBranch,
 	getCurrentCommit,
 	getExecutionStateFilename,
+	getUnhealthyAdapters,
 	gitObjectExists,
+	isAdapterCoolingDown,
 	isCommitInBranch,
+	markAdapterHealthy,
+	markAdapterUnhealthy,
 	readExecutionState,
 	resolveFixBase,
+	type UnhealthyAdapter,
 	writeExecutionState,
 } from "../../src/utils/execution-state.js";
 
@@ -414,6 +427,141 @@ describe("Execution State Git Operations (mocked)", () => {
 			} catch (e: unknown) {
 				expect((e as { code: string }).code).toBe("ENOENT");
 			}
+		});
+	});
+
+	describe("isAdapterCoolingDown", () => {
+		it("returns true when marked_at is recent", () => {
+			const entry: UnhealthyAdapter = {
+				marked_at: new Date().toISOString(),
+				reason: "Usage limit exceeded",
+			};
+			expect(isAdapterCoolingDown(entry)).toBe(true);
+		});
+
+		it("returns false when marked_at is over 1 hour ago", () => {
+			const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+			const entry: UnhealthyAdapter = {
+				marked_at: twoHoursAgo.toISOString(),
+				reason: "Usage limit exceeded",
+			};
+			expect(isAdapterCoolingDown(entry)).toBe(false);
+		});
+
+		it("returns false for invalid timestamp", () => {
+			const entry: UnhealthyAdapter = {
+				marked_at: "invalid-date",
+				reason: "Usage limit exceeded",
+			};
+			expect(isAdapterCoolingDown(entry)).toBe(false);
+		});
+	});
+
+	// Helper to write a state file with optional unhealthy adapters
+	async function writeTestState(
+		dir: string,
+		adapters?: Record<string, { marked_at: string; reason: string }>,
+	) {
+		const state: Record<string, unknown> = {
+			last_run_completed_at: new Date().toISOString(),
+			branch: "main",
+			commit: "abc123def456",
+		};
+		if (adapters) state.unhealthy_adapters = adapters;
+		await fs.writeFile(
+			path.join(dir, ".execution_state"),
+			JSON.stringify(state),
+		);
+	}
+
+	async function readTestState(dir: string) {
+		const content = await fs.readFile(
+			path.join(dir, ".execution_state"),
+			"utf-8",
+		);
+		return JSON.parse(content);
+	}
+
+	const USAGE_LIMIT = "Usage limit exceeded";
+	const recentMark = () => ({
+		marked_at: new Date().toISOString(),
+		reason: USAGE_LIMIT,
+	});
+
+	describe("getUnhealthyAdapters", () => {
+		it("returns empty object when no state file exists", async () => {
+			const result = await getUnhealthyAdapters(
+				path.join(TEST_DIR, "nonexistent"),
+			);
+			expect(result).toEqual({});
+		});
+
+		it("returns empty object when state has no unhealthy_adapters", async () => {
+			await writeTestState(TEST_DIR);
+			expect(await getUnhealthyAdapters(TEST_DIR)).toEqual({});
+		});
+
+		it("returns unhealthy adapters when present", async () => {
+			await writeTestState(TEST_DIR, { claude: recentMark() });
+			const result = await getUnhealthyAdapters(TEST_DIR);
+			expect(result).toHaveProperty("claude");
+			expect(result.claude?.reason).toBe(USAGE_LIMIT);
+		});
+	});
+
+	describe("markAdapterUnhealthy", () => {
+		it("creates state file with unhealthy adapter when no file exists", async () => {
+			const dir = path.join(TEST_DIR, "mark-unhealthy");
+			await markAdapterUnhealthy(dir, "claude", USAGE_LIMIT);
+			const state = await readTestState(dir);
+			expect(state.unhealthy_adapters.claude.reason).toBe(USAGE_LIMIT);
+			expect(state.unhealthy_adapters.claude.marked_at).toBeDefined();
+		});
+
+		it("preserves existing state when adding unhealthy adapter", async () => {
+			await writeTestState(TEST_DIR);
+			await markAdapterUnhealthy(TEST_DIR, "claude", USAGE_LIMIT);
+			const updated = await readTestState(TEST_DIR);
+			expect(updated.branch).toBe("main");
+			expect(updated.unhealthy_adapters.claude.reason).toBe(USAGE_LIMIT);
+		});
+	});
+
+	describe("markAdapterHealthy", () => {
+		it("removes adapter from unhealthy list", async () => {
+			await writeTestState(TEST_DIR, {
+				claude: recentMark(),
+				codex: recentMark(),
+			});
+			await markAdapterHealthy(TEST_DIR, "claude");
+			const updated = await readTestState(TEST_DIR);
+			expect(updated.unhealthy_adapters).not.toHaveProperty("claude");
+			expect(updated.unhealthy_adapters).toHaveProperty("codex");
+		});
+
+		it("removes unhealthy_adapters key when last adapter removed", async () => {
+			await writeTestState(TEST_DIR, { claude: recentMark() });
+			await markAdapterHealthy(TEST_DIR, "claude");
+			const updated = await readTestState(TEST_DIR);
+			expect(updated.unhealthy_adapters).toBeUndefined();
+		});
+
+		it("does nothing when no state file exists", async () => {
+			await markAdapterHealthy(path.join(TEST_DIR, "nonexistent"), "claude");
+		});
+	});
+
+	describe("readExecutionState with unhealthy_adapters", () => {
+		it("returns state with unhealthy_adapters when present", async () => {
+			await writeTestState(TEST_DIR, { claude: recentMark() });
+			const result = await readExecutionState(TEST_DIR);
+			expect(result?.unhealthy_adapters?.claude?.reason).toBe(USAGE_LIMIT);
+		});
+
+		it("returns state without unhealthy_adapters for older files", async () => {
+			await writeTestState(TEST_DIR);
+			const result = await readExecutionState(TEST_DIR);
+			expect(result?.unhealthy_adapters).toBeUndefined();
 		});
 	});
 

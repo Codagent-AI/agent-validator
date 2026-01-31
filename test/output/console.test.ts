@@ -1,7 +1,7 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
-import { ConsoleReporter } from "../../src/output/console";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { Job } from "../../src/core/job";
 import type { GateResult } from "../../src/gates/result";
+import { ConsoleReporter } from "../../src/output/console";
 
 describe("ConsoleReporter", () => {
 	let originalConsoleError: typeof console.error;
@@ -107,7 +107,12 @@ describe("ConsoleReporter", () => {
 		it("should show Failed status when jobs fail", async () => {
 			const reporter = new ConsoleReporter();
 			const results: GateResult[] = [
-				{ jobId: "check:test", status: "fail", duration: 100, message: "Failed" },
+				{
+					jobId: "check:test",
+					status: "fail",
+					duration: 100,
+					message: "Failed",
+				},
 			];
 
 			await reporter.printSummary(results);

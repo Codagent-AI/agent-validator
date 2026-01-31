@@ -41,7 +41,6 @@ log_dir: gauntlet_logs
 cli:
   default_preference:
     - gemini
-  check_usage_limit: false
 entry_points:
   - path: src/
     checks:

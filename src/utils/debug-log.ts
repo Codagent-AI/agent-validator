@@ -109,9 +109,9 @@ export class DebugLogger {
 	 * Log the result of a single preflight check.
 	 */
 	async logPreflightResult(
-		jobId: string,
-		status: "pass" | "fail",
-		reason?: string,
+		_jobId: string,
+		_status: "pass" | "fail",
+		_reason?: string,
 	): Promise<void> {
 		// TODO enable at debug level with logtape
 		// const reasonStr = reason ? ` reason=${reason}` : "";

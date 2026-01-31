@@ -1,9 +1,3 @@
-import { exec } from "node:child_process";
-import { constants as fsConstants } from "node:fs";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { promisify } from "node:util";
-import { getAdapter } from "../cli-adapters/index.js";
 import type {
 	LoadedCheckGateConfig,
 	LoadedConfig,
@@ -12,17 +6,12 @@ import type {
 import { CheckGateExecutor } from "../gates/check.js";
 import type { GateResult } from "../gates/result.js";
 import { ReviewGateExecutor } from "../gates/review.js";
-import { getCategoryLogger } from "../output/app-logger.js";
 import type { ConsoleReporter } from "../output/console.js";
 import type { Logger } from "../output/logger.js";
 import type { DebugLogger } from "../utils/debug-log.js";
 import type { PreviousViolation } from "../utils/log-parser.js";
 import { sanitizeJobId } from "../utils/sanitizer.js";
 import type { Job } from "./job.js";
-
-const log = getCategoryLogger("runner");
-
-const execAsync = promisify(exec);
 
 /**
  * Iteration statistics for RUN_END logging.
@@ -139,16 +128,13 @@ export class Runner {
 			};
 		}
 
-		const { runnableJobs, preflightResults } = await this.preflight(jobs);
-		this.results.push(...preflightResults);
-
 		const parallelEnabled = this.config.project.allow_parallel;
 		const parallelJobs = parallelEnabled
-			? runnableJobs.filter((j) => j.gateConfig.parallel)
+			? jobs.filter((j) => j.gateConfig.parallel)
 			: [];
 		const sequentialJobs = parallelEnabled
-			? runnableJobs.filter((j) => !j.gateConfig.parallel)
-			: runnableJobs;
+			? jobs.filter((j) => !j.gateConfig.parallel)
+			: jobs;
 
 		// Start parallel jobs
 		const parallelPromises = parallelJobs.map((job) => this.executeJob(job));
@@ -240,9 +226,9 @@ export class Runner {
 					effectiveBaseBranch,
 					previousFailures,
 					this.changeOptions,
-					this.config.project.cli.check_usage_limit,
 					this.config.project.rerun_new_issue_threshold,
 					passedSlots,
+					this.config.project.log_dir,
 				);
 			}
 		} catch (err) {
@@ -274,235 +260,5 @@ export class Runner {
 		) {
 			this.shouldStop = true;
 		}
-	}
-
-	/**
-	 * Timeout for the entire preflight phase (60 seconds).
-	 * If any individual check hangs, the timeout fires and marks remaining
-	 * jobs as preflight failures.
-	 */
-	private static readonly PREFLIGHT_TIMEOUT_MS = 60 * 1000;
-
-	private async preflight(
-		jobs: Job[],
-	): Promise<{ runnableJobs: Job[]; preflightResults: GateResult[] }> {
-		const startMs = Date.now();
-		await this.debugLogger?.logPreflightStart(jobs.length);
-
-		// Shared arrays so both the check loop and timeout handler
-		// can see partial progress
-		const runnableJobs: Job[] = [];
-		const preflightResults: GateResult[] = [];
-		let timedOut = false;
-
-		const doPreflightChecks = async () => {
-			const cliCache = new Map<string, boolean>();
-
-			for (const job of jobs) {
-				if (this.shouldStop || timedOut) break;
-				if (job.type === "check") {
-					const commandName = this.getCommandName(
-						(job.gateConfig as LoadedCheckGateConfig).command,
-					);
-					if (!commandName) {
-						const msg = "Unable to parse command";
-						console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
-						preflightResults.push(await this.recordPreflightFailure(job, msg));
-						await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
-						if (this.shouldFailFast(job)) this.shouldStop = true;
-						continue;
-					}
-
-					const available = await this.commandExists(
-						commandName,
-						job.workingDirectory,
-					);
-					if (!available) {
-						const msg = `Missing command: ${commandName}`;
-						console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
-						preflightResults.push(await this.recordPreflightFailure(job, msg));
-						await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
-						if (this.shouldFailFast(job)) this.shouldStop = true;
-						continue;
-					}
-
-					await this.debugLogger?.logPreflightResult(
-						job.id,
-						"pass",
-						`command found: ${commandName}`,
-					);
-				} else {
-					const reviewConfig = job.gateConfig as LoadedReviewGateConfig;
-
-					// Only need at least 1 healthy adapter (round-robin handles the rest)
-					let hasHealthy = false;
-					for (const toolName of reviewConfig.cli_preference || []) {
-						const cached = cliCache.get(toolName);
-						const isAvailable = cached ?? (await this.checkAdapter(toolName));
-						cliCache.set(toolName, isAvailable);
-						if (isAvailable) {
-							hasHealthy = true;
-							break;
-						}
-					}
-
-					if (!hasHealthy) {
-						const msg = "Preflight failed: no healthy adapters available";
-						console.error(`[PREFLIGHT] ${job.id}: ${msg}`);
-						preflightResults.push(await this.recordPreflightFailure(job, msg));
-						await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
-						if (this.shouldFailFast(job)) this.shouldStop = true;
-						continue;
-					}
-
-					await this.debugLogger?.logPreflightResult(
-						job.id,
-						"pass",
-						"adapter healthy",
-					);
-				}
-
-				// Re-check timedOut before pushing to avoid a race where the timeout
-				// fires between the loop guard (line 303) and this push, which would
-				// cause the job to be both executed and marked as a timeout failure.
-				if (!timedOut) {
-					runnableJobs.push(job);
-				}
-			}
-
-			return { runnableJobs, preflightResults };
-		};
-
-		// Race the preflight checks against a timeout
-		let timeoutId: ReturnType<typeof setTimeout> | undefined;
-		const timeoutPromise = new Promise<{
-			runnableJobs: Job[];
-			preflightResults: GateResult[];
-		}>((resolve) => {
-			timeoutId = setTimeout(() => {
-				timedOut = true;
-				this.shouldStop = true;
-				console.error("[PREFLIGHT] Preflight timed out");
-				// Resolve with current partial results
-				resolve({ runnableJobs, preflightResults });
-			}, Runner.PREFLIGHT_TIMEOUT_MS);
-		});
-
-		const result = await Promise.race([doPreflightChecks(), timeoutPromise]);
-
-		// Always clear the timeout to prevent it firing during gate execution
-		if (timeoutId) clearTimeout(timeoutId);
-
-		// If timed out, mark remaining unchecked jobs as preflight failures
-		if (timedOut) {
-			const checkedJobIds = new Set([
-				...result.runnableJobs.map((j) => j.id),
-				...result.preflightResults.map((r) => r.jobId),
-			]);
-			for (const job of jobs) {
-				if (!checkedJobIds.has(job.id)) {
-					const msg = "Preflight timed out";
-					preflightResults.push(await this.recordPreflightFailure(job, msg));
-					await this.debugLogger?.logPreflightResult(job.id, "fail", msg);
-				}
-			}
-			// Reset shouldStop so gate execution can proceed for jobs that passed preflight
-			this.shouldStop = false;
-		}
-
-		const durationMs = Date.now() - startMs;
-		await this.debugLogger?.logPreflightEnd(
-			result.runnableJobs.length,
-			result.preflightResults.length,
-			durationMs,
-		);
-
-		return result;
-	}
-
-	private async recordPreflightFailure(
-		job: Job,
-		message: string,
-	): Promise<GateResult> {
-		if (job.type === "check") {
-			const logPath = await this.logger.getLogPath(job.id);
-			const jobLogger = await this.logger.createJobLogger(job.id);
-			await jobLogger(
-				`[${new Date().toISOString()}] Health check failed\n${message}\n`,
-			);
-			return {
-				jobId: job.id,
-				status: "error",
-				duration: 0,
-				message,
-				logPath,
-			};
-		}
-
-		return {
-			jobId: job.id,
-			status: "error",
-			duration: 0,
-			message,
-		};
-	}
-
-	private async checkAdapter(name: string): Promise<boolean> {
-		const adapter = getAdapter(name);
-		if (!adapter) return false;
-		const health = await adapter.checkHealth({
-			checkUsageLimit: this.config.project.cli.check_usage_limit,
-		});
-		if (health.status !== "healthy") {
-			log.debug(
-				`Adapter ${name} check failed: ${health.status} - ${health.message}`,
-			);
-		}
-		return health.status === "healthy";
-	}
-
-	private getCommandName(command: string): string | null {
-		const tokens = this.tokenize(command);
-		for (const token of tokens) {
-			if (token === "env") continue;
-			if (this.isEnvAssignment(token)) continue;
-			return token;
-		}
-		return null;
-	}
-
-	private tokenize(command: string): string[] {
-		const matches = command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g);
-		if (!matches) return [];
-		return matches.map((token) => token.replace(/^['"]|['"]$/g, ""));
-	}
-
-	private isEnvAssignment(token: string): boolean {
-		return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
-	}
-
-	private async commandExists(command: string, cwd: string): Promise<boolean> {
-		if (command.includes("/") || command.startsWith(".")) {
-			const resolved = path.isAbsolute(command)
-				? command
-				: path.join(cwd, command);
-			try {
-				await fs.access(resolved, fsConstants.X_OK);
-				return true;
-			} catch {
-				return false;
-			}
-		}
-
-		try {
-			await execAsync(`command -v ${command}`);
-			return true;
-		} catch {
-			return false;
-		}
-	}
-
-	private shouldFailFast(job: Job): boolean {
-		return Boolean(job.type === "check" && job.gateConfig.fail_fast);
 	}
 }

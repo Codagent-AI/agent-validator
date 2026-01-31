@@ -42,6 +42,8 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 	getUserCommandAdapters: () => [],
 	getAdapter: (name: string) => mockAdapters.find((a) => a.name === name),
 	getValidCLITools: () => mockAdapters.map((a) => a.name),
+	isUsageLimit: (output: string) =>
+		output.toLowerCase().includes("usage limit"),
 }));
 
 // Import after mocking
