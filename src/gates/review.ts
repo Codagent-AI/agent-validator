@@ -674,8 +674,15 @@ export class ReviewGateExecutor {
 				},
 			});
 
-			// Check for usage limit in output
-			if (isUsageLimit(output)) {
+			await adapterLogger(
+				`\n--- Review Output (${adapter.name}) ---\n${output}\n`,
+			);
+
+			const evaluation = this.evaluateOutput(output, diff);
+
+			// Check for usage limit only when output failed to parse as valid JSON.
+			// This avoids false positives when a review legitimately mentions "usage limit".
+			if (evaluation.status === "error" && isUsageLimit(output)) {
 				const reason = "Usage limit exceeded";
 				if (logDir) {
 					await markAdapterUnhealthy(logDir, adapter.name, reason);
@@ -695,12 +702,6 @@ export class ReviewGateExecutor {
 					},
 				};
 			}
-
-			await adapterLogger(
-				`\n--- Review Output (${adapter.name}) ---\n${output}\n`,
-			);
-
-			const evaluation = this.evaluateOutput(output, diff);
 
 			// Rerun Filtering: If we have previous failures, filter new violations by threshold
 			if (
