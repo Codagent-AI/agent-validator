@@ -124,6 +124,7 @@ export const loggingConfigSchema = z.object({
 export const stopHookConfigSchema = z.object({
 	enabled: z.boolean().optional(),
 	run_interval_minutes: z.number().int().min(0).optional(),
+	auto_push_pr: z.boolean().optional(),
 });
 
 export const gauntletConfigSchema = z.object({

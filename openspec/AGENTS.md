@@ -237,6 +237,17 @@ The scope is strictly **files touched by this change** — not all hotspots in t
 - [ ] 2.1 Unit/integration test for Scenario: Success case
 - [ ] 2.2 Unit/integration test for Scenario: Error handling
 - [ ] 2.3 ... (one test per scenario in spec)
+
+## 3. Manual Verification (Optional)
+<!-- Include this section only when there are verification steps that cannot be automated by the gauntlet. -->
+<!-- These steps MUST be performed by the agent before marking the task complete — not by a human. -->
+<!-- Examples: -->
+<!-- - Grep checks for removed patterns -->
+<!-- - Manual CLI health checks -->
+<!-- - Visual inspection of output format -->
+
+- [ ] 3.1 Verify no "hello" health check prompts remain: `grep -r "echo.*hello" src/`
+- [ ] 3.2 Manual: run `agent-gauntlet health` - should show adapters as installed/missing (no usage limit check)
 ```
 
 **Test coverage rule:** Make sure there are tests cases for all code paths and core functionality.
@@ -245,8 +256,19 @@ Always include the following as the final validation instructions in `tasks.md` 
 ```markdown
 ## 8. Validation
 There are no validation tasks that need to be explicitly run. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
+
+If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.
 ```
-**Do not** include linting, tests, build, etc in the validation; the gauntlet suite runs all of this.
+**Do not** include linting, tests, build, etc. in the validation; the gauntlet suite runs all of this.
+
+**Manual Verification guidance:**
+- Add a `## Manual Verification (Optional)` section **only** when there are verification steps the gauntlet cannot automate.
+- These are steps the **agent** must perform before declaring work complete — not steps for a human reviewer.
+- Examples of valid manual verification steps:
+  - `grep -r "pattern" src/` — verify removed code patterns don't remain
+  - `npm run command -- --flag` — verify CLI output or behavior
+  - `cat path/to/file | head -n 5` — verify file structure or format
+- Prefix manual CLI steps with "Manual:" to distinguish from automated checks.
 
 5. **Create design.md when needed:**
 Create `design.md` if any of the following apply; otherwise omit it:

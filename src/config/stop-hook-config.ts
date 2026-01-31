@@ -8,6 +8,7 @@ import type { stopHookConfigSchema } from "./schema.js";
 export const GAUNTLET_STOP_HOOK_ENABLED = "GAUNTLET_STOP_HOOK_ENABLED";
 export const GAUNTLET_STOP_HOOK_INTERVAL_MINUTES =
 	"GAUNTLET_STOP_HOOK_INTERVAL_MINUTES";
+export const GAUNTLET_AUTO_PUSH_PR = "GAUNTLET_AUTO_PUSH_PR";
 
 /**
  * Resolved stop hook configuration.
@@ -15,6 +16,7 @@ export const GAUNTLET_STOP_HOOK_INTERVAL_MINUTES =
 export interface StopHookConfig {
 	enabled: boolean;
 	run_interval_minutes: number;
+	auto_push_pr: boolean;
 }
 
 type ProjectStopHookConfig = z.infer<typeof stopHookConfigSchema> | undefined;
@@ -26,8 +28,13 @@ type ProjectStopHookConfig = z.infer<typeof stopHookConfigSchema> | undefined;
 export function parseStopHookEnvVars(): {
 	enabled?: boolean;
 	run_interval_minutes?: number;
+	auto_push_pr?: boolean;
 } {
-	const result: { enabled?: boolean; run_interval_minutes?: number } = {};
+	const result: {
+		enabled?: boolean;
+		run_interval_minutes?: number;
+		auto_push_pr?: boolean;
+	} = {};
 
 	// Parse enabled (accepts "true", "1", "false", "0")
 	const enabledEnv = process.env[GAUNTLET_STOP_HOOK_ENABLED];
@@ -37,6 +44,18 @@ export function parseStopHookEnvVars(): {
 			result.enabled = true;
 		} else if (normalized === "false" || normalized === "0") {
 			result.enabled = false;
+		}
+		// Invalid values are ignored (fall through to next source)
+	}
+
+	// Parse auto_push_pr (accepts "true", "1", "false", "0")
+	const autoPushPrEnv = process.env[GAUNTLET_AUTO_PUSH_PR];
+	if (autoPushPrEnv !== undefined) {
+		const normalized = autoPushPrEnv.toLowerCase().trim();
+		if (normalized === "true" || normalized === "1") {
+			result.auto_push_pr = true;
+		} else if (normalized === "false" || normalized === "0") {
+			result.auto_push_pr = false;
 		}
 		// Invalid values are ignored (fall through to next source)
 	}
@@ -89,5 +108,15 @@ export function resolveStopHookConfig(
 		run_interval_minutes = globalConfig.stop_hook.run_interval_minutes;
 	}
 
-	return { enabled, run_interval_minutes };
+	// Resolve auto_push_pr: env > project > global
+	let auto_push_pr: boolean;
+	if (envVars.auto_push_pr !== undefined) {
+		auto_push_pr = envVars.auto_push_pr;
+	} else if (projectConfig?.auto_push_pr !== undefined) {
+		auto_push_pr = projectConfig.auto_push_pr;
+	} else {
+		auto_push_pr = globalConfig.stop_hook.auto_push_pr;
+	}
+
+	return { enabled, run_interval_minutes, auto_push_pr };
 }

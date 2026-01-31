@@ -44,6 +44,17 @@ Execute the autonomous verification suite.
 8. Once all gates pass, do NOT commit or push your changes—await the human's review and explicit instruction to commit.
 `;
 
+const PUSH_PR_COMMAND_CONTENT = `---
+description: Commit changes, push to remote, and create or update a pull request
+allowed-tools: Bash
+---
+
+# /push-pr
+Commit all changes, push to remote, and create or update a pull request for the current branch.
+
+After the PR is created or updated, verify it exists by running \`gh pr view\`.
+`;
+
 type InstallLevel = "none" | "project" | "user";
 
 interface InitOptions {
@@ -180,6 +191,19 @@ For each issue: cite file:line, explain the problem, suggest a fix.
 			await fs.writeFile(canonicalCommandPath, GAUNTLET_COMMAND_CONTENT);
 			console.log(chalk.green("Created .gauntlet/run_gauntlet.md"));
 
+			// Write the push-pr command file
+			const pushPrCommandPath = path.join(targetDir, "push_pr.md");
+			if (await exists(pushPrCommandPath)) {
+				console.log(
+					chalk.dim(
+						".gauntlet/push_pr.md already exists, preserving existing file",
+					),
+				);
+			} else {
+				await fs.writeFile(pushPrCommandPath, PUSH_PR_COMMAND_CONTENT);
+				console.log(chalk.green("Created .gauntlet/push_pr.md"));
+			}
+
 			// Handle command installation
 			if (options.yes) {
 				// Default: install at project level for all selected agents (if they support it)
@@ -187,18 +211,32 @@ For each issue: cite file:line, explain the problem, suggest a fix.
 					(a) => a.getProjectCommandDir() !== null,
 				);
 				if (adaptersToInstall.length > 0) {
-					await installCommands(
-						"project",
-						adaptersToInstall.map((a) => a.name),
+					await installCommands({
+						level: "project",
+						agentNames: adaptersToInstall.map((a) => a.name),
 						projectRoot,
-						canonicalCommandPath,
-					);
+						commands: [
+							{
+								name: "gauntlet",
+								content: GAUNTLET_COMMAND_CONTENT,
+								canonicalPath: canonicalCommandPath,
+								symlinkLabel: ".gauntlet/run_gauntlet.md",
+							},
+							{
+								name: "push-pr",
+								content: PUSH_PR_COMMAND_CONTENT,
+								canonicalPath: pushPrCommandPath,
+								symlinkLabel: ".gauntlet/push_pr.md",
+							},
+						],
+					});
 				}
 			} else {
 				// Interactive prompts - passing available adapters to avoid re-checking or offering unavailable ones
 				await promptAndInstallCommands(
 					projectRoot,
 					canonicalCommandPath,
+					pushPrCommandPath,
 					availableAdapters,
 				);
 			}
@@ -384,6 +422,7 @@ ${entryPoints}
 async function promptAndInstallCommands(
 	projectRoot: string,
 	canonicalCommandPath: string,
+	pushPrCommandPath: string,
 	availableAdapters: CLIAdapter[],
 ): Promise<void> {
 	// Only proceed if we have available adapters
@@ -534,24 +573,84 @@ async function promptAndInstallCommands(
 		rl.close();
 
 		// Install commands
-		await installCommands(
-			installLevel,
-			selectedAgents,
+		await installCommands({
+			level: installLevel,
+			agentNames: selectedAgents,
 			projectRoot,
-			canonicalCommandPath,
-		);
+			commands: [
+				{
+					name: "gauntlet",
+					content: GAUNTLET_COMMAND_CONTENT,
+					canonicalPath: canonicalCommandPath,
+					symlinkLabel: ".gauntlet/run_gauntlet.md",
+				},
+				{
+					name: "push-pr",
+					content: PUSH_PR_COMMAND_CONTENT,
+					canonicalPath: pushPrCommandPath,
+					symlinkLabel: ".gauntlet/push_pr.md",
+				},
+			],
+		});
 	} catch (error: unknown) {
 		rl.close();
 		throw error;
 	}
 }
 
-async function installCommands(
-	level: InstallLevel,
-	agentNames: string[],
+interface InstallCommandsOptions {
+	level: InstallLevel;
+	agentNames: string[];
+	projectRoot: string;
+	commands: Array<{
+		name: string;
+		content: string;
+		canonicalPath?: string;
+		symlinkLabel?: string;
+	}>;
+}
+
+/**
+ * Install a single command file for an adapter, using symlink or transform as appropriate.
+ */
+async function installSingleCommand(
+	adapter: ReturnType<typeof getAllAdapters>[number],
+	commandDir: string,
+	isUserLevel: boolean,
 	projectRoot: string,
-	canonicalCommandPath: string,
+	command: InstallCommandsOptions["commands"][number],
 ): Promise<void> {
+	const fileName = `${command.name}${adapter.getCommandExtension()}`;
+	const filePath = path.join(commandDir, fileName);
+
+	if (await exists(filePath)) {
+		const relPath = isUserLevel
+			? filePath
+			: path.relative(projectRoot, filePath);
+		console.log(
+			chalk.dim(`  ${adapter.name}: ${relPath} already exists, skipping`),
+		);
+		return;
+	}
+
+	if (!isUserLevel && adapter.canUseSymlink() && command.canonicalPath) {
+		const relativePath = path.relative(commandDir, command.canonicalPath);
+		await fs.symlink(relativePath, filePath);
+		const relPath = path.relative(projectRoot, filePath);
+		const label = command.symlinkLabel ?? command.canonicalPath;
+		console.log(chalk.green(`Created ${relPath} (symlink to ${label})`));
+	} else {
+		const transformedContent = adapter.transformCommand(command.content);
+		await fs.writeFile(filePath, transformedContent);
+		const relPath = isUserLevel
+			? filePath
+			: path.relative(projectRoot, filePath);
+		console.log(chalk.green(`Created ${relPath}`));
+	}
+}
+
+async function installCommands(options: InstallCommandsOptions): Promise<void> {
+	const { level, agentNames, projectRoot, commands } = options;
 	if (level === "none" || agentNames.length === 0) {
 		return;
 	}
@@ -578,50 +677,19 @@ async function installCommands(
 		}
 
 		if (!commandDir) {
-			// This shouldn't happen if we filtered correctly, but good safety check
 			continue;
 		}
 
-		const commandFileName = `gauntlet${adapter.getCommandExtension()}`;
-		const commandFilePath = path.join(commandDir, commandFileName);
-
 		try {
-			// Ensure command directory exists
 			await fs.mkdir(commandDir, { recursive: true });
-
-			// Check if file already exists
-			if (await exists(commandFilePath)) {
-				const relPath = isUserLevel
-					? commandFilePath
-					: path.relative(projectRoot, commandFilePath);
-				console.log(
-					chalk.dim(`  ${adapter.name}: ${relPath} already exists, skipping`),
+			for (const command of commands) {
+				await installSingleCommand(
+					adapter,
+					commandDir,
+					isUserLevel,
+					projectRoot,
+					command,
 				);
-				continue;
-			}
-
-			// For project-level with symlink support, create symlink
-			// For user-level or adapters that need transformation, write the file
-			if (!isUserLevel && adapter.canUseSymlink()) {
-				// Calculate relative path from command dir to canonical file
-				const relativePath = path.relative(commandDir, canonicalCommandPath);
-				await fs.symlink(relativePath, commandFilePath);
-				const relPath = path.relative(projectRoot, commandFilePath);
-				console.log(
-					chalk.green(
-						`Created ${relPath} (symlink to .gauntlet/run_gauntlet.md)`,
-					),
-				);
-			} else {
-				// Transform and write the command file
-				const transformedContent = adapter.transformCommand(
-					GAUNTLET_COMMAND_CONTENT,
-				);
-				await fs.writeFile(commandFilePath, transformedContent);
-				const relPath = isUserLevel
-					? commandFilePath
-					: path.relative(projectRoot, commandFilePath);
-				console.log(chalk.green(`Created ${relPath}`));
 			}
 		} catch (error: unknown) {
 			const err = error as { message?: string };
