@@ -1,9 +1,12 @@
+import { execFile } from "node:child_process";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { Command } from "commander";
 import YAML from "yaml";
 import { loadGlobalConfig } from "../config/global.js";
+import { resolveStopHookConfig } from "../config/stop-hook-config.js";
 import { executeRun } from "../core/run-executor.js";
 import {
 	getCategoryLogger,
@@ -16,6 +19,8 @@ import {
 	type RunResult,
 } from "../types/gauntlet-status.js";
 import { DebugLogger, mergeDebugLogConfig } from "../utils/debug-log.js";
+
+const execFileAsync = promisify(execFile);
 
 interface StopHookInput {
 	session_id?: string;
@@ -342,6 +347,8 @@ function getStatusMessage(
 			return "⏭ Gauntlet skipped — another gauntlet run is already in progress.";
 		case "failed":
 			return "✗ Gauntlet failed — issues must be fixed before stopping.";
+		case "pr_push_required":
+			return "✓ Gauntlet passed — PR needs to be created or updated before stopping.";
 		case "no_config":
 			return "○ Not a gauntlet project — no .gauntlet/config.yml found.";
 		case "stop_hook_active":
@@ -403,9 +410,152 @@ function getStopHookLogger() {
 	return getCategoryLogger("stop-hook");
 }
 
+/**
+ * Check if we should verify PR status after gates pass.
+ * Loads stop hook config with 3-tier precedence and checks auto_push_pr.
+ */
+async function shouldCheckPR(projectCwd: string): Promise<boolean> {
+	try {
+		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
+		const content = await fs.readFile(configPath, "utf-8");
+		const raw = YAML.parse(content) as { stop_hook?: Record<string, unknown> };
+		const projectStopHookConfig = raw?.stop_hook as
+			| { auto_push_pr?: boolean }
+			| undefined;
+		const globalConfig = await loadGlobalConfig();
+		const resolved = resolveStopHookConfig(projectStopHookConfig, globalConfig);
+		return resolved.auto_push_pr;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * PR status result from checkPRStatus.
+ */
+interface PRStatusResult {
+	/** Whether a PR exists for the current branch */
+	prExists: boolean;
+	/** Whether the PR is up to date with local HEAD */
+	upToDate: boolean;
+	/** Error message if check failed (graceful degradation) */
+	error?: string;
+	/** PR number if it exists */
+	prNumber?: number;
+}
+
+/**
+ * Check PR existence and whether local commits have been pushed.
+ *
+ * Uses `gh pr view` to get PR info and compares head SHA with local HEAD.
+ * Gracefully degrades if `gh` is not installed or any error occurs.
+ */
+async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
+	try {
+		// Check if gh CLI is available
+		try {
+			await execFileAsync("gh", ["--version"], { cwd });
+		} catch {
+			return {
+				prExists: false,
+				upToDate: false,
+				error: "gh CLI not installed",
+			};
+		}
+
+		// Get PR info for current branch
+		let prInfo: { number: number; state: string; headRefOid: string };
+		try {
+			const { stdout } = await execFileAsync(
+				"gh",
+				["pr", "view", "--json", "number,state,headRefOid"],
+				{ cwd },
+			);
+			prInfo = JSON.parse(stdout.trim());
+		} catch (e: unknown) {
+			const errMsg = (e as { message?: string }).message ?? "unknown";
+			// gh pr view exits with code 1 and specific message when no PR exists
+			if (
+				errMsg.includes("no pull requests found") ||
+				errMsg.includes("Could not resolve")
+			) {
+				return { prExists: false, upToDate: false };
+			}
+			// Other failures (network, auth, etc.) — return error for graceful degradation
+			return {
+				prExists: false,
+				upToDate: false,
+				error: `gh pr view failed: ${errMsg}`,
+			};
+		}
+
+		// Get local HEAD SHA
+		const { stdout: localHead } = await execFileAsync(
+			"git",
+			["rev-parse", "HEAD"],
+			{ cwd },
+		);
+		const localSha = localHead.trim();
+
+		const upToDate = prInfo.headRefOid === localSha;
+		return {
+			prExists: true,
+			upToDate,
+			prNumber: prInfo.number,
+		};
+	} catch (error: unknown) {
+		const errMsg = (error as { message?: string }).message ?? "unknown";
+		return {
+			prExists: false,
+			upToDate: false,
+			error: `PR status check failed: ${errMsg}`,
+		};
+	}
+}
+
+/**
+ * Generate push-PR instructions for the agent.
+ *
+ * Instructs the agent to look for project-level skills first,
+ * then falls back to minimal git + gh instructions.
+ */
+function getPushPRInstructions(options?: { hasWarnings?: boolean }): string {
+	const warningGuidance = options?.hasWarnings
+		? "\n\n**Note:** Some issues were skipped during the gauntlet. Include a summary of skipped issues in the PR description so reviewers are aware."
+		: "";
+
+	return `**GAUNTLET PASSED — CREATE OR UPDATE YOUR PULL REQUEST**
+
+All local quality gates have passed. Before you can stop, you need to push your changes and create or update a pull request.
+
+**Step 1: Look for project-level instructions**
+Check for any of these (use the first one found):
+- A \`/push-pr\` skill or command
+- \`.claude/commands/push-pr.md\`
+- \`.gauntlet/push_pr.md\`
+- \`CONTRIBUTING.md\` section on PR creation
+
+If found, follow those instructions.
+
+**Step 2: Fallback (if no project instructions found)**
+1. Stage your changes: \`git add <files>\`
+2. Commit with a descriptive message: \`git commit -m "your message"\`
+3. Push to remote: \`git push -u origin HEAD\`
+4. Create a PR: \`gh pr create --fill\` (or update existing with \`git push\`)
+
+**Step 3: Try stopping again**
+After creating or updating the PR, try to stop again. The stop hook will verify the PR exists and is up to date.${warningGuidance}`;
+}
+
 // Export for testing
-export { getStopReasonInstructions, outputHookResponse, getStatusMessage };
-export type { GauntletStatus as StopHookStatus, HookResponse };
+export {
+	getStopReasonInstructions,
+	outputHookResponse,
+	getStatusMessage,
+	checkPRStatus,
+	getPushPRInstructions,
+};
+export type { GauntletStatus as StopHookStatus, HookResponse, PRStatusResult };
 
 /**
  * Hard ceiling for the stop hook process.
@@ -700,17 +850,44 @@ export function registerStopHookCommand(program: Command): void {
 
 				// 9. Handle results using unified GauntletStatus directly
 				log.info(`Gauntlet completed with status: ${result.status}`);
+
+				// 10. Post-gauntlet PR check: when gates pass and auto_push_pr is enabled,
+				// verify a PR exists and is up to date before allowing stop.
+				// Only triggers on direct success statuses (passed, passed_with_warnings).
+				let finalStatus = result.status;
+				let pushPRReason: string | undefined;
+
+				if (
+					(result.status === "passed" ||
+						result.status === "passed_with_warnings") &&
+					(await shouldCheckPR(projectCwd))
+				) {
+					const prStatus = await checkPRStatus(projectCwd);
+					if (prStatus.error) {
+						// Graceful degradation: log warning, allow stop
+						log.warn(`PR status check failed: ${prStatus.error}`);
+					} else if (!prStatus.prExists || !prStatus.upToDate) {
+						finalStatus = "pr_push_required";
+						pushPRReason = getPushPRInstructions({
+							hasWarnings: result.status === "passed_with_warnings",
+						});
+					}
+					// else: PR exists and up to date, keep original status
+				}
+
 				await debugLogger.logStopHook(
-					isBlockingStatus(result.status) ? "block" : "allow",
-					result.status,
+					isBlockingStatus(finalStatus) ? "block" : "allow",
+					finalStatus,
 				);
 
 				// Use gate results from executor for detailed failure instructions
-				outputHookResponse(result.status, {
+				outputHookResponse(finalStatus, {
 					reason:
-						result.status === "failed"
+						finalStatus === "failed"
 							? getStopReasonInstructions(result.gateResults)
-							: undefined,
+							: finalStatus === "pr_push_required"
+								? pushPRReason
+								: undefined,
 					errorMessage: result.errorMessage,
 					intervalMinutes: result.intervalMinutes,
 				});

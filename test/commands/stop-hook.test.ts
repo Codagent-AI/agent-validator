@@ -34,8 +34,10 @@ const {
 	getStopReasonInstructions,
 	outputHookResponse,
 	getStatusMessage,
+	getPushPRInstructions,
 } = await import("../../src/commands/stop-hook.js");
 import type { StopHookStatus } from "../../src/commands/stop-hook.js";
+import { isBlockingStatus } from "../../src/types/gauntlet-status.js";
 
 describe("Stop Hook Command", () => {
 	let program: Command;
@@ -1157,6 +1159,75 @@ describe("Stop Hook Command", () => {
 			// 7. stop_hook_active (from stdin input)
 			// 8. no_config at hookInput.cwd (when cwd differs from process.cwd())
 			expect(earlyReturns).toBe(8);
+		});
+	});
+
+	describe("pr_push_required status", () => {
+		it("isBlockingStatus returns true for pr_push_required", () => {
+			expect(isBlockingStatus("pr_push_required")).toBe(true);
+		});
+
+		it("isBlockingStatus returns true for failed", () => {
+			expect(isBlockingStatus("failed")).toBe(true);
+		});
+
+		it("isBlockingStatus returns false for passed", () => {
+			expect(isBlockingStatus("passed")).toBe(false);
+		});
+
+		it("getStatusMessage returns appropriate message for pr_push_required", () => {
+			const message = getStatusMessage("pr_push_required");
+			expect(message).toContain("Gauntlet passed");
+			expect(message).toContain("PR needs to be created or updated");
+		});
+
+		it("outputHookResponse outputs block decision for pr_push_required", () => {
+			const instructions = "Create a PR";
+			outputHookResponse("pr_push_required", { reason: instructions });
+			expect(logs.length).toBe(1);
+			const response = JSON.parse(logs[0]);
+			expect(response.decision).toBe("block");
+			expect(response.status).toBe("pr_push_required");
+			expect(response.reason).toBe(instructions);
+		});
+	});
+
+	describe("getPushPRInstructions", () => {
+		it("includes project-level skill lookup instructions", () => {
+			const instructions = getPushPRInstructions();
+			expect(instructions).toContain("/push-pr");
+			expect(instructions).toContain(".claude/commands/push-pr.md");
+			expect(instructions).toContain(".gauntlet/push_pr.md");
+			expect(instructions).toContain("CONTRIBUTING.md");
+		});
+
+		it("includes minimal fallback instructions", () => {
+			const instructions = getPushPRInstructions();
+			expect(instructions).toContain("git add");
+			expect(instructions).toContain("git commit");
+			expect(instructions).toContain("git push");
+			expect(instructions).toContain("gh pr create");
+		});
+
+		it("includes instruction to try stopping again", () => {
+			const instructions = getPushPRInstructions();
+			expect(instructions).toContain("try to stop again");
+		});
+
+		it("includes skipped issues guidance when passed_with_warnings", () => {
+			const instructions = getPushPRInstructions({ hasWarnings: true });
+			expect(instructions).toContain("skipped issues");
+			expect(instructions).toContain("PR description");
+		});
+
+		it("does not include skipped issues guidance for clean pass", () => {
+			const instructions = getPushPRInstructions({ hasWarnings: false });
+			expect(instructions).not.toContain("skipped issues");
+		});
+
+		it("does not include skipped issues guidance by default", () => {
+			const instructions = getPushPRInstructions();
+			expect(instructions).not.toContain("skipped issues");
 		});
 	});
 });

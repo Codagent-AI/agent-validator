@@ -44,6 +44,32 @@ Execute the autonomous verification suite.
 8. Once all gates pass, do NOT commit or push your changes—await the human's review and explicit instruction to commit.
 `;
 
+const PUSH_PR_COMMAND_CONTENT = `---
+description: Commit changes, push to remote, and create or update a pull request
+allowed-tools: Bash
+---
+
+# /push-pr
+Push changes and create or update a pull request.
+
+**Step 1: Look for project-level instructions**
+Check for any of these (use the first one found):
+- A \`/push-pr\` skill or command (check \`~/.claude/skills/\` or similar)
+- A \`/commit\` command
+- \`CONTRIBUTING.md\` section on PR creation
+
+If found, follow those instructions instead of the fallback below.
+
+**Step 2: Fallback (if no project instructions found)**
+1. Stage your changes: \`git add <changed files>\`
+2. Commit with a descriptive message summarizing the work done
+3. Push to remote: \`git push -u origin HEAD\`
+4. Create a PR: \`gh pr create --fill\` (or if a PR already exists, the push is sufficient)
+
+**Step 3: Verify**
+Confirm the PR was created or updated successfully by running \`gh pr view\`.
+`;
+
 type InstallLevel = "none" | "project" | "user";
 
 interface InitOptions {
@@ -180,6 +206,19 @@ For each issue: cite file:line, explain the problem, suggest a fix.
 			await fs.writeFile(canonicalCommandPath, GAUNTLET_COMMAND_CONTENT);
 			console.log(chalk.green("Created .gauntlet/run_gauntlet.md"));
 
+			// Write the push-pr command file
+			const pushPrCommandPath = path.join(targetDir, "push_pr.md");
+			if (await exists(pushPrCommandPath)) {
+				console.log(
+					chalk.dim(
+						".gauntlet/push_pr.md already exists, preserving existing file",
+					),
+				);
+			} else {
+				await fs.writeFile(pushPrCommandPath, PUSH_PR_COMMAND_CONTENT);
+				console.log(chalk.green("Created .gauntlet/push_pr.md"));
+			}
+
 			// Handle command installation
 			if (options.yes) {
 				// Default: install at project level for all selected agents (if they support it)
@@ -192,6 +231,7 @@ For each issue: cite file:line, explain the problem, suggest a fix.
 						adaptersToInstall.map((a) => a.name),
 						projectRoot,
 						canonicalCommandPath,
+						pushPrCommandPath,
 					);
 				}
 			} else {
@@ -199,6 +239,7 @@ For each issue: cite file:line, explain the problem, suggest a fix.
 				await promptAndInstallCommands(
 					projectRoot,
 					canonicalCommandPath,
+					pushPrCommandPath,
 					availableAdapters,
 				);
 			}
@@ -386,6 +427,7 @@ ${entryPoints}
 async function promptAndInstallCommands(
 	projectRoot: string,
 	canonicalCommandPath: string,
+	pushPrCommandPath: string,
 	availableAdapters: CLIAdapter[],
 ): Promise<void> {
 	// Only proceed if we have available adapters
@@ -541,6 +583,7 @@ async function promptAndInstallCommands(
 			selectedAgents,
 			projectRoot,
 			canonicalCommandPath,
+			pushPrCommandPath,
 		);
 	} catch (error: unknown) {
 		rl.close();
@@ -553,6 +596,7 @@ async function installCommands(
 	agentNames: string[],
 	projectRoot: string,
 	canonicalCommandPath: string,
+	pushPrCommandPath?: string,
 ): Promise<void> {
 	if (level === "none" || agentNames.length === 0) {
 		return;
@@ -624,6 +668,36 @@ async function installCommands(
 					? commandFilePath
 					: path.relative(projectRoot, commandFilePath);
 				console.log(chalk.green(`Created ${relPath}`));
+			}
+			// Install push-pr command alongside gauntlet command
+			if (pushPrCommandPath) {
+				const pushPrFileName = `push-pr${adapter.getCommandExtension()}`;
+				const pushPrFilePath = path.join(commandDir, pushPrFileName);
+
+				if (await exists(pushPrFilePath)) {
+					const relPath = isUserLevel
+						? pushPrFilePath
+						: path.relative(projectRoot, pushPrFilePath);
+					console.log(
+						chalk.dim(`  ${adapter.name}: ${relPath} already exists, skipping`),
+					);
+				} else if (!isUserLevel && adapter.canUseSymlink()) {
+					const relativePath = path.relative(commandDir, pushPrCommandPath);
+					await fs.symlink(relativePath, pushPrFilePath);
+					const relPath = path.relative(projectRoot, pushPrFilePath);
+					console.log(
+						chalk.green(`Created ${relPath} (symlink to .gauntlet/push_pr.md)`),
+					);
+				} else {
+					const transformedContent = adapter.transformCommand(
+						PUSH_PR_COMMAND_CONTENT,
+					);
+					await fs.writeFile(pushPrFilePath, transformedContent);
+					const relPath = isUserLevel
+						? pushPrFilePath
+						: path.relative(projectRoot, pushPrFilePath);
+					console.log(chalk.green(`Created ${relPath}`));
+				}
 			}
 		} catch (error: unknown) {
 			const err = error as { message?: string };

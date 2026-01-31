@@ -57,6 +57,8 @@ This document lists the configuration files Agent Gauntlet loads and all support
     Whether the stop hook gauntlet is enabled for this project. Set to `false` to disable stop hook validation entirely.
   - **run_interval_minutes**: number (optional; default from global config, typically `5`)
     Minimum minutes between gauntlet runs. Set to `0` to always run the gauntlet on every stop attempt.
+  - **auto_push_pr**: boolean (optional; default `false`)
+    When enabled, the stop hook checks whether a PR exists and is up to date after gates pass. If no PR exists or the PR HEAD doesn't match the local HEAD, the hook blocks with `pr_push_required` and provides instructions for creating/updating a PR.
 - **entry_points**: array (required)  
   Declares which parts of the repo are “scopes” for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs.
   - **path**: string (required)  
@@ -113,6 +115,7 @@ Stop hook configuration can be overridden using environment variables. This is u
 |----------|--------|-------------|
 | `GAUNTLET_STOP_HOOK_ENABLED` | `true`, `1`, `false`, `0` | Override whether stop hook is enabled |
 | `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` | Non-negative integer | Override run interval (0 = always run) |
+| `GAUNTLET_AUTO_PUSH_PR` | `true`, `1`, `false`, `0` | Override whether auto PR push check is enabled |
 
 Each field is resolved independently, so you can set one via environment variable while using config files for the other.
 

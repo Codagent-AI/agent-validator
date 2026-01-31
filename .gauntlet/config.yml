@@ -8,6 +8,8 @@ cli:
     - gemini
     - claude
   check_usage_limit: true
+stop_hook:
+  auto_push_pr: true
 entry_points:
   - path: "."
     reviews:
