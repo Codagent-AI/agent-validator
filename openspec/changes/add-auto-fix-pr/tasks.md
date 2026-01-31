@@ -6,7 +6,13 @@
 
 See `design.md` Pre-factoring section for full CodeScene analysis.
 
-Hotspot modified by this change: `stop-hook.ts` (7.07, cc=36). Refactoring deferred: CI workflow logic (wait-ci spawning, retry tracking, instruction generation) will be added in extracted helper functions rather than modifying the existing complex `registerStopHookCommand`, avoiding worsening the hotspot while minimizing risk. `isSuccessStatus()` already exists at `src/types/gauntlet-status.ts:60`.
+Hotspots modified by this change (post-refactor architecture):
+- `src/hooks/stop-hook-handler.ts` — 9.68 (Green). CI workflow logic (wait-ci spawning, retry tracking, instruction generation) will be added as helper methods.
+- `src/hooks/adapters/claude-stop-hook.ts` — 10.0 (Optimal). Will add CI status formatting.
+- `src/hooks/adapters/cursor-stop-hook.ts` — 10.0 (Optimal). Will add CI status formatting.
+- `src/hooks/adapters/types.ts` — type definitions only. Will add `ciFixReason`, `ciPendingReason` to `StopHookResult`.
+
+All files are healthy; no pre-factoring refactoring needed. `isSuccessStatus()` already exists at `src/types/gauntlet-status.ts:60`.
 
 ## 1. Implementation
 

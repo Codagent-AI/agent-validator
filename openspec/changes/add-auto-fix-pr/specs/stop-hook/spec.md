@@ -264,7 +264,7 @@ When blocking with `ci_pending` status, the `reason` prompt SHALL instruct the a
 - **WHEN** the `reason` prompt is generated
 - **THEN** it SHALL instruct the agent to wait approximately 30 seconds and then try to stop again
 
-### Requirement: Cursor Protocol CI Status Handling
+### Requirement: Protocol Adapter CI Status Handling
 
 Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their output formatting.
 
