@@ -39,9 +39,10 @@ async function isGhAvailable(): Promise<boolean> {
  */
 async function runGh(
 	args: string[],
+	cwd?: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
 	return new Promise((resolve) => {
-		const proc = spawn("gh", args, { stdio: "pipe" });
+		const proc = spawn("gh", args, { stdio: "pipe", cwd });
 		let stdout = "";
 		let stderr = "";
 
@@ -63,18 +64,15 @@ async function runGh(
 
 /**
  * Get PR info for the current branch.
+ * Returns null if no PR found or on error.
  */
-async function getPRInfo(): Promise<{
-	number: number;
-	url: string;
-	headRefName: string;
-} | null> {
-	const result = await runGh([
-		"pr",
-		"view",
-		"--json",
-		"number,url,headRefName",
-	]);
+async function getPRInfo(
+	cwd?: string,
+): Promise<{ number: number; url: string; headRefName: string } | null> {
+	const result = await runGh(
+		["pr", "view", "--json", "number,url,headRefName"],
+		cwd,
+	);
 	if (result.code !== 0) {
 		return null;
 	}
@@ -87,36 +85,41 @@ async function getPRInfo(): Promise<{
 
 /**
  * Get CI check statuses for a PR.
+ * Returns null on error, empty array if no checks.
+ * Note: gh pr checks uses 'state' (FAILURE/SUCCESS/PENDING) and 'link' (not conclusion/detailsUrl)
  */
-async function getChecks(): Promise<
-	Array<{ name: string; state: string; conclusion: string; detailsUrl: string }>
-> {
-	const result = await runGh([
-		"pr",
-		"checks",
-		"--json",
-		"name,state,conclusion,detailsUrl",
-	]);
+async function getChecks(cwd?: string): Promise<Array<{
+	name: string;
+	state: string;
+	link: string;
+}> | null> {
+	const result = await runGh(["pr", "checks", "--json", "name,state,link"], cwd);
 	if (result.code !== 0) {
-		return [];
+		return null;
 	}
 	try {
 		return JSON.parse(result.stdout.trim()) || [];
 	} catch {
-		return [];
+		return null;
 	}
 }
 
 /**
  * Get reviews for a PR.
+ * Returns null on error, empty array if no reviews.
  */
 async function getReviews(
 	prNumber: number,
-): Promise<Array<{ author: { login: string }; state: string; body: string }>> {
+	cwd?: string,
+): Promise<Array<{
+	author: { login: string };
+	state: string;
+	body: string;
+}> | null> {
 	// Get owner/repo from gh
-	const repoResult = await runGh(["repo", "view", "--json", "owner,name"]);
+	const repoResult = await runGh(["repo", "view", "--json", "owner,name"], cwd);
 	if (repoResult.code !== 0) {
-		return [];
+		return null;
 	}
 	let owner: string;
 	let repo: string;
@@ -125,15 +128,15 @@ async function getReviews(
 		owner = repoInfo.owner.login;
 		repo = repoInfo.name;
 	} catch {
-		return [];
+		return null;
 	}
 
-	const result = await runGh([
-		"api",
-		`repos/${owner}/${repo}/pulls/${prNumber}/reviews?per_page=100`,
-	]);
+	const result = await runGh(
+		["api", `repos/${owner}/${repo}/pulls/${prNumber}/reviews?per_page=100`],
+		cwd,
+	);
 	if (result.code !== 0) {
-		return [];
+		return null;
 	}
 	try {
 		// GitHub API returns 'user' not 'author', so we transform the response
@@ -143,15 +146,13 @@ async function getReviews(
 				(r: { user?: { login: string }; state: string; body: string }) =>
 					r.user?.login,
 			)
-			.map(
-				(r: { user: { login: string }; state: string; body: string }) => ({
-					author: { login: r.user.login },
-					state: r.state,
-					body: r.body || "",
-				}),
-			);
+			.map((r: { user: { login: string }; state: string; body: string }) => ({
+				author: { login: r.user.login },
+				state: r.state,
+				body: r.body || "",
+			}));
 	} catch {
-		return [];
+		return null;
 	}
 }
 
@@ -183,10 +184,14 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Wait for CI to complete and check for blocking reviews.
+ * @param timeoutSeconds Maximum time to wait for CI
+ * @param pollIntervalSeconds Time between polls
+ * @param cwd Working directory for gh commands (defaults to process.cwd())
  */
 export async function waitForCI(
 	timeoutSeconds: number,
 	pollIntervalSeconds: number,
+	cwd?: string,
 ): Promise<WaitCIResult> {
 	const startTime = Date.now();
 	let isFirstPoll = true;
@@ -203,7 +208,7 @@ export async function waitForCI(
 	}
 
 	// Get PR info
-	const prInfo = await getPRInfo();
+	const prInfo = await getPRInfo(cwd);
 	if (!prInfo) {
 		return {
 			ci_status: "error",
@@ -218,19 +223,28 @@ export async function waitForCI(
 
 	// Poll loop
 	while (Date.now() - startTime < timeoutMs) {
-		const checks = await getChecks();
-		const reviews = await getReviews(prInfo.number);
+		const checks = await getChecks(cwd);
+		const reviews = await getReviews(prInfo.number, cwd);
+
+		// Handle API errors
+		if (checks === null || reviews === null) {
+			return {
+				ci_status: "error",
+				pr_number: prInfo.number,
+				pr_url: prInfo.url,
+				failed_checks: [],
+				review_comments: [],
+				elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
+				error_message: "Failed to fetch CI status or reviews from GitHub",
+			};
+		}
 
 		// Deduplicate reviews to get each author's latest state
 		const latestReviews = getLatestReviewsByAuthor(reviews);
 
 		// Check for failed checks - fail immediately if any check has failed
-		const failedChecks = checks.filter(
-			(c) =>
-				c.conclusion === "failure" ||
-				c.conclusion === "cancelled" ||
-				c.conclusion === "timed_out",
-		);
+		// gh pr checks uses state directly: FAILURE, SUCCESS, PENDING
+		const failedChecks = checks.filter((c) => c.state === "FAILURE");
 
 		// Check for blocking reviews (REQUEST_CHANGES) from latest reviews only
 		const blockingReviews = latestReviews.filter(
@@ -251,8 +265,8 @@ export async function waitForCI(
 				pr_url: prInfo.url,
 				failed_checks: failedChecks.map((c) => ({
 					name: c.name,
-					conclusion: c.conclusion,
-					details_url: c.detailsUrl,
+					conclusion: c.state.toLowerCase(),
+					details_url: c.link,
 				})),
 				review_comments: reviewComments,
 				elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
@@ -260,11 +274,12 @@ export async function waitForCI(
 		}
 
 		// Check if all checks are complete
+		// gh pr checks uses state: PENDING, SUCCESS, FAILURE
 		const pendingChecks = checks.filter(
 			(c) =>
-				c.state === "pending" ||
-				c.state === "queued" ||
-				c.state === "in_progress",
+				c.state === "PENDING" ||
+				c.state === "QUEUED" ||
+				c.state === "IN_PROGRESS",
 		);
 
 		// Handle zero checks case: if no checks exist after the first poll,

@@ -359,10 +359,10 @@ const DEFAULT_CI_POLL_INTERVAL = 15;
  * Run the wait-ci logic and return the result.
  * Calls waitForCI directly instead of spawning a subprocess.
  */
-export async function runWaitCI(_cwd: string): Promise<WaitCIResult> {
+export async function runWaitCI(cwd: string): Promise<WaitCIResult> {
 	// Import and call waitForCI directly to avoid subprocess spawning issues
 	const { waitForCI } = await import("../commands/wait-ci.js");
-	return waitForCI(DEFAULT_CI_WAIT_TIMEOUT, DEFAULT_CI_POLL_INTERVAL);
+	return waitForCI(DEFAULT_CI_WAIT_TIMEOUT, DEFAULT_CI_POLL_INTERVAL, cwd);
 }
 
 /**
