@@ -185,6 +185,93 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Helper to create error result */
+function createErrorResult(
+	startTime: number,
+	message: string,
+	prInfo?: { number: number; url: string },
+): WaitCIResult {
+	return {
+		ci_status: "error",
+		pr_number: prInfo?.number,
+		pr_url: prInfo?.url,
+		failed_checks: [],
+		review_comments: [],
+		elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
+		error_message: message,
+	};
+}
+
+/** Helper to create passed result */
+function createPassedResult(
+	startTime: number,
+	prInfo: { number: number; url: string },
+): WaitCIResult {
+	return {
+		ci_status: "passed",
+		pr_number: prInfo.number,
+		pr_url: prInfo.url,
+		failed_checks: [],
+		review_comments: [],
+		elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
+	};
+}
+
+/** Helper to create failed result */
+function createFailedResult(
+	startTime: number,
+	prInfo: { number: number; url: string },
+	failedChecks: Array<{ name: string; state: string; link: string }>,
+	reviewComments: Array<{ author: string; body: string }>,
+): WaitCIResult {
+	return {
+		ci_status: "failed",
+		pr_number: prInfo.number,
+		pr_url: prInfo.url,
+		failed_checks: failedChecks.map((c) => ({
+			name: c.name,
+			conclusion: c.state.toLowerCase(),
+			details_url: c.link,
+		})),
+		review_comments: reviewComments,
+		elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
+	};
+}
+
+/** Process poll data and determine result or continue polling */
+function processPollData(
+	checks: Array<{ name: string; state: string; link: string }>,
+	reviews: Array<{ author: { login: string }; state: string; body: string }>,
+): {
+	shouldFail: boolean;
+	shouldPass: boolean;
+	failedChecks: Array<{ name: string; state: string; link: string }>;
+	reviewComments: Array<{ author: string; body: string }>;
+} {
+	const latestReviews = getLatestReviewsByAuthor(reviews);
+	const failedChecks = checks.filter((c) => c.state === "FAILURE");
+	const blockingReviews = latestReviews.filter(
+		(r) => r.state === "CHANGES_REQUESTED",
+	);
+	const reviewComments = blockingReviews.map((r) => ({
+		author: r.author.login,
+		body: r.body || "",
+	}));
+	const pendingChecks = checks.filter(
+		(c) =>
+			c.state === "PENDING" ||
+			c.state === "QUEUED" ||
+			c.state === "IN_PROGRESS",
+	);
+
+	return {
+		shouldFail: failedChecks.length > 0 || blockingReviews.length > 0,
+		shouldPass: pendingChecks.length === 0 && checks.length > 0,
+		failedChecks,
+		reviewComments,
+	};
+}
+
 /**
  * Wait for CI to complete and check for blocking reviews.
  * @param timeoutSeconds Maximum time to wait for CI
@@ -199,124 +286,56 @@ export async function waitForCI(
 	const startTime = Date.now();
 	let isFirstPoll = true;
 
-	// Check if gh is available
 	if (!(await isGhAvailable())) {
-		return {
-			ci_status: "error",
-			failed_checks: [],
-			review_comments: [],
-			elapsed_seconds: 0,
-			error_message: "gh CLI is not installed or not authenticated",
-		};
+		return createErrorResult(
+			startTime,
+			"gh CLI is not installed or not authenticated",
+		);
 	}
 
-	// Get PR info
 	const prInfo = await getPRInfo(cwd);
 	if (!prInfo) {
-		return {
-			ci_status: "error",
-			failed_checks: [],
-			review_comments: [],
-			elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
-			error_message: "No PR found for current branch",
-		};
+		return createErrorResult(startTime, "No PR found for current branch");
 	}
 
 	const timeoutMs = timeoutSeconds * 1000;
 
-	// Poll loop
 	while (Date.now() - startTime < timeoutMs) {
 		const checks = await getChecks(cwd);
 		const reviews = await getReviews(prInfo.number, cwd);
 
-		// Handle API errors
 		if (checks === null || reviews === null) {
-			return {
-				ci_status: "error",
-				pr_number: prInfo.number,
-				pr_url: prInfo.url,
-				failed_checks: [],
-				review_comments: [],
-				elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
-				error_message: "Failed to fetch CI status or reviews from GitHub",
-			};
+			return createErrorResult(
+				startTime,
+				"Failed to fetch CI status or reviews from GitHub",
+				prInfo,
+			);
 		}
 
-		// Deduplicate reviews to get each author's latest state
-		const latestReviews = getLatestReviewsByAuthor(reviews);
-
-		// Check for failed checks - fail immediately if any check has failed
-		// gh pr checks uses state directly: FAILURE, SUCCESS, PENDING
-		const failedChecks = checks.filter((c) => c.state === "FAILURE");
-
-		// Check for blocking reviews (REQUEST_CHANGES) from latest reviews only
-		const blockingReviews = latestReviews.filter(
-			(r) => r.state === "CHANGES_REQUESTED",
-		);
-
-		// Build review comments array from blocking reviews only (not all reviews)
-		const reviewComments = blockingReviews.map((r) => ({
-			author: r.author.login,
-			body: r.body || "",
-		}));
-
-		// If any check failed or there are blocking reviews, return immediately
-		if (failedChecks.length > 0 || blockingReviews.length > 0) {
-			return {
-				ci_status: "failed",
-				pr_number: prInfo.number,
-				pr_url: prInfo.url,
-				failed_checks: failedChecks.map((c) => ({
-					name: c.name,
-					conclusion: c.state.toLowerCase(),
-					details_url: c.link,
-				})),
-				review_comments: reviewComments,
-				elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
-			};
-		}
-
-		// Check if all checks are complete
-		// gh pr checks uses state: PENDING, SUCCESS, FAILURE
-		const pendingChecks = checks.filter(
-			(c) =>
-				c.state === "PENDING" ||
-				c.state === "QUEUED" ||
-				c.state === "IN_PROGRESS",
-		);
-
-		// Handle zero checks case: if no checks exist after the first poll,
-		// wait one more poll interval to allow checks to spawn, then pass
+		// Handle zero checks case: wait one poll for checks to spawn
 		if (checks.length === 0) {
 			if (!isFirstPoll) {
-				// No checks after waiting - consider it passed (no CI configured)
-				return {
-					ci_status: "passed",
-					pr_number: prInfo.number,
-					pr_url: prInfo.url,
-					failed_checks: [],
-					review_comments: [],
-					elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
-				};
+				return createPassedResult(startTime, prInfo);
 			}
-			// First poll with no checks - wait and try again
 			isFirstPoll = false;
 			await sleep(pollIntervalSeconds * 1000);
 			continue;
 		}
 
 		isFirstPoll = false;
+		const pollResult = processPollData(checks, reviews);
 
-		if (pendingChecks.length === 0) {
-			// All checks passed (no failed, no pending)
-			return {
-				ci_status: "passed",
-				pr_number: prInfo.number,
-				pr_url: prInfo.url,
-				failed_checks: [],
-				review_comments: [],
-				elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
-			};
+		if (pollResult.shouldFail) {
+			return createFailedResult(
+				startTime,
+				prInfo,
+				pollResult.failedChecks,
+				pollResult.reviewComments,
+			);
+		}
+
+		if (pollResult.shouldPass) {
+			return createPassedResult(startTime, prInfo);
 		}
 
 		// Still pending - sleep and continue
@@ -330,7 +349,7 @@ export async function waitForCI(
 		pr_url: prInfo.url,
 		failed_checks: [],
 		review_comments: [],
-		elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
+		elapsed_seconds: timeoutSeconds,
 	};
 }
 
