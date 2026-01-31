@@ -57,6 +57,8 @@ This document lists the configuration files Agent Gauntlet loads and all support
     Minimum minutes between gauntlet runs. Set to `0` to always run the gauntlet on every stop attempt.
   - **auto_push_pr**: boolean (optional; default `false`)
     When enabled, the stop hook checks whether a PR exists and is up to date after gates pass. If no PR exists or the PR HEAD doesn't match the local HEAD, the hook blocks with `pr_push_required` and provides instructions for creating/updating a PR.
+- **auto_fix_pr**: boolean (optional; default `false`)
+  When enabled (and `auto_push_pr` is also enabled), the stop hook waits for CI checks after a PR is created. If checks fail or blocking reviews are present, it blocks with fix instructions; if checks pass, it approves.
 - **entry_points**: array (required)  
   Declares which parts of the repo are “scopes” for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs.
   - **path**: string (required)  
@@ -113,6 +115,7 @@ Stop hook configuration can be overridden using environment variables. This is u
 | `GAUNTLET_STOP_HOOK_ENABLED` | `true`, `1`, `false`, `0` | Override whether stop hook is enabled |
 | `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` | Non-negative integer | Override run interval (0 = always run) |
 | `GAUNTLET_AUTO_PUSH_PR` | `true`, `1`, `false`, `0` | Override whether auto PR push check is enabled |
+| `GAUNTLET_AUTO_FIX_PR` | `true`, `1`, `false`, `0` | Override whether auto-fix PR CI wait workflow is enabled |
 
 Each field is resolved independently, so you can set one via environment variable while using config files for the other.
 

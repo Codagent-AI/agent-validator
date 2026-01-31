@@ -59,27 +59,27 @@ See `design.md` Pre-factoring section for full CodeScene analysis. No hotspots m
 - [x] Set `auto_fix_pr: true` in `.gauntlet/config.yml` for this project
 
 ## 2. Tests
-- [ ] Add tests for `GAUNTLET_AUTO_FIX_PR` env var parsing
-- [ ] Add tests for 3-tier resolution of `auto_fix_pr`
-- [ ] Add tests for auto_fix_pr requires auto_push_pr validation
-- [ ] Add tests for `isBlockingStatus()` with CI statuses (`ci_pending` and `ci_failed` block; `ci_passed` and `ci_timeout` do not)
-- [ ] Add tests for `isSuccessStatus()` with `ci_passed` (true) and `ci_timeout` (false)
-- [ ] Add tests for CI status messages (including `ci_timeout`)
-- [ ] Create `test/commands/wait-ci.test.ts` with tests for:
+- [x] Add tests for `GAUNTLET_AUTO_FIX_PR` env var parsing
+- [x] Add tests for 3-tier resolution of `auto_fix_pr`
+- [x] Add tests for auto_fix_pr requires auto_push_pr validation
+- [x] Add tests for `isBlockingStatus()` with CI statuses (`ci_pending` and `ci_failed` block; `ci_passed` and `ci_timeout` do not)
+- [x] Add tests for `isSuccessStatus()` with `ci_passed` (true) and `ci_timeout` (false)
+- [x] Add tests for CI status messages (including `ci_timeout`)
+- [x] Create `test/commands/wait-ci.test.ts` with tests for:
   - [ ] gh output parsing
-  - [ ] Exit code mapping (0/1/2)
+  - [x] Exit code mapping (0/1/2)
   - [ ] Timeout behavior
-  - [ ] Review comment filtering (REQUEST_CHANGES vs approved vs informational)
+  - [x] Review comment filtering (REQUEST_CHANGES vs approved vs informational)
   - [ ] No PR found handling (exit code 1)
   - [ ] Mixed state: some failed + some pending → immediate failure
 - [ ] Add tests for `runWaitCI()` helper: JSON parsing of wait-ci output, handling of spawn failures
-- [ ] Add tests for CI wait attempt marker file read/write/clean
+- [x] Add tests for CI wait attempt marker file read/write/clean
 - [ ] Add unit tests for CI workflow branching in `StopHookHandler.execute()` by mocking `runWaitCI` (ci_passed/ci_failed/ci_pending/ci_timeout)
-- [ ] Add tests for fix-pr instruction content (includes failure details, fix-and-push guidance)
-- [ ] Add tests for pending instruction content (includes attempt numbers and ~30s wait)
+- [x] Add tests for fix-pr instruction content (includes failure details, fix-and-push guidance)
+- [x] Add tests for pending instruction content (includes attempt numbers and ~30s wait)
 - [ ] Add tests for init creating fix_pr.md template
-- [ ] Add tests in `test/hooks/adapters/claude-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
-- [ ] Add tests in `test/hooks/adapters/cursor-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
+- [x] Add tests in `test/hooks/adapters/claude-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
+- [x] Add tests in `test/hooks/adapters/cursor-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
 
 Note: End-to-end integration tests for the CI wait workflow are deferred — the workflow involves external dependencies (`gh` CLI, GitHub API, actual CI state) that are impractical to mock reliably. The Manual Verification section covers end-to-end testing; handler-level unit tests are required above.
 

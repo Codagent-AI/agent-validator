@@ -224,9 +224,31 @@ async function getFailedRunLogs(
 	return result.stdout.trim();
 }
 
+/** Group checks by run ID, separating GitHub Actions from external checks */
+function groupChecksByRunId(
+	failedChecks: Array<{ name: string; state: string; link: string }>,
+): Map<string, Array<{ name: string; state: string; link: string }>> {
+	const runIdToChecks = new Map<
+		string,
+		Array<{ name: string; state: string; link: string }>
+	>();
+
+	for (const check of failedChecks) {
+		const runId = extractRunId(check.link);
+		// Use empty string for external checks (no run ID)
+		const key = runId ?? "";
+		const existing = runIdToChecks.get(key) ?? [];
+		existing.push(check);
+		runIdToChecks.set(key, existing);
+	}
+
+	return runIdToChecks;
+}
+
 /**
  * Fetch failure logs for failed checks.
  * Only works for GitHub Actions checks; external checks (CodeScene, etc.) return null.
+ * Fetches logs in parallel for better performance.
  */
 async function enrichFailedChecksWithLogs(
 	failedChecks: Array<{ name: string; state: string; link: string }>,
@@ -234,26 +256,17 @@ async function enrichFailedChecksWithLogs(
 ): Promise<
 	Array<{ name: string; state: string; link: string; log_output?: string }>
 > {
-	// Group checks by run ID to avoid fetching the same logs multiple times
-	const runIdToChecks = new Map<
-		string,
-		Array<{ name: string; state: string; link: string }>
-	>();
-	const externalChecks: Array<{ name: string; state: string; link: string }> =
-		[];
+	const runIdToChecks = groupChecksByRunId(failedChecks);
 
-	for (const check of failedChecks) {
-		const runId = extractRunId(check.link);
-		if (runId) {
-			const existing = runIdToChecks.get(runId) || [];
-			existing.push(check);
-			runIdToChecks.set(runId, existing);
-		} else {
-			externalChecks.push(check);
-		}
-	}
+	// Fetch logs in parallel for all unique run IDs
+	const entries = Array.from(runIdToChecks.entries());
+	const logResults = await Promise.all(
+		entries.map(([runId]) =>
+			runId ? getFailedRunLogs(runId, cwd) : Promise.resolve(null),
+		),
+	);
 
-	// Fetch logs for each unique run ID
+	// Build results with fetched logs
 	const results: Array<{
 		name: string;
 		state: string;
@@ -261,19 +274,12 @@ async function enrichFailedChecksWithLogs(
 		log_output?: string;
 	}> = [];
 
-	for (const [runId, checks] of runIdToChecks) {
-		const logs = await getFailedRunLogs(runId, cwd);
+	for (let i = 0; i < entries.length; i++) {
+		const [, checks] = entries[i];
+		const logs = logResults[i];
 		for (const check of checks) {
-			results.push({
-				...check,
-				log_output: logs ?? undefined,
-			});
+			results.push({ ...check, log_output: logs ?? undefined });
 		}
-	}
-
-	// Add external checks without logs
-	for (const check of externalChecks) {
-		results.push(check);
 	}
 
 	return results;
