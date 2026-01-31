@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 import {
+	GAUNTLET_AUTO_FIX_PR,
 	GAUNTLET_AUTO_PUSH_PR,
 	GAUNTLET_STOP_HOOK_ENABLED,
 	GAUNTLET_STOP_HOOK_INTERVAL_MINUTES,
@@ -8,44 +9,65 @@ import {
 	resolveStopHookConfig,
 } from "../../src/config/stop-hook-config.js";
 
+// Environment variable names for easy iteration
+const ENV_VARS = [
+	GAUNTLET_STOP_HOOK_ENABLED,
+	GAUNTLET_STOP_HOOK_INTERVAL_MINUTES,
+	GAUNTLET_AUTO_PUSH_PR,
+	GAUNTLET_AUTO_FIX_PR,
+] as const;
+
+/**
+ * Helper to save and restore environment variables around tests.
+ */
+function createEnvVarManager() {
+	const saved: Record<string, string | undefined> = {};
+
+	return {
+		save() {
+			for (const key of ENV_VARS) {
+				saved[key] = process.env[key];
+			}
+		},
+		restore() {
+			for (const key of ENV_VARS) {
+				if (saved[key] === undefined) {
+					delete process.env[key];
+				} else {
+					process.env[key] = saved[key];
+				}
+			}
+		},
+		clearAll() {
+			for (const key of ENV_VARS) {
+				delete process.env[key];
+			}
+		},
+	};
+}
+
 describe("stop-hook-config", () => {
 	describe("parseStopHookEnvVars", () => {
-		let originalEnabled: string | undefined;
-		let originalInterval: string | undefined;
-		let originalAutoPushPr: string | undefined;
+		const envManager = createEnvVarManager();
 
 		beforeEach(() => {
-			originalEnabled = process.env[GAUNTLET_STOP_HOOK_ENABLED];
-			originalInterval = process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES];
-			originalAutoPushPr = process.env[GAUNTLET_AUTO_PUSH_PR];
+			envManager.save();
 		});
 
 		afterEach(() => {
-			if (originalEnabled === undefined) {
-				delete process.env[GAUNTLET_STOP_HOOK_ENABLED];
-			} else {
-				process.env[GAUNTLET_STOP_HOOK_ENABLED] = originalEnabled;
-			}
-			if (originalInterval === undefined) {
-				delete process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES];
-			} else {
-				process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES] = originalInterval;
-			}
-			if (originalAutoPushPr === undefined) {
-				delete process.env[GAUNTLET_AUTO_PUSH_PR];
-			} else {
-				process.env[GAUNTLET_AUTO_PUSH_PR] = originalAutoPushPr;
-			}
+			envManager.restore();
 		});
 
 		it("returns empty object when no env vars set", () => {
 			delete process.env[GAUNTLET_STOP_HOOK_ENABLED];
 			delete process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES];
 			delete process.env[GAUNTLET_AUTO_PUSH_PR];
+			delete process.env[GAUNTLET_AUTO_FIX_PR];
 			const result = parseStopHookEnvVars();
 			expect(result.enabled).toBeUndefined();
 			expect(result.run_interval_minutes).toBeUndefined();
 			expect(result.auto_push_pr).toBeUndefined();
+			expect(result.auto_fix_pr).toBeUndefined();
 		});
 
 		describe("enabled parsing", () => {
@@ -173,38 +195,65 @@ describe("stop-hook-config", () => {
 				expect(result.auto_push_pr).toBe(true);
 			});
 		});
+
+		describe("auto_fix_pr parsing", () => {
+			it("accepts 'true' as truthy", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "true";
+				const result = parseStopHookEnvVars();
+				expect(result.auto_fix_pr).toBe(true);
+			});
+
+			it("accepts '1' as truthy", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "1";
+				const result = parseStopHookEnvVars();
+				expect(result.auto_fix_pr).toBe(true);
+			});
+
+			it("accepts 'false' as falsy", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "false";
+				const result = parseStopHookEnvVars();
+				expect(result.auto_fix_pr).toBe(false);
+			});
+
+			it("accepts '0' as falsy", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "0";
+				const result = parseStopHookEnvVars();
+				expect(result.auto_fix_pr).toBe(false);
+			});
+
+			it("ignores invalid values", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "invalid";
+				const result = parseStopHookEnvVars();
+				expect(result.auto_fix_pr).toBeUndefined();
+			});
+
+			it("handles case insensitivity", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "TRUE";
+				const result = parseStopHookEnvVars();
+				expect(result.auto_fix_pr).toBe(true);
+			});
+
+			it("handles whitespace", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "  true  ";
+				const result = parseStopHookEnvVars();
+				expect(result.auto_fix_pr).toBe(true);
+			});
+		});
 	});
 
 	describe("resolveStopHookConfig", () => {
-		let originalEnabled: string | undefined;
-		let originalInterval: string | undefined;
-		let originalAutoPushPr: string | undefined;
+		const envManager = createEnvVarManager();
+		let consoleErrorSpy: ReturnType<typeof spyOn>;
 
 		beforeEach(() => {
-			originalEnabled = process.env[GAUNTLET_STOP_HOOK_ENABLED];
-			originalInterval = process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES];
-			originalAutoPushPr = process.env[GAUNTLET_AUTO_PUSH_PR];
-			delete process.env[GAUNTLET_STOP_HOOK_ENABLED];
-			delete process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES];
-			delete process.env[GAUNTLET_AUTO_PUSH_PR];
+			envManager.save();
+			envManager.clearAll();
+			consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
 		});
 
 		afterEach(() => {
-			if (originalEnabled === undefined) {
-				delete process.env[GAUNTLET_STOP_HOOK_ENABLED];
-			} else {
-				process.env[GAUNTLET_STOP_HOOK_ENABLED] = originalEnabled;
-			}
-			if (originalInterval === undefined) {
-				delete process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES];
-			} else {
-				process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES] = originalInterval;
-			}
-			if (originalAutoPushPr === undefined) {
-				delete process.env[GAUNTLET_AUTO_PUSH_PR];
-			} else {
-				process.env[GAUNTLET_AUTO_PUSH_PR] = originalAutoPushPr;
-			}
+			envManager.restore();
+			consoleErrorSpy.mockRestore();
 		});
 
 		it("uses global config when no project config or env vars", () => {
@@ -212,6 +261,7 @@ describe("stop-hook-config", () => {
 			expect(result.enabled).toBe(true);
 			expect(result.run_interval_minutes).toBe(5);
 			expect(result.auto_push_pr).toBe(false);
+			expect(result.auto_fix_pr).toBe(false);
 		});
 
 		it("project config overrides global config", () => {
@@ -312,6 +362,85 @@ describe("stop-hook-config", () => {
 					DEFAULT_GLOBAL_CONFIG,
 				);
 				expect(result.auto_push_pr).toBe(true); // from project config
+			});
+		});
+
+		describe("auto_fix_pr 3-tier resolution", () => {
+			it("defaults to false when not configured anywhere", () => {
+				const result = resolveStopHookConfig(undefined, DEFAULT_GLOBAL_CONFIG);
+				expect(result.auto_fix_pr).toBe(false);
+			});
+
+			it("project config overrides global config", () => {
+				const projectConfig = { auto_push_pr: true, auto_fix_pr: true };
+				const result = resolveStopHookConfig(
+					projectConfig,
+					DEFAULT_GLOBAL_CONFIG,
+				);
+				expect(result.auto_fix_pr).toBe(true);
+			});
+
+			it("env var overrides project config", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "false";
+				const projectConfig = { auto_push_pr: true, auto_fix_pr: true };
+				const result = resolveStopHookConfig(
+					projectConfig,
+					DEFAULT_GLOBAL_CONFIG,
+				);
+				expect(result.auto_fix_pr).toBe(false);
+			});
+
+			it("env var true overrides project false", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "true";
+				process.env[GAUNTLET_AUTO_PUSH_PR] = "true";
+				const projectConfig = { auto_push_pr: true, auto_fix_pr: false };
+				const result = resolveStopHookConfig(
+					projectConfig,
+					DEFAULT_GLOBAL_CONFIG,
+				);
+				expect(result.auto_fix_pr).toBe(true);
+			});
+
+			it("falls through when env var is invalid", () => {
+				process.env[GAUNTLET_AUTO_FIX_PR] = "invalid";
+				const projectConfig = { auto_push_pr: true, auto_fix_pr: true };
+				const result = resolveStopHookConfig(
+					projectConfig,
+					DEFAULT_GLOBAL_CONFIG,
+				);
+				expect(result.auto_fix_pr).toBe(true); // from project config
+			});
+		});
+
+		describe("auto_fix_pr requires auto_push_pr validation", () => {
+			it("sets auto_fix_pr to false when auto_push_pr is false", () => {
+				const projectConfig = { auto_push_pr: false, auto_fix_pr: true };
+				const result = resolveStopHookConfig(
+					projectConfig,
+					DEFAULT_GLOBAL_CONFIG,
+				);
+				expect(result.auto_fix_pr).toBe(false);
+				expect(consoleErrorSpy).toHaveBeenCalled();
+			});
+
+			it("logs warning when auto_fix_pr=true but auto_push_pr=false", () => {
+				const projectConfig = { auto_push_pr: false, auto_fix_pr: true };
+				resolveStopHookConfig(projectConfig, DEFAULT_GLOBAL_CONFIG);
+				expect(consoleErrorSpy).toHaveBeenCalledWith(
+					expect.stringContaining(
+						"auto_fix_pr=true requires auto_push_pr=true",
+					),
+				);
+			});
+
+			it("allows auto_fix_pr=true when auto_push_pr=true", () => {
+				const projectConfig = { auto_push_pr: true, auto_fix_pr: true };
+				const result = resolveStopHookConfig(
+					projectConfig,
+					DEFAULT_GLOBAL_CONFIG,
+				);
+				expect(result.auto_fix_pr).toBe(true);
+				expect(consoleErrorSpy).not.toHaveBeenCalled();
 			});
 		});
 	});

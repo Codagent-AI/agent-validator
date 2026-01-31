@@ -580,15 +580,17 @@ describe("Execution State Git Operations (mocked)", () => {
 
 		/** Mock spawn where --is-ancestor exits with `ancestorCode` and cat-file exits with `catFileCode` */
 		function mockAncestorAndCatFile(ancestorCode: number, catFileCode: number) {
-			return spyOn(childProcess, "spawn").mockImplementation(
-				(_cmd, args) => {
-					const argsArray = args as string[];
-					if (argsArray.includes("--is-ancestor")) {
-						return createMockSpawn("", ancestorCode) as ReturnType<typeof childProcess.spawn>;
-					}
-					return createMockSpawn("", catFileCode) as ReturnType<typeof childProcess.spawn>;
-				},
-			);
+			return spyOn(childProcess, "spawn").mockImplementation((_cmd, args) => {
+				const argsArray = args as string[];
+				if (argsArray.includes("--is-ancestor")) {
+					return createMockSpawn("", ancestorCode) as ReturnType<
+						typeof childProcess.spawn
+					>;
+				}
+				return createMockSpawn("", catFileCode) as ReturnType<
+					typeof childProcess.spawn
+				>;
+			});
 		}
 
 		it("returns working_tree_ref when commit merged but working_tree_ref is valid", async () => {

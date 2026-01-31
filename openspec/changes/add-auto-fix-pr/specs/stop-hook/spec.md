@@ -27,6 +27,22 @@ The system MUST use a single `GauntletStatus` type for all gauntlet outcomes, sh
 
 ## ADDED Requirements
 
+### Requirement: StopHookResult CI Fields
+
+The `StopHookResult` interface SHALL include additional fields for CI workflow instructions.
+
+#### Scenario: ciFixReason field for ci_failed status
+- **GIVEN** the handler determines status is `ci_failed`
+- **WHEN** the `StopHookResult` is constructed
+- **THEN** it SHALL include a `ciFixReason` field with fix instructions
+- **AND** adapters SHALL use this field for their blocking response message
+
+#### Scenario: ciPendingReason field for ci_pending status
+- **GIVEN** the handler determines status is `ci_pending`
+- **WHEN** the `StopHookResult` is constructed
+- **THEN** it SHALL include a `ciPendingReason` field with wait-and-retry instructions
+- **AND** adapters SHALL use this field for their blocking response message
+
 ### Requirement: Auto Fix PR Configuration
 
 The stop hook SHALL support an `auto_fix_pr` boolean setting that controls whether the agent waits for CI and addresses failures after a PR is created.
@@ -221,22 +237,17 @@ The stop hook SHALL track CI wait attempts across invocations using a marker fil
 
 When blocking with `ci_failed` status, the `reason` prompt SHALL instruct the agent to fix CI failures and address review comments.
 
-#### Scenario: Instructions prioritize project-level skills
-- **GIVEN** the stop hook blocks with `ci_failed`
-- **WHEN** the `reason` prompt is generated
-- **THEN** it SHALL instruct the agent to first look for project-level fix-pr instructions (e.g., `/fix-pr` skill, `.claude/commands/fix-pr.md`, `.gauntlet/fix_pr.md`)
-- **AND** these paths may or may not exist depending on whether `add-auto-push-pr` templates were installed; the fallback instructions handle either case
-
 #### Scenario: Instructions include failure details
 - **GIVEN** the stop hook blocks with `ci_failed`
 - **AND** the `wait-ci` result includes failed check names and review comments
 - **WHEN** the `reason` prompt is generated
 - **THEN** it SHALL include the specific failed check names and review comment details
 
-#### Scenario: Instructions include minimal fallback
+#### Scenario: Instructions tell agent to fix and push
 - **GIVEN** the stop hook blocks with `ci_failed`
 - **WHEN** the `reason` prompt is generated
-- **THEN** it SHALL include minimal fallback instructions for reading CI logs, fixing issues, and pushing changes
+- **THEN** it SHALL instruct the agent to fix issues and push changes
+- **AND** it SHALL instruct the agent to try stopping again after pushing
 
 ### Requirement: CI Pending Instructions
 
@@ -252,3 +263,47 @@ When blocking with `ci_pending` status, the `reason` prompt SHALL instruct the a
 - **GIVEN** the stop hook blocks with `ci_pending`
 - **WHEN** the `reason` prompt is generated
 - **THEN** it SHALL instruct the agent to wait approximately 30 seconds and then try to stop again
+
+### Requirement: Protocol Adapter CI Status Handling
+
+Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their output formatting.
+
+#### Scenario: Cursor adapter handles ci_failed
+- **GIVEN** the handler returns status `ci_failed` with `ciFixReason`
+- **AND** the protocol is Cursor
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL be `{ "followup_message": "<ciFixReason>" }`
+
+#### Scenario: Cursor adapter handles ci_pending
+- **GIVEN** the handler returns status `ci_pending` with `ciPendingReason`
+- **AND** the protocol is Cursor
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL be `{ "followup_message": "<ciPendingReason>" }`
+
+#### Scenario: Cursor adapter handles ci_passed
+- **GIVEN** the handler returns status `ci_passed`
+- **AND** the protocol is Cursor
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL be an empty object `{}` or include `systemMessage`
+- **AND** no `followup_message` field SHALL be present
+
+#### Scenario: Cursor adapter handles ci_timeout
+- **GIVEN** the handler returns status `ci_timeout`
+- **AND** the protocol is Cursor
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL be an empty object `{}` or include `systemMessage`
+- **AND** no `followup_message` field SHALL be present
+
+#### Scenario: Claude Code adapter handles ci_failed
+- **GIVEN** the handler returns status `ci_failed` with `ciFixReason`
+- **AND** the protocol is Claude Code
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL have `decision: "block"`
+- **AND** `reason` SHALL contain the `ciFixReason` instructions
+
+#### Scenario: Claude Code adapter handles ci_pending
+- **GIVEN** the handler returns status `ci_pending` with `ciPendingReason`
+- **AND** the protocol is Claude Code
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL have `decision: "block"`
+- **AND** `reason` SHALL contain the `ciPendingReason` instructions

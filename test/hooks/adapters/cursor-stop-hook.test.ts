@@ -1,6 +1,22 @@
 import { describe, expect, it } from "bun:test";
 import { CursorStopHookAdapter } from "../../../src/hooks/adapters/cursor-stop-hook.js";
-import type { StopHookResult } from "../../../src/hooks/adapters/types.js";
+import type {
+	GauntletStatus,
+	StopHookResult,
+} from "../../../src/hooks/adapters/types.js";
+
+/**
+ * Factory for creating test StopHookResult objects with sensible defaults.
+ */
+function createResult(
+	overrides: Partial<StopHookResult> & { status: GauntletStatus },
+): StopHookResult {
+	return {
+		shouldBlock: false,
+		message: `Status: ${overrides.status}`,
+		...overrides,
+	};
+}
 
 describe("CursorStopHookAdapter", () => {
 	const adapter = new CursorStopHookAdapter();
@@ -90,55 +106,93 @@ describe("CursorStopHookAdapter", () => {
 
 	describe("formatOutput()", () => {
 		it("should output systemMessage for non-blocking status", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "passed",
-				shouldBlock: false,
 				message: "✓ Gauntlet passed",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.systemMessage).toBe("✓ Gauntlet passed");
 			expect(output.followup_message).toBeUndefined();
 		});
 
 		it("should output followup_message for failed status", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "failed",
 				shouldBlock: true,
 				message: "✗ Gauntlet failed",
 				instructions: "Fix the issues",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Fix the issues");
 		});
 
 		it("should output followup_message for pr_push_required status", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "pr_push_required",
 				shouldBlock: true,
 				message: "✓ Gauntlet passed — PR needed",
 				pushPRReason: "Create a PR",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Create a PR");
 		});
 
+		it("should output followup_message for ci_failed status with ciFixReason", () => {
+			const result = createResult({
+				status: "ci_failed",
+				shouldBlock: true,
+				ciFixReason: "Fix the CI failures",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.followup_message).toBe("Fix the CI failures");
+		});
+
+		it("should output followup_message for ci_pending status with ciPendingReason", () => {
+			const result = createResult({
+				status: "ci_pending",
+				shouldBlock: true,
+				ciPendingReason: "Wait for CI to complete",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.followup_message).toBe("Wait for CI to complete");
+		});
+
+		it("should output systemMessage for ci_passed status", () => {
+			const result = createResult({
+				status: "ci_passed",
+				message: "✓ CI passed",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.systemMessage).toBe("✓ CI passed");
+			expect(output.followup_message).toBeUndefined();
+		});
+
+		it("should output systemMessage for ci_timeout status", () => {
+			const result = createResult({
+				status: "ci_timeout",
+				message: "⚠ CI wait exhausted",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.systemMessage).toBe("⚠ CI wait exhausted");
+			expect(output.followup_message).toBeUndefined();
+		});
+
 		it("should use message as fallback when instructions not provided", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "failed",
 				shouldBlock: true,
 				message: "✗ Gauntlet failed",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("✗ Gauntlet failed");
 		});
 
 		it("should output single-line JSON", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "failed",
 				shouldBlock: true,
-				message: "✗ Gauntlet failed",
 				instructions: "Fix the issues",
-			};
+			});
 			const output = adapter.formatOutput(result);
 			expect(output.includes("\n")).toBe(false);
 		});

@@ -4,11 +4,15 @@ log_dir: gauntlet_logs
 allow_parallel: true
 cli:
   default_preference:
-    - codex
     - gemini
     - claude
+    - codex
+debug_log:
+  enabled: true
+  max_size_mb: 10
 stop_hook:
   auto_push_pr: true
+  auto_fix_pr: true
 entry_points:
   - path: "."
     reviews:

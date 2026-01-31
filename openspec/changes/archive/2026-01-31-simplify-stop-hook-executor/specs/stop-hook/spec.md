@@ -10,16 +10,6 @@ The stop-hook command previously checked if the lock file exists before invoking
 
 **Migration:** Callers now receive `lock_conflict` status from `executeRun()` instead of the stop-hook pre-checking the lock file. No external API changes; internal simplification only.
 
-### Requirement: Stop Hook Interval Logic
-
-The stop-hook command previously contained the `shouldRunBasedOnInterval()` function, interval-checking logic, and global config loading. This requirement is removed.
-
-**Rationale:** The interval checking logic moves to the run-executor. The stop-hook passes `checkInterval: true` and the executor handles loading global config and checking the interval internally.
-
-**Migration:** The stop-hook passes `checkInterval: true` to `executeRun()`. The executor loads global config and returns `interval_not_elapsed` status when appropriate. No external behavior change.
-
----
-
 ## MODIFIED Requirements
 
 ### Requirement: Infinite Loop Prevention

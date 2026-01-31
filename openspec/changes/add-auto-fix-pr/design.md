@@ -6,19 +6,29 @@ After `add-auto-push-pr` creates a PR, the developer still needs to manually mon
 
 This builds directly on `add-auto-push-pr`: when a PR already exists and `auto_fix_pr` is enabled, the stop hook enters the CI wait workflow instead of approving immediately.
 
+**Architecture Note:** Since `add-auto-push-pr` was implemented, the stop hook has been refactored into an adapter-based architecture (`add-cursor-stop-hook`, `simplify-stop-hook-executor`). The stop hook is now a thin adapter layer with:
+- `StopHookHandler` class in `src/hooks/stop-hook-handler.ts` — core logic
+- `ClaudeStopHookAdapter` and `CursorStopHookAdapter` — protocol-specific I/O
+- `StopHookResult` interface with `instructions`, `pushPRReason`, and now `ciFixReason`, `ciPendingReason`
+
+CI workflow logic will be added to `StopHookHandler`, and both adapters will handle the new CI statuses.
+
 ## Pre-factoring
 
 CodeScene hotspot analysis for files modified by this change:
 
 | File | Score | Status |
 |------|-------|--------|
-| `src/commands/stop-hook.ts` | 7.07 (Yellow) | Bumpy Road, Complex Method (cc=36), Large Method (240 LoC) in `registerStopHookCommand` |
+| `src/hooks/stop-hook-handler.ts` | 9.68 (Green) | Core handler logic — CI workflow will be added here |
+| `src/hooks/adapters/claude-stop-hook.ts` | 10.0 (Optimal) | Needs to handle CI status output formatting |
+| `src/hooks/adapters/cursor-stop-hook.ts` | 10.0 (Optimal) | Needs to handle CI status output formatting |
+| `src/hooks/adapters/types.ts` | N/A (type definitions) | Add `ciFixReason`, `ciPendingReason` to `StopHookResult` |
 | `src/config/stop-hook-config.ts` | 9.24 (Green) | Healthy |
 | `src/config/schema.ts` | 10.0 (Optimal) | Healthy |
 | `src/config/global.ts` | 9.53 (Green) | Healthy |
 | `src/types/gauntlet-status.ts` | 10.0 (Optimal) | Healthy |
 
-**Strategy:** Same as `add-auto-push-pr` — no refactoring of existing code. CI workflow logic (wait-ci spawning, retry tracking, instruction generation) will be extracted into separate helper functions rather than added to the `registerStopHookCommand` monolith. `isSuccessStatus()` already exists in the codebase at `src/types/gauntlet-status.ts:60`.
+**Strategy:** CI workflow logic (wait-ci spawning, retry tracking, instruction generation) will be added to `StopHookHandler` as helper functions. Both adapters will be updated to handle the new CI statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their `formatOutput()` methods, following the existing pattern for `pr_push_required`. `isSuccessStatus()` already exists in the codebase at `src/types/gauntlet-status.ts:60`.
 
 ## Goals / Non-Goals
 
@@ -89,6 +99,8 @@ Standalone command: `agent-gauntlet wait-ci`
 
 **Multi-invocation flow:** The `auto_push_pr` flow always runs first. On the first stop hook invocation after gauntlet passes, if no PR exists (or PR is not up to date), the hook blocks with `pr_push_required`. The agent creates/updates the PR and stops again. On the next invocation, `auto_push_pr` sees the PR is up to date, and only then does `auto_fix_pr` enter the CI wait workflow.
 
+**Architecture:** This logic is implemented in `StopHookHandler.execute()` in `src/hooks/stop-hook-handler.ts`, extending the existing `postGauntletPRCheck()` flow. The handler returns a `StopHookResult` with the appropriate status and reason fields, which adapters format for their protocols.
+
 When a PR exists and is up to date, and `auto_fix_pr` is enabled:
 
 ```
@@ -102,6 +114,8 @@ PR exists + auto_fix_pr enabled
       → ci_status=pending: increment marker, block with ci_pending + wait instructions
 ```
 
+**Re-invocation mechanism:** When blocking with `ci_pending`, the stop hook returns a blocking response that prompts the agent to continue. The instruction tells the agent to wait ~30 seconds and try to stop again. When the agent attempts to stop, the stop hook is re-invoked, reads the marker file, and resumes the CI wait flow. This is the same pattern used for `pr_push_required` — the stop hook is stateless between invocations.
+
 ### 5. Retry Tracking
 
 Marker file: `gauntlet_logs/.ci-wait-attempts` containing a JSON counter. Tracks attempts across stop hook invocations since the hook process exits between retries.
@@ -111,25 +125,49 @@ Marker file: `gauntlet_logs/.ci-wait-attempts` containing a JSON counter. Tracks
 - Cleaned up on pass, fail, or max attempts reached
 - Max 3 attempts (~15 minutes of total CI waiting with 270s timeout each)
 
-### 6. Fix-PR Instructions
+### 6. CI Instructions
 
-When blocking with `ci_failed`, the `reason` prompt:
-1. Look for project-level instructions (`/fix-pr` skill, `.claude/commands/fix-pr.md`, `.gauntlet/fix_pr.md`) — these paths may or may not exist depending on whether `add-auto-push-pr` templates were installed; fallback handles either case
-2. Fallback: read failed check details, fix issues, push changes
-3. Include specific failed check names and review comment details from wait-ci output
+Two helper functions following the same simplified pattern as `getPushPRInstructions()`:
 
-### 7. CI Pending Instructions
+**`getCIFixInstructions(ciResult)`** — for `ci_failed` status:
 
-When blocking with `ci_pending`, the `reason` prompt:
-1. Note the attempt number (N of 3)
-2. Instruct agent to wait briefly, then try to stop again
+```
+**CI FAILED OR REVIEW CHANGES REQUESTED — FIX AND PUSH**
 
-### 8. Fix-PR Template Command
+{failed_checks_section if any}
+{review_comments_section if any}
+
+Fix the issues above, commit, and push your changes. After pushing, try to stop again.
+```
+
+Where `{failed_checks_section}` is:
+```
+**Failed checks:**
+- {check_name}: {details_url}
+...
+```
+
+And `{review_comments_section}` is:
+```
+**Review comments requiring changes:**
+- {author}: {body} ({path}:{line})
+...
+```
+
+**`getCIPendingInstructions(attemptNumber, maxAttempts)`** — for `ci_pending` status:
+
+```
+**CI CHECKS STILL RUNNING — WAITING (attempt {attemptNumber} of {maxAttempts})**
+
+CI checks are still in progress. Wait approximately 30 seconds, then try to stop again.
+```
+
+### 7. Fix-PR Template Command
 
 One template file installed during `agent-gauntlet init`:
-- `.gauntlet/fix_pr.md` — simplified fix-pr instructions (renamed from address-pr; skill-first lookup, minimal fallback)
+- `.gauntlet/fix_pr.md` — simplified fix-pr instructions
 
-Gets symlinked to `.claude/commands/fix-pr.md` following the existing `run_gauntlet.md` pattern. Existing files are not overwritten.
+Gets symlinked to `.claude/commands/fix-pr.md` following the existing `push_pr.md` pattern. Existing files are not overwritten.
 
 ## Alternatives Considered
 
