@@ -34,3 +34,6 @@ gauntlet_logs
 # Finder (MacOS) folder config
 .DS_Store
 bin/
+
+# Local IDE hook configs (use dev commands)
+.cursor/hooks.json

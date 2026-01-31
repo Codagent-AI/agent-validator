@@ -245,14 +245,14 @@ describe("run-executor checkInterval option", () => {
 			expect(sourceFile).not.toContain("checkInterval: true");
 		});
 
-		it("stop-hook should pass checkInterval: true (source verification)", () => {
-			const sourceFile = readFileSync(
-				join(process.cwd(), "src/commands/stop-hook.ts"),
+		it("stop-hook handler should pass checkInterval: true (source verification)", () => {
+			const handlerFile = readFileSync(
+				join(process.cwd(), "src/hooks/stop-hook-handler.ts"),
 				"utf-8",
 			);
 
-			// stop-hook should call executeRun with checkInterval: true
-			expect(sourceFile).toContain("checkInterval: true");
+			// stop-hook handler should call executeRun with checkInterval: true
+			expect(handlerFile).toContain("checkInterval: true");
 		});
 	});
 });

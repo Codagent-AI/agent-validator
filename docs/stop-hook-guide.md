@@ -1,15 +1,24 @@
 # Stop Hook Guide
 
-The stop hook integrates Agent Gauntlet with Claude Code, automatically validating that all gates pass before an AI agent can stop working on a task.
+The stop hook integrates Agent Gauntlet with AI coding assistants, automatically validating that all gates pass before an agent can stop working on a task. It supports both **Claude Code** and **Cursor IDE**.
 
 ## Overview
 
-When an AI agent using Claude Code attempts to stop (e.g., by saying "I'm done"), the stop hook:
+When an AI agent attempts to stop (e.g., by saying "I'm done"), the stop hook:
 1. Runs `agent-gauntlet run` to check all configured gates
 2. If gates pass, allows the agent to stop
 3. If gates fail, blocks the stop and directs the agent to fix the issues
 
 The hook automatically re-runs after each fix attempt, creating a feedback loop until all issues are resolved.
+
+## Supported IDEs
+
+| IDE | Protocol | Block Mechanism | Loop Prevention |
+|-----|----------|-----------------|-----------------|
+| Claude Code | `decision: "block"` | Blocks stop, feeds reason back to agent | `stop_hook_active` field |
+| Cursor | `followup_message` | Continues agent with message | `loop_count` field |
+
+The stop hook automatically detects which IDE is calling it based on the input format.
 
 ## Installation
 
@@ -17,7 +26,7 @@ The hook automatically re-runs after each fix attempt, creating a feedback loop 
 
 - Agent Gauntlet installed globally (`bun add -g agent-gauntlet`)
 - A project with `.gauntlet/config.yml` initialized (`agent-gauntlet init`)
-- Claude Code CLI installed and configured
+- Claude Code CLI or Cursor IDE installed and configured
 
 ### Claude Code Configuration
 
@@ -52,6 +61,31 @@ Add the stop hook to your Claude Code settings:
 ```
 
 The empty `matcher` means the hook runs for all projects. Use a path pattern like `"/path/to/project/*"` to limit to specific projects.
+
+### Cursor IDE Configuration
+
+Add the stop hook to your Cursor hooks configuration:
+
+**Project-level settings** (`.cursor/hooks.json`):
+```json
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "agent-gauntlet stop-hook",
+        "loop_limit": 10
+      }
+    ]
+  }
+}
+```
+
+Configuration options:
+- `command`: The command to run (required)
+- `loop_limit`: Maximum times the hook can block before Cursor forces stop (default: 5)
+
+**Note**: Cursor hooks are a beta feature. The `loop_limit` provides built-in protection against infinite loops.
 
 ## Configuration
 
@@ -340,6 +374,79 @@ The hook has built-in infinite loop prevention. If `stop_hook_active: true` is s
 3. **Handle skipped issues**: Use `"status": "skipped"` with a reason for issues you intentionally don't fix. This allows the gauntlet to pass with warnings.
 
 4. **Clean between branches**: Run `agent-gauntlet clean` when switching branches to avoid confusion from stale logs. This archives log files and deletes execution state (including unhealthy adapter entries).
+
+## Protocol Differences
+
+The stop hook supports both Claude Code and Cursor IDE with automatic protocol detection.
+
+### Claude Code Protocol
+
+**Input format:**
+```json
+{
+  "cwd": "/path/to/project",
+  "session_id": "session-123",
+  "stop_hook_active": false,
+  "hook_event_name": "Stop"
+}
+```
+
+**Output format (blocking):**
+```json
+{
+  "decision": "block",
+  "reason": "Fix instructions fed back to agent",
+  "stopReason": "Detailed instructions shown to user",
+  "systemMessage": "Human-friendly status",
+  "status": "failed",
+  "message": "Human-friendly explanation"
+}
+```
+
+**Output format (allowing):**
+```json
+{
+  "decision": "approve",
+  "stopReason": "Status message",
+  "status": "passed",
+  "message": "Human-friendly explanation"
+}
+```
+
+### Cursor Protocol
+
+**Input format:**
+```json
+{
+  "cursor_version": "0.44.0",
+  "workspace_roots": ["/path/to/project"],
+  "loop_count": 0,
+  "conversation_id": "conv-123"
+}
+```
+
+**Output format (blocking):**
+```json
+{
+  "followup_message": "Instructions for the agent to continue"
+}
+```
+
+**Output format (allowing):**
+```json
+{}
+```
+
+### Key Differences
+
+| Aspect | Claude Code | Cursor |
+|--------|-------------|--------|
+| Block mechanism | `decision: "block"` | `followup_message` present |
+| Allow mechanism | `decision: "approve"` | Empty object `{}` |
+| Working directory | `cwd` field | `workspace_roots[0]` |
+| Session ID | `session_id` | `conversation_id` |
+| Loop prevention | `stop_hook_active` flag | `loop_count` + `loop_limit` |
+| Config location | `.claude/settings.json` | `.cursor/hooks.json` |
 
 ## Related Documentation
 

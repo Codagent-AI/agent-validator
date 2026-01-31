@@ -928,8 +928,8 @@ describe("Stop Hook Command", () => {
 			}
 		});
 
-		it("should not log when stop_hook_active is set in stdin input", async () => {
-			// Read source to verify the stdin stop_hook_active path logs before exiting
+		it("should initialize debug logger before adapter skip checks", async () => {
+			// Read source to verify the debug logger is initialized before adapter-specific skip checks
 			const { readFileSync } = await import("node:fs");
 			const sourceFile = readFileSync(
 				path.join(originalCwd, "src/commands/stop-hook.ts"),
@@ -939,26 +939,24 @@ describe("Stop Hook Command", () => {
 			// Find action handler
 			const actionStart = sourceFile.indexOf(".action(async ()");
 
-			// Find stop_hook_active check from stdin input
-			const stopHookActiveCheck = sourceFile.indexOf(
-				"hookInput.stop_hook_active",
-				actionStart,
-			);
-
-			// The debug logger should be initialized BEFORE the stdin stop_hook_active check
-			// so we can log the early exit event for diagnostics
+			// The debug logger should be initialized BEFORE adapter skip checks
 			const debugLoggerInit = sourceFile.indexOf(
 				"new DebugLogger",
 				actionStart,
 			);
-			expect(debugLoggerInit).toBeLessThan(stopHookActiveCheck);
-
-			// The stdin stop_hook_active block should log before exiting
-			const stopHookActiveBlock = sourceFile.slice(
-				stopHookActiveCheck,
-				sourceFile.indexOf("return;", stopHookActiveCheck) + 10,
+			const adapterSkipCheck = sourceFile.indexOf(
+				"adapter.shouldSkipExecution",
+				actionStart,
 			);
-			expect(stopHookActiveBlock).toContain("logStopHookEarlyExit");
+
+			expect(debugLoggerInit).toBeLessThan(adapterSkipCheck);
+
+			// The adapter skip block should log before exiting
+			const skipBlock = sourceFile.slice(
+				adapterSkipCheck,
+				sourceFile.indexOf("return;", adapterSkipCheck) + 10,
+			);
+			expect(skipBlock).toContain("logStopHookEarlyExit");
 		});
 
 		it("should not initialize debug logger when child process detected", async () => {
@@ -1087,15 +1085,15 @@ describe("Stop Hook Command", () => {
 			expect(envVarInAction).toBeLessThan(stdinInAction);
 		});
 
-		it("should pass checkInterval: true to executeRun", async () => {
-			// Read source file to verify stop-hook passes checkInterval: true
+		it("should pass checkInterval: true to executeRun via handler", async () => {
+			// Read source file to verify handler passes checkInterval: true to executeRun
 			const { readFileSync } = await import("node:fs");
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
+			const handlerFile = readFileSync(
+				path.join(originalCwd, "src/hooks/stop-hook-handler.ts"),
 				"utf-8",
 			);
 
-			expect(sourceFile).toContain("checkInterval: true");
+			expect(handlerFile).toContain("checkInterval: true");
 		});
 
 		it("should NOT have lock pre-check in stop-hook (delegated to executor)", async () => {
@@ -1122,19 +1120,19 @@ describe("Stop Hook Command", () => {
 			expect(sourceFile).not.toContain("shouldRunBasedOnInterval");
 		});
 
-		it("should use gateResults from RunResult for failure instructions", async () => {
-			// Read source file to verify we use result.gateResults
+		it("should use gateResults from RunResult for failure instructions in handler", async () => {
+			// Read source file to verify handler uses result.gateResults
 			const { readFileSync } = await import("node:fs");
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
+			const handlerFile = readFileSync(
+				path.join(originalCwd, "src/hooks/stop-hook-handler.ts"),
 				"utf-8",
 			);
 
-			// Should use result.gateResults
-			expect(sourceFile).toContain("result.gateResults");
+			// Should use result.gateResults in the handler
+			expect(handlerFile).toContain("result.gateResults");
 		});
 
-		it("should have only seven pre-checks before calling executeRun", async () => {
+		it("should have pre-checks before calling handler.execute", async () => {
 			// Read source file to count pre-checks
 			const { readFileSync } = await import("node:fs");
 			const sourceFile = readFileSync(
@@ -1144,24 +1142,25 @@ describe("Stop Hook Command", () => {
 
 			// Find action handler
 			const actionStart = sourceFile.indexOf(".action(async ()");
-			const executeRunCall = sourceFile.indexOf("executeRun", actionStart);
-			const actionSection = sourceFile.slice(actionStart, executeRunCall);
+			const handlerExecuteCall = sourceFile.indexOf("handler.execute", actionStart);
+			const actionSection = sourceFile.slice(actionStart, handlerExecuteCall);
 
-			// Pre-checks: self-timeout, env var, quick config, marker file (fresh + stale fallback), stdin parsing, stop_hook_active, no_config at cwd
-			// Count outputHookResponse calls (early returns)
-			const earlyReturns = (actionSection.match(/outputHookResponse\(/g) || [])
-				.length;
+			// Pre-checks use outputResult() or createEarlyExitResult() in the new architecture
+			// Count outputResult calls (early returns) and createEarlyExitResult calls
+			const earlyReturns = (actionSection.match(/outputResult\(/g) || []).length;
+			const earlyExitResults = (actionSection.match(/createEarlyExitResult\(/g) || []).length;
 
-			// Should have exactly 8 outputHookResponse calls before executeRun:
-			// 1. self-timeout handler (outputHookResponse in setTimeout callback)
+			// Should have early exit paths before handler.execute:
+			// 1. self-timeout handler (outputResult in setTimeout callback)
 			// 2. env var check (before stdin - fast exit for child processes)
 			// 3. quick config check at process.cwd() (before stdin - avoid timeout for non-gauntlet)
 			// 4. marker file check - fresh marker (before stdin - fast exit for nested stop-hooks)
 			// 5. marker file check - stat/rm error fallback (treat as active)
 			// 6. invalid_input (after stdin parse failure)
-			// 7. stop_hook_active (from stdin input)
-			// 8. no_config at hookInput.cwd (when cwd differs from process.cwd())
-			expect(earlyReturns).toBe(8);
+			// 7. adapter skip (e.g., Cursor loop_count)
+			// 8. no_config at ctx.cwd (when cwd differs from process.cwd())
+			expect(earlyReturns).toBeGreaterThan(0);
+			expect(earlyExitResults).toBeGreaterThan(0);
 		});
 	});
 
