@@ -3,16 +3,14 @@
 "agent-gauntlet": minor
 ---
 
-### Features
-- feat: include GitHub Actions failure logs in CI fix instructions
-- feat: add CodeScene code health rules configuration
-
 ### Fixes
 - fix: prevent clean command from running during active gauntlet run
 - fix: regenerate changeset
 - fix: properly skip unhealthy adapters
 
 ### Other Changes
+- chore: include GitHub Actions failure logs in CI fix instructions
+- chore: add CodeScene code health rules configuration
 - refactor: improve code health and fix review violations
 - Address PR review comments and fix CI failures
 - chore: add changeset for global adapter state

@@ -430,43 +430,23 @@ The execution state file MUST persist across clean operations to enable post-cle
 - **THEN** `.execution_state` SHALL be deleted (reset)
 - **AND** the next run SHALL operate in first-run mode against base branch
 
-### Requirement: Adapter Health Tracking in Execution State
-The execution state file (`.execution_state`) MUST support an optional `unhealthy_adapters` field that records adapters which have hit usage limits or other runtime failures. Each entry is keyed by adapter name and contains the timestamp when the adapter was marked unhealthy and the reason. This field is used to skip unhealthy adapters with a 1-hour cooldown.
-
-#### Scenario: Execution state structure with unhealthy adapters
-- **GIVEN** one or more adapters have been marked unhealthy during the current or a previous run
-- **WHEN** the system writes `.execution_state` with unhealthy adapter data
-- **THEN** the file SHALL contain the existing fields (`last_run_completed_at`, `branch`, `commit`, `working_tree_ref`) plus an `unhealthy_adapters` object
-- **AND** each key in `unhealthy_adapters` SHALL be an adapter name (e.g. `"claude"`)
-- **AND** each value SHALL contain `marked_at` (ISO 8601 timestamp) and `reason` (string)
-
-#### Scenario: No unhealthy adapters
-- **GIVEN** no adapters have been marked unhealthy
-- **WHEN** the system reads `.execution_state`
-- **THEN** the `unhealthy_adapters` field SHALL be absent or an empty object
-- **AND** all adapters SHALL be considered healthy
-
-#### Scenario: Reading legacy execution state without unhealthy_adapters
-- **GIVEN** an `.execution_state` file written by a previous version (no `unhealthy_adapters` field)
-- **WHEN** the system reads the file
-- **THEN** the system SHALL treat all adapters as healthy
-- **AND** the file SHALL be parsed successfully (backward compatible)
-
 ### Requirement: Runtime Usage Limit Detection
-The system MUST detect usage limits from actual review adapter output rather than from preflight health probes. When a review adapter returns output or throws an error that matches usage-limit patterns, the system SHALL mark the review as failed with an error status and record the adapter as unhealthy in `.execution_state`.
+This requirement MUST record unhealthy adapters in the global unhealthy adapter state file rather than `.execution_state`.
+
+The system MUST detect usage limits from actual review adapter output rather than from preflight health probes. When a review adapter returns output or throws an error that matches usage-limit patterns, the system SHALL mark the review as failed with an error status and record the adapter as unhealthy in the global unhealthy adapter state file.
 
 #### Scenario: Usage limit detected in review output
 - **GIVEN** an adapter is assigned to a review slot
 - **WHEN** the adapter returns output containing usage-limit text (e.g. "usage limit", "quota exceeded")
 - **THEN** the review slot SHALL report `status: "error"` with a message indicating the usage limit
-- **AND** the adapter SHALL be marked unhealthy in `.execution_state` with reason "Usage limit exceeded"
+- **AND** the adapter SHALL be marked unhealthy in the global unhealthy adapter state file with reason "Usage limit exceeded"
 - **AND** the system SHALL log that the adapter was marked unhealthy for 1 hour
 
 #### Scenario: Usage limit detected in adapter exception
 - **GIVEN** an adapter is assigned to a review slot
 - **WHEN** the adapter throws an error whose message matches usage-limit patterns
 - **THEN** the review slot SHALL report `status: "error"` with the usage-limit message
-- **AND** the adapter SHALL be marked unhealthy in `.execution_state`
+- **AND** the adapter SHALL be marked unhealthy in the global unhealthy adapter state file
 
 #### Scenario: Non-usage-limit error does not mark adapter unhealthy
 - **GIVEN** an adapter is assigned to a review slot
@@ -475,7 +455,9 @@ The system MUST detect usage limits from actual review adapter output rather tha
 - **AND** the adapter SHALL NOT be marked unhealthy
 
 ### Requirement: Adapter Cooldown and Recovery
-Adapters marked as unhealthy SHALL be skipped for a 1-hour cooldown period. After the cooldown expires, the system SHALL attempt to use the adapter again. If the adapter's CLI binary is available, the unhealthy flag SHALL be cleared.
+This requirement MUST read and clear cooldown state from the global unhealthy adapter state file rather than `.execution_state`.
+
+Adapters marked as unhealthy SHALL be skipped for a 1-hour cooldown period. After the cooldown expires, the system SHALL attempt to use the adapter again. If the adapter's CLI binary is available, the unhealthy flag SHALL be cleared in the global unhealthy adapter state file.
 
 #### Scenario: Adapter within cooldown period
 - **GIVEN** adapter "claude" was marked unhealthy 30 minutes ago
@@ -487,7 +469,7 @@ Adapters marked as unhealthy SHALL be skipped for a 1-hour cooldown period. Afte
 - **GIVEN** adapter "claude" was marked unhealthy 2 hours ago
 - **AND** the `claude` CLI binary is available on PATH
 - **WHEN** the system selects adapters for a review gate
-- **THEN** the system SHALL clear the unhealthy flag for "claude" in `.execution_state`
+- **THEN** the system SHALL clear the unhealthy flag for "claude" in the global unhealthy adapter state file
 - **AND** "claude" SHALL be included in the healthy adapter list
 
 #### Scenario: Adapter cooldown expired but binary missing
@@ -578,4 +560,29 @@ When interval checking is enabled, the executor SHALL check interval before acqu
 - **WHEN** the interval has not elapsed
 - **THEN** the executor SHALL return `interval_not_elapsed`
 - **AND** auto-clean SHALL NOT run
+
+### Requirement: Adapter Health Tracking in Global State
+The system MUST store unhealthy adapter cooldown state in a global state file located in the global config directory (default: `~/.config/agent-gauntlet/unhealthy_adapters.json`). Each entry is keyed by adapter name and contains the timestamp when the adapter was marked unhealthy and the reason. The global state file SHALL be used to determine adapter cooldown across projects.
+
+#### Scenario: Global unhealthy adapter file structure
+- **GIVEN** one or more adapters have been marked unhealthy
+- **WHEN** the system writes the global unhealthy adapter state file
+- **THEN** the file SHALL contain an `unhealthy_adapters` object
+- **AND** each key in `unhealthy_adapters` SHALL be an adapter name (e.g. `"claude"`)
+- **AND** each value SHALL contain `marked_at` (ISO 8601 timestamp) and `reason` (string)
+
+#### Scenario: Global state file missing or invalid
+- **GIVEN** the global unhealthy adapter state file does not exist or is invalid
+- **WHEN** the system reads unhealthy adapter state
+- **THEN** all adapters SHALL be considered healthy
+
+#### Scenario: Global state directory override
+- **GIVEN** the `GAUNTLET_GLOBAL_STATE_DIR` environment variable is set
+- **WHEN** the system resolves the unhealthy adapter state path
+- **THEN** it SHALL use that directory instead of the default global config directory
+
+#### Scenario: Manual clean does not clear global adapter state
+- **GIVEN** a project `clean` command runs
+- **WHEN** the clean operation completes
+- **THEN** the global unhealthy adapter state file SHALL remain intact
 
