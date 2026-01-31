@@ -12,6 +12,7 @@ export type GauntletStatus =
 	| "retry_limit_exceeded" // Max retries reached
 	| "lock_conflict" // Another run in progress
 	| "error" // Unexpected error (includes config errors)
+	| "pr_push_required" // Gates passed but PR needs to be created/updated
 	// Stop-hook pre-checks (before running executor)
 	| "no_config" // No .gauntlet/config.yml found
 	| "stop_hook_active" // Infinite loop prevention
@@ -51,7 +52,7 @@ export interface RunResult {
  * Determine if a status should block the stop hook.
  */
 export function isBlockingStatus(status: GauntletStatus): boolean {
-	return status === "failed";
+	return status === "failed" || status === "pr_push_required";
 }
 
 /**

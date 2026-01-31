@@ -88,6 +88,7 @@ Override all config levels using environment variables:
 |----------|--------|-------------|
 | `GAUNTLET_STOP_HOOK_ENABLED` | `true`, `1`, `false`, `0` | Override whether stop hook is enabled |
 | `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` | Non-negative integer | Override run interval (0 = always run) |
+| `GAUNTLET_AUTO_PUSH_PR` | `true`, `1`, `false`, `0` | Override whether auto PR push check is enabled |
 
 Example:
 ```bash
@@ -101,6 +102,7 @@ GAUNTLET_STOP_HOOK_ENABLED=false claude
 |---------|---------|-------------|
 | `stop_hook.enabled` | `true` | Whether stop hook validation runs. Set to `false` to disable entirely. |
 | `stop_hook.run_interval_minutes` | `5` | Minimum minutes between gauntlet runs. Set to `0` to always run. Prevents excessive re-runs during active development. |
+| `stop_hook.auto_push_pr` | `false` | When enabled, blocks the stop if no PR exists or PR is not up to date after gates pass. |
 
 ## How It Works
 
@@ -222,6 +224,7 @@ Example entries:
 | `stop_hook_active` | allow | Recursive hook prevention triggered |
 | `interval_not_elapsed` | allow | Run interval not yet passed |
 | `invalid_input` | allow | Invalid input to stop-hook |
+| `pr_push_required` | block | Gates passed but PR needs creation or update |
 | `stop_hook_disabled` | allow | Stop hook disabled via configuration |
 
 ### RUN_START with Diff Statistics

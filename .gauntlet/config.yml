@@ -7,6 +7,8 @@ cli:
     - codex
     - gemini
     - claude
+stop_hook:
+  auto_push_pr: true
 entry_points:
   - path: "."
     reviews:
