@@ -44,7 +44,10 @@ const {
 } = await import("../../src/commands/stop-hook.js");
 
 import type { StopHookStatus } from "../../src/commands/stop-hook.js";
-import { isBlockingStatus } from "../../src/types/gauntlet-status.js";
+import {
+	isBlockingStatus,
+	isSuccessStatus,
+} from "../../src/types/gauntlet-status.js";
 
 describe("Stop Hook Command", () => {
 	let program: Command;
@@ -1142,13 +1145,19 @@ describe("Stop Hook Command", () => {
 
 			// Find action handler
 			const actionStart = sourceFile.indexOf(".action(async ()");
-			const handlerExecuteCall = sourceFile.indexOf("handler.execute", actionStart);
+			const handlerExecuteCall = sourceFile.indexOf(
+				"handler.execute",
+				actionStart,
+			);
 			const actionSection = sourceFile.slice(actionStart, handlerExecuteCall);
 
 			// Pre-checks use outputResult() or createEarlyExitResult() in the new architecture
 			// Count outputResult calls (early returns) and createEarlyExitResult calls
-			const earlyReturns = (actionSection.match(/outputResult\(/g) || []).length;
-			const earlyExitResults = (actionSection.match(/createEarlyExitResult\(/g) || []).length;
+			const earlyReturns = (actionSection.match(/outputResult\(/g) || [])
+				.length;
+			const earlyExitResults = (
+				actionSection.match(/createEarlyExitResult\(/g) || []
+			).length;
 
 			// Should have early exit paths before handler.execute:
 			// 1. self-timeout handler (outputResult in setTimeout callback)
@@ -1220,6 +1229,66 @@ describe("Stop Hook Command", () => {
 		it("does not include skipped issues guidance by default", () => {
 			const instructions = getPushPRInstructions();
 			expect(instructions).not.toContain("skipped issues");
+		});
+	});
+
+	describe("CI status handling", () => {
+		describe("isBlockingStatus with CI statuses", () => {
+			it("returns true for ci_pending", () => {
+				expect(isBlockingStatus("ci_pending")).toBe(true);
+			});
+
+			it("returns true for ci_failed", () => {
+				expect(isBlockingStatus("ci_failed")).toBe(true);
+			});
+
+			it("returns false for ci_passed", () => {
+				expect(isBlockingStatus("ci_passed")).toBe(false);
+			});
+
+			it("returns false for ci_timeout", () => {
+				expect(isBlockingStatus("ci_timeout")).toBe(false);
+			});
+		});
+
+		describe("isSuccessStatus with CI statuses", () => {
+			it("returns true for ci_passed", () => {
+				expect(isSuccessStatus("ci_passed")).toBe(true);
+			});
+
+			it("returns false for ci_timeout", () => {
+				expect(isSuccessStatus("ci_timeout")).toBe(false);
+			});
+
+			it("returns false for ci_pending", () => {
+				expect(isSuccessStatus("ci_pending")).toBe(false);
+			});
+
+			it("returns false for ci_failed", () => {
+				expect(isSuccessStatus("ci_failed")).toBe(false);
+			});
+		});
+
+		describe("getStatusMessage with CI statuses", () => {
+			it("returns appropriate message for ci_pending", () => {
+				const message = getStatusMessage("ci_pending");
+				expect(message).toContain("CI checks still running");
+			});
+
+			it("returns appropriate message for ci_failed", () => {
+				const message = getStatusMessage("ci_failed");
+				expect(message).toContain("CI failed");
+			});
+
+			it("returns appropriate message for ci_passed", () => {
+				const message = getStatusMessage("ci_passed");
+				expect(message).toContain("CI passed");
+			});
+
+			it("returns appropriate message for ci_timeout", () => {
+				const message = getStatusMessage("ci_timeout");
+				expect(message).toContain("CI wait exhausted");
+			});
 		});
 	});
 });

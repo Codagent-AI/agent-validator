@@ -55,6 +55,20 @@ Commit all changes, push to remote, and create or update a pull request for the 
 After the PR is created or updated, verify it exists by running \`gh pr view\`.
 `;
 
+const FIX_PR_COMMAND_CONTENT = `---
+description: Fix CI failures or address review comments on a pull request
+allowed-tools: Bash
+---
+
+# /fix-pr
+Fix CI failures or address review comments on the current pull request.
+
+1. Check CI status and review comments: \`gh pr checks\` and \`gh pr view --comments\`
+2. Fix any failing checks or address reviewer feedback
+3. Commit and push your changes
+4. After pushing, verify the PR is updated: \`gh pr view\`
+`;
+
 type InstallLevel = "none" | "project" | "user";
 
 interface InitOptions {
@@ -204,6 +218,19 @@ For each issue: cite file:line, explain the problem, suggest a fix.
 				console.log(chalk.green("Created .gauntlet/push_pr.md"));
 			}
 
+			// Write the fix-pr command file
+			const fixPrCommandPath = path.join(targetDir, "fix_pr.md");
+			if (await exists(fixPrCommandPath)) {
+				console.log(
+					chalk.dim(
+						".gauntlet/fix_pr.md already exists, preserving existing file",
+					),
+				);
+			} else {
+				await fs.writeFile(fixPrCommandPath, FIX_PR_COMMAND_CONTENT);
+				console.log(chalk.green("Created .gauntlet/fix_pr.md"));
+			}
+
 			// Handle command installation
 			if (options.yes) {
 				// Default: install at project level for all selected agents (if they support it)
@@ -228,17 +255,26 @@ For each issue: cite file:line, explain the problem, suggest a fix.
 								canonicalPath: pushPrCommandPath,
 								symlinkLabel: ".gauntlet/push_pr.md",
 							},
+							{
+								name: "fix-pr",
+								content: FIX_PR_COMMAND_CONTENT,
+								canonicalPath: fixPrCommandPath,
+								symlinkLabel: ".gauntlet/fix_pr.md",
+							},
 						],
 					});
 				}
 			} else {
 				// Interactive prompts - passing available adapters to avoid re-checking or offering unavailable ones
-				await promptAndInstallCommands(
+				await promptAndInstallCommands({
 					projectRoot,
-					canonicalCommandPath,
-					pushPrCommandPath,
+					commandPaths: {
+						gauntlet: canonicalCommandPath,
+						pushPr: pushPrCommandPath,
+						fixPr: fixPrCommandPath,
+					},
 					availableAdapters,
-				);
+				});
 			}
 
 			// Handle stop hook installation (only in interactive mode)
@@ -419,12 +455,20 @@ ${entryPoints}
 `;
 }
 
+interface PromptAndInstallOptions {
+	projectRoot: string;
+	commandPaths: {
+		gauntlet: string;
+		pushPr: string;
+		fixPr: string;
+	};
+	availableAdapters: CLIAdapter[];
+}
+
 async function promptAndInstallCommands(
-	projectRoot: string,
-	canonicalCommandPath: string,
-	pushPrCommandPath: string,
-	availableAdapters: CLIAdapter[],
+	options: PromptAndInstallOptions,
 ): Promise<void> {
+	const { projectRoot, commandPaths, availableAdapters } = options;
 	// Only proceed if we have available adapters
 	if (availableAdapters.length === 0) return;
 
@@ -581,14 +625,20 @@ async function promptAndInstallCommands(
 				{
 					name: "gauntlet",
 					content: GAUNTLET_COMMAND_CONTENT,
-					canonicalPath: canonicalCommandPath,
+					canonicalPath: commandPaths.gauntlet,
 					symlinkLabel: ".gauntlet/run_gauntlet.md",
 				},
 				{
 					name: "push-pr",
 					content: PUSH_PR_COMMAND_CONTENT,
-					canonicalPath: pushPrCommandPath,
+					canonicalPath: commandPaths.pushPr,
 					symlinkLabel: ".gauntlet/push_pr.md",
+				},
+				{
+					name: "fix-pr",
+					content: FIX_PR_COMMAND_CONTENT,
+					canonicalPath: commandPaths.fixPr,
+					symlinkLabel: ".gauntlet/fix_pr.md",
 				},
 			],
 		});
