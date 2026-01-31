@@ -323,6 +323,11 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
 			};
 		}
 
+		// Only consider OPEN PRs - closed/merged PRs should not block stop
+		if (prInfo.state !== "OPEN") {
+			return { prExists: false, upToDate: false };
+		}
+
 		// Get local HEAD SHA
 		const { stdout: localHead } = await execFileAsync(
 			"git",
