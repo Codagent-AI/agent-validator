@@ -34,7 +34,7 @@ development loops, multi-agent review, and CI usage with minimal setup.
 
 ### Git Workflow
 - Base branch for change detection defaults to `origin/main`
-- Do not commit directly to main branch. Most development is committed to `development` branch
+- Do not commit directly to main branch, use feature branches
 
 ## Domain Context
 - Agent Gauntlet a feedback runner allowing projects to configure "gates".
