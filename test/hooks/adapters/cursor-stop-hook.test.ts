@@ -89,14 +89,15 @@ describe("CursorStopHookAdapter", () => {
 	});
 
 	describe("formatOutput()", () => {
-		it("should output empty object for non-blocking status", () => {
+		it("should output systemMessage for non-blocking status", () => {
 			const result: StopHookResult = {
 				status: "passed",
 				shouldBlock: false,
 				message: "✓ Gauntlet passed",
 			};
-			const output = adapter.formatOutput(result);
-			expect(output).toBe("{}");
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.systemMessage).toBe("✓ Gauntlet passed");
+			expect(output.followup_message).toBeUndefined();
 		});
 
 		it("should output followup_message for failed status", () => {

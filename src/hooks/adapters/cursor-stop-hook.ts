@@ -6,11 +6,13 @@ import type {
 
 /**
  * Cursor hook response format.
- * - Empty object {} = allow stop
+ * - Empty object {} = allow stop (no feedback)
+ * - { systemMessage: "..." } = allow stop with user-visible message
  * - { followup_message: "..." } = block stop and continue with message
  */
 interface CursorHookResponse {
 	followup_message?: string;
+	systemMessage?: string;
 }
 
 /**
@@ -90,8 +92,11 @@ export class CursorStopHookAdapter implements StopHookAdapter {
 			return JSON.stringify(response);
 		}
 
-		// Empty object = allow stop
-		return "{}";
+		// Include systemMessage for user feedback even when not blocking
+		const response: CursorHookResponse = {
+			systemMessage: result.message,
+		};
+		return JSON.stringify(response);
 	}
 
 	/**

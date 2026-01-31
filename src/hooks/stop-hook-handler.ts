@@ -38,6 +38,22 @@ interface MinimalConfig {
  */
 const DEFAULT_LOG_DIR = "gauntlet_logs";
 
+/**
+ * Read and parse the project config file.
+ * Returns undefined if the file doesn't exist or can't be parsed.
+ */
+async function readProjectConfig(
+	projectCwd: string,
+): Promise<MinimalConfig | undefined> {
+	try {
+		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
+		const content = await fs.readFile(configPath, "utf-8");
+		return YAML.parse(content) as MinimalConfig;
+	} catch {
+		return undefined;
+	}
+}
+
 interface FailedGateLog {
 	/** Log file paths for failed check gates */
 	checkLogs: string[];
@@ -159,6 +175,30 @@ ${trustLevelSection}${addressSection}
 }
 
 /**
+ * Static status messages for statuses that don't need dynamic context.
+ */
+const STATUS_MESSAGES: Record<string, string> = {
+	passed: "✓ Gauntlet passed — all gates completed successfully.",
+	passed_with_warnings:
+		"✓ Gauntlet completed — passed with warnings (some issues were skipped).",
+	no_applicable_gates:
+		"✓ Gauntlet passed — no applicable gates matched current changes.",
+	no_changes: "✓ Gauntlet passed — no changes detected.",
+	retry_limit_exceeded:
+		"⚠ Gauntlet terminated — retry limit exceeded. Run `agent-gauntlet clean` to archive and continue.",
+	lock_conflict:
+		"⏭ Gauntlet skipped — another gauntlet run is already in progress.",
+	failed: "✗ Gauntlet failed — issues must be fixed before stopping.",
+	pr_push_required:
+		"✓ Gauntlet passed — PR needs to be created or updated before stopping.",
+	no_config: "○ Not a gauntlet project — no .gauntlet/config.yml found.",
+	stop_hook_active:
+		"↺ Stop hook cycle detected — allowing stop to prevent infinite loop.",
+	stop_hook_disabled: "○ Stop hook is disabled via configuration.",
+	invalid_input: "⚠ Invalid hook input — could not parse JSON, allowing stop.",
+};
+
+/**
  * Get a human-friendly message for each status code.
  * These messages explain why the stop was approved or blocked.
  */
@@ -166,40 +206,21 @@ export function getStatusMessage(
 	status: GauntletStatus,
 	context?: { intervalMinutes?: number; errorMessage?: string },
 ): string {
-	switch (status) {
-		case "passed":
-			return "✓ Gauntlet passed — all gates completed successfully.";
-		case "passed_with_warnings":
-			return "✓ Gauntlet completed — passed with warnings (some issues were skipped).";
-		case "no_applicable_gates":
-			return "✓ Gauntlet passed — no applicable gates matched current changes.";
-		case "no_changes":
-			return "✓ Gauntlet passed — no changes detected.";
-		case "retry_limit_exceeded":
-			return "⚠ Gauntlet terminated — retry limit exceeded. Run `agent-gauntlet clean` to archive and continue.";
-		case "interval_not_elapsed":
-			return context?.intervalMinutes
-				? `⏭ Gauntlet skipped — run interval (${context.intervalMinutes} min) not elapsed since last run.`
-				: "⏭ Gauntlet skipped — run interval not elapsed since last run.";
-		case "lock_conflict":
-			return "⏭ Gauntlet skipped — another gauntlet run is already in progress.";
-		case "failed":
-			return "✗ Gauntlet failed — issues must be fixed before stopping.";
-		case "pr_push_required":
-			return "✓ Gauntlet passed — PR needs to be created or updated before stopping.";
-		case "no_config":
-			return "○ Not a gauntlet project — no .gauntlet/config.yml found.";
-		case "stop_hook_active":
-			return "↺ Stop hook cycle detected — allowing stop to prevent infinite loop.";
-		case "stop_hook_disabled":
-			return "○ Stop hook is disabled via configuration.";
-		case "error":
-			return context?.errorMessage
-				? `⚠ Stop hook error — ${context.errorMessage}`
-				: "⚠ Stop hook error — unexpected error occurred.";
-		case "invalid_input":
-			return "⚠ Invalid hook input — could not parse JSON, allowing stop.";
+	// Handle statuses that need dynamic context
+	if (status === "interval_not_elapsed") {
+		return context?.intervalMinutes
+			? `⏭ Gauntlet skipped — run interval (${context.intervalMinutes} min) not elapsed since last run.`
+			: "⏭ Gauntlet skipped — run interval not elapsed since last run.";
 	}
+
+	if (status === "error") {
+		return context?.errorMessage
+			? `⚠ Stop hook error — ${context.errorMessage}`
+			: "⚠ Stop hook error — unexpected error occurred.";
+	}
+
+	// Use static lookup for all other statuses
+	return STATUS_MESSAGES[status] ?? `Unknown status: ${status}`;
 }
 
 /**
@@ -223,14 +244,8 @@ After the PR is created or updated, try to stop again. The stop hook will verify
  * Read the log_dir from project config without full validation.
  */
 export async function getLogDir(projectCwd: string): Promise<string> {
-	try {
-		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
-		const content = await fs.readFile(configPath, "utf-8");
-		const config = YAML.parse(content) as MinimalConfig;
-		return config.log_dir || DEFAULT_LOG_DIR;
-	} catch {
-		return DEFAULT_LOG_DIR;
-	}
+	const config = await readProjectConfig(projectCwd);
+	return config?.log_dir || DEFAULT_LOG_DIR;
 }
 
 /**
@@ -239,14 +254,8 @@ export async function getLogDir(projectCwd: string): Promise<string> {
 export async function getDebugLogConfig(
 	projectCwd: string,
 ): Promise<MinimalConfig["debug_log"]> {
-	try {
-		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
-		const content = await fs.readFile(configPath, "utf-8");
-		const config = YAML.parse(content) as MinimalConfig;
-		return config.debug_log;
-	} catch {
-		return undefined;
-	}
+	const config = await readProjectConfig(projectCwd);
+	return config?.debug_log;
 }
 
 /**
@@ -339,6 +348,25 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
 }
 
 /**
+ * Check if the gauntlet status indicates a passing state that should trigger PR check.
+ */
+function isPassingStatus(status: GauntletStatus): boolean {
+	return status === "passed" || status === "passed_with_warnings";
+}
+
+/**
+ * Refresh execution state (non-fatal on error).
+ */
+async function refreshExecutionState(logDir?: string): Promise<void> {
+	if (!logDir) return;
+	try {
+		await writeExecutionState(logDir);
+	} catch {
+		// Non-fatal; stale state won't block the next run
+	}
+}
+
+/**
  * Check PR status after gauntlet passes and determine if the stop should be blocked.
  * Returns the final status and optional push-PR reason.
  */
@@ -347,43 +375,37 @@ async function postGauntletPRCheck(
 	gauntletStatus: GauntletStatus,
 	options?: { logDir?: string },
 ): Promise<{ finalStatus: GauntletStatus; pushPRReason?: string }> {
-	const log = getStopHookLogger();
-
-	if (
-		gauntletStatus !== "passed" &&
-		gauntletStatus !== "passed_with_warnings"
-	) {
+	// Only check PR for passing statuses
+	if (!isPassingStatus(gauntletStatus)) {
 		return { finalStatus: gauntletStatus };
 	}
 
+	// Skip if auto_push_pr is disabled
 	if (!(await shouldCheckPR(projectCwd))) {
 		return { finalStatus: gauntletStatus };
 	}
 
 	const prStatus = await checkPRStatus(projectCwd);
+
+	// Graceful degradation on PR check errors
 	if (prStatus.error) {
-		log.warn(`PR status check failed: ${prStatus.error}`);
+		getStopHookLogger().warn(`PR status check failed: ${prStatus.error}`);
 		return { finalStatus: gauntletStatus };
 	}
 
-	if (!prStatus.prExists || !prStatus.upToDate) {
-		// Refresh execution state so files created during PR push are captured
-		if (options?.logDir) {
-			try {
-				await writeExecutionState(options.logDir);
-			} catch {
-				// Non-fatal; stale state won't block the next run
-			}
-		}
-		return {
-			finalStatus: "pr_push_required",
-			pushPRReason: getPushPRInstructions({
-				hasWarnings: gauntletStatus === "passed_with_warnings",
-			}),
-		};
+	// PR exists and is up to date - allow stop
+	if (prStatus.prExists && prStatus.upToDate) {
+		return { finalStatus: gauntletStatus };
 	}
 
-	return { finalStatus: gauntletStatus };
+	// PR missing or outdated - block and request push
+	await refreshExecutionState(options?.logDir);
+	return {
+		finalStatus: "pr_push_required",
+		pushPRReason: getPushPRInstructions({
+			hasWarnings: gauntletStatus === "passed_with_warnings",
+		}),
+	};
 }
 
 /**

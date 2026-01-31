@@ -12,6 +12,7 @@
 - fix: prevent stale execution state from causing false auto-clean and phantom diffs
 
 ### Other Changes
+- refactor: improve code health in stop-hook-handler
 - chore: add changeset
 - spec: update cursor stop hook spec
 - chore: add changeset
