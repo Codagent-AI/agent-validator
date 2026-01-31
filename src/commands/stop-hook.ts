@@ -514,6 +514,43 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
 }
 
 /**
+ * Check PR status after gauntlet passes and determine if the stop should be blocked.
+ * Returns the final status and optional push-PR reason.
+ */
+async function postGauntletPRCheck(
+	projectCwd: string,
+	gauntletStatus: GauntletStatus,
+): Promise<{ finalStatus: GauntletStatus; pushPRReason?: string }> {
+	if (
+		gauntletStatus !== "passed" &&
+		gauntletStatus !== "passed_with_warnings"
+	) {
+		return { finalStatus: gauntletStatus };
+	}
+
+	if (!(await shouldCheckPR(projectCwd))) {
+		return { finalStatus: gauntletStatus };
+	}
+
+	const prStatus = await checkPRStatus(projectCwd);
+	if (prStatus.error) {
+		log.warn(`PR status check failed: ${prStatus.error}`);
+		return { finalStatus: gauntletStatus };
+	}
+
+	if (!prStatus.prExists || !prStatus.upToDate) {
+		return {
+			finalStatus: "pr_push_required",
+			pushPRReason: getPushPRInstructions({
+				hasWarnings: gauntletStatus === "passed_with_warnings",
+			}),
+		};
+	}
+
+	return { finalStatus: gauntletStatus };
+}
+
+/**
  * Generate push-PR instructions for the agent.
  */
 function getPushPRInstructions(options?: { hasWarnings?: boolean }): string {
@@ -835,26 +872,10 @@ export function registerStopHookCommand(program: Command): void {
 				// 10. Post-gauntlet PR check: when gates pass and auto_push_pr is enabled,
 				// verify a PR exists and is up to date before allowing stop.
 				// Only triggers on direct success statuses (passed, passed_with_warnings).
-				let finalStatus = result.status;
-				let pushPRReason: string | undefined;
-
-				if (
-					(result.status === "passed" ||
-						result.status === "passed_with_warnings") &&
-					(await shouldCheckPR(projectCwd))
-				) {
-					const prStatus = await checkPRStatus(projectCwd);
-					if (prStatus.error) {
-						// Graceful degradation: log warning, allow stop
-						log.warn(`PR status check failed: ${prStatus.error}`);
-					} else if (!prStatus.prExists || !prStatus.upToDate) {
-						finalStatus = "pr_push_required";
-						pushPRReason = getPushPRInstructions({
-							hasWarnings: result.status === "passed_with_warnings",
-						});
-					}
-					// else: PR exists and up to date, keep original status
-				}
+				const { finalStatus, pushPRReason } = await postGauntletPRCheck(
+					projectCwd,
+					result.status,
+				);
 
 				await debugLogger?.logStopHook(
 					isBlockingStatus(finalStatus) ? "block" : "allow",
