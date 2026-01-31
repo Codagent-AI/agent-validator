@@ -1,5 +1,80 @@
 # agent-gauntlet
 
+## 0.9.0
+
+### Minor Changes
+
+- [#29](https://github.com/pacaplan/agent-gauntlet/pull/29) [`33f88fa`](https://github.com/pacaplan/agent-gauntlet/commit/33f88fa07a88217415214fe9d0c87bc3a84e6c0a) Thanks [@pacaplan](https://github.com/pacaplan)! - ### Features
+
+  - feat: implement auto-fix-pr feature for autonomous CI monitoring
+
+  ### Fixes
+
+  - fix: correct wait-ci API response parsing and add docs
+
+  ### Other Changes
+
+  - chore: change cli pref
+  - spec: update the proposal
+  - spec: update the proposal
+  - spec: archive changes
+
+- ### Features
+
+  - feat: add cursor stop hook
+
+  ### Fixes
+
+  - fix: resolve merge conflict and update rerun_new_issue_threshold docs
+  - fix: include stderr in adapter error messages for usage limit detection
+  - fix: prevent stale execution state from causing false auto-clean and phantom diffs
+
+  ### Other Changes
+
+  - refactor: improve code health in stop-hook-handler
+  - chore: add changeset
+  - spec: update cursor stop hook spec
+  - chore: add changeset
+  - spec: cursor stop hook
+
+- [#30](https://github.com/pacaplan/agent-gauntlet/pull/30) [`78637c7`](https://github.com/pacaplan/agent-gauntlet/commit/78637c79cdac0a514f8c96075bab06a08ce57c09) Thanks [@pacaplan](https://github.com/pacaplan)! - ### Fixes
+
+  - fix: prevent clean command from running during active gauntlet run
+  - fix: regenerate changeset
+  - fix: properly skip unhealthy adapters
+
+  ### Other Changes
+
+  - chore: include GitHub Actions failure logs in CI fix instructions
+  - chore: add CodeScene code health rules configuration
+  - refactor: improve code health and fix review violations
+  - Address PR review comments and fix CI failures
+  - chore: add changeset for global adapter state
+  - Clarify OpenSpec updates and refactor adapter streaming
+  - chore: change cli pref
+  - spec: move unhealthy adapter state
+
+- [#25](https://github.com/pacaplan/agent-gauntlet/pull/25) [`ce16800`](https://github.com/pacaplan/agent-gauntlet/commit/ce16800c662d89cd19a1243f6c0d6e2eb9669bdf) Thanks [@pacaplan](https://github.com/pacaplan)! - ### Features
+
+  - feat: implement auto_push_pr stop hook workflow
+
+  ### Other Changes
+
+  - refactor: reduce cyclomatic complexity in init and stop-hook
+  - Address PR review comments and resolve merge conflict
+  - spec: pr workflows
+
+### Patch Changes
+
+- [#27](https://github.com/pacaplan/agent-gauntlet/pull/27) [`20bfb53`](https://github.com/pacaplan/agent-gauntlet/commit/20bfb5389b625743092962bee4e1afde1fb3f8ee) Thanks [@pacaplan](https://github.com/pacaplan)! - ### Fixes
+
+  - fix: include stderr in adapter error messages for usage limit detection
+  - fix: prevent stale execution state from causing false auto-clean and phantom diffs
+
+  ### Other Changes
+
+  - chore: add changeset
+
 ## 0.8.0
 
 ### Minor Changes
