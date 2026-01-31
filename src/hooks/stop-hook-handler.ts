@@ -265,9 +265,16 @@ export function getCIFixInstructions(ciResult: WaitCIResult): string {
 	const sections: string[] = [];
 
 	if (ciResult.failed_checks.length > 0) {
-		const checkLines = ciResult.failed_checks.map(
-			(c) => `- ${c.name}: ${c.details_url}`,
-		);
+		const checkLines: string[] = [];
+		for (const c of ciResult.failed_checks) {
+			checkLines.push(`- ${c.name}: ${c.details_url}`);
+			// Include actual log output if available
+			if (c.log_output) {
+				checkLines.push("```");
+				checkLines.push(c.log_output);
+				checkLines.push("```");
+			}
+		}
 		sections.push(`**Failed checks:**\n${checkLines.join("\n")}`);
 	}
 

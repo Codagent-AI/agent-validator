@@ -12,6 +12,8 @@ export interface WaitCIResult {
 		name: string;
 		conclusion: string;
 		details_url: string;
+		/** Actual error output from GitHub Actions logs (if available) */
+		log_output?: string;
 	}>;
 	review_comments: Array<{
 		author: string;
@@ -97,13 +99,14 @@ async function getChecks(cwd?: string): Promise<Array<{
 		["pr", "checks", "--json", "name,state,link"],
 		cwd,
 	);
-	if (result.code !== 0) {
-		return null;
+	const output = result.stdout.trim();
+	if (!output) {
+		return result.code === 0 ? [] : null;
 	}
 	try {
-		return JSON.parse(result.stdout.trim()) || [];
+		return JSON.parse(output) || [];
 	} catch {
-		return null;
+		return result.code === 0 ? [] : null;
 	}
 }
 
@@ -135,7 +138,11 @@ async function getReviews(
 	}
 
 	const result = await runGh(
-		["api", `repos/${owner}/${repo}/pulls/${prNumber}/reviews?per_page=100`],
+		[
+			"api",
+			"--paginate",
+			`repos/${owner}/${repo}/pulls/${prNumber}/reviews?per_page=100`,
+		],
 		cwd,
 	);
 	if (result.code !== 0) {
@@ -185,13 +192,105 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Extract GitHub Actions run ID from a check link.
+ * Links look like: https://github.com/owner/repo/actions/runs/RUN_ID/job/JOB_ID
+ * Returns null if the link is not a GitHub Actions link.
+ */
+function extractRunId(link: string): string | null {
+	const match = link.match(/\/actions\/runs\/(\d+)/);
+	return match ? match[1] : null;
+}
+
+/**
+ * Fetch failed job logs for a GitHub Actions run.
+ * Uses `gh run view <run-id> --log-failed` to get actual error output.
+ * Returns null if logs can't be fetched.
+ */
+async function getFailedRunLogs(
+	runId: string,
+	cwd?: string,
+): Promise<string | null> {
+	const result = await runGh(["run", "view", runId, "--log-failed"], cwd);
+	if (result.code !== 0 || !result.stdout.trim()) {
+		return null;
+	}
+	// Limit output to avoid huge payloads (keep last ~100 lines)
+	const lines = result.stdout.trim().split("\n");
+	const maxLines = 100;
+	if (lines.length > maxLines) {
+		return `... (${lines.length - maxLines} lines truncated)\n${lines.slice(-maxLines).join("\n")}`;
+	}
+	return result.stdout.trim();
+}
+
+/**
+ * Fetch failure logs for failed checks.
+ * Only works for GitHub Actions checks; external checks (CodeScene, etc.) return null.
+ */
+async function enrichFailedChecksWithLogs(
+	failedChecks: Array<{ name: string; state: string; link: string }>,
+	cwd?: string,
+): Promise<
+	Array<{ name: string; state: string; link: string; log_output?: string }>
+> {
+	// Group checks by run ID to avoid fetching the same logs multiple times
+	const runIdToChecks = new Map<
+		string,
+		Array<{ name: string; state: string; link: string }>
+	>();
+	const externalChecks: Array<{ name: string; state: string; link: string }> =
+		[];
+
+	for (const check of failedChecks) {
+		const runId = extractRunId(check.link);
+		if (runId) {
+			const existing = runIdToChecks.get(runId) || [];
+			existing.push(check);
+			runIdToChecks.set(runId, existing);
+		} else {
+			externalChecks.push(check);
+		}
+	}
+
+	// Fetch logs for each unique run ID
+	const results: Array<{
+		name: string;
+		state: string;
+		link: string;
+		log_output?: string;
+	}> = [];
+
+	for (const [runId, checks] of runIdToChecks) {
+		const logs = await getFailedRunLogs(runId, cwd);
+		for (const check of checks) {
+			results.push({
+				...check,
+				log_output: logs ?? undefined,
+			});
+		}
+	}
+
+	// Add external checks without logs
+	for (const check of externalChecks) {
+		results.push(check);
+	}
+
+	return results;
+}
+
 /** Options for creating a WaitCIResult */
 interface ResultOptions {
 	status: WaitCIResult["ci_status"];
 	startTime: number;
 	prInfo?: { number: number; url: string };
 	errorMessage?: string;
-	failedChecks?: Array<{ name: string; state: string; link: string }>;
+	failedChecks?: Array<{
+		name: string;
+		state: string;
+		link: string;
+		log_output?: string;
+	}>;
 	reviewComments?: Array<{ author: string; body: string }>;
 }
 
@@ -207,6 +306,7 @@ function createResult(opts: ResultOptions): WaitCIResult {
 				name: c.name,
 				conclusion: c.state.toLowerCase(),
 				details_url: c.link,
+				log_output: c.log_output,
 			})) || [],
 		review_comments: opts.reviewComments || [],
 		elapsed_seconds: elapsed,
@@ -221,7 +321,12 @@ interface PollOutcome {
 	noChecksConfigured?: boolean;
 	shouldFail?: boolean;
 	shouldPass?: boolean;
-	failedChecks?: Array<{ name: string; state: string; link: string }>;
+	failedChecks?: Array<{
+		name: string;
+		state: string;
+		link: string;
+		log_output?: string;
+	}>;
 	reviewComments?: Array<{ author: string; body: string }>;
 }
 
@@ -322,11 +427,16 @@ export async function waitForCI(
 		}
 
 		if (pollOutcome.shouldFail && pollOutcome.failedChecks) {
+			// Enrich failed checks with actual log output from GitHub Actions
+			const enrichedChecks = await enrichFailedChecksWithLogs(
+				pollOutcome.failedChecks,
+				cwd,
+			);
 			return createResult({
 				status: "failed",
 				startTime,
 				prInfo,
-				failedChecks: pollOutcome.failedChecks,
+				failedChecks: enrichedChecks,
 				reviewComments: pollOutcome.reviewComments,
 			});
 		}
