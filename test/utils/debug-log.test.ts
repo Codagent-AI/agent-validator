@@ -196,17 +196,18 @@ describe("DebugLogger", () => {
 			expect(content).toContain("base_ref=WORKTREE-abc123");
 		});
 
-		it("writes RUN_END entries", async () => {
+		it("writes RUN_END entries with duration", async () => {
 			const logger = new DebugLogger(TEST_DIR, {
 				enabled: true,
 				maxSizeMb: 10,
 			});
+			await logger.logRunStart("full", 5, 3);
 			await logger.logRunEnd("pass", 2, 1, 0, 1);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
 			const content = await fs.readFile(logPath, "utf-8");
 			expect(content).toContain(
-				"RUN_END status=pass fixed=2 skipped=1 failed=0 iterations=1",
+				"RUN_END status=pass fixed=2 skipped=1 failed=0 iterations=1 duration=",
 			);
 		});
 

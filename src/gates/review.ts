@@ -28,6 +28,7 @@ const execAsync = promisify(exec);
 
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const MAX_LOG_BUFFER_SIZE = 10000;
+const REVIEW_ADAPTER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 const JSON_SYSTEM_INSTRUCTION = `
 You are in a read-only mode. You may read files in the repository to gather context.
@@ -664,7 +665,9 @@ export class ReviewGateExecutor {
 				prompt: finalPrompt,
 				diff,
 				model: config.model,
-				timeoutMs: config.timeout ? config.timeout * 1000 : undefined,
+				timeoutMs: config.timeout
+					? config.timeout * 1000
+					: REVIEW_ADAPTER_TIMEOUT_MS,
 				onOutput: (chunk: string) => {
 					// Stream output to log file in real-time
 					adapterLogger(chunk);

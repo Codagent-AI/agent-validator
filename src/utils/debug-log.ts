@@ -36,6 +36,7 @@ export class DebugLogger {
 	private backupPath: string;
 	private maxSizeBytes: number;
 	private enabled: boolean;
+	private runStartTime: number | undefined;
 
 	constructor(logDir: string, config: DebugLogConfig) {
 		this.logPath = path.join(logDir, DEBUG_LOG_FILENAME);
@@ -67,6 +68,7 @@ export class DebugLogger {
 		changes: number,
 		gates: number,
 	): Promise<void> {
+		this.runStartTime = Date.now();
 		await this.write(
 			`RUN_START mode=${mode} changes=${changes} gates=${gates}`,
 		);
@@ -80,6 +82,7 @@ export class DebugLogger {
 		diffStats: DiffStats,
 		gates: number,
 	): Promise<void> {
+		this.runStartTime = Date.now();
 		const parts = [
 			"RUN_START",
 			`mode=${mode}`,
@@ -155,8 +158,12 @@ export class DebugLogger {
 		failed: number,
 		iterations: number,
 	): Promise<void> {
+		const durationStr =
+			this.runStartTime !== undefined
+				? ` duration=${((Date.now() - this.runStartTime) / 1000).toFixed(1)}s`
+				: "";
 		await this.write(
-			`RUN_END status=${status} fixed=${fixed} skipped=${skipped} failed=${failed} iterations=${iterations}`,
+			`RUN_END status=${status} fixed=${fixed} skipped=${skipped} failed=${failed} iterations=${iterations}${durationStr}`,
 		);
 	}
 
