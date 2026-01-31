@@ -12,6 +12,7 @@ cli:
     - codex
 stop_hook:
   auto_push_pr: true
+  auto_fix_pr: true
 entry_points:
   - path: "."
     reviews:

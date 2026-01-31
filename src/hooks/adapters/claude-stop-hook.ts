@@ -50,19 +50,23 @@ export class ClaudeStopHookAdapter implements StopHookAdapter {
 	}
 
 	/**
+	 * Get the block reason for a given result based on status.
+	 */
+	private getBlockReason(result: StopHookResult): string | undefined {
+		const reasonMap: Record<string, string | undefined> = {
+			failed: result.instructions,
+			pr_push_required: result.pushPRReason,
+			ci_failed: result.ciFixReason,
+			ci_pending: result.ciPendingReason,
+		};
+		return reasonMap[result.status];
+	}
+
+	/**
 	 * Format handler result into Claude Code protocol output.
 	 */
 	formatOutput(result: StopHookResult): string {
-		// Determine the appropriate reason/stopReason based on status
-		const blockReason =
-			result.status === "failed"
-				? result.instructions
-				: result.status === "pr_push_required"
-					? result.pushPRReason
-					: undefined;
-
-		// For blocking status with detailed instructions, use those as stopReason
-		// For non-blocking statuses, use the human-friendly message as stopReason
+		const blockReason = this.getBlockReason(result);
 		const stopReason =
 			result.shouldBlock && blockReason ? blockReason : result.message;
 

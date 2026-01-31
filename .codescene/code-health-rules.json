@@ -1,0 +1,59 @@
+{
+  "usage": "Custom code health rules for agent-gauntlet. See docs/code-health-improvements.md for deferred issues.",
+  "rule_sets": [
+    {
+      "matching_content_path": "test/**",
+      "rules": [
+        {
+          "name": "DRY Violations",
+          "weight": 0.5
+        },
+        {
+          "name": "Duplicated Assertion Blocks",
+          "weight": 0.5
+        },
+        {
+          "name": "Large Method",
+          "weight": 0.5
+        },
+        {
+          "name": "Primitive Obsession",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "src/**",
+      "rules": [
+        {
+          "name": "DRY Violations",
+          "weight": 1.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "src/commands/**",
+      "rules": [
+        {
+          "name": "Primitive Obsession",
+          "weight": 0.5
+        }
+      ],
+      "thresholds": [
+        {
+          "name": "function_cyclomatic_complexity_warning",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "matching_content_path": "src/hooks/**",
+      "rules": [
+        {
+          "name": "Primitive Obsession",
+          "weight": 0.5
+        }
+      ]
+    }
+  ]
+}

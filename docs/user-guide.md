@@ -236,6 +236,8 @@ Creates `.gauntlet/` with a minimal starter config and a sample review prompt.
 .gauntlet/
   config.yml           # Entry points and settings
   run_gauntlet.md      # Canonical /gauntlet command for CLI agents
+  push_pr.md           # /push-pr command for creating PRs
+  fix_pr.md            # /fix-pr command for fixing CI failures
   checks/              # Check gate definitions
   reviews/
     code-quality.md    # Sample review prompt
@@ -245,14 +247,17 @@ Creates `.gauntlet/` with a minimal starter config and a sample review prompt.
 
 When run interactively, `init` prompts you to set up CLI agent commands:
 
-1. **Installation level**: Choose where to install the `/gauntlet` command:
+1. **Installation level**: Choose where to install commands (`/gauntlet`, `/push-pr`, `/fix-pr`):
    - Don't install commands
    - Project level (`.claude/commands/`, `.gemini/commands/`)
    - User level (`~/.claude/commands/`, `~/.gemini/commands/`, `~/.codex/prompts/`)
 
 2. **Agent selection**: Choose which CLI agents to install for (Claude, Gemini, Codex, or all)
 
-Once installed, you can run `/gauntlet` directly in your CLI agent session to execute the verification suite.
+Once installed, you can run these commands directly in your CLI agent session:
+- `/gauntlet` - Execute the verification suite
+- `/push-pr` - Commit, push, and create/update a PR
+- `/fix-pr` - Fix CI failures or address review comments
 
 #### Options
 
@@ -276,6 +281,38 @@ Internal command used by the CI workflow to discover which jobs to run.
 - Reads `.gauntlet/ci.yml` and `.gauntlet/config.yml`
 - Expands entry points based on file patterns
 - Outputs a JSON object defining the job matrix and service configurations
+
+### `agent-gauntlet wait-ci`
+
+Waits for CI checks to complete and checks for blocking reviews on the current PR.
+
+This command is primarily used internally by the stop hook when `auto_fix_pr` is enabled, but can also be run manually to check CI status.
+
+#### Options
+
+- `--timeout <seconds>` (default: `270`): Maximum time to wait for CI checks to complete
+- `--poll-interval <seconds>` (default: `15`): Time between CI status checks
+
+#### Output
+
+Returns JSON with:
+- `ci_status`: One of `passed`, `failed`, `pending`, or `error`
+- `pr_number`: The PR number (if found)
+- `pr_url`: The PR URL (if found)
+- `failed_checks`: Array of failed check details
+- `review_comments`: Array of blocking review comments (REQUEST_CHANGES only)
+- `elapsed_seconds`: Time spent waiting
+- `error_message`: Error details (if status is `error`)
+
+#### Exit codes
+
+- `0`: All checks passed, no blocking reviews
+- `1`: Failed checks, blocking reviews, error, or no PR found
+- `2`: Timeout (checks still pending)
+
+#### Requirements
+
+Requires the GitHub CLI (`gh`) to be installed and authenticated.
 
 ### `agent-gauntlet help`
 
@@ -382,6 +419,25 @@ Priority threshold for filtering new violations during reruns. Valid values: `"c
 Configuration for persistent debug logging:
 - `enabled` (boolean, default: `false`): Whether to enable debug logging
 - `max_size_mb` (number, default: `10`): Maximum log file size before rotation
+
+### `stop_hook` (object, optional)
+
+Configuration for the stop hook (used by CLI agents like Claude Code and Cursor):
+- `enabled` (boolean, default: `true`): Whether the stop hook is enabled
+- `run_interval_minutes` (number, default: `5`): Minimum interval between stop hook runs
+- `auto_push_pr` (boolean, default: `false`): Automatically prompt to create/update PR after gates pass
+- `auto_fix_pr` (boolean, default: `false`): Automatically monitor CI and prompt to fix failures after PR is pushed. Requires `auto_push_pr` to be enabled.
+
+When `auto_fix_pr` is enabled, the stop hook will:
+1. Wait for CI checks to complete (up to 3 attempts)
+2. If CI fails or reviews request changes, block with fix instructions
+3. If CI passes, allow the agent to stop
+
+Environment variables can override these settings:
+- `GAUNTLET_STOP_HOOK_ENABLED`: `true`/`1` or `false`/`0`
+- `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES`: Non-negative integer
+- `GAUNTLET_AUTO_PUSH_PR`: `true`/`1` or `false`/`0`
+- `GAUNTLET_AUTO_FIX_PR`: `true`/`1` or `false`/`0`
 
 ### `entry_points` (array, required)
 

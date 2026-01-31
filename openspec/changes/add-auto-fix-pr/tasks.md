@@ -9,54 +9,54 @@ See `design.md` Pre-factoring section for full CodeScene analysis. No hotspots m
 ## 1. Implementation
 
 ### Config & Types
-- [ ] Add `ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout` to `GauntletStatus` union in `src/types/gauntlet-status.ts`
-- [ ] Update `isBlockingStatus()` to return `true` for `ci_pending` and `ci_failed`
-- [ ] Update `isSuccessStatus()` to return `true` for `ci_passed` (note: `isSuccessStatus()` already exists in the codebase)
-- [ ] Ensure `ci_timeout` is non-blocking (`isBlockingStatus` returns `false`) and not a success status (`isSuccessStatus` returns `false`)
-- [ ] Add `auto_fix_pr` to `stopHookConfigSchema` in `src/config/schema.ts`
-- [ ] Add `auto_fix_pr` to global config schema and `DEFAULT_GLOBAL_CONFIG` in `src/config/global.ts`
-- [ ] Add `GAUNTLET_AUTO_FIX_PR` env var constant in `src/config/stop-hook-config.ts`
-- [ ] Extend `StopHookConfig` interface with `auto_fix_pr: boolean`
-- [ ] Extend `parseStopHookEnvVars()` to parse `GAUNTLET_AUTO_FIX_PR`
-- [ ] Extend `resolveStopHookConfig()` with 3-tier resolution for `auto_fix_pr`
-- [ ] Add validation: if `auto_fix_pr=true` but `auto_push_pr=false`, log warning and treat as false
+- [x] Add `ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout` to `GauntletStatus` union in `src/types/gauntlet-status.ts`
+- [x] Update `isBlockingStatus()` to return `true` for `ci_pending` and `ci_failed`
+- [x] Update `isSuccessStatus()` to return `true` for `ci_passed` (note: `isSuccessStatus()` already exists in the codebase)
+- [x] Ensure `ci_timeout` is non-blocking (`isBlockingStatus` returns `false`) and not a success status (`isSuccessStatus` returns `false`)
+- [x] Add `auto_fix_pr` to `stopHookConfigSchema` in `src/config/schema.ts`
+- [x] Add `auto_fix_pr` to global config schema and `DEFAULT_GLOBAL_CONFIG` in `src/config/global.ts`
+- [x] Add `GAUNTLET_AUTO_FIX_PR` env var constant in `src/config/stop-hook-config.ts`
+- [x] Extend `StopHookConfig` interface with `auto_fix_pr: boolean`
+- [x] Extend `parseStopHookEnvVars()` to parse `GAUNTLET_AUTO_FIX_PR`
+- [x] Extend `resolveStopHookConfig()` with 3-tier resolution for `auto_fix_pr`
+- [x] Add validation: if `auto_fix_pr=true` but `auto_push_pr=false`, log warning and treat as false
 
 ### wait-ci CLI Command
-- [ ] Create `src/commands/wait-ci.ts` with Commander registration
-- [ ] Implement `--timeout` and `--poll-interval` options
-- [ ] Implement PR detection via `gh pr view --json number,url,headRefName`
-- [ ] Implement CI check polling via `gh pr checks`
-- [ ] Implement review comment fetching via `gh api` — blocking reviews are `REQUEST_CHANGES` reviews only
-- [ ] Implement polling loop with sleep and timeout
-- [ ] Fail immediately if any check has failed (don't wait for pending checks)
-- [ ] Output structured JSON with ci_status, failed_checks, review_comments, elapsed_seconds
-- [ ] Exit with appropriate codes: 0=passed, 1=failed/error/no-PR, 2=pending
-- [ ] Handle `gh` CLI not installed with clear error
-- [ ] Register command in `src/commands/index.ts` and `src/index.ts`
+- [x] Create `src/commands/wait-ci.ts` with Commander registration
+- [x] Implement `--timeout` and `--poll-interval` options
+- [x] Implement PR detection via `gh pr view --json number,url,headRefName`
+- [x] Implement CI check polling via `gh pr checks`
+- [x] Implement review comment fetching via `gh api` — blocking reviews are `REQUEST_CHANGES` reviews only
+- [x] Implement polling loop with sleep and timeout
+- [x] Fail immediately if any check has failed (don't wait for pending checks)
+- [x] Output structured JSON with ci_status, failed_checks, review_comments, elapsed_seconds
+- [x] Exit with appropriate codes: 0=passed, 1=failed/error/no-PR, 2=pending
+- [x] Handle `gh` CLI not installed with clear error
+- [x] Register command in `src/commands/index.ts` and `src/index.ts`
 
 ### Stop Hook CI Workflow (in `src/hooks/stop-hook-handler.ts`)
-- [ ] Add `readCIWaitAttempts(logDir)` helper — reads `.ci-wait-attempts` marker file
-- [ ] Add `writeCIWaitAttempts(logDir, count)` helper — writes attempt count
-- [ ] Add `cleanCIWaitAttempts(logDir)` helper — removes marker file
-- [ ] Add `runWaitCI(cwd)` helper — spawns `agent-gauntlet wait-ci` and parses JSON output
-- [ ] Add `getCIFixInstructions(ciResult)` helper — generates fix-pr prompt with failure details (follows simplified pattern like `getPushPRInstructions`)
-- [ ] Add `getCIPendingInstructions(ciResult, attemptNumber)` helper — generates wait-and-retry prompt with attempt count and ~30 second wait
-- [ ] Add `getStatusMessage()` cases for `ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`
-- [ ] Extend `StopHookHandler.execute()` with CI workflow: when PR exists and is up to date + auto_fix_pr enabled, run wait-ci and handle result (auto_push_pr flow runs first if PR is missing/stale)
-- [ ] Implement 3-attempt retry limit for ci_pending; on max attempts, approve with `ci_timeout` status and message indicating CI wait exhausted
+- [x] Add `readCIWaitAttempts(logDir)` helper — reads `.ci-wait-attempts` marker file
+- [x] Add `writeCIWaitAttempts(logDir, count)` helper — writes attempt count
+- [x] Add `cleanCIWaitAttempts(logDir)` helper — removes marker file
+- [x] Add `runWaitCI(cwd)` helper — spawns `agent-gauntlet wait-ci` and parses JSON output
+- [x] Add `getCIFixInstructions(ciResult)` helper — generates fix-pr prompt with failure details (follows simplified pattern like `getPushPRInstructions`)
+- [x] Add `getCIPendingInstructions(ciResult, attemptNumber)` helper — generates wait-and-retry prompt with attempt count and ~30 second wait
+- [x] Add `getStatusMessage()` cases for `ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`
+- [x] Extend `StopHookHandler.execute()` with CI workflow: when PR exists and is up to date + auto_fix_pr enabled, run wait-ci and handle result (auto_push_pr flow runs first if PR is missing/stale)
+- [x] Implement 3-attempt retry limit for ci_pending; on max attempts, approve with `ci_timeout` status and message indicating CI wait exhausted
 
 ### Adapter Updates
-- [ ] Add `ciFixReason` and `ciPendingReason` fields to `StopHookResult` interface in `src/hooks/adapters/types.ts`
-- [ ] Update `ClaudeStopHookAdapter.formatOutput()` to handle `ci_pending` and `ci_failed` statuses (use `ciFixReason`/`ciPendingReason` for `reason` field)
-- [ ] Update `CursorStopHookAdapter.formatOutput()` to handle `ci_pending` and `ci_failed` statuses (use `ciFixReason`/`ciPendingReason` for `followup_message` field)
+- [x] Add `ciFixReason` and `ciPendingReason` fields to `StopHookResult` interface in `src/hooks/adapters/types.ts`
+- [x] Update `ClaudeStopHookAdapter.formatOutput()` to handle `ci_pending` and `ci_failed` statuses (use `ciFixReason`/`ciPendingReason` for `reason` field)
+- [x] Update `CursorStopHookAdapter.formatOutput()` to handle `ci_pending` and `ci_failed` statuses (use `ciFixReason`/`ciPendingReason` for `followup_message` field)
 
 ### Template Command
-- [ ] Create `src/templates/fix_pr.template.md` — simplified fix-pr instructions (renamed from address-pr)
-- [ ] Update `src/commands/init.ts` to create `.gauntlet/fix_pr.md` during init
-- [ ] Update `installCommands()` in init.ts to install fix-pr symlink/copy alongside gauntlet and push-pr commands
+- [x] Create `src/templates/fix_pr.template.md` — simplified fix-pr instructions (renamed from address-pr)
+- [x] Update `src/commands/init.ts` to create `.gauntlet/fix_pr.md` during init
+- [x] Update `installCommands()` in init.ts to install fix-pr symlink/copy alongside gauntlet and push-pr commands
 
 ### Dogfooding: Enable for agent-gauntlet project
-- [ ] Set `auto_fix_pr: true` in `.gauntlet/config.yml` for this project
+- [x] Set `auto_fix_pr: true` in `.gauntlet/config.yml` for this project
 
 ## 2. Tests
 - [ ] Add tests for `GAUNTLET_AUTO_FIX_PR` env var parsing
@@ -88,11 +88,11 @@ Note: End-to-end integration tests for the CI wait workflow are deferred — the
 These steps verify basic functionality that cannot be easily unit tested. They must be performed by the agent before marking the task complete.
 
 ### wait-ci command
-- [ ] 3.1 Run `bun src/index.ts wait-ci --help` — verify command is registered and shows `--timeout` and `--poll-interval` options
-- [ ] 3.2 Run `bun src/index.ts wait-ci` in this repo (no PR on current branch) — verify exit code 1 and JSON output with `ci_status: "error"`
+- [x] 3.1 Run `bun src/index.ts wait-ci --help` — verify command is registered and shows `--timeout` and `--poll-interval` options
+- [x] 3.2 Run `bun src/index.ts wait-ci` in this repo (no PR on current branch) — verify exit code 1 and JSON output with `ci_status: "error"`
 
 ### Marker file behavior
-- [ ] 3.3 Verify marker file helpers work correctly:
+- [x] 3.3 Verify marker file helpers work correctly:
   - Create `gauntlet_logs/.ci-wait-attempts` with `{"count":2}`
   - Call `readCIWaitAttempts()` — verify returns 2
   - Call `writeCIWaitAttempts(3)` — verify file updated

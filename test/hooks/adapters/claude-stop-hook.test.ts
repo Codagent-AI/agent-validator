@@ -1,6 +1,22 @@
 import { describe, expect, it } from "bun:test";
 import { ClaudeStopHookAdapter } from "../../../src/hooks/adapters/claude-stop-hook.js";
-import type { StopHookResult } from "../../../src/hooks/adapters/types.js";
+import type {
+	GauntletStatus,
+	StopHookResult,
+} from "../../../src/hooks/adapters/types.js";
+
+/**
+ * Factory for creating test StopHookResult objects with sensible defaults.
+ */
+function createResult(
+	overrides: Partial<StopHookResult> & { status: GauntletStatus },
+): StopHookResult {
+	return {
+		shouldBlock: false,
+		message: `Status: ${overrides.status}`,
+		...overrides,
+	};
+}
 
 describe("ClaudeStopHookAdapter", () => {
 	const adapter = new ClaudeStopHookAdapter();
@@ -70,11 +86,10 @@ describe("ClaudeStopHookAdapter", () => {
 
 	describe("formatOutput()", () => {
 		it("should output approve decision for non-blocking status", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "passed",
-				shouldBlock: false,
 				message: "✓ Gauntlet passed",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.decision).toBe("approve");
 			expect(output.status).toBe("passed");
@@ -82,12 +97,12 @@ describe("ClaudeStopHookAdapter", () => {
 		});
 
 		it("should output block decision for failed status", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "failed",
 				shouldBlock: true,
 				message: "✗ Gauntlet failed",
 				instructions: "Fix the issues",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.decision).toBe("block");
 			expect(output.status).toBe("failed");
@@ -96,12 +111,12 @@ describe("ClaudeStopHookAdapter", () => {
 		});
 
 		it("should output block decision for pr_push_required status", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "pr_push_required",
 				shouldBlock: true,
 				message: "✓ Gauntlet passed — PR needed",
 				pushPRReason: "Create a PR",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.decision).toBe("block");
 			expect(output.status).toBe("pr_push_required");
@@ -109,32 +124,75 @@ describe("ClaudeStopHookAdapter", () => {
 			expect(output.stopReason).toBe("Create a PR");
 		});
 
+		it("should output block decision for ci_failed status with ciFixReason", () => {
+			const result = createResult({
+				status: "ci_failed",
+				shouldBlock: true,
+				ciFixReason: "Fix the CI failures",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.decision).toBe("block");
+			expect(output.status).toBe("ci_failed");
+			expect(output.reason).toBe("Fix the CI failures");
+			expect(output.stopReason).toBe("Fix the CI failures");
+		});
+
+		it("should output block decision for ci_pending status with ciPendingReason", () => {
+			const result = createResult({
+				status: "ci_pending",
+				shouldBlock: true,
+				ciPendingReason: "Wait for CI to complete",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.decision).toBe("block");
+			expect(output.status).toBe("ci_pending");
+			expect(output.reason).toBe("Wait for CI to complete");
+			expect(output.stopReason).toBe("Wait for CI to complete");
+		});
+
+		it("should output approve decision for ci_passed status", () => {
+			const result = createResult({
+				status: "ci_passed",
+				message: "✓ CI passed",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.decision).toBe("approve");
+			expect(output.status).toBe("ci_passed");
+		});
+
+		it("should output approve decision for ci_timeout status", () => {
+			const result = createResult({
+				status: "ci_timeout",
+				message: "⚠ CI wait exhausted",
+			});
+			const output = JSON.parse(adapter.formatOutput(result));
+			expect(output.decision).toBe("approve");
+			expect(output.status).toBe("ci_timeout");
+		});
+
 		it("should include systemMessage for all statuses", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "no_config",
-				shouldBlock: false,
 				message: "○ Not a gauntlet project",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.systemMessage).toBe("○ Not a gauntlet project");
 		});
 
 		it("should use message as stopReason when not blocking", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "passed",
-				shouldBlock: false,
 				message: "✓ Gauntlet passed",
-			};
+			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.stopReason).toBe("✓ Gauntlet passed");
 		});
 
 		it("should output single-line JSON", () => {
-			const result: StopHookResult = {
+			const result = createResult({
 				status: "passed",
-				shouldBlock: false,
 				message: "✓ Gauntlet passed",
-			};
+			});
 			const output = adapter.formatOutput(result);
 			expect(output.includes("\n")).toBe(false);
 		});

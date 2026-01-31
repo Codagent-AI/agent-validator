@@ -3,7 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import YAML from "yaml";
+import type { WaitCIResult } from "../commands/wait-ci.js";
 import { loadGlobalConfig } from "../config/global.js";
+import type { StopHookConfig } from "../config/stop-hook-config.js";
 import { resolveStopHookConfig } from "../config/stop-hook-config.js";
 import { executeRun } from "../core/run-executor.js";
 import { getCategoryLogger } from "../output/app-logger.js";
@@ -30,8 +32,19 @@ interface MinimalConfig {
 	};
 	stop_hook?: {
 		auto_push_pr?: boolean;
+		auto_fix_pr?: boolean;
 	};
 }
+
+/**
+ * Marker file for tracking CI wait attempts.
+ */
+const CI_WAIT_ATTEMPTS_FILE = ".ci-wait-attempts";
+
+/**
+ * Maximum number of CI wait attempts before giving up.
+ */
+const MAX_CI_WAIT_ATTEMPTS = 3;
 
 /**
  * Default log directory when config doesn't specify one.
@@ -191,6 +204,11 @@ const STATUS_MESSAGES: Record<string, string> = {
 	failed: "✗ Gauntlet failed — issues must be fixed before stopping.",
 	pr_push_required:
 		"✓ Gauntlet passed — PR needs to be created or updated before stopping.",
+	ci_pending: "⏳ CI checks still running — waiting for completion.",
+	ci_failed: "✗ CI failed or review changes requested — fix issues and push.",
+	ci_passed: "✓ CI passed — all checks completed and no blocking reviews.",
+	ci_timeout:
+		"⚠ CI wait exhausted — max attempts reached, allowing stop for manual review.",
 	no_config: "○ Not a gauntlet project — no .gauntlet/config.yml found.",
 	stop_hook_active:
 		"↺ Stop hook cycle detected — allowing stop to prevent infinite loop.",
@@ -241,6 +259,113 @@ After the PR is created or updated, try to stop again. The stop hook will verify
 }
 
 /**
+ * Generate CI fix instructions for the agent.
+ */
+export function getCIFixInstructions(ciResult: WaitCIResult): string {
+	const sections: string[] = [];
+
+	if (ciResult.failed_checks.length > 0) {
+		const checkLines = ciResult.failed_checks.map(
+			(c) => `- ${c.name}: ${c.details_url}`,
+		);
+		sections.push(`**Failed checks:**\n${checkLines.join("\n")}`);
+	}
+
+	// review_comments already contains only blocking reviews (from wait-ci.ts)
+	// Filter out empty bodies for display
+	const blockingReviews = ciResult.review_comments.filter(
+		(r) => r.body && r.body.trim().length > 0,
+	);
+	if (blockingReviews.length > 0) {
+		const reviewLines = blockingReviews.map((r) => {
+			const location = r.path
+				? ` (${r.path}${r.line ? `:${r.line}` : ""})`
+				: "";
+			return `- ${r.author}: ${r.body}${location}`;
+		});
+		sections.push(
+			`**Review comments requiring changes:**\n${reviewLines.join("\n")}`,
+		);
+	}
+
+	const detailsSection =
+		sections.length > 0 ? `\n\n${sections.join("\n\n")}` : "";
+
+	return `**CI FAILED OR REVIEW CHANGES REQUESTED — FIX AND PUSH**${detailsSection}
+
+Fix the issues above, commit, and push your changes. After pushing, try to stop again.`;
+}
+
+/**
+ * Generate CI pending instructions for the agent.
+ */
+export function getCIPendingInstructions(
+	attemptNumber: number,
+	maxAttempts: number,
+): string {
+	return `**CI CHECKS STILL RUNNING — WAITING (attempt ${attemptNumber} of ${maxAttempts})**
+
+CI checks are still in progress. Wait approximately 30 seconds, then try to stop again.`;
+}
+
+/**
+ * Read CI wait attempts from marker file.
+ */
+export async function readCIWaitAttempts(logDir: string): Promise<number> {
+	try {
+		const markerPath = path.join(logDir, CI_WAIT_ATTEMPTS_FILE);
+		const content = await fs.readFile(markerPath, "utf-8");
+		const data = JSON.parse(content);
+		return typeof data.count === "number" ? data.count : 0;
+	} catch {
+		return 0;
+	}
+}
+
+/**
+ * Write CI wait attempts to marker file.
+ */
+export async function writeCIWaitAttempts(
+	logDir: string,
+	count: number,
+): Promise<void> {
+	const markerPath = path.join(logDir, CI_WAIT_ATTEMPTS_FILE);
+	await fs.writeFile(markerPath, JSON.stringify({ count }), "utf-8");
+}
+
+/**
+ * Clean up CI wait attempts marker file.
+ */
+export async function cleanCIWaitAttempts(logDir: string): Promise<void> {
+	try {
+		const markerPath = path.join(logDir, CI_WAIT_ATTEMPTS_FILE);
+		await fs.rm(markerPath, { force: true });
+	} catch {
+		// Ignore errors - file may not exist
+	}
+}
+
+/**
+ * Default timeout for CI wait (just under 5-minute stop hook budget).
+ */
+const DEFAULT_CI_WAIT_TIMEOUT = 270;
+
+/**
+ * Default poll interval for CI checks.
+ */
+const DEFAULT_CI_POLL_INTERVAL = 15;
+
+/**
+ * Run the wait-ci logic and return the result.
+ * Calls waitForCI directly instead of spawning a subprocess.
+ */
+export async function runWaitCI(cwd: string): Promise<WaitCIResult> {
+	// Import and call waitForCI directly to avoid subprocess spawning issues
+	const { waitForCI } = await import("../commands/wait-ci.js");
+	return waitForCI(DEFAULT_CI_WAIT_TIMEOUT, DEFAULT_CI_POLL_INTERVAL, cwd);
+}
+
+/**
  * Read the log_dir from project config without full validation.
  */
 export async function getLogDir(projectCwd: string): Promise<string> {
@@ -259,23 +384,32 @@ export async function getDebugLogConfig(
 }
 
 /**
- * Check if we should verify PR status after gates pass.
- * Loads stop hook config with 3-tier precedence and checks auto_push_pr.
+ * Get resolved stop hook config with 3-tier precedence.
  */
-async function shouldCheckPR(projectCwd: string): Promise<boolean> {
+async function getResolvedStopHookConfig(
+	projectCwd: string,
+): Promise<StopHookConfig | null> {
 	try {
 		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
 		const content = await fs.readFile(configPath, "utf-8");
 		const raw = YAML.parse(content) as { stop_hook?: Record<string, unknown> };
 		const projectStopHookConfig = raw?.stop_hook as
-			| { auto_push_pr?: boolean }
+			| { auto_push_pr?: boolean; auto_fix_pr?: boolean }
 			| undefined;
 		const globalConfig = await loadGlobalConfig();
-		const resolved = resolveStopHookConfig(projectStopHookConfig, globalConfig);
-		return resolved.auto_push_pr;
+		return resolveStopHookConfig(projectStopHookConfig, globalConfig);
 	} catch {
-		return false;
+		return null;
 	}
+}
+
+/**
+ * Check if we should verify PR status after gates pass.
+ * Loads stop hook config with 3-tier precedence and checks auto_push_pr.
+ */
+async function shouldCheckPR(projectCwd: string): Promise<boolean> {
+	const config = await getResolvedStopHookConfig(projectCwd);
+	return config?.auto_push_pr ?? false;
 }
 
 /**
@@ -372,45 +506,117 @@ async function refreshExecutionState(logDir?: string): Promise<void> {
 }
 
 /**
+ * Result from post-gauntlet checks (PR and CI).
+ */
+interface PostGauntletResult {
+	finalStatus: GauntletStatus;
+	pushPRReason?: string;
+	ciFixReason?: string;
+	ciPendingReason?: string;
+}
+
+/**
+ * Handle CI wait workflow after PR is confirmed up-to-date.
+ */
+async function handleCIWaitWorkflow(
+	projectCwd: string,
+	logDir: string,
+	gauntletStatus: GauntletStatus,
+): Promise<PostGauntletResult> {
+	const log = getStopHookLogger();
+	const attempts = await readCIWaitAttempts(logDir);
+
+	// Check if we've exceeded max attempts
+	if (attempts >= MAX_CI_WAIT_ATTEMPTS) {
+		log.info(
+			`CI wait attempts exhausted (${attempts}/${MAX_CI_WAIT_ATTEMPTS})`,
+		);
+		await cleanCIWaitAttempts(logDir);
+		return { finalStatus: "ci_timeout" };
+	}
+
+	log.info(
+		`Running wait-ci (attempt ${attempts + 1}/${MAX_CI_WAIT_ATTEMPTS})...`,
+	);
+	const ciResult = await runWaitCI(projectCwd);
+
+	switch (ciResult.ci_status) {
+		case "passed":
+			await cleanCIWaitAttempts(logDir);
+			return { finalStatus: "ci_passed" };
+
+		case "failed":
+			await cleanCIWaitAttempts(logDir);
+			await refreshExecutionState(logDir);
+			return {
+				finalStatus: "ci_failed",
+				ciFixReason: getCIFixInstructions(ciResult),
+			};
+
+		case "pending":
+			await writeCIWaitAttempts(logDir, attempts + 1);
+			await refreshExecutionState(logDir);
+			return {
+				finalStatus: "ci_pending",
+				ciPendingReason: getCIPendingInstructions(
+					attempts + 1,
+					MAX_CI_WAIT_ATTEMPTS,
+				),
+			};
+
+		default:
+			log.warn(`wait-ci error: ${ciResult.error_message}`);
+			await cleanCIWaitAttempts(logDir);
+			return { finalStatus: gauntletStatus };
+	}
+}
+
+/**
  * Check PR status after gauntlet passes and determine if the stop should be blocked.
- * Returns the final status and optional push-PR reason.
+ * Also handles CI wait workflow when auto_fix_pr is enabled.
  */
 async function postGauntletPRCheck(
 	projectCwd: string,
 	gauntletStatus: GauntletStatus,
 	options?: { logDir?: string },
-): Promise<{ finalStatus: GauntletStatus; pushPRReason?: string }> {
-	// Only check PR for passing statuses
+): Promise<PostGauntletResult> {
+	const log = getStopHookLogger();
+
 	if (!isPassingStatus(gauntletStatus)) {
 		return { finalStatus: gauntletStatus };
 	}
 
-	// Skip if auto_push_pr is disabled
-	if (!(await shouldCheckPR(projectCwd))) {
+	const config = await getResolvedStopHookConfig(projectCwd);
+	if (!config?.auto_push_pr) {
 		return { finalStatus: gauntletStatus };
 	}
 
 	const prStatus = await checkPRStatus(projectCwd);
-
-	// Graceful degradation on PR check errors
 	if (prStatus.error) {
-		getStopHookLogger().warn(`PR status check failed: ${prStatus.error}`);
-		return { finalStatus: gauntletStatus };
-	}
-
-	// PR exists and is up to date - allow stop
-	if (prStatus.prExists && prStatus.upToDate) {
+		log.warn(`PR status check failed: ${prStatus.error}`);
 		return { finalStatus: gauntletStatus };
 	}
 
 	// PR missing or outdated - block and request push
-	await refreshExecutionState(options?.logDir);
-	return {
-		finalStatus: "pr_push_required",
-		pushPRReason: getPushPRInstructions({
-			hasWarnings: gauntletStatus === "passed_with_warnings",
-		}),
-	};
+	if (!prStatus.prExists || !prStatus.upToDate) {
+		await refreshExecutionState(options?.logDir);
+		return {
+			finalStatus: "pr_push_required",
+			pushPRReason: getPushPRInstructions({
+				hasWarnings: gauntletStatus === "passed_with_warnings",
+			}),
+		};
+	}
+
+	// PR exists and is up to date - check if we should wait for CI
+	if (!config.auto_fix_pr || !options?.logDir) {
+		if (config.auto_fix_pr && !options?.logDir) {
+			log.warn("No logDir provided for CI wait workflow");
+		}
+		return { finalStatus: gauntletStatus };
+	}
+
+	return handleCIWaitWorkflow(projectCwd, options.logDir, gauntletStatus);
 }
 
 /**
@@ -455,11 +661,11 @@ export class StopHookHandler {
 
 		// Post-gauntlet PR check: when gates pass and auto_push_pr is enabled,
 		// verify a PR exists and is up to date before allowing stop.
-		const { finalStatus, pushPRReason } = await postGauntletPRCheck(
-			ctx.cwd,
-			result.status,
-			{ logDir: this.logDir },
-		);
+		// Also handles CI wait workflow when auto_fix_pr is enabled.
+		const { finalStatus, pushPRReason, ciFixReason, ciPendingReason } =
+			await postGauntletPRCheck(ctx.cwd, result.status, {
+				logDir: this.logDir,
+			});
 
 		await this.debugLogger?.logStopHook(
 			isBlockingStatus(finalStatus) ? "block" : "allow",
@@ -480,6 +686,8 @@ export class StopHookHandler {
 					? getStopReasonInstructions(result.gateResults)
 					: undefined,
 			pushPRReason,
+			ciFixReason,
+			ciPendingReason,
 			message,
 			intervalMinutes: result.intervalMinutes,
 			gateResults: result.gateResults,
@@ -490,3 +698,6 @@ export class StopHookHandler {
 // Re-export types and functions for backward compatibility
 export type { PRStatusResult };
 export { checkPRStatus, shouldCheckPR };
+
+// Export CI helpers for testing
+export { MAX_CI_WAIT_ATTEMPTS };

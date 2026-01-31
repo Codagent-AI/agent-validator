@@ -30,6 +30,10 @@ export interface StopHookResult {
 	instructions?: string;
 	/** PR push instructions when blocking due to pr_push_required */
 	pushPRReason?: string;
+	/** CI fix instructions when blocking due to ci_failed */
+	ciFixReason?: string;
+	/** CI pending instructions when blocking due to ci_pending */
+	ciPendingReason?: string;
 	/** Human-friendly status message */
 	message: string;
 	/** Interval minutes (when status is interval_not_elapsed) */

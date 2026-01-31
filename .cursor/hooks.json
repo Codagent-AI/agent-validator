@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "bun src/index.ts stop-hook",
+        "timeout": 300
+      }
+    ]
+  }
+}

@@ -14,6 +14,7 @@ import {
 	registerRunCommand,
 	registerStopHookCommand,
 	registerValidateCommand,
+	registerWaitCICommand,
 } from "./commands/index.js";
 
 const program = new Command();
@@ -35,6 +36,7 @@ registerHealthCommand(program);
 registerInitCommand(program);
 registerValidateCommand(program);
 registerStopHookCommand(program);
+registerWaitCICommand(program);
 registerHelpCommand(program);
 
 // Default action: help

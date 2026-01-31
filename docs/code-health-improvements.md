@@ -34,9 +34,38 @@ This would reduce string passing but adds complexity. Consider if the codebase g
 - `test/hooks/adapters/cursor-stop-hook.test.ts`
 - `test/hooks/adapters/claude-stop-hook.test.ts`
 - `test/hooks/stop-hook-handler.test.ts`
+- `test/config/stop-hook-config.test.ts`
 
-**Issue:** Similar test structures with repeated `StopHookResult` object creation.
+**Issue:** Similar test structures with repeated `StopHookResult` object creation and env var setup/teardown.
 **Why deferred:** Test readability and independence are more important than DRY principles. Each test should be self-contained and easy to understand. This is acceptable in test code.
+
+### Complex Methods (add-auto-fix-pr)
+
+**File:** `src/hooks/stop-hook-handler.ts`
+**Function:** `postGauntletPRCheck` (cyclomatic complexity: 16)
+**Issue:** The CI workflow logic adds necessary branching for different CI states.
+**Why deferred:** The complexity is inherent to the feature requirements - handling PR check, CI wait, retry tracking, and multiple CI states. Breaking this into smaller functions would obscure the flow.
+
+**File:** `src/config/stop-hook-config.ts`
+**Functions:** `parseStopHookEnvVars` (complexity: 20), `resolveStopHookConfig` (complexity: 15)
+**Issue:** Each config field requires similar parsing/resolution logic.
+**Why deferred:** The repetitive structure is intentional for consistency. A more abstract approach would reduce readability.
+
+**File:** `src/hooks/adapters/claude-stop-hook.ts` and `cursor-stop-hook.ts`
+**Function:** `formatOutput` (complexity: 10)
+**Issue:** Each CI status requires specific output formatting.
+**Why deferred:** The switch-like logic is the clearest way to handle status-specific formatting.
+
+**File:** `src/commands/init.ts`
+**Functions:** `promptAndInstallCommands`, `registerInitCommand`
+**Issue:** Interactive prompts and command installation have inherent complexity.
+**Why deferred:** These are initialization functions that run once. The complexity is acceptable for the user experience they provide.
+
+### Primitive Obsession
+
+**File:** `src/hooks/stop-hook-handler.ts`
+**Issue:** 53.6% of function arguments are primitive types.
+**Why deferred:** Same as String-Heavy Function Arguments above. Would require a `ProjectContext` type refactor.
 
 ## Notes
 
