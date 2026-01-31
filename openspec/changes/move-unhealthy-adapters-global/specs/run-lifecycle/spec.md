@@ -30,6 +30,8 @@ The system MUST store unhealthy adapter cooldown state in a global state file lo
 - **THEN** the global unhealthy adapter state file SHALL remain intact
 
 ### Requirement: Runtime Usage Limit Detection
+This requirement MUST record unhealthy adapters in the global unhealthy adapter state file rather than `.execution_state`.
+
 The system MUST detect usage limits from actual review adapter output rather than from preflight health probes. When a review adapter returns output or throws an error that matches usage-limit patterns, the system SHALL mark the review as failed with an error status and record the adapter as unhealthy in the global unhealthy adapter state file.
 
 #### Scenario: Usage limit detected in review output
@@ -52,6 +54,8 @@ The system MUST detect usage limits from actual review adapter output rather tha
 - **AND** the adapter SHALL NOT be marked unhealthy
 
 ### Requirement: Adapter Cooldown and Recovery
+This requirement MUST read and clear cooldown state from the global unhealthy adapter state file rather than `.execution_state`.
+
 Adapters marked as unhealthy SHALL be skipped for a 1-hour cooldown period. After the cooldown expires, the system SHALL attempt to use the adapter again. If the adapter's CLI binary is available, the unhealthy flag SHALL be cleared in the global unhealthy adapter state file.
 
 #### Scenario: Adapter within cooldown period

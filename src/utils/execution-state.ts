@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getDebugLogger } from "./debug-log.js";
 
 const EXECUTION_STATE_FILENAME = ".execution_state";
 const SESSION_REF_FILENAME = ".session_ref";
@@ -13,12 +12,6 @@ function extractUnhealthyAdapters(
 		return undefined;
 	}
 	return rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>;
-}
-
-async function logExecutionStateEvent(message: string): Promise<void> {
-	const logger = getDebugLogger();
-	if (!logger) return;
-	await logger.logExecutionState(message);
 }
 
 export interface UnhealthyAdapter {
@@ -150,13 +143,6 @@ export async function writeExecutionState(logDir: string): Promise<void> {
 	]);
 	const existingUnhealthy = extractUnhealthyAdapters(rawState);
 
-	const existingAdapters = existingUnhealthy
-		? Object.keys(existingUnhealthy)
-		: [];
-	await logExecutionStateEvent(
-		`write start existing_unhealthy=${existingAdapters.join(",") || "none"}`,
-	);
-
 	const state: ExecutionState = {
 		last_run_completed_at: new Date().toISOString(),
 		branch,
@@ -168,13 +154,6 @@ export async function writeExecutionState(logDir: string): Promise<void> {
 	if (existingUnhealthy) {
 		state.unhealthy_adapters = existingUnhealthy;
 	}
-
-	const finalAdapters = state.unhealthy_adapters
-		? Object.keys(state.unhealthy_adapters)
-		: [];
-	await logExecutionStateEvent(
-		`write final_unhealthy=${finalAdapters.join(",") || "none"}`,
-	);
 
 	// Ensure the log directory exists
 	await fs.mkdir(logDir, { recursive: true });
@@ -412,17 +391,11 @@ export async function markAdapterUnhealthy(
 
 	const adapters =
 		(rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>) ?? {};
-	const existingAdapters = Object.keys(adapters);
 	adapters[adapterName] = {
 		marked_at: new Date().toISOString(),
 		reason,
 	};
 	rawData.unhealthy_adapters = adapters;
-
-	const updatedAdapters = Object.keys(adapters);
-	await logExecutionStateEvent(
-		`mark_unhealthy adapter=${adapterName} existing=${existingAdapters.join(",") || "none"} updated=${updatedAdapters.join(",") || "none"}`,
-	);
 
 	await fs.mkdir(logDir, { recursive: true });
 	await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), "utf-8");

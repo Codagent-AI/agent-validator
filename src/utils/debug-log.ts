@@ -230,13 +230,6 @@ export class DebugLogger {
 	}
 
 	/**
-	 * Log execution state events for debugging state persistence.
-	 */
-	async logExecutionState(message: string): Promise<void> {
-		await this.write(`EXEC_STATE ${message}`);
-	}
-
-	/**
 	 * Write a log entry with timestamp.
 	 */
 	private async write(message: string): Promise<void> {

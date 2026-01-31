@@ -17,6 +17,5 @@ Project-scoped unhealthy adapter tracking is reset by `clean`, causing adapters 
   - `src/utils/unhealthy-adapters.ts` (new)
   - `src/utils/execution-state.ts` (remove unhealthy adapter persistence)
   - `src/gates/review.ts` (use global unhealthy adapter state)
-  - `src/config/global.ts` (global state path helper)
   - Tests: `test/utils/execution-state.test.ts`, `test/gates/review.test.ts`
   - Docs: `docs/cli-invocation-details.md`

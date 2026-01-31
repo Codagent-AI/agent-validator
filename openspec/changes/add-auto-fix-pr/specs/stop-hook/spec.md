@@ -264,7 +264,7 @@ When blocking with `ci_pending` status, the `reason` prompt SHALL instruct the a
 - **WHEN** the `reason` prompt is generated
 - **THEN** it SHALL instruct the agent to wait approximately 30 seconds and then try to stop again
 
-### Requirement: Cursor Protocol CI Status Handling
+### Requirement: Adapter Protocol CI Status Handling
 
 Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their output formatting.
 
@@ -284,14 +284,14 @@ Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_p
 - **GIVEN** the handler returns status `ci_passed`
 - **AND** the protocol is Cursor
 - **WHEN** `formatOutput(result)` is called
-- **THEN** the response SHALL be an empty object `{}` or include `systemMessage`
+- **THEN** the response SHALL be an empty object `{}`
 - **AND** no `followup_message` field SHALL be present
 
 #### Scenario: Cursor adapter handles ci_timeout
 - **GIVEN** the handler returns status `ci_timeout`
 - **AND** the protocol is Cursor
 - **WHEN** `formatOutput(result)` is called
-- **THEN** the response SHALL be an empty object `{}` or include `systemMessage`
+- **THEN** the response SHALL be an empty object `{}`
 - **AND** no `followup_message` field SHALL be present
 
 #### Scenario: Claude Code adapter handles ci_failed
@@ -307,3 +307,17 @@ Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_p
 - **WHEN** `formatOutput(result)` is called
 - **THEN** the response SHALL have `decision: "block"`
 - **AND** `reason` SHALL contain the `ciPendingReason` instructions
+
+#### Scenario: Claude Code adapter handles ci_passed
+- **GIVEN** the handler returns status `ci_passed`
+- **AND** the protocol is Claude Code
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL have `decision: "approve"`
+- **AND** `reason` SHALL contain the `ci_passed` status message
+
+#### Scenario: Claude Code adapter handles ci_timeout
+- **GIVEN** the handler returns status `ci_timeout`
+- **AND** the protocol is Claude Code
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL have `decision: "approve"`
+- **AND** `reason` SHALL contain the `ci_timeout` status message

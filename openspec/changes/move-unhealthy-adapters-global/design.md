@@ -1,6 +1,20 @@
 ## Context
 Unhealthy adapter cooldowns are currently stored in the project log directory’s `.execution_state`. Manual `clean` deletes this file, so adapters that hit usage limits (e.g. Codex) are retried immediately. This defeats cooldown behavior and wastes review iterations. The fix is to store unhealthy adapter state globally instead of per project.
 
+## Pre-factoring
+
+CodeScene hotspot analysis for files modified by this change:
+
+| File | Score | Status |
+|------|-------|--------|
+| `src/utils/execution-state.ts` | 9.38 (Green) | Healthy |
+| `src/gates/review.ts` | 7.2 (Yellow) | Hotspot candidate |
+
+**Hotspot details (`src/gates/review.ts`):**
+- `ReviewGateExecutor.getDiff` — Bumpy Road, Complex Method (cc=25), Large Method (LoC=95)
+
+**Strategy:** Before implementing global unhealthy adapter storage, refactor `ReviewGateExecutor.getDiff` to reduce branching and length (extract diff-source resolution and validation steps into helpers). This keeps new adapter-selection changes from further degrading a hotspot.
+
 ## Goals / Non-Goals
 - Goals:
   - Persist unhealthy adapter cooldowns across projects and cleans.

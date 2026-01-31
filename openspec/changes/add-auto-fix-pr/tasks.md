@@ -4,9 +4,7 @@
 
 **Dependency**: `add-auto-push-pr` must be implemented before starting this change.
 
-See `design.md` Pre-factoring section for full CodeScene analysis.
-
-Hotspot modified by this change: `stop-hook.ts` (7.07, cc=36). Refactoring deferred: CI workflow logic (wait-ci spawning, retry tracking, instruction generation) will be added in extracted helper functions rather than modifying the existing complex `registerStopHookCommand`, avoiding worsening the hotspot while minimizing risk. `isSuccessStatus()` already exists at `src/types/gauntlet-status.ts:60`.
+See `design.md` Pre-factoring section for full CodeScene analysis. No hotspots modified.
 
 ## 1. Implementation
 
@@ -76,13 +74,14 @@ Hotspot modified by this change: `stop-hook.ts` (7.07, cc=36). Refactoring defer
   - [ ] Mixed state: some failed + some pending → immediate failure
 - [ ] Add tests for `runWaitCI()` helper: JSON parsing of wait-ci output, handling of spawn failures
 - [ ] Add tests for CI wait attempt marker file read/write/clean
+- [ ] Add unit tests for CI workflow branching in `StopHookHandler.execute()` by mocking `runWaitCI` (ci_passed/ci_failed/ci_pending/ci_timeout)
 - [ ] Add tests for fix-pr instruction content (includes failure details, fix-and-push guidance)
 - [ ] Add tests for pending instruction content (includes attempt numbers and ~30s wait)
 - [ ] Add tests for init creating fix_pr.md template
-- [ ] Add tests in `test/hooks/adapters/claude-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed` use `ciFixReason`/`ciPendingReason` in `reason` field)
-- [ ] Add tests in `test/hooks/adapters/cursor-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed` use `ciFixReason`/`ciPendingReason` in `followup_message` field)
+- [ ] Add tests in `test/hooks/adapters/claude-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
+- [ ] Add tests in `test/hooks/adapters/cursor-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
 
-Note: Full integration tests for the CI wait workflow in `StopHookHandler` are deferred — the workflow involves external dependencies (`gh` CLI, GitHub API, actual CI state) that are impractical to mock reliably. The Manual Verification section covers end-to-end testing.
+Note: End-to-end integration tests for the CI wait workflow are deferred — the workflow involves external dependencies (`gh` CLI, GitHub API, actual CI state) that are impractical to mock reliably. The Manual Verification section covers end-to-end testing; handler-level unit tests are required above.
 
 ## 3. Manual Verification
 

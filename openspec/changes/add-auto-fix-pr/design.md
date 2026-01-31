@@ -19,10 +19,10 @@ CodeScene hotspot analysis for files modified by this change:
 
 | File | Score | Status |
 |------|-------|--------|
-| `src/hooks/stop-hook-handler.ts` | TBD | Core handler logic — CI workflow will be added here |
-| `src/hooks/adapters/claude-stop-hook.ts` | TBD | Needs to handle CI status output formatting |
-| `src/hooks/adapters/cursor-stop-hook.ts` | TBD | Needs to handle CI status output formatting |
-| `src/hooks/adapters/types.ts` | TBD | Add `ciFixReason`, `ciPendingReason` to `StopHookResult` |
+| `src/hooks/stop-hook-handler.ts` | 9.68 (Green) | Healthy |
+| `src/hooks/adapters/claude-stop-hook.ts` | 10.0 (Optimal) | Healthy |
+| `src/hooks/adapters/cursor-stop-hook.ts` | 10.0 (Optimal) | Healthy |
+| `src/hooks/adapters/types.ts` | N/A | Not analyzed by CodeScene (no score returned) |
 | `src/config/stop-hook-config.ts` | 9.24 (Green) | Healthy |
 | `src/config/schema.ts` | 10.0 (Optimal) | Healthy |
 | `src/config/global.ts` | 9.53 (Green) | Healthy |
