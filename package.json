@@ -37,7 +37,8 @@
     "lint": "biome check src",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "npm publish"
+    "release": "npm publish",
+    "gen-changeset": "bun scripts/gen-changeset.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.11",
