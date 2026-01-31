@@ -5,13 +5,13 @@ Unhealthy adapter cooldowns are currently stored in the project log directory’
 
 CodeScene hotspot analysis for files modified by this change:
 
-| File | Score | Status |
-|------|-------|--------|
-| `src/utils/execution-state.ts` | 9.38 (Green) | Healthy |
-| `src/gates/review.ts` | 7.2 (Yellow) | Hotspot candidate |
+| File                                 | Score        | Status            |
+| :----------------------------------- | :----------- | :---------------- |
+| `src/utils/execution-state.ts:8`     | 9.38 (Green) | Healthy           |
+| `src/gates/review.ts:878`            | 7.2 (Yellow) | Hotspot candidate |
 
-**Hotspot details (`src/gates/review.ts`):**
-- `ReviewGateExecutor.getDiff` — Bumpy Road, Complex Method (cc=25), Large Method (LoC=95)
+**Hotspot details (`src/gates/review.ts:878`):**
+- `src/gates/review.ts:878-ReviewGateExecutor.getDiff` — Bumpy Road, Complex Method (cc=25), Large Method (LoC=95)
 
 **Strategy:** Before implementing global unhealthy adapter storage, refactor `ReviewGateExecutor.getDiff` to reduce branching and length (extract diff-source resolution and validation steps into helpers). This keeps new adapter-selection changes from further degrading a hotspot.
 

@@ -12,10 +12,10 @@ Project-scoped unhealthy adapter tracking is reset by `clean`, causing adapters 
 - Update documentation and tests to reflect global storage.
 
 ## Impact
-- Affected specs: `run-lifecycle`
+- Affected specs: `specs/run-lifecycle/spec.md`
 - Affected code:
-  - `src/utils/unhealthy-adapters.ts` (new)
-  - `src/utils/execution-state.ts` (remove unhealthy adapter persistence)
-  - `src/gates/review.ts` (use global unhealthy adapter state)
-  - Tests: `test/utils/execution-state.test.ts`, `test/gates/review.test.ts`
-  - Docs: `docs/cli-invocation-details.md`
+  - `src/utils/unhealthy-adapters.ts:1` (new)
+  - `src/utils/execution-state.ts:8` (remove unhealthy adapter persistence)
+  - `src/gates/review.ts:878` (use global unhealthy adapter state)
+  - Tests: `test/utils/execution-state.test.ts:1`, `test/gates/review.test.ts:1`
+  - Docs: `docs/cli-invocation-details.md:1`

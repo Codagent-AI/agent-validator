@@ -8,7 +8,11 @@ const SESSION_REF_FILENAME = ".session_ref";
 function extractUnhealthyAdapters(
 	rawData: Record<string, unknown> | null,
 ): Record<string, UnhealthyAdapter> | undefined {
-	if (!rawData || typeof rawData.unhealthy_adapters !== "object") {
+	if (
+		!rawData ||
+		rawData.unhealthy_adapters === null ||
+		typeof rawData.unhealthy_adapters !== "object"
+	) {
 		return undefined;
 	}
 	return rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>;

@@ -29,18 +29,18 @@ The system MUST use a single `GauntletStatus` type for all gauntlet outcomes, sh
 
 ### Requirement: StopHookResult CI Fields
 
-The `StopHookResult` interface SHALL include additional fields for CI workflow instructions.
+The `StopHookResult` interface (`src/hooks/adapters/types.ts:24`) SHALL include additional fields for CI workflow instructions.
 
 #### Scenario: ciFixReason field for ci_failed status
 - **GIVEN** the handler determines status is `ci_failed`
 - **WHEN** the `StopHookResult` is constructed
-- **THEN** it SHALL include a `ciFixReason` field with fix instructions
+- **THEN** it SHALL include a `ciFixReason` field with fix instructions on `StopHookResult` (`src/hooks/adapters/types.ts:24`)
 - **AND** adapters SHALL use this field for their blocking response message
 
 #### Scenario: ciPendingReason field for ci_pending status
 - **GIVEN** the handler determines status is `ci_pending`
 - **WHEN** the `StopHookResult` is constructed
-- **THEN** it SHALL include a `ciPendingReason` field with wait-and-retry instructions
+- **THEN** it SHALL include a `ciPendingReason` field with wait-and-retry instructions on `StopHookResult` (`src/hooks/adapters/types.ts:24`)
 - **AND** adapters SHALL use this field for their blocking response message
 
 ### Requirement: Auto Fix PR Configuration
@@ -266,7 +266,7 @@ When blocking with `ci_pending` status, the `reason` prompt SHALL instruct the a
 
 ### Requirement: Adapter Protocol CI Status Handling
 
-Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their output formatting.
+Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their output formatting (`src/hooks/adapters/cursor-stop-hook.ts:77`, `src/hooks/adapters/claude-stop-hook.ts:55`; spec reference: `specs/stop-hook/spec.md`).
 
 #### Scenario: Cursor adapter handles ci_failed
 - **GIVEN** the handler returns status `ci_failed` with `ciFixReason`

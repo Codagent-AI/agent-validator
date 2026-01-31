@@ -427,7 +427,7 @@ The stop-hook command MUST always include a human-friendly status message in the
 - **GIVEN** the stop-hook skips the gauntlet due to interval not elapsed
 - **WHEN** the response is output
 - **THEN** the `stopReason` SHALL indicate that the run interval has not elapsed
-- **AND** it MAY include the configured interval duration
+- **AND** it SHALL include the configured interval duration
 
 #### Scenario: Message format for no_config
 - **GIVEN** the stop-hook detects no gauntlet configuration
@@ -506,7 +506,7 @@ The system SHALL include a `pr_push_required` status in the `GauntletStatus` typ
 
 ### Requirement: Post-Gauntlet PR Detection
 
-When `auto_push_pr` is enabled and the gauntlet returns a success status, the stop hook SHALL check whether a PR exists and is up to date for the current branch before deciding to block. PR detection SHALL only be triggered by direct gauntlet success statuses (`passed`, `passed_with_warnings`), not by termination statuses or other approval statuses.
+When `auto_push_pr` is enabled and the gauntlet returns a success status, the stop hook SHALL check whether a PR exists and is up-to-date for the current branch before deciding to block. PR detection SHALL only be triggered by direct gauntlet success statuses (`passed`, `passed_with_warnings`), not by termination statuses or other approval statuses.
 
 #### Scenario: No PR exists after gates pass
 - **GIVEN** `auto_push_pr` is `true`
@@ -516,7 +516,7 @@ When `auto_push_pr` is enabled and the gauntlet returns a success status, the st
 - **THEN** it SHALL block with `pr_push_required` status
 - **AND** the `reason` field SHALL contain instructions for creating or updating a PR
 
-#### Scenario: PR exists but is not up to date
+#### Scenario: PR exists but is not up-to-date
 - **GIVEN** `auto_push_pr` is `true`
 - **AND** the gauntlet returns `passed` or `passed_with_warnings`
 - **AND** an open PR exists for the current branch
@@ -525,7 +525,7 @@ When `auto_push_pr` is enabled and the gauntlet returns a success status, the st
 - **THEN** it SHALL block with `pr_push_required` status
 - **AND** the `reason` field SHALL contain instructions for creating or updating a PR
 
-#### Scenario: PR exists and is up to date
+#### Scenario: PR exists and is up-to-date
 - **GIVEN** `auto_push_pr` is `true`
 - **AND** the gauntlet returns `passed` or `passed_with_warnings`
 - **AND** an open PR exists for the current branch
@@ -769,7 +769,7 @@ The system MUST define a `StopHookAdapter` interface that protocol-specific impl
 
 ### Requirement: PR Push Required Status Handling
 
-Both Claude Code and Cursor adapters MUST handle the `pr_push_required` status returned by the handler when `auto_push_pr` is enabled and gates pass but no PR exists or PR is not up to date.
+Both Claude Code and Cursor adapters MUST handle the `pr_push_required` status returned by the handler when `auto_push_pr` is enabled and gates pass but no PR exists or PR is not up-to-date.
 
 #### Scenario: Claude Code adapter handles pr_push_required
 - **GIVEN** the handler returns status `pr_push_required` with `pushPRReason`

@@ -100,6 +100,6 @@ These steps verify basic functionality that cannot be easily unit tested. They m
 
 ## 4. Validation
 
-There are no additional validation tasks. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
+There are no validation tasks that need to be explicitly run. The stop hook will execute the full gauntlet of verification tasks and provide direction on what needs to be fixed.
 
 If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.
