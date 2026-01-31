@@ -566,19 +566,50 @@ describe("Execution State Git Operations (mocked)", () => {
 	});
 
 	describe("resolveFixBase", () => {
-		it("returns null when commit is merged into base branch", async () => {
-			// isCommitInBranch returns true (merged)
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() => {
-				return createMockSpawn("", 0) as ReturnType<typeof childProcess.spawn>;
-			});
+		const COMMIT = "abc123def456789012345678901234567890abcd";
+		const STASH_REF = "stash123456789012345678901234567890ab";
 
-			const state = {
+		function mergedState(overrides?: Partial<{ working_tree_ref: string }>) {
+			return {
 				last_run_completed_at: new Date().toISOString(),
 				branch: "feature",
-				commit: "abc123def456789012345678901234567890abcd",
-				working_tree_ref: "stash123456789012345678901234567890ab",
+				commit: COMMIT,
+				...overrides,
 			};
+		}
 
+		/** Mock spawn where --is-ancestor exits with `ancestorCode` and cat-file exits with `catFileCode` */
+		function mockAncestorAndCatFile(ancestorCode: number, catFileCode: number) {
+			return spyOn(childProcess, "spawn").mockImplementation(
+				(_cmd, args) => {
+					const argsArray = args as string[];
+					if (argsArray.includes("--is-ancestor")) {
+						return createMockSpawn("", ancestorCode) as ReturnType<typeof childProcess.spawn>;
+					}
+					return createMockSpawn("", catFileCode) as ReturnType<typeof childProcess.spawn>;
+				},
+			);
+		}
+
+		it("returns working_tree_ref when commit merged but working_tree_ref is valid", async () => {
+			spawnSpy = mockAncestorAndCatFile(0, 0);
+			const state = mergedState({ working_tree_ref: STASH_REF });
+			const result = await resolveFixBase(state, "main");
+			expect(result.fixBase).toBe(STASH_REF);
+			expect(result.warning).toContain("Commit merged into base branch");
+		});
+
+		it("returns null when commit merged and working_tree_ref is gc'd", async () => {
+			spawnSpy = mockAncestorAndCatFile(0, 128);
+			const state = mergedState({ working_tree_ref: STASH_REF });
+			const result = await resolveFixBase(state, "main");
+			expect(result.fixBase).toBeNull();
+			expect(result.warning).toBeUndefined();
+		});
+
+		it("returns null when commit merged and no working_tree_ref", async () => {
+			spawnSpy = mockAncestorAndCatFile(0, 0);
+			const state = mergedState();
 			const result = await resolveFixBase(state, "main");
 			expect(result.fixBase).toBeNull();
 			expect(result.warning).toBeUndefined();

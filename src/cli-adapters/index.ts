@@ -4,6 +4,38 @@ export interface CLIAdapterHealth {
 	message?: string;
 }
 
+import type { ChildProcess } from "node:child_process";
+
+/**
+ * Collects stderr from a child process and returns a getter for the accumulated output.
+ * Also forwards each chunk to the optional onOutput callback.
+ */
+export function collectStderr(
+	child: ChildProcess,
+	onOutput?: (text: string) => void,
+): () => string {
+	const chunks: string[] = [];
+	child.stderr?.on("data", (data: Buffer) => {
+		const text = data.toString();
+		chunks.push(text);
+		onOutput?.(text);
+	});
+	return () => chunks.join("");
+}
+
+/**
+ * Builds an Error for a non-zero process exit, including stderr if available.
+ */
+export function processExitError(
+	code: number | null,
+	getStderr: () => string,
+): Error {
+	const stderr = getStderr();
+	return new Error(
+		`Process exited with code ${code}${stderr ? `\n${stderr}` : ""}`,
+	);
+}
+
 export function isUsageLimit(output: string): boolean {
 	const lower = output.toLowerCase();
 	return (

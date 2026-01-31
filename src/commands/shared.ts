@@ -8,6 +8,7 @@ import {
 	deleteExecutionState,
 	getCurrentBranch,
 	getExecutionStateFilename,
+	gitObjectExists,
 	isCommitInBranch,
 	readExecutionState,
 } from "../utils/execution-state.js";
@@ -53,6 +54,12 @@ export async function shouldAutoClean(
 	try {
 		const isMerged = await isCommitInBranch(state.commit, baseBranch);
 		if (isMerged) {
+			if (state.working_tree_ref) {
+				const refValid = await gitObjectExists(state.working_tree_ref);
+				if (refValid) {
+					return { clean: true, reason: "commit merged", resetState: false };
+				}
+			}
 			return { clean: true, reason: "commit merged", resetState: true };
 		}
 	} catch {
