@@ -7,7 +7,6 @@ cli:
     - codex
     - gemini
     - claude
-  check_usage_limit: true
 stop_hook:
   auto_push_pr: true
 entry_points:
@@ -21,6 +20,7 @@ entry_points:
       - test
       - security-code
       - schema-validate
+      - code-health
   - path: "package.json"
     checks:
       - build

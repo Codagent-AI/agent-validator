@@ -10,6 +10,10 @@ import type { ReviewGateExecutor } from "../../src/gates/review.js";
 import { Logger } from "../../src/output/logger.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-review-logs-${Date.now()}`);
+const COOLDOWN_STATE_DIR = path.join(
+	process.cwd(),
+	`test-review-cooldown-${Date.now()}`,
+);
 
 describe("ReviewGateExecutor Logging", () => {
 	let logger: Logger;
@@ -56,6 +60,8 @@ describe("ReviewGateExecutor Logging", () => {
 				createMockAdapter("claude"),
 			],
 			getValidCLITools: () => ["codex", "claude", "gemini"],
+			isUsageLimit: (output: string) =>
+				output.toLowerCase().includes("usage limit"),
 		}));
 
 		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
@@ -260,5 +266,230 @@ Violations:
 		expect(details.some((d: string) => d.includes("Rename variable"))).toBe(
 			true,
 		);
+	});
+});
+
+describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
+	let logger: Logger;
+
+	const FAKE_DIFF = `diff --git a/src/test.ts b/src/test.ts\nindex abc..def 100644\n--- a/src/test.ts\n+++ b/src/test.ts\n@@ -1 +1 @@\n-old\n+new`;
+
+	function createMockAdapter(
+		name: string,
+		overrides?: Partial<CLIAdapter>,
+	): CLIAdapter {
+		return {
+			name,
+			isAvailable: async () => true,
+			checkHealth: async () => ({ status: "healthy" as const }),
+			execute: async () => JSON.stringify({ status: "pass", message: "OK" }),
+			getProjectCommandDir: () => null,
+			getUserCommandDir: () => null,
+			getCommandExtension: () => "md",
+			canUseSymlink: () => false,
+			transformCommand: (c: string) => c,
+			...overrides,
+		} as unknown as CLIAdapter;
+	}
+
+	function mockAdapterModule(
+		factory: (name: string) => CLIAdapter,
+		names: string[],
+	) {
+		const adapters = names.map((n) => factory(n));
+		mock.module("../../src/cli-adapters/index.js", () => ({
+			getAdapter: (name: string) => factory(name),
+			getAllAdapters: () => adapters,
+			getProjectCommandAdapters: () => adapters,
+			getUserCommandAdapters: () => adapters,
+			getValidCLITools: () => names,
+			isUsageLimit: (output: string) =>
+				output.toLowerCase().includes("usage limit"),
+		}));
+	}
+
+	async function createExecutor(): Promise<ReviewGateExecutor> {
+		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
+		const exec = new ReviewGateExecutor();
+		// biome-ignore lint/suspicious/noExplicitAny: Mocking private method for testing
+		(exec as any).getDiff = async () => FAKE_DIFF;
+		return exec;
+	}
+
+	async function runReview(
+		executor: ReviewGateExecutor,
+		preferences: string[],
+	) {
+		const config: ReviewGateConfig & ReviewPromptFrontmatter = {
+			name: "code-quality",
+			cli_preference: preferences,
+			num_reviews: 1,
+		};
+		const loggerFactory = logger.createLoggerFactory("review:src:test");
+		return executor.execute(
+			"review:src:test",
+			config,
+			"src/",
+			loggerFactory,
+			"main",
+			undefined,
+			undefined,
+			"high",
+			undefined,
+			COOLDOWN_STATE_DIR,
+		);
+	}
+
+	async function writeState(
+		unhealthyAdapters: Record<string, { marked_at: string; reason: string }>,
+	) {
+		await fs.writeFile(
+			path.join(COOLDOWN_STATE_DIR, ".execution_state"),
+			JSON.stringify({
+				last_run_completed_at: new Date().toISOString(),
+				branch: "main",
+				commit: "abc123",
+				unhealthy_adapters: unhealthyAdapters,
+			}),
+		);
+	}
+
+	beforeEach(async () => {
+		await fs.mkdir(COOLDOWN_STATE_DIR, { recursive: true });
+		const logsDir = path.join(COOLDOWN_STATE_DIR, "logs");
+		await fs.mkdir(logsDir, { recursive: true });
+		logger = new Logger(logsDir);
+	});
+
+	afterEach(async () => {
+		await fs.rm(COOLDOWN_STATE_DIR, { recursive: true, force: true });
+		mock.restore();
+	});
+
+	async function runWithExecuteBehavior(overrides: Partial<CLIAdapter>) {
+		mockAdapterModule((name) => createMockAdapter(name, overrides), ["codex"]);
+		const executor = await createExecutor();
+		return runReview(executor, ["codex"]);
+	}
+
+	it("6.3: usage limit in review output marks adapter unhealthy and returns error", async () => {
+		const result = await runWithExecuteBehavior({
+			execute: async () =>
+				"You've hit your usage limit. Please try again later.",
+		});
+
+		expect(result.status).toBe("error");
+		const stateContent = await fs.readFile(
+			path.join(COOLDOWN_STATE_DIR, ".execution_state"),
+			"utf-8",
+		);
+		const state = JSON.parse(stateContent);
+		expect(state.unhealthy_adapters?.codex?.reason).toBe(
+			"Usage limit exceeded",
+		);
+	});
+
+	it("6.4: adapter in cooldown is skipped during review dispatch", async () => {
+		await writeState({
+			codex: {
+				marked_at: new Date().toISOString(),
+				reason: "Usage limit exceeded",
+			},
+		});
+		mockAdapterModule((name) => createMockAdapter(name), ["codex", "claude"]);
+		const executor = await createExecutor();
+		const result = await runReview(executor, ["codex", "claude"]);
+
+		expect(result.status).toBe("pass");
+		expect(result.subResults).toBeDefined();
+		if (result.subResults) {
+			expect(result.subResults.map((r) => r.adapter)).not.toContain("codex");
+		}
+	});
+
+	it("6.5: adapter past cooldown with available binary is re-included", async () => {
+		const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+		await writeState({
+			codex: {
+				marked_at: twoHoursAgo.toISOString(),
+				reason: "Usage limit exceeded",
+			},
+		});
+		mockAdapterModule((name) => createMockAdapter(name), ["codex"]);
+		const executor = await createExecutor();
+		const result = await runReview(executor, ["codex"]);
+
+		expect(result.status).toBe("pass");
+		const stateContent = await fs.readFile(
+			path.join(COOLDOWN_STATE_DIR, ".execution_state"),
+			"utf-8",
+		);
+		const state = JSON.parse(stateContent);
+		expect(state.unhealthy_adapters?.codex).toBeUndefined();
+	});
+
+	it("6.6: adapter past cooldown with missing binary remains excluded", async () => {
+		const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+		await writeState({
+			codex: {
+				marked_at: twoHoursAgo.toISOString(),
+				reason: "Usage limit exceeded",
+			},
+		});
+		mockAdapterModule(
+			(name) =>
+				createMockAdapter(name, {
+					checkHealth: async () => ({
+						status: "missing" as const,
+						available: false,
+						message: "Command not found",
+					}),
+				}),
+			["codex"],
+		);
+		const executor = await createExecutor();
+		const result = await runReview(executor, ["codex"]);
+
+		expect(result.status).toBe("error");
+		expect(result.message).toContain("no healthy adapters");
+	});
+
+	it("6.7: all adapters cooling down returns error", async () => {
+		await writeState({
+			codex: {
+				marked_at: new Date().toISOString(),
+				reason: "Usage limit exceeded",
+			},
+			claude: {
+				marked_at: new Date().toISOString(),
+				reason: "Usage limit exceeded",
+			},
+		});
+		mockAdapterModule((name) => createMockAdapter(name), ["codex", "claude"]);
+		const executor = await createExecutor();
+		const result = await runReview(executor, ["codex", "claude"]);
+
+		expect(result.status).toBe("error");
+		expect(result.message).toContain("no healthy adapters");
+	});
+
+	it("6.8: non-usage-limit adapter error does not mark adapter unhealthy", async () => {
+		const result = await runWithExecuteBehavior({
+			execute: async () => {
+				throw new Error("Network timeout");
+			},
+		});
+
+		expect(result.status).toBe("error");
+		try {
+			const stateContent = await fs.readFile(
+				path.join(COOLDOWN_STATE_DIR, ".execution_state"),
+				"utf-8",
+			);
+			const state = JSON.parse(stateContent);
+			expect(state.unhealthy_adapters?.codex).toBeUndefined();
+		} catch {
+			// No state file is also acceptable
+		}
 	});
 });

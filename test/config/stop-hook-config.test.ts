@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 import {
 	GAUNTLET_AUTO_PUSH_PR,
 	GAUNTLET_STOP_HOOK_ENABLED,
@@ -6,7 +7,6 @@ import {
 	parseStopHookEnvVars,
 	resolveStopHookConfig,
 } from "../../src/config/stop-hook-config.js";
-import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 
 describe("stop-hook-config", () => {
 	describe("parseStopHookEnvVars", () => {
@@ -216,7 +216,10 @@ describe("stop-hook-config", () => {
 
 		it("project config overrides global config", () => {
 			const projectConfig = { enabled: false, run_interval_minutes: 5 };
-			const result = resolveStopHookConfig(projectConfig, DEFAULT_GLOBAL_CONFIG);
+			const result = resolveStopHookConfig(
+				projectConfig,
+				DEFAULT_GLOBAL_CONFIG,
+			);
 			expect(result.enabled).toBe(false);
 			expect(result.run_interval_minutes).toBe(5);
 		});
@@ -225,7 +228,10 @@ describe("stop-hook-config", () => {
 			process.env[GAUNTLET_STOP_HOOK_ENABLED] = "false";
 			process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES] = "0";
 			const projectConfig = { enabled: true, run_interval_minutes: 5 };
-			const result = resolveStopHookConfig(projectConfig, DEFAULT_GLOBAL_CONFIG);
+			const result = resolveStopHookConfig(
+				projectConfig,
+				DEFAULT_GLOBAL_CONFIG,
+			);
 			expect(result.enabled).toBe(false);
 			expect(result.run_interval_minutes).toBe(0);
 		});
@@ -246,13 +252,19 @@ describe("stop-hook-config", () => {
 		it("falls through when env var is invalid", () => {
 			process.env[GAUNTLET_STOP_HOOK_ENABLED] = "invalid";
 			const projectConfig = { enabled: false };
-			const result = resolveStopHookConfig(projectConfig, DEFAULT_GLOBAL_CONFIG);
+			const result = resolveStopHookConfig(
+				projectConfig,
+				DEFAULT_GLOBAL_CONFIG,
+			);
 			expect(result.enabled).toBe(false); // from project config, since env is invalid
 		});
 
 		it("backwards compatibility: missing enabled defaults to true", () => {
 			const projectConfig = { run_interval_minutes: 5 }; // no enabled field
-			const result = resolveStopHookConfig(projectConfig, DEFAULT_GLOBAL_CONFIG);
+			const result = resolveStopHookConfig(
+				projectConfig,
+				DEFAULT_GLOBAL_CONFIG,
+			);
 			expect(result.enabled).toBe(true); // default from global
 			expect(result.run_interval_minutes).toBe(5); // from project
 		});

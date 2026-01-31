@@ -515,9 +515,6 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
 
 /**
  * Generate push-PR instructions for the agent.
- *
- * Instructs the agent to look for project-level skills first,
- * then falls back to minimal git + gh instructions.
  */
 function getPushPRInstructions(options?: { hasWarnings?: boolean }): string {
 	const warningGuidance = options?.hasWarnings
@@ -526,25 +523,9 @@ function getPushPRInstructions(options?: { hasWarnings?: boolean }): string {
 
 	return `**GAUNTLET PASSED — CREATE OR UPDATE YOUR PULL REQUEST**
 
-All local quality gates have passed. Before you can stop, you need to push your changes and create or update a pull request.
+All local quality gates have passed. Before you can stop, you need to commit your changes, push to remote, and create or update a pull request for the current branch.
 
-**Step 1: Look for project-level instructions**
-Check for any of these (use the first one found):
-- A \`/push-pr\` skill or command
-- \`.claude/commands/push-pr.md\`
-- \`.gauntlet/push_pr.md\`
-- \`CONTRIBUTING.md\` section on PR creation
-
-If found, follow those instructions.
-
-**Step 2: Fallback (if no project instructions found)**
-1. Stage your changes: \`git add <files>\`
-2. Commit with a descriptive message: \`git commit -m "your message"\`
-3. Push to remote: \`git push -u origin HEAD\`
-4. Create a PR: \`gh pr create --fill\` (or update existing with \`git push\`)
-
-**Step 3: Try stopping again**
-After creating or updating the PR, try to stop again. The stop hook will verify the PR exists and is up to date.${warningGuidance}`;
+After the PR is created or updated, try to stop again. The stop hook will verify the PR exists and is up to date.${warningGuidance}`;
 }
 
 // Export for testing
@@ -875,7 +856,7 @@ export function registerStopHookCommand(program: Command): void {
 					// else: PR exists and up to date, keep original status
 				}
 
-				await debugLogger.logStopHook(
+				await debugLogger?.logStopHook(
 					isBlockingStatus(finalStatus) ? "block" : "allow",
 					finalStatus,
 				);

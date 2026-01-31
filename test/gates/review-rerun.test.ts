@@ -22,6 +22,8 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 	getProjectCommandAdapters: () => [],
 	getUserCommandAdapters: () => [],
 	getValidCLITools: () => ["mock-adapter"],
+	isUsageLimit: (output: string) =>
+		output.toLowerCase().includes("usage limit"),
 }));
 
 // We need to import after mocking
@@ -119,7 +121,6 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 			"main",
 			previousFailures,
 			{ uncommitted: true },
-			false,
 			"high", // threshold
 		);
 
@@ -189,7 +190,6 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 			"main",
 			previousFailures,
 			{ uncommitted: true },
-			false,
 			"high", // threshold
 		);
 

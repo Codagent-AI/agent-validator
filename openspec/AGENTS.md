@@ -259,7 +259,7 @@ There are no validation tasks that need to be explicitly run. When work is compl
 
 If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.
 ```
-**Do not** include linting, tests, build, etc in the validation; the gauntlet suite runs all of this.
+**Do not** include linting, tests, build, etc. in the validation; the gauntlet suite runs all of this.
 
 **Manual Verification guidance:**
 - Add a `## Manual Verification (Optional)` section **only** when there are verification steps the gauntlet cannot automate.

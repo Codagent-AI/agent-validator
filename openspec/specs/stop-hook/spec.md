@@ -153,10 +153,11 @@ The command SHALL output actionable feedback for the agent when blocking stop. T
 - **AND** the format extends the original `{"decision": "block", "reason": "..."}` with additional fields
 
 ### Requirement: Execution State Tracking
-The system MUST track execution metadata in a `.execution_state` JSON file in the log directory. This file SHALL be written at the end of each `run`, `check`, or `review` command execution (regardless of success or failure) and SHALL contain the branch name, commit SHA, and completion timestamp.
+
+The system MUST track execution metadata in a `.execution_state` JSON file in the log directory. This file SHALL be written ONLY when gates actually execute (statuses: `passed`, `passed_with_warnings`, `failed`, `retry_limit_exceeded`), not for early-exit conditions (statuses: `no_changes`, `no_applicable_gates`, `error`). The file SHALL contain the branch name, commit SHA, and completion timestamp.
 
 #### Scenario: State file written on successful run
-- **GIVEN** the gauntlet run completes successfully
+- **GIVEN** the gauntlet run completes successfully with status `passed`
 - **WHEN** the run command exits
 - **THEN** the `.execution_state` file SHALL be written to the log directory
 - **AND** it SHALL contain `last_run_completed_at` with the current ISO timestamp
@@ -164,10 +165,31 @@ The system MUST track execution metadata in a `.execution_state` JSON file in th
 - **AND** it SHALL contain `commit` with the current HEAD commit SHA
 
 #### Scenario: State file written on failed run
-- **GIVEN** the gauntlet run completes with failures
+- **GIVEN** the gauntlet run completes with failures (status `failed` or `retry_limit_exceeded`)
 - **WHEN** the run command exits
 - **THEN** the `.execution_state` file SHALL be written to the log directory
 - **AND** it SHALL contain the same fields as a successful run
+
+#### Scenario: State file written for passed_with_warnings
+- **GIVEN** the gauntlet run completes with status `passed_with_warnings`
+- **WHEN** the run command exits
+- **THEN** the `.execution_state` file SHALL be written to the log directory
+- **AND** it SHALL contain the same fields as a successful run
+
+#### Scenario: State file NOT written for no_changes
+- **GIVEN** the gauntlet run detects no changes
+- **WHEN** the run completes with status `no_changes`
+- **THEN** the `.execution_state` file SHALL NOT be written or updated
+
+#### Scenario: State file NOT written for no_applicable_gates
+- **GIVEN** the gauntlet run finds no applicable gates for the changes
+- **WHEN** the run completes with status `no_applicable_gates`
+- **THEN** the `.execution_state` file SHALL NOT be written or updated
+
+#### Scenario: State file NOT written for error
+- **GIVEN** the gauntlet run encounters an unexpected error
+- **WHEN** the run completes with status `error`
+- **THEN** the `.execution_state` file SHALL NOT be written or updated
 
 #### Scenario: State file cleared on clean
 - **GIVEN** an `.execution_state` file exists in the log directory
@@ -207,18 +229,32 @@ The system MUST automatically clean logs when execution context has changed, bef
 - **AND** the system SHALL proceed normally
 
 ### Requirement: Global Configuration
-The system MUST support a global configuration file at `~/.config/agent-gauntlet/config.yml` for user-level settings that apply across all projects.
+The system MUST support a global configuration file at `~/.config/agent-gauntlet/config.yml` for user-level settings that apply across all projects. The `stop_hook` section supports both `enabled` and `run_interval_minutes` settings.
 
-#### Scenario: Global config with stop hook interval
+#### Scenario: Global config with stop hook enabled and interval
 - **GIVEN** the file `~/.config/agent-gauntlet/config.yml` exists
-- **AND** it contains `stop_hook.run_interval_minutes: 15`
+- **AND** it contains `stop_hook.enabled: true` and `stop_hook.run_interval_minutes: 15`
 - **WHEN** the stop-hook command reads configuration
-- **THEN** the system SHALL use 15 minutes as the run interval
+- **THEN** the system SHALL use `enabled: true` and 15 minutes as the run interval
+
+#### Scenario: Global config with stop hook disabled
+- **GIVEN** the file `~/.config/agent-gauntlet/config.yml` exists
+- **AND** it contains `stop_hook.enabled: false`
+- **WHEN** the stop-hook command reads configuration
+- **THEN** the system SHALL skip gauntlet execution entirely
+- **AND** the system SHALL output `{ "decision": "approve", "status": "stop_hook_disabled", "message": "..." }`
+
+#### Scenario: Global config missing enabled field (backwards compatibility)
+- **GIVEN** the file `~/.config/agent-gauntlet/config.yml` exists
+- **AND** it contains only `stop_hook.run_interval_minutes: 15` (no `enabled` field)
+- **WHEN** the stop-hook command reads configuration
+- **THEN** the system SHALL default `enabled` to `true`
+- **AND** the system SHALL use 15 minutes as the run interval
 
 #### Scenario: Global config missing
 - **GIVEN** the file `~/.config/agent-gauntlet/config.yml` does not exist
 - **WHEN** the stop-hook command reads configuration
-- **THEN** the system SHALL use the default run interval of 10 minutes
+- **THEN** the system SHALL use defaults: `enabled: true`, `run_interval_minutes: 10`
 
 #### Scenario: Global config invalid
 - **GIVEN** the global config file contains invalid YAML
@@ -227,23 +263,59 @@ The system MUST support a global configuration file at `~/.config/agent-gauntlet
 - **AND** the system SHALL use default values
 
 ### Requirement: Stop Hook Run Interval
-The stop-hook command MUST skip gauntlet execution if the configured run interval has not elapsed since the last completed run. The interval is measured from the `last_run_completed_at` timestamp in the execution state file.
+The stop-hook command MUST skip gauntlet execution if the stop hook is disabled OR if the configured run interval has not elapsed since the last completed run. Configuration is resolved from three sources with precedence: environment variables > project config > global config.
+
+#### Scenario: Environment variable overrides all other sources
+- **GIVEN** `GAUNTLET_STOP_HOOK_ENABLED=false` is set in the environment
+- **AND** the project config has `stop_hook.enabled: true`
+- **AND** the global config has `stop_hook.enabled: true`
+- **WHEN** the stop-hook command reads configuration
+- **THEN** the system SHALL use `enabled: false` from the environment variable
+- **AND** the system SHALL skip gauntlet execution
+
+#### Scenario: Environment variable for interval
+- **GIVEN** `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES=0` is set in the environment
+- **AND** the project config has `stop_hook.run_interval_minutes: 10`
+- **WHEN** the stop-hook command reads configuration
+- **THEN** the system SHALL use `run_interval_minutes: 0` from the environment variable
+- **AND** the system SHALL always run the gauntlet (interval 0 means always run)
+
+#### Scenario: Project config overrides global config
+- **GIVEN** the project config (`.gauntlet/config.yml`) has `stop_hook.run_interval_minutes: 5`
+- **AND** the global config has `stop_hook.run_interval_minutes: 10`
+- **AND** no environment variables are set
+- **WHEN** the stop-hook command reads configuration
+- **THEN** the system SHALL use 5 minutes from the project config
+
+#### Scenario: Interval of zero means always run
+- **GIVEN** the resolved config has `enabled: true` and `run_interval_minutes: 0`
+- **WHEN** the stop-hook command runs
+- **THEN** the system SHALL run the gauntlet immediately without checking elapsed time
+- **AND** the system SHALL NOT read or compare against `.execution_state` timestamps for interval purposes
+
+#### Scenario: Stop hook disabled
+- **GIVEN** the resolved config has `enabled: false`
+- **WHEN** the stop-hook command runs
+- **THEN** the system SHALL allow stop by outputting `{ "decision": "approve", "status": "stop_hook_disabled", "message": "..." }`
+- **AND** the system SHALL NOT invoke executeRun()
+- **AND** the system SHALL log a message indicating the stop hook is disabled
 
 #### Scenario: Interval not elapsed - skip run
-- **GIVEN** the global config has `stop_hook.run_interval_minutes: 10`
+- **GIVEN** the resolved config has `enabled: true` and `run_interval_minutes: 10`
 - **AND** the `.execution_state` file shows `last_run_completed_at` was 5 minutes ago
 - **WHEN** the stop-hook command runs
-- **THEN** the system SHALL allow stop by outputting no JSON (empty stdout, exit 0)
+- **THEN** the system SHALL allow stop by outputting `{ "decision": "approve", "status": "interval_not_elapsed", "message": "..." }`
 - **AND** the system SHALL log a message to stderr indicating the interval has not elapsed
 
 #### Scenario: Interval elapsed - run gauntlet
-- **GIVEN** the global config has `stop_hook.run_interval_minutes: 10`
+- **GIVEN** the resolved config has `enabled: true` and `run_interval_minutes: 10`
 - **AND** the `.execution_state` file shows `last_run_completed_at` was 15 minutes ago
 - **WHEN** the stop-hook command runs
 - **THEN** the system SHALL run the gauntlet normally
 
 #### Scenario: No execution state - run gauntlet
-- **GIVEN** no `.execution_state` file exists
+- **GIVEN** the resolved config has `enabled: true`
+- **AND** no `.execution_state` file exists
 - **WHEN** the stop-hook command runs
 - **THEN** the system SHALL run the gauntlet normally
 
@@ -318,96 +390,12 @@ The stop-hook command SHALL output a structured JSON response for ALL outcomes, 
 
 The system MUST use distinct status codes for different approval scenarios to enable debugging and transparency. Status determination follows a defined precedence order.
 
-#### Scenario: Status precedence order
-- **GIVEN** the stop-hook needs to determine the response status
-- **WHEN** processing gauntlet results
-- **THEN** the system SHALL check in this order:
-  1. Exit code 0 with "No applicable gates" in output → `no_applicable_gates`
-  2. Exit code 0 (success) → `passed`
-  3. Non-zero exit with termination condition in output → `termination_*` statuses
-  4. Non-zero exit without termination condition → `failed` (block)
-
-#### Scenario: Gauntlet passed (exit code 0)
-- **GIVEN** the gauntlet runs and exits with code 0
-- **AND** the output does NOT contain "No applicable gates"
+#### Scenario: Stop hook disabled via configuration
+- **GIVEN** the resolved config has `enabled: false`
 - **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "passed"
-- **AND** `message` SHALL indicate the gauntlet completed successfully
-
-#### Scenario: No applicable gates
-- **GIVEN** the gauntlet runs and exits with code 0
-- **AND** the output contains "No applicable gates"
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "no_applicable_gates"
-- **AND** `message` SHALL indicate no gates matched the changed files
-- **AND** this is a new check to be added to the stop-hook (gauntlet already outputs this message)
-
-#### Scenario: Termination condition - passed (non-zero exit)
-- **GIVEN** the gauntlet exits with non-zero code
-- **AND** the output contains "Status: Passed"
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "termination_passed"
-- **AND** `message` SHALL indicate all gates passed
-
-#### Scenario: Termination condition - passed with warnings (non-zero exit)
-- **GIVEN** the gauntlet exits with non-zero code
-- **AND** the output contains "Status: Passed with warnings"
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "termination_warnings"
-- **AND** `message` SHALL indicate gates passed with some issues skipped
-
-#### Scenario: Termination condition - retry limit exceeded (non-zero exit)
-- **GIVEN** the gauntlet exits with non-zero code
-- **AND** the output contains "Status: Retry limit exceeded"
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "termination_retry_limit"
-- **AND** `message` SHALL indicate the retry limit was exceeded and human review may be needed
-
-#### Scenario: Run interval not elapsed
-- **GIVEN** the configured run interval has not elapsed since last run
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "interval_not_elapsed"
-- **AND** `message` SHALL indicate how much time remains until next eligible run
-
-#### Scenario: Lock file exists
-- **GIVEN** the gauntlet lock file exists (another run in progress)
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "lock_exists"
-- **AND** `message` SHALL indicate another gauntlet is already running
-
-#### Scenario: Infrastructure error
-- **GIVEN** the gauntlet fails due to infrastructure issues (spawn failure/ENOENT or timeout)
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "infrastructure_error"
-- **AND** `message` SHALL describe the specific infrastructure issue
-- **AND** `decision` SHALL be "approve" to avoid blocking on transient failures
-- **AND** note: lock file check (which outputs "A gauntlet run is already in progress") is handled separately with `lock_exists` status before gauntlet spawn
-
-#### Scenario: No gauntlet configuration
-- **GIVEN** no `.gauntlet/config.yml` exists in the project
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "no_config"
-- **AND** `message` SHALL indicate this is not a gauntlet-enabled project
-
-#### Scenario: Stop hook already active
-- **GIVEN** the hook input has `stop_hook_active: true`
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "stop_hook_active"
-- **AND** `message` SHALL indicate this is to prevent infinite loops
-
-#### Scenario: Unexpected error
-- **GIVEN** an unexpected error occurs during stop-hook execution
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "error"
-- **AND** `message` SHALL include the error details
-- **AND** `decision` SHALL be "approve" to avoid blocking indefinitely
-
-#### Scenario: Invalid hook input
-- **GIVEN** the hook receives invalid or empty JSON input
-- **WHEN** the stop-hook outputs its response
-- **THEN** `status` SHALL be "invalid_input"
-- **AND** `message` SHALL indicate the input could not be parsed
-- **AND** `decision` SHALL be "approve" to avoid blocking on parse errors
+- **THEN** `status` SHALL be `"stop_hook_disabled"`
+- **AND** `message` SHALL indicate the stop hook was disabled by configuration
+- **AND** `decision` SHALL be `"approve"`
 
 ### Requirement: Block Status for Failed Gates
 
@@ -421,4 +409,64 @@ The stop-hook command SHALL only output `decision: "block"` when the gauntlet fa
 - **AND** `decision` SHALL be "block"
 - **AND** `reason` SHALL contain the detailed instructions for the agent
 - **AND** `message` SHALL provide a brief summary of the failure
+
+### Requirement: Stop Hook Status Messages
+
+The stop-hook command MUST always include a human-friendly status message in the `stopReason` field of the response, regardless of whether the decision is to block or approve. This ensures users have visibility into gauntlet behavior for non-blocking statuses.
+
+**Note:** This requirement covers non-blocking statuses (approve decisions). For blocking statuses (block decisions with detailed fix instructions), see the existing "Enhanced Stop Reason Instructions" requirement which remains unchanged.
+
+#### Scenario: Message included for blocking status
+- **GIVEN** the gauntlet fails with status `failed`
+- **WHEN** the stop-hook outputs the response
+- **THEN** the response SHALL include `stopReason` with detailed fix instructions per "Enhanced Stop Reason Instructions"
+- **AND** the `decision` SHALL be `block`
+
+#### Scenario: Message included for non-blocking status
+- **GIVEN** the stop-hook completes with a non-blocking status (e.g., `interval_not_elapsed`, `no_config`, `passed`)
+- **WHEN** the stop-hook outputs the response
+- **THEN** the response SHALL include `stopReason` with a brief human-friendly message
+- **AND** the `decision` SHALL be `approve`
+- **AND** the message SHALL explain the gauntlet result or why it was skipped
+
+#### Scenario: Message format for interval_not_elapsed
+- **GIVEN** the stop-hook skips the gauntlet due to interval not elapsed
+- **WHEN** the response is output
+- **THEN** the `stopReason` SHALL indicate that the run interval has not elapsed
+- **AND** it MAY include the configured interval duration
+
+#### Scenario: Message format for no_config
+- **GIVEN** the stop-hook detects no gauntlet configuration
+- **WHEN** the response is output
+- **THEN** the `stopReason` SHALL indicate this is not a gauntlet project
+
+#### Scenario: Message format for lock_conflict
+- **GIVEN** the stop-hook detects another gauntlet is running
+- **WHEN** the response is output
+- **THEN** the `stopReason` SHALL indicate another run is in progress
+
+### Requirement: Stop Hook Configuration Resolution
+The system MUST resolve stop hook configuration from three sources with clear precedence: environment variables (highest), project config, global config (lowest). Each field is resolved independently.
+
+#### Scenario: Per-field independent resolution
+- **GIVEN** `GAUNTLET_STOP_HOOK_ENABLED=true` is set in the environment
+- **AND** the project config has `stop_hook.run_interval_minutes: 5` (no `enabled` field)
+- **AND** the global config has `stop_hook.enabled: false` and `stop_hook.run_interval_minutes: 10`
+- **WHEN** the stop-hook command resolves configuration
+- **THEN** `enabled` SHALL be `true` (from env var)
+- **AND** `run_interval_minutes` SHALL be `5` (from project config, since no env var for interval)
+
+#### Scenario: Environment variable parsing for enabled
+- **GIVEN** `GAUNTLET_STOP_HOOK_ENABLED` is set in the environment
+- **WHEN** the stop-hook command parses the value
+- **THEN** the system SHALL accept "true", "1" as truthy values
+- **AND** the system SHALL accept "false", "0" as falsy values
+- **AND** the system SHALL ignore invalid values and fall through to next source
+
+#### Scenario: Environment variable parsing for interval
+- **GIVEN** `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` is set in the environment
+- **WHEN** the stop-hook command parses the value
+- **THEN** the system SHALL parse the value as an integer
+- **AND** the system SHALL accept non-negative integers (0 or greater)
+- **AND** the system SHALL ignore invalid values (non-numeric, negative) and fall through to next source
 

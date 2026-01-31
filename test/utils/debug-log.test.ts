@@ -96,15 +96,19 @@ describe("DebugLogger", () => {
 				enabled: true,
 				maxSizeMb: 10,
 			});
-			await logger.logRunStartWithDiff("full", {
-				baseRef: "origin/main",
-				total: 10,
-				newFiles: 3,
-				modifiedFiles: 5,
-				deletedFiles: 2,
-				linesAdded: 150,
-				linesRemoved: 30,
-			}, 4);
+			await logger.logRunStartWithDiff(
+				"full",
+				{
+					baseRef: "origin/main",
+					total: 10,
+					newFiles: 3,
+					modifiedFiles: 5,
+					deletedFiles: 2,
+					linesAdded: 150,
+					linesRemoved: 30,
+				},
+				4,
+			);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
 			const content = await fs.readFile(logPath, "utf-8");
@@ -124,15 +128,19 @@ describe("DebugLogger", () => {
 				enabled: true,
 				maxSizeMb: 10,
 			});
-			await logger.logRunStartWithDiff("verification", {
-				baseRef: "abc123def456",
-				total: 2,
-				newFiles: 1,
-				modifiedFiles: 1,
-				deletedFiles: 0,
-				linesAdded: 25,
-				linesRemoved: 10,
-			}, 1);
+			await logger.logRunStartWithDiff(
+				"verification",
+				{
+					baseRef: "abc123def456",
+					total: 2,
+					newFiles: 1,
+					modifiedFiles: 1,
+					deletedFiles: 0,
+					linesAdded: 25,
+					linesRemoved: 10,
+				},
+				1,
+			);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
 			const content = await fs.readFile(logPath, "utf-8");
@@ -145,15 +153,19 @@ describe("DebugLogger", () => {
 				enabled: true,
 				maxSizeMb: 10,
 			});
-			await logger.logRunStartWithDiff("full", {
-				baseRef: "uncommitted",
-				total: 1,
-				newFiles: 1,
-				modifiedFiles: 0,
-				deletedFiles: 0,
-				linesAdded: 50,
-				linesRemoved: 0,
-			}, 2);
+			await logger.logRunStartWithDiff(
+				"full",
+				{
+					baseRef: "uncommitted",
+					total: 1,
+					newFiles: 1,
+					modifiedFiles: 0,
+					deletedFiles: 0,
+					linesAdded: 50,
+					linesRemoved: 0,
+				},
+				2,
+			);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
 			const content = await fs.readFile(logPath, "utf-8");
@@ -165,32 +177,37 @@ describe("DebugLogger", () => {
 				enabled: true,
 				maxSizeMb: 10,
 			});
-			await logger.logRunStartWithDiff("verification", {
-				baseRef: "WORKTREE-abc123",
-				total: 3,
-				newFiles: 0,
-				modifiedFiles: 3,
-				deletedFiles: 0,
-				linesAdded: 20,
-				linesRemoved: 15,
-			}, 1);
+			await logger.logRunStartWithDiff(
+				"verification",
+				{
+					baseRef: "WORKTREE-abc123",
+					total: 3,
+					newFiles: 0,
+					modifiedFiles: 3,
+					deletedFiles: 0,
+					linesAdded: 20,
+					linesRemoved: 15,
+				},
+				1,
+			);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
 			const content = await fs.readFile(logPath, "utf-8");
 			expect(content).toContain("base_ref=WORKTREE-abc123");
 		});
 
-		it("writes RUN_END entries", async () => {
+		it("writes RUN_END entries with duration", async () => {
 			const logger = new DebugLogger(TEST_DIR, {
 				enabled: true,
 				maxSizeMb: 10,
 			});
+			await logger.logRunStart("full", 5, 3);
 			await logger.logRunEnd("pass", 2, 1, 0, 1);
 
 			const logPath = path.join(TEST_DIR, ".debug.log");
 			const content = await fs.readFile(logPath, "utf-8");
 			expect(content).toContain(
-				"RUN_END status=pass fixed=2 skipped=1 failed=0 iterations=1",
+				"RUN_END status=pass fixed=2 skipped=1 failed=0 iterations=1 duration=",
 			);
 		});
 

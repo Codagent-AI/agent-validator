@@ -362,7 +362,6 @@ Directory where job logs are written.
 ### `cli` (object, required)
 
 - `default_preference`: string[] (required) - Default list of CLI tools to use for reviews.
-- `check_usage_limit`: boolean (default: `false`) - Whether to check for usage limits during health checks.
 
 ### `allow_parallel` (boolean, default: `true`)
 

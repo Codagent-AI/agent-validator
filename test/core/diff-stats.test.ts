@@ -107,7 +107,7 @@ describe("computeDiffStats", () => {
 			mockExec.mockImplementation((file, args) => {
 				const argsArr = args as string[];
 				// verify args contain the commit range
-				if (argsArr.some(arg => arg.includes(commitSha))) {
+				if (argsArr.some((arg) => arg.includes(commitSha))) {
 					return createMockOutput("");
 				}
 				return createMockOutput("");
@@ -129,7 +129,10 @@ describe("computeDiffStats", () => {
 			expect(result.baseRef).toBe("origin/main");
 
 			// Should call git diff baseBranch...HEAD
-			expect(mockExec).toHaveBeenCalledWith("git", expect.arrayContaining(["origin/main...HEAD"]));
+			expect(mockExec).toHaveBeenCalledWith(
+				"git",
+				expect.arrayContaining(["origin/main...HEAD"]),
+			);
 		});
 	});
 
@@ -157,7 +160,10 @@ describe("computeDiffStats", () => {
 			// The logic: computeCIDiffStats uses baseBranch...headRef
 			expect(result.baseRef).toBe("origin/main");
 
-			expect(mockExec).toHaveBeenCalledWith("git", expect.arrayContaining([`origin/main...${process.env.GITHUB_SHA}`]));
+			expect(mockExec).toHaveBeenCalledWith(
+				"git",
+				expect.arrayContaining([`origin/main...${process.env.GITHUB_SHA}`]),
+			);
 		});
 	});
 
@@ -214,7 +220,7 @@ describe("computeDiffStats", () => {
 		});
 
 		it("returns only changes since fixBase, not all uncommitted changes", async () => {
-			// Mock logic: 
+			// Mock logic:
 			// ls-files returns "file1"
 			// ls-tree returns "file1" (so no new untracked)
 			mockExec.mockImplementation((file, args) => {

@@ -1,6 +1,6 @@
 {
   "name": "agent-gauntlet",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A CLI tool for testing AI coding agents",
   "license": "Apache-2.0",
   "author": "Paul Caplan",
@@ -37,7 +37,8 @@
     "lint": "biome check src",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "npm publish"
+    "release": "npm publish",
+    "gen-changeset": "bun scripts/gen-changeset.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.11",

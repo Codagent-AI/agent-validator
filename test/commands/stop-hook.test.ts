@@ -22,9 +22,15 @@ mock.module("node:child_process", () => {
 	return {
 		spawn: (...args: unknown[]) => spawnMock?.(...args),
 		exec: mock(() => {}),
-		execFile: mock((cmd: string, args: string[], callback: (error: Error | null, stdout: string, stderr: string) => void) => {
-			callback(null, "", "");
-		}),
+		execFile: mock(
+			(
+				cmd: string,
+				args: string[],
+				callback: (error: Error | null, stdout: string, stderr: string) => void,
+			) => {
+				callback(null, "", "");
+			},
+		),
 	};
 });
 
@@ -36,6 +42,7 @@ const {
 	getStatusMessage,
 	getPushPRInstructions,
 } = await import("../../src/commands/stop-hook.js");
+
 import type { StopHookStatus } from "../../src/commands/stop-hook.js";
 import { isBlockingStatus } from "../../src/types/gauntlet-status.js";
 
@@ -1005,10 +1012,7 @@ describe("Stop Hook Command", () => {
 
 			// Should set up setTimeout at the start of the action handler
 			const actionStart = sourceFile.indexOf(".action(async ()");
-			const selfTimeoutSetup = sourceFile.indexOf(
-				"setTimeout(",
-				actionStart,
-			);
+			const selfTimeoutSetup = sourceFile.indexOf("setTimeout(", actionStart);
 			const stdinRead = sourceFile.indexOf("readStdin", actionStart);
 
 			// Self-timeout should be set BEFORE stdin read
@@ -1039,7 +1043,7 @@ describe("Stop Hook Command", () => {
 		it("should check config BEFORE stdin parsing (avoid 5s timeout)", async () => {
 			// Read source file to verify order of operations
 			const { readFileSync } = await import("node:fs");
-		
+
 			// TODO wow really Claude? remove all of these assertions about the source code of the class
 			const sourceFile = readFileSync(
 				path.join(originalCwd, "src/commands/stop-hook.ts"),
@@ -1145,9 +1149,8 @@ describe("Stop Hook Command", () => {
 
 			// Pre-checks: self-timeout, env var, quick config, marker file (fresh + stale fallback), stdin parsing, stop_hook_active, no_config at cwd
 			// Count outputHookResponse calls (early returns)
-			const earlyReturns = (
-				actionSection.match(/outputHookResponse\(/g) || []
-			).length;
+			const earlyReturns = (actionSection.match(/outputHookResponse\(/g) || [])
+				.length;
 
 			// Should have exactly 8 outputHookResponse calls before executeRun:
 			// 1. self-timeout handler (outputHookResponse in setTimeout callback)
@@ -1193,20 +1196,10 @@ describe("Stop Hook Command", () => {
 	});
 
 	describe("getPushPRInstructions", () => {
-		it("includes project-level skill lookup instructions", () => {
+		it("includes PR creation instructions", () => {
 			const instructions = getPushPRInstructions();
-			expect(instructions).toContain("/push-pr");
-			expect(instructions).toContain(".claude/commands/push-pr.md");
-			expect(instructions).toContain(".gauntlet/push_pr.md");
-			expect(instructions).toContain("CONTRIBUTING.md");
-		});
-
-		it("includes minimal fallback instructions", () => {
-			const instructions = getPushPRInstructions();
-			expect(instructions).toContain("git add");
-			expect(instructions).toContain("git commit");
-			expect(instructions).toContain("git push");
-			expect(instructions).toContain("gh pr create");
+			expect(instructions).toContain("GAUNTLET PASSED");
+			expect(instructions).toContain("pull request");
 		});
 
 		it("includes instruction to try stopping again", () => {

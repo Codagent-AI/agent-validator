@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import type { LoadedConfig, LoadedCheckGateConfig } from "../../src/config/types.js";
+import type {
+	LoadedCheckGateConfig,
+	LoadedConfig,
+} from "../../src/config/types.js";
 import type { ExpandedEntryPoint } from "../../src/core/entry-point.js";
 import { JobGenerator } from "../../src/core/job.js";
 
@@ -27,7 +30,7 @@ function makeConfig(
 			allow_parallel: true,
 			max_retries: 3,
 			rerun_new_issue_threshold: "high",
-			cli: { default_preference: ["claude"], check_usage_limit: false },
+			cli: { default_preference: ["claude"] },
 			entry_points: [],
 		},
 		checks,

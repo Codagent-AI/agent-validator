@@ -19,9 +19,7 @@ export function isUsageLimit(output: string): boolean {
 export interface CLIAdapter {
 	name: string;
 	isAvailable(): Promise<boolean>;
-	checkHealth(options?: {
-		checkUsageLimit?: boolean;
-	}): Promise<CLIAdapterHealth>;
+	checkHealth(): Promise<CLIAdapterHealth>;
 	execute(opts: {
 		prompt: string;
 		diff: string;
