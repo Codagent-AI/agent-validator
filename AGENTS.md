@@ -29,3 +29,26 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Use strict TypeScript.
 - Prefer functional patterns where appropriate.
 - Keep CLI commands in `src/commands`.
+
+## Code Health (CodeScene)
+
+When the `code-health` check fails:
+
+1. **Make a reasonable attempt to fix issues** - Address complexity, duplication, and other code smells where the fix is straightforward and improves the code.
+
+2. **Document deferred issues** in `docs/code-health-improvements.md`:
+   - What the issue is and which file/function
+   - Why it's being deferred (e.g., too complex, acceptable trade-off, test code)
+   - Suggested fix for future work
+
+3. **Acceptable to defer:**
+   - Style metrics that don't affect functionality (e.g., string-heavy arguments)
+   - Test file duplication (test readability > DRY)
+   - Issues requiring significant refactoring unrelated to current work
+
+4. **Should fix:**
+   - High cyclomatic complexity in new code
+   - Code duplication in production code (not tests)
+   - Issues that can be fixed with simple refactoring
+
+CodeScene thresholds are guidelines, not hard rules. Use judgment.

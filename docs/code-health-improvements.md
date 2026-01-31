@@ -1,19 +1,14 @@
 # Code Health Improvements
 
-This document tracks code health issues identified by CodeScene that are lower priority and can be addressed in future refactoring.
+This document tracks code health issues identified by CodeScene that are deferred for future work. When the `code-health` check fails, agents should make a reasonable attempt to fix issues and document here anything not being fixed, with reasons and suggestions.
 
-## Completed
-
-1. **Code Duplication in `stop-hook-handler.ts`** - Fixed by extracting `readProjectConfig()` helper
-2. **Complex Method `getStatusMessage`** - Fixed by using a lookup object instead of switch statement
-3. **Complex Method `postGauntletPRCheck`** - Fixed by extracting helper functions and simplifying control flow
-
-## Deferred (Lower Priority)
+## Deferred Issues
 
 ### String-Heavy Function Arguments
 
 **File:** `src/hooks/stop-hook-handler.ts`
-**Issue:** 42.9% of function arguments are strings (threshold: 39%)
+**Issue:** 47.1% of function arguments are strings (threshold: 39%)
+**Why deferred:** Would require significant refactoring to create a `ProjectContext` type. The current approach is functional and the metric is a style guideline, not a bug.
 
 **Affected functions:**
 - `getLogDir(projectCwd: string)`
@@ -22,7 +17,7 @@ This document tracks code health issues identified by CodeScene that are lower p
 - `checkPRStatus(cwd: string)`
 - `postGauntletPRCheck(projectCwd: string, ...)`
 
-**Potential fix:** Create a `ProjectContext` type that wraps the project working directory and potentially caches config. This would reduce string passing but adds complexity. Consider if the codebase grows significantly.
+**Suggested fix for future:**
 
 ```typescript
 interface ProjectContext {
@@ -30,6 +25,8 @@ interface ProjectContext {
   config?: MinimalConfig;
 }
 ```
+
+This would reduce string passing but adds complexity. Consider if the codebase grows significantly.
 
 ### Test File Duplication
 
@@ -39,8 +36,7 @@ interface ProjectContext {
 - `test/hooks/stop-hook-handler.test.ts`
 
 **Issue:** Similar test structures with repeated `StopHookResult` object creation.
-
-**Recommendation:** This is acceptable in test code. Test readability and independence are more important than DRY principles in tests. Each test should be self-contained and easy to understand. No action needed.
+**Why deferred:** Test readability and independence are more important than DRY principles. Each test should be self-contained and easy to understand. This is acceptable in test code.
 
 ## Notes
 
