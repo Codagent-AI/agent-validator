@@ -134,7 +134,7 @@ export const gauntletConfigSchema = z.object({
 	max_retries: z.number().default(3),
 	rerun_new_issue_threshold: z
 		.enum(["critical", "high", "medium", "low"])
-		.default("high"),
+		.default("medium"),
 	cli: cliConfigSchema,
 	entry_points: z.array(entryPointSchema).min(1),
 	debug_log: debugLogConfigSchema.optional(),

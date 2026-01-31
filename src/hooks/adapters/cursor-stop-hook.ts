@@ -1,0 +1,114 @@
+import type {
+	StopHookAdapter,
+	StopHookContext,
+	StopHookResult,
+} from "./types.js";
+
+/**
+ * Cursor hook response format.
+ * - Empty object {} = allow stop
+ * - { followup_message: "..." } = block stop and continue with message
+ */
+interface CursorHookResponse {
+	followup_message?: string;
+}
+
+/**
+ * Default maximum loop count before allowing stop.
+ * Cursor has built-in loop_limit (default 5, configurable in hooks.json),
+ * but we provide defense-in-depth with our own check.
+ */
+const DEFAULT_MAX_LOOPS = 10;
+
+/**
+ * Adapter for Cursor IDE stop hook protocol.
+ *
+ * Cursor protocol:
+ * - Input: { status, loop_count, cursor_version, workspace_roots, conversation_id, ... }
+ * - Output: { followup_message?: "..." } or {}
+ * - Block mechanism: { followup_message: "instructions" } - continues agent with message
+ * - Allow mechanism: {} (empty object) - allows stop
+ * - Loop prevention: loop_count field (Cursor has built-in loop_limit)
+ */
+export class CursorStopHookAdapter implements StopHookAdapter {
+	name = "cursor";
+
+	/**
+	 * Maximum loop count before forcing stop.
+	 * Can be configured via hooks.json loop_limit.
+	 */
+	private maxLoops: number;
+
+	constructor(maxLoops: number = DEFAULT_MAX_LOOPS) {
+		this.maxLoops = maxLoops;
+	}
+
+	/**
+	 * Detect if this adapter should handle the given input.
+	 * Cursor sends cursor_version in hook input.
+	 */
+	detect(raw: Record<string, unknown>): boolean {
+		return "cursor_version" in raw;
+	}
+
+	/**
+	 * Parse Cursor input into normalized context.
+	 */
+	parseInput(raw: Record<string, unknown>): StopHookContext {
+		const workspaceRoots = raw.workspace_roots;
+		const loopCount = raw.loop_count as number | undefined;
+
+		return {
+			cwd:
+				(Array.isArray(workspaceRoots) ? workspaceRoots[0] : null) ??
+				process.cwd(),
+			isNestedHook: false, // Cursor uses loop_count instead of nested hook flag
+			loopCount,
+			sessionId: raw.conversation_id as string | undefined,
+			rawInput: raw,
+		};
+	}
+
+	/**
+	 * Format handler result into Cursor protocol output.
+	 */
+	formatOutput(result: StopHookResult): string {
+		if (result.shouldBlock) {
+			// Determine the appropriate message based on status
+			// For `failed` status, use fix instructions
+			// For `pr_push_required` status, use push-PR instructions
+			const blockMessage =
+				result.status === "failed"
+					? result.instructions || result.message
+					: result.status === "pr_push_required"
+						? result.pushPRReason || result.message
+						: result.message;
+
+			const response: CursorHookResponse = {
+				followup_message: blockMessage,
+			};
+			return JSON.stringify(response);
+		}
+
+		// Empty object = allow stop
+		return "{}";
+	}
+
+	/**
+	 * Check if execution should be skipped based on Cursor-specific conditions.
+	 * Returns early if loop_count exceeds threshold.
+	 */
+	shouldSkipExecution(ctx: StopHookContext): StopHookResult | null {
+		// Cursor has built-in loop_limit (default 5), but we can check here too
+		// for defense-in-depth
+		if (ctx.loopCount !== undefined && ctx.loopCount >= this.maxLoops) {
+			return {
+				status: "retry_limit_exceeded",
+				shouldBlock: false,
+				message:
+					"Loop limit reached — run `agent-gauntlet clean` to archive and continue.",
+			};
+		}
+		return null;
+	}
+}

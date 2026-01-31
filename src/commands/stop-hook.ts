@@ -1,52 +1,29 @@
-import { execFile } from "node:child_process";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { Command } from "commander";
-import YAML from "yaml";
 import { loadGlobalConfig } from "../config/global.js";
-import { resolveStopHookConfig } from "../config/stop-hook-config.js";
-import { executeRun } from "../core/run-executor.js";
+import { ClaudeStopHookAdapter } from "../hooks/adapters/claude-stop-hook.js";
+import { CursorStopHookAdapter } from "../hooks/adapters/cursor-stop-hook.js";
+import type {
+	StopHookAdapter,
+	StopHookResult,
+} from "../hooks/adapters/types.js";
+import {
+	getDebugLogConfig,
+	getLogDir,
+	getPushPRInstructions,
+	getStatusMessage,
+	getStopReasonInstructions,
+	StopHookHandler,
+} from "../hooks/stop-hook-handler.js";
 import {
 	getCategoryLogger,
 	initLogger,
 	resetLogger,
 } from "../output/app-logger.js";
-import {
-	type GauntletStatus,
-	isBlockingStatus,
-	type RunResult,
-} from "../types/gauntlet-status.js";
+import type { GauntletStatus } from "../types/gauntlet-status.js";
 import { DebugLogger, mergeDebugLogConfig } from "../utils/debug-log.js";
-
-const execFileAsync = promisify(execFile);
-
-interface StopHookInput {
-	session_id?: string;
-	transcript_path?: string;
-	cwd?: string;
-	permission_mode?: string;
-	hook_event_name?: string;
-	stop_hook_active?: boolean;
-}
-
-interface HookResponse {
-	decision: "block" | "approve";
-	reason?: string; // This becomes the prompt fed back to Claude (for blocking)
-	stopReason: string; // Displayed to user when blocking - detailed instructions
-	systemMessage?: string; // Always displayed to user - human-friendly status message
-	status: GauntletStatus; // Machine-readable status code (unified type)
-	message: string; // Human-friendly explanation (same as systemMessage, for internal use)
-}
-
-interface MinimalConfig {
-	log_dir?: string;
-	debug_log?: {
-		enabled?: boolean;
-		max_size_mb?: number;
-	};
-}
 
 /**
  * Timeout for reading stdin (in milliseconds).
@@ -78,11 +55,6 @@ const STDIN_TIMEOUT_MS = 5000;
 export const GAUNTLET_STOP_HOOK_ACTIVE_ENV = "GAUNTLET_STOP_HOOK_ACTIVE";
 
 /**
- * Default log directory when config doesn't specify one.
- */
-const DEFAULT_LOG_DIR = "gauntlet_logs";
-
-/**
  * Marker file to detect nested stop-hook invocations.
  *
  * **Why this exists:**
@@ -99,6 +71,24 @@ const DEFAULT_LOG_DIR = "gauntlet_logs";
  * (which would hit lock_conflict anyway, but this is faster and quieter).
  */
 const STOP_HOOK_MARKER_FILE = ".stop-hook-active";
+
+/**
+ * Hard ceiling for the stop hook process.
+ * If the process runs longer than this, it outputs an allow response and exits.
+ * This prevents zombie processes when Claude Code times out reading stdout
+ * but the process keeps running.
+ */
+const STOP_HOOK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Available adapters in detection order.
+ * Cursor adapter is checked first because it has a positive detection (cursor_version present).
+ * Claude adapter is the fallback (detected by absence of cursor_version).
+ */
+const adapters: StopHookAdapter[] = [
+	new CursorStopHookAdapter(),
+	new ClaudeStopHookAdapter(),
+];
 
 /**
  * Read hook input from stdin with a timeout.
@@ -178,192 +168,37 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 /**
- * Read the log_dir from project config without full validation.
+ * Get a logger for stop-hook operations.
  */
-async function getLogDir(projectCwd: string): Promise<string> {
-	try {
-		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
-		const content = await fs.readFile(configPath, "utf-8");
-		const config = YAML.parse(content) as MinimalConfig;
-		return config.log_dir || DEFAULT_LOG_DIR;
-	} catch {
-		return DEFAULT_LOG_DIR;
-	}
+function getStopHookLogger() {
+	return getCategoryLogger("stop-hook");
 }
 
 /**
- * Read the debug_log config from project config without full validation.
+ * Output a result using the given adapter's format.
  */
-async function getDebugLogConfig(
-	projectCwd: string,
-): Promise<MinimalConfig["debug_log"]> {
-	try {
-		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
-		const content = await fs.readFile(configPath, "utf-8");
-		const config = YAML.parse(content) as MinimalConfig;
-		return config.debug_log;
-	} catch {
-		return undefined;
-	}
-}
-
-interface FailedGateLog {
-	/** Log file paths for failed check gates */
-	checkLogs: string[];
-	/** JSON file paths for failed review gates */
-	reviewJsons: string[];
+function outputResult(adapter: StopHookAdapter, result: StopHookResult): void {
+	console.log(adapter.formatOutput(result));
 }
 
 /**
- * Extract failed gate log paths from gate results.
+ * Create a simple result for early exit conditions.
  */
-function getFailedGateLogs(
-	gateResults?: RunResult["gateResults"],
-): FailedGateLog {
-	const checkLogs: string[] = [];
-	const reviewJsons: string[] = [];
-
-	if (!gateResults) return { checkLogs, reviewJsons };
-
-	for (const gate of gateResults) {
-		if (gate.status === "pass") continue;
-
-		const isReview = gate.jobId.startsWith("review:");
-
-		if (gate.subResults) {
-			for (const sub of gate.subResults) {
-				if (sub.status === "pass" || !sub.logPath) continue;
-				if (isReview) {
-					reviewJsons.push(sub.logPath);
-				} else {
-					checkLogs.push(sub.logPath);
-				}
-			}
-		} else if (isReview) {
-			// Review gate without subResults — check logPaths then logPath
-			const paths = gate.logPaths ?? (gate.logPath ? [gate.logPath] : []);
-			for (const p of paths) {
-				if (p.endsWith(".json")) {
-					reviewJsons.push(p);
-				} else {
-					checkLogs.push(p);
-				}
-			}
-		} else {
-			// Check gate
-			const logPath = gate.logPath ?? gate.logPaths?.[0];
-			if (logPath) {
-				checkLogs.push(logPath);
-			}
-		}
-	}
-
-	return { checkLogs, reviewJsons };
-}
-
-/**
- * Get the enhanced stop reason instructions for the agent.
- * Includes trust level guidance (when reviews fail), violation handling,
- * termination conditions, and paths to failed gate log files.
- */
-function getStopReasonInstructions(
-	gateResults?: RunResult["gateResults"],
-): string {
-	const { checkLogs, reviewJsons } = getFailedGateLogs(gateResults);
-	const hasReviewFailures = reviewJsons.length > 0;
-
-	const trustLevelSection = hasReviewFailures
-		? `\n**Review trust level: medium** — Fix issues you reasonably agree with or believe the human wants fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed.\n`
-		: "";
-
-	let failedLogsSection = "";
-	if (checkLogs.length > 0 || reviewJsons.length > 0) {
-		failedLogsSection = "\n\n**Failed gate logs:**";
-		for (const logPath of checkLogs) {
-			failedLogsSection += `\n- Check: \`${logPath}\``;
-		}
-		for (const jsonPath of reviewJsons) {
-			failedLogsSection += `\n- Review: \`${jsonPath}\``;
-		}
-	}
-
-	const hasCheckFailures = checkLogs.length > 0;
-
-	// Build failure instructions conditionally based on what types of failures exist
-	const failureSteps: string[] = [];
-	if (hasCheckFailures) {
-		failureSteps.push(
-			"For CHECK failures: Read the `.log` file path listed below.",
-		);
-	}
-	if (hasReviewFailures) {
-		failureSteps.push(
-			"For REVIEW failures: Read the `.json` file path listed below.",
-		);
-		failureSteps.push(
-			'For REVIEW violations: Update the `"status"` and `"result"` fields in the JSON file:\n   - Set `"status": "fixed"` with a brief description in `"result"` for issues you fix.\n   - Set `"status": "skipped"` with a brief reason in `"result"` for issues you skip.',
-		);
-	}
-
-	const addressSection =
-		failureSteps.length > 0
-			? `\n**To address failures:**\n${failureSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n`
-			: "";
-
-	return `**GAUNTLET FAILED — YOU MUST FIX ISSUES NOW**
-
-You cannot stop until the gauntlet passes or a termination condition is met. The stop hook will automatically re-run to verify your fixes.
-${trustLevelSection}${addressSection}
-**Termination conditions:**
-- "Status: Passed" — All gates passed
-- "Status: Passed with warnings" — Remaining issues were skipped
-- "Status: Retry limit exceeded" — Run \`agent-gauntlet clean\` to archive the session and stop. This is the only case requiring manual clean; it signals unresolvable issues that need human review.${failedLogsSection}`;
-}
-
-/**
- * Get a human-friendly message for each status code.
- * These messages explain why the stop was approved or blocked.
- */
-function getStatusMessage(
+function createEarlyExitResult(
 	status: GauntletStatus,
-	context?: { intervalMinutes?: number; errorMessage?: string },
-): string {
-	switch (status) {
-		case "passed":
-			return "✓ Gauntlet passed — all gates completed successfully.";
-		case "passed_with_warnings":
-			return "✓ Gauntlet completed — passed with warnings (some issues were skipped).";
-		case "no_applicable_gates":
-			return "✓ Gauntlet passed — no applicable gates matched current changes.";
-		case "no_changes":
-			return "✓ Gauntlet passed — no changes detected.";
-		case "retry_limit_exceeded":
-			return "⚠ Gauntlet terminated — retry limit exceeded. Run `agent-gauntlet clean` to archive and continue.";
-		case "interval_not_elapsed":
-			return context?.intervalMinutes
-				? `⏭ Gauntlet skipped — run interval (${context.intervalMinutes} min) not elapsed since last run.`
-				: "⏭ Gauntlet skipped — run interval not elapsed since last run.";
-		case "lock_conflict":
-			return "⏭ Gauntlet skipped — another gauntlet run is already in progress.";
-		case "failed":
-			return "✗ Gauntlet failed — issues must be fixed before stopping.";
-		case "pr_push_required":
-			return "✓ Gauntlet passed — PR needs to be created or updated before stopping.";
-		case "no_config":
-			return "○ Not a gauntlet project — no .gauntlet/config.yml found.";
-		case "stop_hook_active":
-			return "↺ Stop hook cycle detected — allowing stop to prevent infinite loop.";
-		case "error":
-			return context?.errorMessage
-				? `⚠ Stop hook error — ${context.errorMessage}`
-				: "⚠ Stop hook error — unexpected error occurred.";
-		case "invalid_input":
-			return "⚠ Invalid hook input — could not parse JSON, allowing stop.";
-	}
+	options?: { intervalMinutes?: number; errorMessage?: string },
+): StopHookResult {
+	return {
+		status,
+		shouldBlock: false,
+		message: getStatusMessage(status, options),
+		intervalMinutes: options?.intervalMinutes,
+	};
 }
 
 /**
- * Output a hook response to stdout.
+ * Output a hook response to stdout using Claude protocol format.
+ * This is the legacy API for backward compatibility.
  * Uses the Claude Code hook protocol format:
  * - decision: "block" | "approve" - whether to block or allow the stop
  * - reason: string - when blocking, this becomes the prompt fed back to Claude automatically
@@ -371,7 +206,7 @@ function getStatusMessage(
  * - status: machine-readable status code for transparency (unified GauntletStatus)
  * - message: human-friendly explanation of the outcome
  */
-function outputHookResponse(
+export function outputHookResponse(
 	status: GauntletStatus,
 	options?: {
 		reason?: string;
@@ -379,229 +214,55 @@ function outputHookResponse(
 		errorMessage?: string;
 	},
 ): void {
-	const block = isBlockingStatus(status);
+	const claudeAdapter = new ClaudeStopHookAdapter();
+	const shouldBlock = status === "failed" || status === "pr_push_required";
 	const message = getStatusMessage(status, {
 		intervalMinutes: options?.intervalMinutes,
 		errorMessage: options?.errorMessage,
 	});
 
-	// For blocking status with detailed instructions, use those as stopReason
-	// For non-blocking statuses, use the human-friendly message as stopReason
-	const stopReason = block && options?.reason ? options.reason : message;
-
-	const response: HookResponse = {
-		decision: block ? "block" : "approve",
-		stopReason,
-		systemMessage: message,
+	const result: StopHookResult = {
 		status,
+		shouldBlock,
 		message,
+		instructions: options?.reason,
+		pushPRReason: status === "pr_push_required" ? options?.reason : undefined,
+		intervalMinutes: options?.intervalMinutes,
 	};
-	if (options?.reason) {
-		response.reason = options.reason;
-	}
-	console.log(JSON.stringify(response));
-}
 
-/**
- * Get a logger for stop-hook operations.
- * In stop-hook mode, this only writes to file (no console output).
- */
-function getStopHookLogger() {
-	return getCategoryLogger("stop-hook");
-}
-
-/**
- * Check if we should verify PR status after gates pass.
- * Loads stop hook config with 3-tier precedence and checks auto_push_pr.
- */
-async function shouldCheckPR(projectCwd: string): Promise<boolean> {
-	try {
-		const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
-		const content = await fs.readFile(configPath, "utf-8");
-		const raw = YAML.parse(content) as { stop_hook?: Record<string, unknown> };
-		const projectStopHookConfig = raw?.stop_hook as
-			| { auto_push_pr?: boolean }
-			| undefined;
-		const globalConfig = await loadGlobalConfig();
-		const resolved = resolveStopHookConfig(projectStopHookConfig, globalConfig);
-		return resolved.auto_push_pr;
-	} catch {
-		return false;
-	}
-}
-
-/**
- * PR status result from checkPRStatus.
- */
-interface PRStatusResult {
-	/** Whether a PR exists for the current branch */
-	prExists: boolean;
-	/** Whether the PR is up to date with local HEAD */
-	upToDate: boolean;
-	/** Error message if check failed (graceful degradation) */
-	error?: string;
-	/** PR number if it exists */
-	prNumber?: number;
-}
-
-/**
- * Check PR existence and whether local commits have been pushed.
- *
- * Uses `gh pr view` to get PR info and compares head SHA with local HEAD.
- * Gracefully degrades if `gh` is not installed or any error occurs.
- */
-async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
-	try {
-		// Check if gh CLI is available
-		try {
-			await execFileAsync("gh", ["--version"], { cwd });
-		} catch {
-			return {
-				prExists: false,
-				upToDate: false,
-				error: "gh CLI not installed",
-			};
-		}
-
-		// Get PR info for current branch
-		let prInfo: { number: number; state: string; headRefOid: string };
-		try {
-			const { stdout } = await execFileAsync(
-				"gh",
-				["pr", "view", "--json", "number,state,headRefOid"],
-				{ cwd },
-			);
-			prInfo = JSON.parse(stdout.trim());
-		} catch (e: unknown) {
-			const errMsg = (e as { message?: string }).message ?? "unknown";
-			// gh pr view exits with code 1 and specific message when no PR exists
-			if (
-				errMsg.includes("no pull requests found") ||
-				errMsg.includes("Could not resolve")
-			) {
-				return { prExists: false, upToDate: false };
-			}
-			// Other failures (network, auth, etc.) — return error for graceful degradation
-			return {
-				prExists: false,
-				upToDate: false,
-				error: `gh pr view failed: ${errMsg}`,
-			};
-		}
-
-		// Get local HEAD SHA
-		const { stdout: localHead } = await execFileAsync(
-			"git",
-			["rev-parse", "HEAD"],
-			{ cwd },
-		);
-		const localSha = localHead.trim();
-
-		const upToDate = prInfo.headRefOid === localSha;
-		return {
-			prExists: true,
-			upToDate,
-			prNumber: prInfo.number,
-		};
-	} catch (error: unknown) {
-		const errMsg = (error as { message?: string }).message ?? "unknown";
-		return {
-			prExists: false,
-			upToDate: false,
-			error: `PR status check failed: ${errMsg}`,
-		};
-	}
-}
-
-/**
- * Check PR status after gauntlet passes and determine if the stop should be blocked.
- * Returns the final status and optional push-PR reason.
- */
-async function postGauntletPRCheck(
-	projectCwd: string,
-	gauntletStatus: GauntletStatus,
-): Promise<{ finalStatus: GauntletStatus; pushPRReason?: string }> {
-	if (
-		gauntletStatus !== "passed" &&
-		gauntletStatus !== "passed_with_warnings"
-	) {
-		return { finalStatus: gauntletStatus };
-	}
-
-	if (!(await shouldCheckPR(projectCwd))) {
-		return { finalStatus: gauntletStatus };
-	}
-
-	const prStatus = await checkPRStatus(projectCwd);
-	if (prStatus.error) {
-		log.warn(`PR status check failed: ${prStatus.error}`);
-		return { finalStatus: gauntletStatus };
-	}
-
-	if (!prStatus.prExists || !prStatus.upToDate) {
-		return {
-			finalStatus: "pr_push_required",
-			pushPRReason: getPushPRInstructions({
-				hasWarnings: gauntletStatus === "passed_with_warnings",
-			}),
-		};
-	}
-
-	return { finalStatus: gauntletStatus };
-}
-
-/**
- * Generate push-PR instructions for the agent.
- */
-function getPushPRInstructions(options?: { hasWarnings?: boolean }): string {
-	const warningGuidance = options?.hasWarnings
-		? "\n\n**Note:** Some issues were skipped during the gauntlet. Include a summary of skipped issues in the PR description so reviewers are aware."
-		: "";
-
-	return `**GAUNTLET PASSED — CREATE OR UPDATE YOUR PULL REQUEST**
-
-All local quality gates have passed. Before you can stop, you need to commit your changes, push to remote, and create or update a pull request for the current branch.
-
-After the PR is created or updated, try to stop again. The stop hook will verify the PR exists and is up to date.${warningGuidance}`;
+	console.log(claudeAdapter.formatOutput(result));
 }
 
 // Export for testing
-export {
-	getStopReasonInstructions,
-	outputHookResponse,
-	getStatusMessage,
-	checkPRStatus,
-	getPushPRInstructions,
+export { getStopReasonInstructions, getStatusMessage, getPushPRInstructions };
+export type {
+	GauntletStatus as StopHookStatus,
+	StopHookResult as HookResponse,
 };
-export type { GauntletStatus as StopHookStatus, HookResponse, PRStatusResult };
 
-/**
- * Hard ceiling for the stop hook process.
- * If the process runs longer than this, it outputs an allow response and exits.
- * This prevents zombie processes when Claude Code times out reading stdout
- * but the process keeps running.
- */
-const STOP_HOOK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+// Re-export PRStatusResult from handler for backward compatibility
+export type { PRStatusResult } from "../hooks/stop-hook-handler.js";
+
+// Re-export checkPRStatus for testing
+export { checkPRStatus } from "../hooks/stop-hook-handler.js";
 
 export function registerStopHookCommand(program: Command): void {
 	program
 		.command("stop-hook")
 		.description("Claude Code stop hook - validates gauntlet completion")
 		.action(async () => {
-			// Self-timeout: kill this process if it runs too long.
-			// Claude Code may timeout reading stdout, but the process keeps running
-			// as a zombie holding the lock and marker file.
+			// Default to Claude adapter for error handling before detection
+			let adapter: StopHookAdapter = adapters[1];
 			let debugLogger: DebugLogger | null = null;
 			let loggerInitialized = false;
-			let markerFilePath: string | null = null; // Track marker file for cleanup
+			let markerFilePath: string | null = null;
+			const log = getStopHookLogger();
 
 			// Self-timeout: kill this process if it runs too long.
 			// Claude Code may timeout reading stdout, but the process keeps running
 			// as a zombie holding the lock and marker file.
 			const selfTimeout = setTimeout(() => {
-				// Clean up marker file synchronously before exiting to avoid
-				// leaving stale markers that block subsequent stop-hook invocations
-				// for up to 10 minutes (the stale marker threshold).
+				// Clean up marker file synchronously before exiting
 				if (markerFilePath) {
 					try {
 						fsSync.rmSync(markerFilePath, { force: true });
@@ -609,13 +270,15 @@ export function registerStopHookCommand(program: Command): void {
 						// Best-effort cleanup
 					}
 				}
-				outputHookResponse("error", {
-					errorMessage: "stop hook timed out",
-				});
+				outputResult(
+					adapter,
+					createEarlyExitResult("error", {
+						errorMessage: "stop hook timed out",
+					}),
+				);
 				process.exit(0);
 			}, STOP_HOOK_TIMEOUT_MS);
-			selfTimeout.unref(); // Don't keep process alive just for this timer
-			const log = getStopHookLogger();
+			selfTimeout.unref();
 
 			// Capture diagnostic info early for later logging
 			const diagnostics = {
@@ -636,36 +299,25 @@ export function registerStopHookCommand(program: Command): void {
 				// These checks allow quick exit without the 5-second stdin timeout
 				// ============================================================
 
-				// TODO: The env var is not working reliably so we added STOP_HOOK_MARKER_FILE; repurpose the env var check to allow users to disable the stop hook at env level.
-
 				// 1. Check env var FIRST - fast exit for child Claude processes
-				// When gauntlet spawns Claude for reviews, child processes have this set
 				if (process.env[GAUNTLET_STOP_HOOK_ACTIVE_ENV]) {
-					// No debug logging: we don't know the log dir yet, and child
-					// processes are expected to hit this path every time
-					outputHookResponse("stop_hook_active");
+					outputResult(adapter, createEarlyExitResult("stop_hook_active"));
 					return;
 				}
 
 				// 2. Check if this is a gauntlet project BEFORE reading stdin
-				// This avoids the 5-second stdin timeout for non-gauntlet projects
-				// Use process.cwd() since that's where Claude Code runs the hook
 				const quickConfigCheck = path.join(
 					process.cwd(),
 					".gauntlet",
 					"config.yml",
 				);
 				if (!(await fileExists(quickConfigCheck))) {
-					// Not a gauntlet project - allow stop without reading stdin
-					// No debug logging: not a gauntlet project
-					outputHookResponse("no_config");
+					outputResult(adapter, createEarlyExitResult("no_config"));
 					return;
 				}
 
 				// ============================================================
 				// EARLY DEBUG LOGGER INIT (before marker/stdin checks)
-				// We now know it's a gauntlet project, so init the debug logger
-				// early to capture every subsequent decision point.
 				// ============================================================
 				const earlyLogDir = path.join(
 					process.cwd(),
@@ -680,8 +332,6 @@ export function registerStopHookCommand(program: Command): void {
 					);
 					debugLogger = new DebugLogger(earlyLogDir, debugLogConfig);
 				} catch (initErr: unknown) {
-					// Debug logger init failed — continue without it.
-					// This should never break the stop hook.
 					log.warn(
 						`Debug logger init failed: ${(initErr as { message?: string }).message ?? "unknown"}`,
 					);
@@ -690,8 +340,6 @@ export function registerStopHookCommand(program: Command): void {
 				await debugLogger?.logCommand("stop-hook", []);
 
 				// 3. Check marker file - fast exit for nested stop-hooks
-				// This catches child Claude processes whose stop hooks fire during gauntlet
-				// (Claude Code doesn't pass env vars to hooks, so we use a file-based signal)
 				const markerLogDir = await getLogDir(process.cwd());
 				const markerPath = path.join(
 					process.cwd(),
@@ -699,9 +347,6 @@ export function registerStopHookCommand(program: Command): void {
 					STOP_HOOK_MARKER_FILE,
 				);
 				if (await fileExists(markerPath)) {
-					// Check staleness: if the marker is older than 10 minutes, the previous
-					// stop-hook process was likely killed before its finally block could clean up.
-					// Remove the stale marker and proceed instead of blocking indefinitely.
 					const STALE_MARKER_MS = 10 * 60 * 1000;
 					try {
 						const stat = await fs.stat(markerPath);
@@ -713,14 +358,13 @@ export function registerStopHookCommand(program: Command): void {
 								`age=${Math.round(ageMs / 1000)}s threshold=${Math.round(STALE_MARKER_MS / 1000)}s`,
 							);
 							await fs.rm(markerPath, { force: true });
-							// Fall through — marker was stale, proceed normally
 						} else {
 							await debugLogger?.logStopHookEarlyExit(
 								"marker_fresh",
 								"stop_hook_active",
 								`age=${Math.round(ageMs / 1000)}s`,
 							);
-							outputHookResponse("stop_hook_active");
+							outputResult(adapter, createEarlyExitResult("stop_hook_active"));
 							return;
 						}
 					} catch (markerErr: unknown) {
@@ -731,32 +375,35 @@ export function registerStopHookCommand(program: Command): void {
 							"stop_hook_active",
 							`error=${errMsg}`,
 						);
-						// If we can't stat/remove, treat as active to be safe
-						outputHookResponse("stop_hook_active");
+						outputResult(adapter, createEarlyExitResult("stop_hook_active"));
 						return;
 					}
 				}
 
 				// ============================================================
-				// STDIN PARSING (only for gauntlet projects)
+				// STDIN PARSING AND ADAPTER DETECTION
 				// ============================================================
 
-				// 4. Read stdin JSON - now we know it's a gauntlet project
 				const input = await readStdin();
 				diagnostics.rawStdin = input;
 
-				let hookInput: StopHookInput = {};
+				let parsed: Record<string, unknown> = {};
 				try {
 					if (input.trim()) {
-						hookInput = JSON.parse(input);
+						parsed = JSON.parse(input);
 						// Capture parsed fields for diagnostics
-						diagnostics.stdinSessionId = hookInput.session_id;
-						diagnostics.stdinStopHookActive = hookInput.stop_hook_active;
-						diagnostics.stdinCwd = hookInput.cwd;
-						diagnostics.stdinHookEventName = hookInput.hook_event_name;
+						diagnostics.stdinSessionId = parsed.session_id as
+							| string
+							| undefined;
+						diagnostics.stdinStopHookActive = parsed.stop_hook_active as
+							| boolean
+							| undefined;
+						diagnostics.stdinCwd = parsed.cwd as string | undefined;
+						diagnostics.stdinHookEventName = parsed.hook_event_name as
+							| string
+							| undefined;
 					}
 				} catch (parseErr: unknown) {
-					// Invalid JSON - allow stop to avoid blocking on parse errors
 					const errMsg =
 						(parseErr as { message?: string }).message ?? "unknown";
 					log.info(`Invalid hook input (${errMsg}), allowing stop`);
@@ -765,34 +412,37 @@ export function registerStopHookCommand(program: Command): void {
 						"invalid_input",
 						`error=${errMsg}`,
 					);
-					outputHookResponse("invalid_input");
+					outputResult(adapter, createEarlyExitResult("invalid_input"));
 					return;
 				}
 
-				// 5. Check stop_hook_active from stdin (Claude Code's loop prevention)
-				// DISABLED: Claude Code sends stop_hook_active=true after blocking
-				// the stop hook twice, but our gauntlet legitimately needs to re-run
-				// on the 3rd+ attempt to verify fixes. The marker file (check 3) and
-				// env var (check 1) already handle nested/child process cases.
-				// if (hookInput.stop_hook_active) {
-				// 	await debugLogger?.logStopHookEarlyExit(
-				// 		"stdin_stop_hook_active",
-				// 		"stop_hook_active",
-				// 	);
-				// 	outputHookResponse("stop_hook_active");
-				// 	return;
-				// }
+				// Detect protocol and select adapter
+				adapter = adapters.find((a) => a.detect(parsed)) ?? adapters[1];
+
+				// Parse input using selected adapter
+				const ctx = adapter.parseInput(parsed);
+
+				// Check for adapter-specific early exit (e.g., Cursor loop_count)
+				const skipResult = adapter.shouldSkipExecution(ctx);
+				if (skipResult) {
+					await debugLogger?.logStopHookEarlyExit(
+						"adapter_skip",
+						skipResult.status,
+						`adapter=${adapter.name}`,
+					);
+					outputResult(adapter, skipResult);
+					return;
+				}
 
 				// ============================================================
-				// GAUNTLET EXECUTION (full validation with logging)
+				// GAUNTLET EXECUTION
 				// ============================================================
 
 				log.info("Starting gauntlet validation...");
 
-				// 6. Determine project directory (use hook-provided cwd if different)
 				// Re-check config if cwd differs from process.cwd()
-				const projectCwd = hookInput.cwd ?? process.cwd();
-				if (hookInput.cwd && hookInput.cwd !== process.cwd()) {
+				const projectCwd = ctx.cwd;
+				if (ctx.cwd !== process.cwd()) {
 					const configPath = path.join(projectCwd, ".gauntlet", "config.yml");
 					if (!(await fileExists(configPath))) {
 						log.info("No gauntlet config found at hook cwd, allowing stop");
@@ -801,15 +451,15 @@ export function registerStopHookCommand(program: Command): void {
 							"no_config",
 							`cwd=${projectCwd}`,
 						);
-						outputHookResponse("no_config");
+						outputResult(adapter, createEarlyExitResult("no_config"));
 						return;
 					}
 				}
 
-				// 7. Get log directory from project config (for debug logging)
+				// Get log directory from project config
 				const logDir = path.join(projectCwd, await getLogDir(projectCwd));
 
-				// Initialize app logger in stop-hook mode (file-only, no console output)
+				// Initialize app logger in stop-hook mode
 				await initLogger({
 					mode: "stop-hook",
 					logDir,
@@ -830,28 +480,25 @@ export function registerStopHookCommand(program: Command): void {
 					}
 				}
 
-				// Log diagnostic info to help debug duplicate stop-hook triggers
+				// Log diagnostic info
 				await debugLogger?.logStopHookDiagnostics(diagnostics);
 
-				// 8. Create marker file to signal nested stop-hooks to fast-exit
+				// Create marker file to signal nested stop-hooks to fast-exit
 				markerFilePath = path.join(logDir, STOP_HOOK_MARKER_FILE);
 				try {
 					await fs.writeFile(markerFilePath, `${process.pid}`, "utf-8");
 				} catch (mkErr: unknown) {
-					// Marker is best-effort, but log the error
 					const errMsg = (mkErr as { message?: string }).message ?? "unknown";
 					log.warn(`Failed to create marker file: ${errMsg}`);
 					markerFilePath = null;
 				}
 
-				// 8. Run gauntlet (executor handles lock, interval, config loading)
+				// Execute handler
 				log.info("Running gauntlet gates...");
-				let result: RunResult;
+				const handler = new StopHookHandler(debugLogger ?? undefined);
+				let result: StopHookResult;
 				try {
-					result = await executeRun({
-						cwd: projectCwd,
-						checkInterval: true,
-					});
+					result = await handler.execute(ctx);
 				} finally {
 					// Clean up marker file regardless of success/failure
 					if (markerFilePath) {
@@ -866,35 +513,10 @@ export function registerStopHookCommand(program: Command): void {
 					}
 				}
 
-				// 9. Handle results using unified GauntletStatus directly
-				log.info(`Gauntlet completed with status: ${result.status}`);
+				// Output result using adapter format
+				outputResult(adapter, result);
 
-				// 10. Post-gauntlet PR check: when gates pass and auto_push_pr is enabled,
-				// verify a PR exists and is up to date before allowing stop.
-				// Only triggers on direct success statuses (passed, passed_with_warnings).
-				const { finalStatus, pushPRReason } = await postGauntletPRCheck(
-					projectCwd,
-					result.status,
-				);
-
-				await debugLogger?.logStopHook(
-					isBlockingStatus(finalStatus) ? "block" : "allow",
-					finalStatus,
-				);
-
-				// Use gate results from executor for detailed failure instructions
-				outputHookResponse(finalStatus, {
-					reason:
-						finalStatus === "failed"
-							? getStopReasonInstructions(result.gateResults)
-							: finalStatus === "pr_push_required"
-								? pushPRReason
-								: undefined,
-					errorMessage: result.errorMessage,
-					intervalMinutes: result.intervalMinutes,
-				});
-
-				// Clean up logger (do not let cleanup errors break protocol)
+				// Clean up logger
 				if (loggerInitialized) {
 					try {
 						await resetLogger();
@@ -910,25 +532,23 @@ export function registerStopHookCommand(program: Command): void {
 				const errorMessage = err.message || "unknown error";
 				log.error(`Stop hook error: ${errorMessage}`);
 				await debugLogger?.logStopHook("allow", `error: ${errorMessage}`);
-				outputHookResponse("error", { errorMessage });
+				outputResult(adapter, createEarlyExitResult("error", { errorMessage }));
 
 				// Clean up marker file if it was created
 				if (markerFilePath) {
 					try {
 						await fs.rm(markerFilePath, { force: true });
 					} catch (rmErr: unknown) {
-						// Log but don't throw — error handler must not fail
 						const rmMsg = (rmErr as { message?: string }).message ?? "unknown";
 						log.warn(`Failed to remove marker file in error handler: ${rmMsg}`);
 					}
 				}
 
-				// Clean up logger (do not let cleanup errors break protocol)
+				// Clean up logger
 				if (loggerInitialized) {
 					try {
 						await resetLogger();
 					} catch (resetErr: unknown) {
-						// Log to stderr as last resort
 						const resetMsg =
 							(resetErr as { message?: string }).message ?? "unknown";
 						process.stderr.write(
@@ -937,7 +557,6 @@ export function registerStopHookCommand(program: Command): void {
 					}
 				}
 			} finally {
-				// Always clear the self-timeout so the process can exit normally
 				clearTimeout(selfTimeout);
 			}
 		});
