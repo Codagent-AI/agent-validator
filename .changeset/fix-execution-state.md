@@ -4,4 +4,8 @@
 ---
 
 ### Fixes
+- fix: include stderr in adapter error messages for usage limit detection
 - fix: prevent stale execution state from causing false auto-clean and phantom diffs
+
+### Other Changes
+- chore: add changeset

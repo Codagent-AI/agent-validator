@@ -147,21 +147,7 @@ When `stop_hook.auto_push_pr` is enabled, an additional check runs after gates p
 
 ### Adapter Health and Cooldown
 
-Review gates dispatch work to CLI adapters (e.g., codex, gemini, claude). If an adapter hits a usage limit or quota error during a review, it is marked **unhealthy** for a 1-hour cooldown period. This prevents wasting time retrying adapters that are temporarily unavailable.
-
-**How it works:**
-
-1. **Detection**: When an adapter process exits with an error, the system checks the error output for usage-limit phrases (e.g., "usage limit", "quota exceeded", "credit balance is too low").
-2. **Marking**: If a usage limit is detected, the adapter is written to the `unhealthy_adapters` map in `gauntlet_logs/.execution_state` with a `marked_at` timestamp and `reason`.
-3. **Skipping**: On each subsequent run, before dispatching reviews, the system checks the unhealthy map. Adapters within the 1-hour cooldown are skipped.
-4. **Recovery**: After the cooldown expires, the adapter's binary is probed. If healthy, the flag is cleared and the adapter rejoins the pool.
-5. **Round-robin fallback**: The `num_reviews` round-robin assignment uses only healthy adapters. If `num_reviews: 2` but only one adapter is healthy, both review slots are assigned to that adapter.
-6. **No mid-execution failover**: If an adapter fails during a run, that review slot is lost for the current iteration. The adapter is marked unhealthy and skipped on the next rerun.
-7. **No healthy adapters**: If all configured adapters are unhealthy or unavailable, the review gate returns an error immediately.
-
-**Example**: With `cli_preference: [codex, gemini]` and `num_reviews: 2`, if codex hits a rate limit:
-- Current run: codex@1 errors, gemini@2 passes → gate fails (incomplete)
-- Next run: codex is cooling down, skipped → gemini@1 and gemini@2 both assigned → gate can pass
+If a CLI adapter hits a usage limit during a review, it is automatically marked unhealthy and skipped for 1 hour. Remaining healthy adapters absorb the review slots via round-robin. See [CLI Invocation Details — Adapter Health and Cooldown](cli-invocation-details.md#adapter-health-and-cooldown) for the full mechanism.
 
 ### Review Rerun Behavior
 
