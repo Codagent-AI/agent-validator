@@ -206,7 +206,7 @@ describe("run-executor checkInterval option", () => {
 
 			// Should return interval_not_elapsed status
 			expect(sourceFile).toContain('"interval_not_elapsed"');
-			expect(sourceFile).toContain("status: \"interval_not_elapsed\"");
+			expect(sourceFile).toContain('status: "interval_not_elapsed"');
 		});
 
 		it("should only check interval when no existing logs (not in rerun mode)", () => {

@@ -62,7 +62,6 @@ export function registerHealthCommand(program: Command): void {
 
 			try {
 				const config = await loadConfig();
-				const checkUsageLimit = config.project.cli.check_usage_limit;
 
 				// Check for reviews configuration
 				const reviewEntries = Object.entries(config.reviews);
@@ -119,7 +118,7 @@ export function registerHealthCommand(program: Command): void {
 				for (const agentName of Array.from(preferredAgents).sort()) {
 					const adapter = getAdapter(agentName);
 					if (adapter) {
-						const health = await adapter.checkHealth({ checkUsageLimit });
+						const health = await adapter.checkHealth();
 						let statusStr = "";
 
 						switch (health.status) {

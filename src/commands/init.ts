@@ -375,8 +375,6 @@ log_dir: gauntlet_logs
 cli:
   default_preference:
 ${cliList}
-  # Check CLI usage quota before running (if unavailable, uses next in list)
-  # check_usage_limit: false
 
 entry_points:
 ${entryPoints}

@@ -25,8 +25,6 @@ This document lists the configuration files Agent Gauntlet loads and all support
 - **cli**: object (required)
   - **default_preference**: string[] (required)  
     Default ordered list of review CLI tools to try when a review gate doesn't specify its own `cli_preference`.
-  - **check_usage_limit**: boolean (default: `false`)  
-    If `true`, health checks will probe for usage limits/quotas (which may consume a small amount of tokens).
 - **allow_parallel**: boolean (default: `true`)
   If `true`, gates with `parallel: true` run concurrently, while `parallel: false` gates run sequentially. If `false`, all gates run sequentially regardless of per-gate settings.
 - **max_retries**: number (default: `3`)
@@ -78,7 +76,6 @@ cli:
     - codex
     - claude
     - github-copilot
-  check_usage_limit: false
 debug_log:
   enabled: true
   max_size_mb: 10

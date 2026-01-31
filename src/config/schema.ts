@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const cliConfigSchema = z.object({
 	default_preference: z.array(z.string().min(1)).min(1),
-	check_usage_limit: z.boolean().default(false),
 });
 
 export const checkGateSchema = z

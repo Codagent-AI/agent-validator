@@ -7,7 +7,6 @@ cli:
     - codex
     - gemini
     - claude
-  check_usage_limit: true
 entry_points:
   - path: "."
     reviews:

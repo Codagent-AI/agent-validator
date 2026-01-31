@@ -88,7 +88,6 @@ cli:
     - codex
     - claude
     - gemini
-  check_usage_limit: true
 entry_points:
   - path: "src"
     checks:
@@ -113,7 +112,6 @@ entry_points:
 | `log_dir` | Where Gauntlet writes log files for each run |
 | `allow_parallel` | Run checks and reviews concurrently for faster feedback |
 | `cli.default_preference` | Ordered list of AI CLIs to try for reviews — uses the first available one |
-| `cli.check_usage_limit` | Skip CLIs that have hit their token/usage limit |
 | `entry_points` | Maps paths to the checks and reviews that run when those paths change |
 
 In this example:

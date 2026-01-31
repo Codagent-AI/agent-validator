@@ -2,7 +2,7 @@ import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { getAdapter } from "../cli-adapters/index.js";
+import { getAdapter, isUsageLimit } from "../cli-adapters/index.js";
 import type { LoadedReviewGateConfig } from "../config/types.js";
 import { getCategoryLogger } from "../output/app-logger.js";
 import {
@@ -10,6 +10,12 @@ import {
 	isValidViolationLocation,
 	parseDiff,
 } from "../utils/diff-parser.js";
+import {
+	getUnhealthyAdapters,
+	isAdapterCoolingDown,
+	markAdapterHealthy,
+	markAdapterUnhealthy,
+} from "../utils/execution-state.js";
 import type {
 	GateResult,
 	PreviousViolation,
@@ -118,9 +124,9 @@ export class ReviewGateExecutor {
 			uncommitted?: boolean;
 			fixBase?: string;
 		},
-		checkUsageLimit: boolean = false,
 		rerunThreshold: "critical" | "high" | "medium" | "low" = "high",
 		passedSlots?: Map<number, { adapter: string; passIteration: number }>,
+		logDir?: string,
 	): Promise<GateResult> {
 		const startTime = Date.now();
 		const logBuffer: string[] = [];
@@ -213,37 +219,61 @@ export class ReviewGateExecutor {
 				`Checking adapters: ${preferences.join(", ") || "(none configured)"}`,
 			);
 
-			// Determine healthy adapters
+			// Determine healthy adapters using cooldown-based filtering
 			const healthyAdapters: string[] = [];
-			const cliCache = new Map<string, boolean>();
+			const unhealthyMap = logDir ? await getUnhealthyAdapters(logDir) : {};
 
 			for (const toolName of preferences) {
-				const cached = cliCache.get(toolName);
-				let isHealthy: boolean;
-				if (cached !== undefined) {
-					isHealthy = cached;
-				} else {
-					const adapter = getAdapter(toolName);
-					if (!adapter) {
-						log.debug(`Adapter ${toolName}: not found`);
-						isHealthy = false;
+				const adapter = getAdapter(toolName);
+				if (!adapter) {
+					log.debug(`Adapter ${toolName}: not found`);
+					continue;
+				}
+
+				// Check cooldown status
+				const unhealthyEntry = unhealthyMap[toolName];
+				if (unhealthyEntry) {
+					if (isAdapterCoolingDown(unhealthyEntry)) {
+						log.debug(`Adapter ${toolName}: cooling down`);
+						await mainLogger(
+							`Skipping ${toolName}: cooling down (${unhealthyEntry.reason})\n`,
+						);
+						continue;
+					}
+
+					// Cooldown expired - probe binary availability
+					const health = await adapter.checkHealth();
+					if (health.status === "healthy") {
+						log.debug(
+							`Adapter ${toolName}: cooldown expired, binary available, clearing unhealthy flag`,
+						);
+						if (logDir) {
+							await markAdapterHealthy(logDir, toolName);
+						}
 					} else {
-						const health = await adapter.checkHealth({ checkUsageLimit });
-						isHealthy = health.status === "healthy";
+						log.debug(
+							`Adapter ${toolName}: cooldown expired but binary missing`,
+						);
+						await mainLogger(
+							`Skipping ${toolName}: ${health.message || "Missing"}\n`,
+						);
+						continue;
+					}
+				} else {
+					// Not in unhealthy list - check binary availability
+					const health = await adapter.checkHealth();
+					if (health.status !== "healthy") {
 						log.debug(
 							`Adapter ${toolName}: ${health.status}${health.message ? ` - ${health.message}` : ""}`,
 						);
-						if (!isHealthy) {
-							await mainLogger(
-								`Skipping ${toolName}: ${health.message || "Unhealthy"}\n`,
-							);
-						}
+						await mainLogger(
+							`Skipping ${toolName}: ${health.message || "Unhealthy"}\n`,
+						);
+						continue;
 					}
-					cliCache.set(toolName, isHealthy);
 				}
-				if (isHealthy) {
-					healthyAdapters.push(toolName);
-				}
+
+				healthyAdapters.push(toolName);
 			}
 
 			if (healthyAdapters.length === 0) {
@@ -400,9 +430,8 @@ export class ReviewGateExecutor {
 							mainLogger,
 							loggerFactory,
 							previousFailures,
-							true,
-							checkUsageLimit,
 							rerunThreshold,
+							logDir,
 						),
 					),
 				);
@@ -428,9 +457,8 @@ export class ReviewGateExecutor {
 						mainLogger,
 						loggerFactory,
 						previousFailures,
-						true,
-						checkUsageLimit,
 						rerunThreshold,
+						logDir,
 					);
 					if (res) {
 						outputs.push({
@@ -588,9 +616,8 @@ export class ReviewGateExecutor {
 			logPath: string;
 		}>,
 		previousFailures?: Map<string, PreviousViolation[]>,
-		skipHealthCheck: boolean = false,
-		checkUsageLimit: boolean = false,
 		rerunThreshold: "critical" | "high" | "medium" | "low" = "high",
+		logDir?: string,
 	): Promise<{
 		adapter: string;
 		reviewIndex: number;
@@ -608,17 +635,6 @@ export class ReviewGateExecutor {
 	} | null> {
 		const adapter = getAdapter(toolName);
 		if (!adapter) return null;
-
-		if (!skipHealthCheck) {
-			const health = await adapter.checkHealth({ checkUsageLimit });
-			if (health.status === "missing") return null;
-			if (health.status === "unhealthy") {
-				await mainLogger(
-					`Skipping ${adapter.name}: ${health.message || "Unhealthy"}\n`,
-				);
-				return null;
-			}
-		}
 
 		if (!adapter.name || typeof adapter.name !== "string") {
 			await mainLogger(
@@ -654,6 +670,28 @@ export class ReviewGateExecutor {
 					adapterLogger(chunk);
 				},
 			});
+
+			// Check for usage limit in output
+			if (isUsageLimit(output)) {
+				const reason = "Usage limit exceeded";
+				if (logDir) {
+					await markAdapterUnhealthy(logDir, adapter.name, reason);
+					log.debug(
+						`Adapter ${adapter.name} marked unhealthy for 1 hour: ${reason}`,
+					);
+					await mainLogger(
+						`${adapter.name} marked unhealthy for 1 hour: ${reason}\n`,
+					);
+				}
+				return {
+					adapter: adapter.name,
+					reviewIndex,
+					evaluation: {
+						status: "error",
+						message: reason,
+					},
+				};
+			}
 
 			await adapterLogger(
 				`\n--- Review Output (${adapter.name}) ---\n${output}\n`,
@@ -806,6 +844,29 @@ export class ReviewGateExecutor {
 			log.error(errorMsg);
 			await adapterLogger(`${errorMsg}\n`);
 			await mainLogger(`${errorMsg}\n`);
+
+			// Check if the error is a usage limit
+			if (err.message && isUsageLimit(err.message)) {
+				const reason = "Usage limit exceeded";
+				if (logDir) {
+					await markAdapterUnhealthy(logDir, adapter.name, reason);
+					log.debug(
+						`Adapter ${adapter.name} marked unhealthy for 1 hour: ${reason}`,
+					);
+					await mainLogger(
+						`${adapter.name} marked unhealthy for 1 hour: ${reason}\n`,
+					);
+				}
+				return {
+					adapter: adapter.name,
+					reviewIndex,
+					evaluation: {
+						status: "error",
+						message: reason,
+					},
+				};
+			}
+
 			return null;
 		}
 	}

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { type CLIAdapter, isUsageLimit } from "./index.js";
+import type { CLIAdapter } from "./index.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -21,7 +21,7 @@ export class CursorAdapter implements CLIAdapter {
 		}
 	}
 
-	async checkHealth(options?: { checkUsageLimit?: boolean }): Promise<{
+	async checkHealth(): Promise<{
 		available: boolean;
 		status: "healthy" | "missing" | "unhealthy";
 		message?: string;
@@ -33,54 +33,6 @@ export class CursorAdapter implements CLIAdapter {
 				status: "missing",
 				message: "Command not found",
 			};
-		}
-
-		if (options?.checkUsageLimit) {
-			try {
-				// Try a lightweight command to check if we're rate limited
-				const { stdout, stderr } = await execAsync('echo "hello" | agent', {
-					timeout: 10000,
-				});
-
-				const combined = (stdout || "") + (stderr || "");
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				return { available: true, status: "healthy", message: "Ready" };
-			} catch (error: unknown) {
-				const execError = error as {
-					stderr?: string;
-					stdout?: string;
-					message?: string;
-				};
-				const stderr = execError.stderr || "";
-				const stdout = execError.stdout || "";
-				const combined = stderr + stdout;
-
-				if (isUsageLimit(combined)) {
-					return {
-						available: true,
-						status: "unhealthy",
-						message: "Usage limit exceeded",
-					};
-				}
-
-				// Since we sent a valid prompt ("hello"), any other error implies the tool is broken
-				const cleanError =
-					combined.split("\n")[0]?.trim() ||
-					execError.message ||
-					"Command failed";
-				return {
-					available: true,
-					status: "unhealthy",
-					message: `Error: ${cleanError}`,
-				};
-			}
 		}
 
 		return { available: true, status: "healthy", message: "Ready" };

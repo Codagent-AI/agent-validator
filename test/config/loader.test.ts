@@ -26,7 +26,6 @@ cli:
   default_preference:
     - claude
     - gemini
-  check_usage_limit: false
 entry_points:
   - path: src/
     checks:

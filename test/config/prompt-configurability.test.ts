@@ -3,10 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "../../src/config/loader.js";
 
-const TEST_DIR = path.join(
-	process.cwd(),
-	`test-prompt-config-${Date.now()}`,
-);
+const TEST_DIR = path.join(process.cwd(), `test-prompt-config-${Date.now()}`);
 const GAUNTLET_DIR = path.join(TEST_DIR, ".gauntlet");
 const CHECKS_DIR = path.join(GAUNTLET_DIR, "checks");
 const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
@@ -29,7 +26,6 @@ cli:
   default_preference:
     - claude
     - gemini
-  check_usage_limit: false
 entry_points:
   - path: src/
 ${checksSection}${reviewsSection}`,
@@ -112,9 +108,7 @@ skill_name: some-skill
 		});
 
 		it("throws validation error", async () => {
-			await expect(loadConfig(TEST_DIR)).rejects.toThrow(
-				/mutually exclusive/,
-			);
+			await expect(loadConfig(TEST_DIR)).rejects.toThrow(/mutually exclusive/);
 		});
 	});
 
@@ -202,9 +196,7 @@ Body.
 		});
 
 		it("throws validation error", async () => {
-			await expect(loadConfig(TEST_DIR)).rejects.toThrow(
-				/mutually exclusive/,
-			);
+			await expect(loadConfig(TEST_DIR)).rejects.toThrow(/mutually exclusive/);
 		});
 	});
 
@@ -331,9 +323,7 @@ fix_with_skill: fix-it
 		});
 
 		it("throws mutual exclusivity error", async () => {
-			await expect(loadConfig(TEST_DIR)).rejects.toThrow(
-				/mutually exclusive/,
-			);
+			await expect(loadConfig(TEST_DIR)).rejects.toThrow(/mutually exclusive/);
 		});
 	});
 
@@ -351,9 +341,7 @@ fix_instructions_file: new.md
 		});
 
 		it("throws deprecation conflict error", async () => {
-			await expect(loadConfig(TEST_DIR)).rejects.toThrow(
-				/Cannot specify both/,
-			);
+			await expect(loadConfig(TEST_DIR)).rejects.toThrow(/Cannot specify both/);
 		});
 	});
 

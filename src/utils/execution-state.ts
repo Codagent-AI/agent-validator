@@ -5,17 +5,37 @@ import path from "node:path";
 const EXECUTION_STATE_FILENAME = ".execution_state";
 const SESSION_REF_FILENAME = ".session_ref";
 
+export interface UnhealthyAdapter {
+	marked_at: string;
+	reason: string;
+}
+
 export interface ExecutionState {
 	last_run_completed_at: string;
 	branch: string;
 	commit: string;
 	working_tree_ref?: string;
+	unhealthy_adapters?: Record<string, UnhealthyAdapter>;
 }
 
 /**
  * Read the execution state from the log directory.
  * Returns null if the state file or directory doesn't exist.
  */
+function isValidStateData(data: unknown): data is Record<string, unknown> & {
+	last_run_completed_at: string;
+	branch: string;
+	commit: string;
+} {
+	if (typeof data !== "object" || data === null) return false;
+	const record = data as Record<string, unknown>;
+	return (
+		typeof record.last_run_completed_at === "string" &&
+		typeof record.branch === "string" &&
+		typeof record.commit === "string"
+	);
+}
+
 export async function readExecutionState(
 	logDir: string,
 ): Promise<ExecutionState | null> {
@@ -24,31 +44,26 @@ export async function readExecutionState(
 		const content = await fs.readFile(statePath, "utf-8");
 		const data = JSON.parse(content) as unknown;
 
-		// Validate the parsed JSON has the expected structure
-		if (
-			typeof data !== "object" ||
-			data === null ||
-			typeof (data as Record<string, unknown>).last_run_completed_at !==
-				"string" ||
-			typeof (data as Record<string, unknown>).branch !== "string" ||
-			typeof (data as Record<string, unknown>).commit !== "string"
-		) {
-			return null;
-		}
+		if (!isValidStateData(data)) return null;
 
-		// working_tree_ref is optional (may not exist in older state files)
 		const state: ExecutionState = {
-			last_run_completed_at: (data as Record<string, unknown>)
-				.last_run_completed_at as string,
-			branch: (data as Record<string, unknown>).branch as string,
-			commit: (data as Record<string, unknown>).commit as string,
+			last_run_completed_at: data.last_run_completed_at,
+			branch: data.branch,
+			commit: data.commit,
 		};
 
+		if (typeof data.working_tree_ref === "string") {
+			state.working_tree_ref = data.working_tree_ref;
+		}
+
 		if (
-			typeof (data as Record<string, unknown>).working_tree_ref === "string"
+			data.unhealthy_adapters &&
+			typeof data.unhealthy_adapters === "object"
 		) {
-			state.working_tree_ref = (data as Record<string, unknown>)
-				.working_tree_ref as string;
+			state.unhealthy_adapters = data.unhealthy_adapters as Record<
+				string,
+				UnhealthyAdapter
+			>;
 		}
 
 		return state;
@@ -110,10 +125,11 @@ export async function createWorkingTreeRef(): Promise<string> {
  * Also cleans up legacy .session_ref file if it exists.
  */
 export async function writeExecutionState(logDir: string): Promise<void> {
-	const [branch, commit, workingTreeRef] = await Promise.all([
+	const [branch, commit, workingTreeRef, existing] = await Promise.all([
 		getCurrentBranch(),
 		getCurrentCommit(),
 		createWorkingTreeRef(),
+		readExecutionState(logDir),
 	]);
 
 	const state: ExecutionState = {
@@ -122,6 +138,11 @@ export async function writeExecutionState(logDir: string): Promise<void> {
 		commit,
 		working_tree_ref: workingTreeRef,
 	};
+
+	// Preserve unhealthy_adapters from existing state
+	if (existing?.unhealthy_adapters) {
+		state.unhealthy_adapters = existing.unhealthy_adapters;
+	}
 
 	// Ensure the log directory exists
 	await fs.mkdir(logDir, { recursive: true });
@@ -285,6 +306,96 @@ export async function resolveFixBase(
 
 	// Everything is gone, fall back to base branch
 	return { fixBase: null };
+}
+
+const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Check if an unhealthy adapter entry is still within the cooldown period.
+ * Returns true if marked_at is less than 1 hour ago.
+ * Invalid or missing timestamps default to "expired" (returns false).
+ */
+export function isAdapterCoolingDown(entry: UnhealthyAdapter): boolean {
+	const markedAt = new Date(entry.marked_at).getTime();
+	if (Number.isNaN(markedAt)) return false;
+	return Date.now() - markedAt < COOLDOWN_MS;
+}
+
+/**
+ * Get the unhealthy adapters map from execution state.
+ * Returns an empty object if no unhealthy adapters are recorded.
+ */
+export async function getUnhealthyAdapters(
+	logDir: string,
+): Promise<Record<string, UnhealthyAdapter>> {
+	const state = await readExecutionState(logDir);
+	return state?.unhealthy_adapters ?? {};
+}
+
+/**
+ * Read raw state data from the state file.
+ * Returns null if the file doesn't exist or is invalid.
+ */
+async function readRawState(
+	statePath: string,
+): Promise<Record<string, unknown> | null> {
+	try {
+		const content = await fs.readFile(statePath, "utf-8");
+		return JSON.parse(content) as Record<string, unknown>;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Mark an adapter as unhealthy in the execution state.
+ * Reads the current state, upserts the entry, and writes back.
+ */
+export async function markAdapterUnhealthy(
+	logDir: string,
+	adapterName: string,
+	reason: string,
+): Promise<void> {
+	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+	const rawData = (await readRawState(statePath)) ?? {};
+
+	const adapters =
+		(rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>) ?? {};
+	adapters[adapterName] = {
+		marked_at: new Date().toISOString(),
+		reason,
+	};
+	rawData.unhealthy_adapters = adapters;
+
+	await fs.mkdir(logDir, { recursive: true });
+	await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), "utf-8");
+}
+
+/**
+ * Mark an adapter as healthy by removing it from the unhealthy list.
+ * Reads the current state, removes the entry, and writes back.
+ */
+export async function markAdapterHealthy(
+	logDir: string,
+	adapterName: string,
+): Promise<void> {
+	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+	const rawData = await readRawState(statePath);
+	if (!rawData) return;
+
+	const adapters = rawData.unhealthy_adapters as
+		| Record<string, UnhealthyAdapter>
+		| undefined;
+	if (!adapters || !(adapterName in adapters)) return;
+
+	delete adapters[adapterName];
+	if (Object.keys(adapters).length === 0) {
+		delete rawData.unhealthy_adapters;
+	} else {
+		rawData.unhealthy_adapters = adapters;
+	}
+
+	await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), "utf-8");
 }
 
 /**
