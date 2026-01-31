@@ -4,15 +4,7 @@
 
 **Dependency**: `add-auto-push-pr` must be implemented before starting this change.
 
-See `design.md` Pre-factoring section for full CodeScene analysis.
-
-Hotspots modified by this change (post-refactor architecture):
-- `src/hooks/stop-hook-handler.ts` — 9.68 (Green). CI workflow logic (wait-ci spawning, retry tracking, instruction generation) will be added as helper methods.
-- `src/hooks/adapters/claude-stop-hook.ts` — 10.0 (Optimal). Will add CI status formatting.
-- `src/hooks/adapters/cursor-stop-hook.ts` — 10.0 (Optimal). Will add CI status formatting.
-- `src/hooks/adapters/types.ts` — type definitions only. Will add `ciFixReason`, `ciPendingReason` to `StopHookResult`.
-
-All files are healthy; no pre-factoring refactoring needed. `isSuccessStatus()` already exists at `src/types/gauntlet-status.ts:60`.
+See `design.md` Pre-factoring section for full CodeScene analysis. No hotspots modified.
 
 ## 1. Implementation
 
@@ -74,21 +66,22 @@ All files are healthy; no pre-factoring refactoring needed. `isSuccessStatus()` 
 - [x] Add tests for `isSuccessStatus()` with `ci_passed` (true) and `ci_timeout` (false)
 - [x] Add tests for CI status messages (including `ci_timeout`)
 - [x] Create `test/commands/wait-ci.test.ts` with tests for:
-  - [x] gh output parsing
+  - [ ] gh output parsing
   - [x] Exit code mapping (0/1/2)
-  - [x] Timeout behavior
+  - [ ] Timeout behavior
   - [x] Review comment filtering (REQUEST_CHANGES vs approved vs informational)
-  - [x] No PR found handling (exit code 1)
-  - [x] Mixed state: some failed + some pending → immediate failure
-- [x] Add tests for `runWaitCI()` helper: JSON parsing of wait-ci output, handling of spawn failures
+  - [ ] No PR found handling (exit code 1)
+  - [ ] Mixed state: some failed + some pending → immediate failure
+- [ ] Add tests for `runWaitCI()` helper: JSON parsing of wait-ci output, handling of spawn failures
 - [x] Add tests for CI wait attempt marker file read/write/clean
+- [ ] Add unit tests for CI workflow branching in `StopHookHandler.execute()` by mocking `runWaitCI` (ci_passed/ci_failed/ci_pending/ci_timeout)
 - [x] Add tests for fix-pr instruction content (includes failure details, fix-and-push guidance)
 - [x] Add tests for pending instruction content (includes attempt numbers and ~30s wait)
-- [x] Add tests for init creating fix_pr.md template
-- [x] Add tests in `test/hooks/adapters/claude-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed` use `ciFixReason`/`ciPendingReason` in `reason` field)
-- [x] Add tests in `test/hooks/adapters/cursor-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed` use `ciFixReason`/`ciPendingReason` in `followup_message` field)
+- [ ] Add tests for init creating fix_pr.md template
+- [x] Add tests in `test/hooks/adapters/claude-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
+- [x] Add tests in `test/hooks/adapters/cursor-stop-hook.test.ts` for CI status output formatting (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`)
 
-Note: Full integration tests for the CI wait workflow in `StopHookHandler` are deferred — the workflow involves external dependencies (`gh` CLI, GitHub API, actual CI state) that are impractical to mock reliably. The Manual Verification section covers end-to-end testing.
+Note: End-to-end integration tests for the CI wait workflow are deferred — the workflow involves external dependencies (`gh` CLI, GitHub API, actual CI state) that are impractical to mock reliably. The Manual Verification section covers end-to-end testing; handler-level unit tests are required above.
 
 ## 3. Manual Verification
 
@@ -107,6 +100,6 @@ These steps verify basic functionality that cannot be easily unit tested. They m
 
 ## 4. Validation
 
-There are no additional validation tasks. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
+There are no validation tasks that need to be explicitly run. The stop hook will execute the full gauntlet of verification tasks and provide direction on what needs to be fixed.
 
 If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.

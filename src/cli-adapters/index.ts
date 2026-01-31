@@ -1,10 +1,12 @@
+import { type ChildProcess, spawn } from "node:child_process";
+import type { FileHandle } from "node:fs/promises";
+import fs from "node:fs/promises";
+
 export interface CLIAdapterHealth {
 	available: boolean;
 	status: "healthy" | "missing" | "unhealthy";
 	message?: string;
 }
-
-import type { ChildProcess } from "node:child_process";
 
 /**
  * Collects stderr from a child process and returns a getter for the accumulated output.
@@ -24,16 +26,110 @@ export function collectStderr(
 }
 
 /**
- * Builds an Error for a non-zero process exit, including stderr if available.
+ * Builds an Error for a non-zero process exit, including stdout and stderr if available.
+ * Both stdout and stderr are included to ensure usage limit messages are captured
+ * regardless of which stream the CLI writes them to.
  */
 export function processExitError(
 	code: number | null,
 	getStderr: () => string,
+	getStdout?: () => string,
 ): Error {
 	const stderr = getStderr();
+	const stdout = getStdout?.() ?? "";
+	const output = [stdout, stderr].filter(Boolean).join("\n");
 	return new Error(
-		`Process exited with code ${code}${stderr ? `\n${stderr}` : ""}`,
+		`Process exited with code ${code}${output ? `\n${output}` : ""}`,
 	);
+}
+
+export async function runStreamingCommand(opts: {
+	command: string;
+	args: string[];
+	tmpFile: string;
+	timeoutMs?: number;
+	onOutput?: (chunk: string) => void;
+	cleanup: () => Promise<void>;
+	env?: NodeJS.ProcessEnv;
+}): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const chunks: string[] = [];
+		const inputStream = fs.open(opts.tmpFile, "r").then((handle) => {
+			const stream = handle.createReadStream();
+			return { stream, handle };
+		});
+
+		inputStream
+			.then(({ stream, handle }) => {
+				const child = spawn(opts.command, opts.args, {
+					stdio: ["pipe", "pipe", "pipe"],
+					env: opts.env,
+				});
+
+				stream.pipe(child.stdin);
+
+				let timeoutId: ReturnType<typeof setTimeout> | undefined;
+				if (opts.timeoutMs) {
+					timeoutId = setTimeout(() => {
+						child.kill("SIGTERM");
+						reject(new Error("Command timed out"));
+					}, opts.timeoutMs);
+				}
+
+				child.stdout.on("data", (data: Buffer) => {
+					const chunk = data.toString();
+					chunks.push(chunk);
+					opts.onOutput?.(chunk);
+				});
+
+				const getStderr = collectStderr(child, opts.onOutput);
+
+				child.on("close", (code) => {
+					void finalizeProcessClose({
+						code,
+						timeoutId,
+						handle,
+						cleanup: opts.cleanup,
+						chunks,
+						getStderr,
+						resolve,
+						reject,
+					});
+				});
+
+				child.on("error", (err) => {
+					if (timeoutId) clearTimeout(timeoutId);
+					handle.close().catch(() => {});
+					opts.cleanup().then(() => reject(err));
+				});
+			})
+			.catch((err) => {
+				opts.cleanup().then(() => reject(err));
+			});
+	});
+}
+
+export async function finalizeProcessClose(opts: {
+	code: number | null;
+	timeoutId?: ReturnType<typeof setTimeout>;
+	handle: FileHandle;
+	cleanup: () => Promise<void>;
+	chunks: string[];
+	getStderr: () => string;
+	resolve: (value: string) => void;
+	reject: (error: Error) => void;
+}): Promise<void> {
+	if (opts.timeoutId) clearTimeout(opts.timeoutId);
+	await opts.handle.close().catch(() => {});
+	await opts.cleanup();
+
+	if (opts.code === 0 || opts.code === null) {
+		opts.resolve(opts.chunks.join(""));
+	} else {
+		opts.reject(
+			processExitError(opts.code, opts.getStderr, () => opts.chunks.join("")),
+		);
+	}
 }
 
 export function isUsageLimit(output: string): boolean {

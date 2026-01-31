@@ -67,6 +67,10 @@ This would reduce string passing but adds complexity. Consider if the codebase g
 **Issue:** 53.6% of function arguments are primitive types.
 **Why deferred:** Same as String-Heavy Function Arguments above. Would require a `ProjectContext` type refactor.
 
+**File:** `src/commands/wait-ci.ts`
+**Issue:** 68.4% of function arguments are primitive types (threshold: 30%), 42.1% are strings (threshold: 39%)
+**Why deferred:** The module deals with CLI commands and GitHub API interactions where string parameters (cwd, runId, etc.) are natural. Creating wrapper types would add complexity without improving readability. The code health score actually improved (9.38 -> 9.53) after refactoring for parallel log fetching.
+
 ## Notes
 
 CodeScene's thresholds are guidelines, not hard rules. The current code is functional and maintainable. These improvements can be made opportunistically during related refactoring work.

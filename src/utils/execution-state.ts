@@ -5,6 +5,23 @@ import path from "node:path";
 const EXECUTION_STATE_FILENAME = ".execution_state";
 const SESSION_REF_FILENAME = ".session_ref";
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+	// Use loose equality to check both null and undefined in one comparison
+	if (value == null) return false;
+	if (Array.isArray(value)) return false;
+	return typeof value === "object";
+}
+
+function extractUnhealthyAdapters(
+	rawData: Record<string, unknown> | null,
+): Record<string, UnhealthyAdapter> | undefined {
+	const adapters = rawData?.unhealthy_adapters;
+	if (!isPlainRecord(adapters)) {
+		return undefined;
+	}
+	return adapters as Record<string, UnhealthyAdapter>;
+}
+
 export interface UnhealthyAdapter {
 	marked_at: string;
 	reason: string;
@@ -125,12 +142,14 @@ export async function createWorkingTreeRef(): Promise<string> {
  * Also cleans up legacy .session_ref file if it exists.
  */
 export async function writeExecutionState(logDir: string): Promise<void> {
-	const [branch, commit, workingTreeRef, existing] = await Promise.all([
+	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+	const [branch, commit, workingTreeRef, rawState] = await Promise.all([
 		getCurrentBranch(),
 		getCurrentCommit(),
 		createWorkingTreeRef(),
-		readExecutionState(logDir),
+		readRawState(statePath),
 	]);
+	const existingUnhealthy = extractUnhealthyAdapters(rawState);
 
 	const state: ExecutionState = {
 		last_run_completed_at: new Date().toISOString(),
@@ -140,13 +159,12 @@ export async function writeExecutionState(logDir: string): Promise<void> {
 	};
 
 	// Preserve unhealthy_adapters from existing state
-	if (existing?.unhealthy_adapters) {
-		state.unhealthy_adapters = existing.unhealthy_adapters;
+	if (existingUnhealthy) {
+		state.unhealthy_adapters = existingUnhealthy;
 	}
 
 	// Ensure the log directory exists
 	await fs.mkdir(logDir, { recursive: true });
-	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
 	await fs.writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
 
 	// Clean up legacy .session_ref file if it exists
@@ -347,8 +365,9 @@ export function isAdapterCoolingDown(entry: UnhealthyAdapter): boolean {
 export async function getUnhealthyAdapters(
 	logDir: string,
 ): Promise<Record<string, UnhealthyAdapter>> {
-	const state = await readExecutionState(logDir);
-	return state?.unhealthy_adapters ?? {};
+	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+	const rawState = await readRawState(statePath);
+	return extractUnhealthyAdapters(rawState) ?? {};
 }
 
 /**

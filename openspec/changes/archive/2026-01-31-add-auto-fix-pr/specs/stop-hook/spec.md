@@ -29,18 +29,18 @@ The system MUST use a single `GauntletStatus` type for all gauntlet outcomes, sh
 
 ### Requirement: StopHookResult CI Fields
 
-The `StopHookResult` interface SHALL include additional fields for CI workflow instructions.
+The `StopHookResult` interface (`src/hooks/adapters/types.ts:24`) SHALL include additional fields for CI workflow instructions.
 
 #### Scenario: ciFixReason field for ci_failed status
 - **GIVEN** the handler determines status is `ci_failed`
 - **WHEN** the `StopHookResult` is constructed
-- **THEN** it SHALL include a `ciFixReason` field with fix instructions
+- **THEN** it SHALL include a `ciFixReason` field with fix instructions on `StopHookResult` (`src/hooks/adapters/types.ts:24`)
 - **AND** adapters SHALL use this field for their blocking response message
 
 #### Scenario: ciPendingReason field for ci_pending status
 - **GIVEN** the handler determines status is `ci_pending`
 - **WHEN** the `StopHookResult` is constructed
-- **THEN** it SHALL include a `ciPendingReason` field with wait-and-retry instructions
+- **THEN** it SHALL include a `ciPendingReason` field with wait-and-retry instructions on `StopHookResult` (`src/hooks/adapters/types.ts:24`)
 - **AND** adapters SHALL use this field for their blocking response message
 
 ### Requirement: Auto Fix PR Configuration
@@ -264,9 +264,9 @@ When blocking with `ci_pending` status, the `reason` prompt SHALL instruct the a
 - **WHEN** the `reason` prompt is generated
 - **THEN** it SHALL instruct the agent to wait approximately 30 seconds and then try to stop again
 
-### Requirement: Protocol Adapter CI Status Handling
+### Requirement: Adapter Protocol CI Status Handling
 
-Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their output formatting.
+Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their output formatting (`src/hooks/adapters/cursor-stop-hook.ts:77`, `src/hooks/adapters/claude-stop-hook.ts:55`; spec reference: `specs/stop-hook/spec.md`).
 
 #### Scenario: Cursor adapter handles ci_failed
 - **GIVEN** the handler returns status `ci_failed` with `ciFixReason`
@@ -284,14 +284,14 @@ Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_p
 - **GIVEN** the handler returns status `ci_passed`
 - **AND** the protocol is Cursor
 - **WHEN** `formatOutput(result)` is called
-- **THEN** the response SHALL be an empty object `{}` or include `systemMessage`
+- **THEN** the response SHALL be an empty object `{}`
 - **AND** no `followup_message` field SHALL be present
 
 #### Scenario: Cursor adapter handles ci_timeout
 - **GIVEN** the handler returns status `ci_timeout`
 - **AND** the protocol is Cursor
 - **WHEN** `formatOutput(result)` is called
-- **THEN** the response SHALL be an empty object `{}` or include `systemMessage`
+- **THEN** the response SHALL be an empty object `{}`
 - **AND** no `followup_message` field SHALL be present
 
 #### Scenario: Claude Code adapter handles ci_failed
@@ -307,3 +307,17 @@ Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_p
 - **WHEN** `formatOutput(result)` is called
 - **THEN** the response SHALL have `decision: "block"`
 - **AND** `reason` SHALL contain the `ciPendingReason` instructions
+
+#### Scenario: Claude Code adapter handles ci_passed
+- **GIVEN** the handler returns status `ci_passed`
+- **AND** the protocol is Claude Code
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL have `decision: "approve"`
+- **AND** `reason` SHALL contain the `ci_passed` status message
+
+#### Scenario: Claude Code adapter handles ci_timeout
+- **GIVEN** the handler returns status `ci_timeout`
+- **AND** the protocol is Claude Code
+- **WHEN** `formatOutput(result)` is called
+- **THEN** the response SHALL have `decision: "approve"`
+- **AND** `reason` SHALL contain the `ci_timeout` status message

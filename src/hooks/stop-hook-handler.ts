@@ -258,6 +258,23 @@ All local quality gates have passed. Before you can stop, you need to commit you
 After the PR is created or updated, try to stop again. The stop hook will verify the PR exists and is up to date.${warningGuidance}`;
 }
 
+/** Format a single failed check with optional log output */
+function formatFailedCheck(c: WaitCIResult["failed_checks"][0]): string[] {
+	const lines: string[] = [`- ${c.name}: ${c.details_url}`];
+	if (!c.log_output) return lines;
+
+	// Use dynamic fence to avoid markdown injection if logs contain backticks
+	const fence = c.log_output.includes("```") ? "````" : "```";
+	lines.push(fence, c.log_output, fence);
+	return lines;
+}
+
+/** Format a review comment with location info */
+function formatReviewComment(r: WaitCIResult["review_comments"][0]): string {
+	const location = r.path ? ` (${r.path}${r.line ? `:${r.line}` : ""})` : "";
+	return `- ${r.author}: ${r.body}${location}`;
+}
+
 /**
  * Generate CI fix instructions for the agent.
  */
@@ -265,24 +282,16 @@ export function getCIFixInstructions(ciResult: WaitCIResult): string {
 	const sections: string[] = [];
 
 	if (ciResult.failed_checks.length > 0) {
-		const checkLines = ciResult.failed_checks.map(
-			(c) => `- ${c.name}: ${c.details_url}`,
-		);
+		const checkLines = ciResult.failed_checks.flatMap(formatFailedCheck);
 		sections.push(`**Failed checks:**\n${checkLines.join("\n")}`);
 	}
 
 	// review_comments already contains only blocking reviews (from wait-ci.ts)
-	// Filter out empty bodies for display
-	const blockingReviews = ciResult.review_comments.filter(
-		(r) => r.body && r.body.trim().length > 0,
+	const blockingReviews = ciResult.review_comments.filter((r) =>
+		r.body?.trim(),
 	);
 	if (blockingReviews.length > 0) {
-		const reviewLines = blockingReviews.map((r) => {
-			const location = r.path
-				? ` (${r.path}${r.line ? `:${r.line}` : ""})`
-				: "";
-			return `- ${r.author}: ${r.body}${location}`;
-		});
+		const reviewLines = blockingReviews.map(formatReviewComment);
 		sections.push(
 			`**Review comments requiring changes:**\n${reviewLines.join("\n")}`,
 		);

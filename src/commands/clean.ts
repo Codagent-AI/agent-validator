@@ -28,13 +28,15 @@ export function registerCleanCommand(program: Command): void {
 				);
 				initDebugLogger(config.project.log_dir, debugLogConfig);
 
-				// Log the command invocation
+				// Acquire lock BEFORE logging - prevents clean from running during active gauntlet run
+				await acquireLock(config.project.log_dir);
+				lockAcquired = true;
+
+				// Log the command invocation (only after lock acquired)
 				const debugLogger = getDebugLogger();
 				await debugLogger?.logCommand("clean", []);
 				await debugLogger?.logClean("manual", "user_request");
 
-				await acquireLock(config.project.log_dir);
-				lockAcquired = true;
 				await cleanLogs(config.project.log_dir);
 				await deleteExecutionState(config.project.log_dir);
 				await releaseLock(config.project.log_dir);

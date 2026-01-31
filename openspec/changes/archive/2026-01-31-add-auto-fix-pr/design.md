@@ -7,26 +7,26 @@ After `add-auto-push-pr` creates a PR, the developer still needs to manually mon
 This builds directly on `add-auto-push-pr`: when a PR already exists and `auto_fix_pr` is enabled, the stop hook enters the CI wait workflow instead of approving immediately.
 
 **Architecture Note:** Since `add-auto-push-pr` was implemented, the stop hook has been refactored into an adapter-based architecture (`add-cursor-stop-hook`, `simplify-stop-hook-executor`). The stop hook is now a thin adapter layer with:
-- `StopHookHandler` class in `src/hooks/stop-hook-handler.ts` — core logic
-- `ClaudeStopHookAdapter` and `CursorStopHookAdapter` — protocol-specific I/O
-- `StopHookResult` interface with `instructions`, `pushPRReason`, and now `ciFixReason`, `ciPendingReason`
+- `StopHookHandler` class in `src/hooks/stop-hook-handler.ts:420` — core logic
+- `ClaudeStopHookAdapter` in `src/hooks/adapters/claude-stop-hook.ts:28` and `CursorStopHookAdapter` in `src/hooks/adapters/cursor-stop-hook.ts:35` — protocol-specific I/O
+- `StopHookResult` interface in `src/hooks/adapters/types.ts:24` with `instructions`, `pushPRReason`, and now `ciFixReason`, `ciPendingReason`
 
-CI workflow logic will be added to `StopHookHandler`, and both adapters will handle the new CI statuses.
+CI workflow logic will be added to `StopHookHandler` (`src/hooks/stop-hook-handler.ts:420`), and both adapters will handle the new CI statuses in `formatOutput()` (`src/hooks/adapters/claude-stop-hook.ts:55`, `src/hooks/adapters/cursor-stop-hook.ts:77`).
 
 ## Pre-factoring
 
 CodeScene hotspot analysis for files modified by this change:
 
-| File | Score | Status |
-|------|-------|--------|
-| `src/hooks/stop-hook-handler.ts` | 9.68 (Green) | Core handler logic — CI workflow will be added here |
-| `src/hooks/adapters/claude-stop-hook.ts` | 10.0 (Optimal) | Needs to handle CI status output formatting |
-| `src/hooks/adapters/cursor-stop-hook.ts` | 10.0 (Optimal) | Needs to handle CI status output formatting |
-| `src/hooks/adapters/types.ts` | N/A (type definitions) | Add `ciFixReason`, `ciPendingReason` to `StopHookResult` |
-| `src/config/stop-hook-config.ts` | 9.24 (Green) | Healthy |
-| `src/config/schema.ts` | 10.0 (Optimal) | Healthy |
-| `src/config/global.ts` | 9.53 (Green) | Healthy |
-| `src/types/gauntlet-status.ts` | 10.0 (Optimal) | Healthy |
+| File                                   | Score           | Status                              |
+| :------------------------------------- | :-------------- | :---------------------------------- |
+| `src/hooks/stop-hook-handler.ts:420`   | 9.68 (Green)    | Healthy                             |
+| `src/hooks/adapters/claude-stop-hook.ts:28` | 10.0 (Optimal)  | Healthy                             |
+| `src/hooks/adapters/cursor-stop-hook.ts:35` | 10.0 (Optimal)  | Healthy                             |
+| `src/hooks/adapters/types.ts:24`       | N/A             | Not analyzed by CodeScene (no score returned) |
+| `src/config/stop-hook-config.ts:11`    | 9.24 (Green)    | Healthy                             |
+| `src/config/schema.ts:127`             | 10.0 (Optimal)  | Healthy                             |
+| `src/config/global.ts:26`              | 9.53 (Green)    | Healthy                             |
+| `src/types/gauntlet-status.ts:5`       | 10.0 (Optimal)  | Healthy                             |
 
 **Strategy:** CI workflow logic (wait-ci spawning, retry tracking, instruction generation) will be added to `StopHookHandler` as helper functions. Both adapters will be updated to handle the new CI statuses (`ci_pending`, `ci_failed`, `ci_passed`, `ci_timeout`) in their `formatOutput()` methods, following the existing pattern for `pr_push_required`. `isSuccessStatus()` already exists in the codebase at `src/types/gauntlet-status.ts:60`.
 
@@ -99,11 +99,11 @@ Standalone command: `agent-gauntlet wait-ci`
 
 **Multi-invocation flow:** The `auto_push_pr` flow always runs first. On the first stop hook invocation after gauntlet passes, if no PR exists (or PR is not up to date), the hook blocks with `pr_push_required`. The agent creates/updates the PR and stops again. On the next invocation, `auto_push_pr` sees the PR is up to date, and only then does `auto_fix_pr` enter the CI wait workflow.
 
-**Architecture:** This logic is implemented in `StopHookHandler.execute()` in `src/hooks/stop-hook-handler.ts`, extending the existing `postGauntletPRCheck()` flow. The handler returns a `StopHookResult` with the appropriate status and reason fields, which adapters format for their protocols.
+**Architecture:** This logic is implemented in `StopHookHandler.execute()` in `src/hooks/stop-hook-handler.ts:445`, extending the existing `postGauntletPRCheck()` flow. The handler returns a `StopHookResult` with the appropriate status and reason fields, which adapters format for their protocols.
 
 When a PR exists and is up to date, and `auto_fix_pr` is enabled:
 
-```
+```text
 PR exists + auto_fix_pr enabled
   → read ci_wait_attempts from marker file (gauntlet_logs/.ci-wait-attempts)
   → attempts >= 3?
@@ -131,7 +131,7 @@ Two helper functions following the same simplified pattern as `getPushPRInstruct
 
 **`getCIFixInstructions(ciResult)`** — for `ci_failed` status:
 
-```
+```text
 **CI FAILED OR REVIEW CHANGES REQUESTED — FIX AND PUSH**
 
 {failed_checks_section if any}
@@ -141,14 +141,14 @@ Fix the issues above, commit, and push your changes. After pushing, try to stop 
 ```
 
 Where `{failed_checks_section}` is:
-```
+```text
 **Failed checks:**
 - {check_name}: {details_url}
 ...
 ```
 
 And `{review_comments_section}` is:
-```
+```text
 **Review comments requiring changes:**
 - {author}: {body} ({path}:{line})
 ...
@@ -156,7 +156,7 @@ And `{review_comments_section}` is:
 
 **`getCIPendingInstructions(attemptNumber, maxAttempts)`** — for `ci_pending` status:
 
-```
+```text
 **CI CHECKS STILL RUNNING — WAITING (attempt {attemptNumber} of {maxAttempts})**
 
 CI checks are still in progress. Wait approximately 30 seconds, then try to stop again.
@@ -168,6 +168,13 @@ One template file installed during `agent-gauntlet init`:
 - `.gauntlet/fix_pr.md` — simplified fix-pr instructions
 
 Gets symlinked to `.claude/commands/fix-pr.md` following the existing `push_pr.md` pattern. Existing files are not overwritten.
+
+## Migration Plan
+- Add `auto_fix_pr` to config schema and docs before shipping the stop-hook CI wait behavior.
+- Install `.gauntlet/fix_pr.md` on new `init` runs and only create the symlink when it does not already exist, preserving existing custom instructions.
+
+## Open Questions
+- Should the fix-pr symlink be updated when the template changes, or remain unchanged after first install?
 
 ## Alternatives Considered
 

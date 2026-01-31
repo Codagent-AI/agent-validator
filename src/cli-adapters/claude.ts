@@ -1,10 +1,10 @@
-import { exec, spawn } from "node:child_process";
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { GAUNTLET_STOP_HOOK_ACTIVE_ENV } from "../commands/stop-hook.js";
-import { type CLIAdapter, collectStderr, processExitError } from "./index.js";
+import { type CLIAdapter, runStreamingCommand } from "./index.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -94,62 +94,17 @@ export class ClaudeAdapter implements CLIAdapter {
 
 		// If onOutput callback is provided, use spawn for real-time streaming
 		if (opts.onOutput) {
-			return new Promise((resolve, reject) => {
-				const chunks: string[] = [];
-				const inputStream = fs.open(tmpFile, "r").then((handle) => {
-					const stream = handle.createReadStream();
-					return { stream, handle };
-				});
-
-				inputStream
-					.then(({ stream, handle }) => {
-						const child = spawn("claude", args, {
-							stdio: ["pipe", "pipe", "pipe"],
-							env: {
-								...process.env,
-								[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
-							},
-						});
-
-						stream.pipe(child.stdin);
-
-						let timeoutId: ReturnType<typeof setTimeout> | undefined;
-						if (opts.timeoutMs) {
-							timeoutId = setTimeout(() => {
-								child.kill("SIGTERM");
-								reject(new Error("Command timed out"));
-							}, opts.timeoutMs);
-						}
-
-						child.stdout.on("data", (data: Buffer) => {
-							const chunk = data.toString();
-							chunks.push(chunk);
-							opts.onOutput?.(chunk);
-						});
-
-						const getStderr = collectStderr(child, opts.onOutput);
-
-						child.on("close", (code) => {
-							if (timeoutId) clearTimeout(timeoutId);
-							handle.close().catch(() => {});
-							cleanup().then(() => {
-								if (code === 0 || code === null) {
-									resolve(chunks.join(""));
-								} else {
-									reject(processExitError(code, getStderr));
-								}
-							});
-						});
-
-						child.on("error", (err) => {
-							if (timeoutId) clearTimeout(timeoutId);
-							handle.close().catch(() => {});
-							cleanup().then(() => reject(err));
-						});
-					})
-					.catch((err) => {
-						cleanup().then(() => reject(err));
-					});
+			return runStreamingCommand({
+				command: "claude",
+				args,
+				tmpFile,
+				timeoutMs: opts.timeoutMs,
+				onOutput: opts.onOutput,
+				cleanup,
+				env: {
+					...process.env,
+					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
+				},
 			});
 		}
 
