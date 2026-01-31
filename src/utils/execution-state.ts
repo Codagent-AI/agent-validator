@@ -5,17 +5,21 @@ import path from "node:path";
 const EXECUTION_STATE_FILENAME = ".execution_state";
 const SESSION_REF_FILENAME = ".session_ref";
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+	// Use loose equality to check both null and undefined in one comparison
+	if (value == null) return false;
+	if (Array.isArray(value)) return false;
+	return typeof value === "object";
+}
+
 function extractUnhealthyAdapters(
 	rawData: Record<string, unknown> | null,
 ): Record<string, UnhealthyAdapter> | undefined {
-	if (
-		!rawData ||
-		rawData.unhealthy_adapters === null ||
-		typeof rawData.unhealthy_adapters !== "object"
-	) {
+	const adapters = rawData?.unhealthy_adapters;
+	if (!isPlainRecord(adapters)) {
 		return undefined;
 	}
-	return rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>;
+	return adapters as Record<string, UnhealthyAdapter>;
 }
 
 export interface UnhealthyAdapter {
