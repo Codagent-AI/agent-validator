@@ -29,8 +29,8 @@ This document lists the configuration files Agent Gauntlet loads and all support
   If `true`, gates with `parallel: true` run concurrently, while `parallel: false` gates run sequentially. If `false`, all gates run sequentially regardless of per-gate settings.
 - **max_retries**: number (default: `3`)
   Maximum number of retry attempts before declaring "Retry limit exceeded". After the initial run, the system allows up to this many additional runs to fix issues.
-- **rerun_new_issue_threshold**: number (default: `3`)
-  Maximum number of new issues allowed in a rerun before failing the gate. If a rerun introduces more than this many new issues, it fails even if original issues were fixed.
+- **rerun_new_issue_threshold**: enum (default: `"medium"`)
+  Priority threshold for filtering new violations during reruns. Valid values: `"critical"`, `"high"`, `"medium"`, `"low"`. During verification mode (when logs exist), new violations with priority below this threshold are filtered out, allowing you to focus on fixing original issues first. For example, with the default `"medium"` threshold, new `"low"` priority issues won't block the rerun.
 - **debug_log**: object (optional)
   Configuration for persistent debug logging. When enabled, writes detailed execution logs to `.debug.log` in the log directory. This file survives `clean` operations.
   - **enabled**: boolean (default: `false`)

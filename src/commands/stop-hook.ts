@@ -493,9 +493,10 @@ export function registerStopHookCommand(program: Command): void {
 					markerFilePath = null;
 				}
 
-				// Execute handler
+				// Execute handler (includes gauntlet run + post-gauntlet PR check)
 				log.info("Running gauntlet gates...");
 				const handler = new StopHookHandler(debugLogger ?? undefined);
+				handler.setLogDir(logDir); // Pass logDir for execution state refresh
 				let result: StopHookResult;
 				try {
 					result = await handler.execute(ctx);

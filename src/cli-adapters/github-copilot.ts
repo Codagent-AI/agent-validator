@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { CLIAdapter } from "./index.js";
+import { type CLIAdapter, collectStderr, processExitError } from "./index.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -132,10 +132,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 							opts.onOutput?.(chunk);
 						});
 
-						child.stderr.on("data", (data: Buffer) => {
-							// Only log stderr, don't include in return value
-							opts.onOutput?.(data.toString());
-						});
+						const getStderr = collectStderr(child, opts.onOutput);
 
 						child.on("close", (code) => {
 							if (timeoutId) clearTimeout(timeoutId);
@@ -144,7 +141,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 								if (code === 0 || code === null) {
 									resolve(chunks.join(""));
 								} else {
-									reject(new Error(`Process exited with code ${code}`));
+									reject(processExitError(code, getStderr));
 								}
 							});
 						});

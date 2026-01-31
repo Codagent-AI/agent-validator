@@ -14,7 +14,7 @@ describe("Clean Command", () => {
 		const cleanCmd = program.commands.find((cmd) => cmd.name() === "clean");
 		expect(cleanCmd).toBeDefined();
 		expect(cleanCmd?.description()).toBe(
-			"Archive logs (move current logs into previous/)",
+			"Archive logs and reset execution state",
 		);
 	});
 });

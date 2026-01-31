@@ -13,6 +13,7 @@ import {
 	type RunResult,
 } from "../types/gauntlet-status.js";
 import type { DebugLogger } from "../utils/debug-log.js";
+import { writeExecutionState } from "../utils/execution-state.js";
 import type {
 	PRStatusResult,
 	StopHookContext,
@@ -344,6 +345,7 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
 async function postGauntletPRCheck(
 	projectCwd: string,
 	gauntletStatus: GauntletStatus,
+	options?: { logDir?: string },
 ): Promise<{ finalStatus: GauntletStatus; pushPRReason?: string }> {
 	const log = getStopHookLogger();
 
@@ -365,6 +367,14 @@ async function postGauntletPRCheck(
 	}
 
 	if (!prStatus.prExists || !prStatus.upToDate) {
+		// Refresh execution state so files created during PR push are captured
+		if (options?.logDir) {
+			try {
+				await writeExecutionState(options.logDir);
+			} catch {
+				// Non-fatal; stale state won't block the next run
+			}
+		}
 		return {
 			finalStatus: "pr_push_required",
 			pushPRReason: getPushPRInstructions({
@@ -382,6 +392,7 @@ async function postGauntletPRCheck(
  */
 export class StopHookHandler {
 	private debugLogger?: DebugLogger;
+	private logDir?: string;
 
 	constructor(debugLogger?: DebugLogger) {
 		this.debugLogger = debugLogger;
@@ -392,6 +403,13 @@ export class StopHookHandler {
 	 */
 	setDebugLogger(debugLogger: DebugLogger): void {
 		this.debugLogger = debugLogger;
+	}
+
+	/**
+	 * Set the log directory (needed for execution state refresh).
+	 */
+	setLogDir(logDir: string): void {
+		this.logDir = logDir;
 	}
 
 	/**
@@ -413,6 +431,7 @@ export class StopHookHandler {
 		const { finalStatus, pushPRReason } = await postGauntletPRCheck(
 			ctx.cwd,
 			result.status,
+			{ logDir: this.logDir },
 		);
 
 		await this.debugLogger?.logStopHook(

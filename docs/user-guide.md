@@ -373,9 +373,9 @@ Controls scheduling mode:
 
 Maximum number of retry attempts. After the initial run, the system allows up to this many additional runs.
 
-### `rerun_new_issue_threshold` (number, default: `3`)
+### `rerun_new_issue_threshold` (enum, default: `"medium"`)
 
-Maximum new issues allowed in a rerun before failing.
+Priority threshold for filtering new violations during reruns. Valid values: `"critical"`, `"high"`, `"medium"`, `"low"`. During verification mode, new violations with priority below this threshold are filtered out.
 
 ### `debug_log` (object, optional)
 
