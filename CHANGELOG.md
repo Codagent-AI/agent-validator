@@ -1,5 +1,21 @@
 # agent-gauntlet
 
+## 0.9.0
+
+### Minor Changes
+
+- [#29](https://github.com/pacaplan/agent-gauntlet/pull/29) Implement auto-fix-pr feature for autonomous CI monitoring and fix wait-ci API response parsing
+
+- [#25](https://github.com/pacaplan/agent-gauntlet/pull/25) Implement auto_push_pr stop hook workflow
+
+- Add cursor stop hook for detecting and handling cursor adapter stops
+
+- [#30](https://github.com/pacaplan/agent-gauntlet/pull/30) Prevent clean command from running during active gauntlet run, properly skip unhealthy adapters, and include GitHub Actions failure logs in CI fix instructions
+
+### Patch Changes
+
+- [#27](https://github.com/pacaplan/agent-gauntlet/pull/27) Include stderr in adapter error messages for usage limit detection and prevent stale execution state from causing false auto-clean and phantom diffs
+
 ## 0.8.0
 
 ### Minor Changes
