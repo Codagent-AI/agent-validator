@@ -130,15 +130,26 @@ async function getReviews(
 
 	const result = await runGh([
 		"api",
-		"-F",
-		"per_page=100",
-		`repos/${owner}/${repo}/pulls/${prNumber}/reviews`,
+		`repos/${owner}/${repo}/pulls/${prNumber}/reviews?per_page=100`,
 	]);
 	if (result.code !== 0) {
 		return [];
 	}
 	try {
-		return JSON.parse(result.stdout.trim()) || [];
+		// GitHub API returns 'user' not 'author', so we transform the response
+		const rawReviews = JSON.parse(result.stdout.trim()) || [];
+		return rawReviews
+			.filter(
+				(r: { user?: { login: string }; state: string; body: string }) =>
+					r.user?.login,
+			)
+			.map(
+				(r: { user: { login: string }; state: string; body: string }) => ({
+					author: { login: r.user.login },
+					state: r.state,
+					body: r.body || "",
+				}),
+			);
 	} catch {
 		return [];
 	}
