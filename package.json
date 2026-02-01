@@ -37,7 +37,7 @@
     "lint": "biome check src",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "npm publish",
+    "release": "changeset publish",
     "gen-changeset": "bun scripts/gen-changeset.ts"
   },
   "devDependencies": {
