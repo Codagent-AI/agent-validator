@@ -84,27 +84,25 @@ export function registerReviewCommand(program: Command): void {
 						: null) ||
 					config.project.base_branch;
 
-				// Detect rerun mode early: if logs exist, skip auto-clean
+				// Auto-clean on context change (branch changed, commit merged)
+				const autoCleanResult = await shouldAutoClean(
+					config.project.log_dir,
+					effectiveBaseBranch,
+				);
+				if (autoCleanResult.clean) {
+					console.log(
+						chalk.dim(`Auto-cleaning logs (${autoCleanResult.reason})...`),
+					);
+					await debugLogger?.logClean(
+						"auto",
+						autoCleanResult.reason || "unknown",
+					);
+					await performAutoClean(config.project.log_dir, autoCleanResult);
+				}
+
+				// Detect rerun mode after auto-clean (clean may have removed logs)
 				const logsExist = await hasExistingLogs(config.project.log_dir);
 				const isRerun = logsExist && !options.commit;
-
-				// Only auto-clean on first run, not during rerun/verification mode
-				if (!logsExist) {
-					const autoCleanResult = await shouldAutoClean(
-						config.project.log_dir,
-						effectiveBaseBranch,
-					);
-					if (autoCleanResult.clean) {
-						console.log(
-							chalk.dim(`Auto-cleaning logs (${autoCleanResult.reason})...`),
-						);
-						await debugLogger?.logClean(
-							"auto",
-							autoCleanResult.reason || "unknown",
-						);
-						await performAutoClean(config.project.log_dir, autoCleanResult);
-					}
-				}
 
 				// Acquire lock BEFORE starting console log (prevents orphaned log files)
 				await acquireLock(config.project.log_dir);
