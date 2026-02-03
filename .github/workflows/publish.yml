@@ -27,10 +27,15 @@ jobs:
         run: |
           LOCAL_VERSION=$(node -p "require('./package.json').version")
           echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
-          if npm view agent-gauntlet@"$LOCAL_VERSION" version 2>/dev/null; then
+          if npm view agent-gauntlet@"$LOCAL_VERSION" version >/dev/null 2>/tmp/npm_view_err; then
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
-            echo "published=false" >> "$GITHUB_OUTPUT"
+            if grep -q 'E404' /tmp/npm_view_err; then
+              echo "published=false" >> "$GITHUB_OUTPUT"
+            else
+              cat /tmp/npm_view_err >&2
+              exit 1
+            fi
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
