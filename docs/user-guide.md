@@ -457,6 +457,7 @@ Fields:
 
 - `name` (string, required): Unique gate name
 - `command` (string, required): Shell command to run
+- `rerun_command` (string, optional): Alternate command used in rerun mode. When defined, this command is used instead of `command` during reruns (when log files exist and no `--commit` flag is passed). Supports the same `${BASE_BRANCH}` variable substitution as `command`.
 - `working_directory` (string, optional): Defaults to the entry point path
 - `parallel` (boolean, default: `false`)
 - `run_in_ci` (boolean, default: `true`)

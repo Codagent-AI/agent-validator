@@ -535,6 +535,7 @@ export async function executeRun(
 				effectiveBaseBranch,
 				passedSlotsMap,
 				debugLogger ?? undefined,
+				isRerun,
 			);
 
 			const outcome = await runner.run(jobs);

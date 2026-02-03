@@ -267,6 +267,7 @@ export function registerCheckCommand(program: Command): void {
 					effectiveBaseBranch,
 					passedSlotsMap,
 					debugLogger ?? undefined,
+					isRerun,
 				);
 
 				const success = await runner.run(jobs);

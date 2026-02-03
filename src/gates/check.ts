@@ -12,12 +12,11 @@ export class CheckGateExecutor {
 		config: LoadedCheckGateConfig,
 		workingDirectory: string,
 		logger: (output: string) => Promise<void>,
-		baseBranch?: string,
+		options?: { baseBranch?: string; isRerun?: boolean },
 	): Promise<GateResult> {
 		const startTime = Date.now();
 
-		// Substitute variables in command
-		const command = this.substituteVariables(config.command, { baseBranch });
+		const command = this.resolveCommand(config, options);
 
 		try {
 			await logger(
@@ -116,13 +115,17 @@ export class CheckGateExecutor {
 		}
 	}
 
-	private substituteVariables(
-		command: string,
-		variables: { baseBranch?: string },
+	private resolveCommand(
+		config: LoadedCheckGateConfig,
+		options?: { baseBranch?: string; isRerun?: boolean },
 	): string {
-		let result = command;
-		if (variables.baseBranch) {
-			result = result.replace(/\$\{BASE_BRANCH\}/g, variables.baseBranch);
+		const rawCommand =
+			options?.isRerun && config.rerun_command
+				? config.rerun_command
+				: config.command;
+		let result = rawCommand;
+		if (options?.baseBranch) {
+			result = result.replace(/\$\{BASE_BRANCH\}/g, options.baseBranch);
 		}
 		return result;
 	}

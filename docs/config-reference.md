@@ -140,6 +140,8 @@ Check gate names are derived from the filename (e.g. `lint.yml` → gate name `l
 
 - **command**: string (required)
   Shell command to execute for the check (e.g. tests, lint, typecheck). The gate passes if the command exits with code `0`.
+- **rerun_command**: string (optional)
+  Alternate shell command to use when the system is in rerun mode (log files exist from a previous run and no explicit `--commit` target is specified). Supports the same variable substitution as `command` (e.g. `${BASE_BRANCH}`). When not defined, `command` is used for both first runs and reruns.
 - **working_directory**: string (optional; default: entry point path)
   Directory to run the command in (`cwd`). If omitted, the command runs in the entry point directory for the job.
 - **parallel**: boolean (default: `false`)
