@@ -9,6 +9,98 @@ import { type CLIAdapter, runStreamingCommand } from "./index.js";
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
+// Matches OTel console exporter metric blocks dumped to stdout at process exit.
+// Requires `descriptor`, `dataPointType`, and `dataPoints` fields which are
+// unique to OTel SDK output and won't appear in normal code review content.
+const OTEL_METRIC_BLOCK_RE =
+	/\{\s*\n\s*descriptor:\s*\{[\s\S]*?dataPointType:\s*\d+[\s\S]*?dataPoints:\s*\[[\s\S]*?\]\s*,?\s*\n\}/g;
+
+interface OtelUsage {
+	cost?: number;
+	input?: number;
+	output?: number;
+	cacheRead?: number;
+	cacheCreation?: number;
+}
+
+/**
+ * Parse OTel metric blocks and extract cost + token usage values.
+ */
+function parseOtelMetrics(blocks: string[]): OtelUsage {
+	const usage: OtelUsage = {};
+
+	for (const block of blocks) {
+		// Extract metric name
+		const nameMatch = block.match(/name:\s*"([^"]+)"/);
+		if (!nameMatch) continue;
+		const name = nameMatch[1];
+
+		if (name === "claude_code.cost.usage") {
+			// Single value for cost
+			const valueMatch = block.match(/value:\s*([\d.]+)/);
+			if (valueMatch) {
+				usage.cost = Number.parseFloat(valueMatch[1]);
+			}
+		} else if (name === "claude_code.token.usage") {
+			// Multiple datapoints with type attributes
+			const dataPointRe =
+				/type:\s*"(\w+)"[\s\S]*?value:\s*(\d+)(?:,|\s*\})/g;
+			let match: RegExpExecArray | null;
+			while ((match = dataPointRe.exec(block)) !== null) {
+				const type = match[1] as keyof OtelUsage;
+				const value = Number.parseInt(match[2], 10);
+				if (type in usage || ["input", "output", "cacheRead", "cacheCreation"].includes(type)) {
+					usage[type] = value;
+				}
+			}
+		}
+	}
+
+	return usage;
+}
+
+/**
+ * Format OTel usage as a compact one-liner for logging.
+ */
+function formatOtelSummary(usage: OtelUsage): string | null {
+	if (usage.cost === undefined && usage.input === undefined) {
+		return null;
+	}
+
+	const parts: string[] = [];
+	if (usage.cost !== undefined) {
+		parts.push(`cost=$${usage.cost.toFixed(4)}`);
+	}
+	if (usage.input !== undefined) parts.push(`in=${usage.input}`);
+	if (usage.output !== undefined) parts.push(`out=${usage.output}`);
+	if (usage.cacheRead !== undefined) parts.push(`cacheRead=${usage.cacheRead}`);
+	if (usage.cacheCreation !== undefined) parts.push(`cacheWrite=${usage.cacheCreation}`);
+
+	return `[otel] ${parts.join(" ")}`;
+}
+
+/**
+ * Strip OTel console-exporter metric blocks from raw stdout and optionally
+ * log a summary to the provided callback (adapter log only, not terminal).
+ */
+function extractOtelMetrics(
+	raw: string,
+	onLog?: (msg: string) => void,
+): string {
+	const blocks = raw.match(OTEL_METRIC_BLOCK_RE);
+	if (!blocks) return raw;
+
+	if (onLog) {
+		const usage = parseOtelMetrics(blocks);
+		const summary = formatOtelSummary(usage);
+		if (summary) {
+			onLog(`\n${summary}\n`);
+		}
+	}
+
+	return raw.replace(OTEL_METRIC_BLOCK_RE, "").trimEnd();
+}
+
 export class ClaudeAdapter implements CLIAdapter {
 	name = "claude";
 
@@ -90,11 +182,20 @@ export class ClaudeAdapter implements CLIAdapter {
 			"10",
 		];
 
+		// Enable OTel metrics unless user has explicitly configured these env vars
+		const otelEnv: Record<string, string> = {};
+		if (!process.env.CLAUDE_CODE_ENABLE_TELEMETRY) {
+			otelEnv.CLAUDE_CODE_ENABLE_TELEMETRY = "1";
+		}
+		if (!process.env.OTEL_METRICS_EXPORTER) {
+			otelEnv.OTEL_METRICS_EXPORTER = "console";
+		}
+
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
 		// If onOutput callback is provided, use spawn for real-time streaming
 		if (opts.onOutput) {
-			return runStreamingCommand({
+			const raw = await runStreamingCommand({
 				command: "claude",
 				args,
 				tmpFile,
@@ -104,9 +205,10 @@ export class ClaudeAdapter implements CLIAdapter {
 				env: {
 					...process.env,
 					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
-					CLAUDE_CODE_ENABLE_TELEMETRY: "1",
+					...otelEnv,
 				},
 			});
+			return extractOtelMetrics(raw, opts.onOutput);
 		}
 
 		// Otherwise use exec for buffered output
@@ -118,10 +220,11 @@ export class ClaudeAdapter implements CLIAdapter {
 				env: {
 					...process.env,
 					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
-					CLAUDE_CODE_ENABLE_TELEMETRY: "1",
+					...otelEnv,
 				},
 			});
-			return stdout;
+			// No onOutput in buffered mode, so no log destination for summary
+			return extractOtelMetrics(stdout);
 		} finally {
 			await cleanup();
 		}
