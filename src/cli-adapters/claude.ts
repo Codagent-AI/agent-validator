@@ -104,6 +104,7 @@ export class ClaudeAdapter implements CLIAdapter {
 				env: {
 					...process.env,
 					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
+					CLAUDE_CODE_ENABLE_TELEMETRY: "1",
 				},
 			});
 		}
@@ -117,6 +118,7 @@ export class ClaudeAdapter implements CLIAdapter {
 				env: {
 					...process.env,
 					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
+					CLAUDE_CODE_ENABLE_TELEMETRY: "1",
 				},
 			});
 			return stdout;
