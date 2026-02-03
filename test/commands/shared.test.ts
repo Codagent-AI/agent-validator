@@ -6,10 +6,12 @@ import {
 	cleanLogs,
 	getLockFilename,
 	hasExistingLogs,
+	performAutoClean,
 	releaseLock,
 	shouldAutoClean,
 } from "../../src/commands/shared.js";
 import {
+	getCurrentBranch,
 	getExecutionStateFilename,
 	writeExecutionState,
 } from "../../src/utils/execution-state.js";
@@ -311,5 +313,95 @@ describe("auto-clean during rerun mode", () => {
 		// In rerun mode, shouldAutoClean should NOT be called
 		// (the skip logic is in the command files, not here)
 		// This test just verifies hasExistingLogs correctly detects the state
+	});
+});
+
+describe("auto-clean workflow integration", () => {
+	// Tests for the fix: auto-clean runs regardless of existing logs.
+	// Previously, shouldAutoClean was gated behind !logsExist, so it never
+	// ran when logs existed. The fix calls shouldAutoClean unconditionally.
+	// These tests verify the correct behavioral sequence.
+
+	beforeEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	it("shouldAutoClean detects branch change even when logs exist", async () => {
+		// Setup: log files exist AND stale execution state (different branch)
+		await fs.writeFile(path.join(TEST_DIR, "check_src.1.log"), "content");
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify({
+				last_run_completed_at: new Date().toISOString(),
+				branch: "different-branch-that-does-not-exist",
+				commit: "abc123",
+			}),
+		);
+
+		// Verify logs exist (old code would have skipped auto-clean here)
+		expect(await hasExistingLogs(TEST_DIR)).toBe(true);
+
+		// shouldAutoClean should still detect the branch change
+		const result = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(result.clean).toBe(true);
+		expect(result.reason).toBe("branch changed");
+	});
+
+	it("full auto-clean workflow: logs exist + branch changed → clean + fresh start", async () => {
+		// Setup: log files + stale state (different branch)
+		await fs.writeFile(path.join(TEST_DIR, "check_src.1.log"), "content");
+		await fs.writeFile(path.join(TEST_DIR, "review_src.2.json"), "{}");
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify({
+				last_run_completed_at: new Date().toISOString(),
+				branch: "different-branch-that-does-not-exist",
+				commit: "abc123",
+			}),
+		);
+
+		// Step 1: shouldAutoClean detects context change
+		const autoClean = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(autoClean.clean).toBe(true);
+
+		// Step 2: performAutoClean archives logs and resets state
+		await performAutoClean(TEST_DIR, autoClean);
+
+		// Step 3: hasExistingLogs returns false (fresh start)
+		expect(await hasExistingLogs(TEST_DIR)).toBe(false);
+
+		// Logs should be archived in previous/
+		const previousFiles = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(previousFiles).toContain("check_src.1.log");
+		expect(previousFiles).toContain("review_src.2.json");
+	});
+
+	it("full auto-clean workflow: logs exist + same branch → no clean, rerun mode", async () => {
+		// Write a mock execution state with the current branch but a dummy commit
+		// that cannot be found in origin/main (avoids "commit merged" false positive).
+		const currentBranch = await getCurrentBranch();
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify({
+				last_run_completed_at: new Date().toISOString(),
+				branch: currentBranch,
+				commit: "0000000000000000000000000000000000000000",
+			}),
+		);
+
+		// Add log files (simulating a previous run)
+		await fs.writeFile(path.join(TEST_DIR, "check_src.1.log"), "content");
+
+		// Step 1: shouldAutoClean returns false (same branch)
+		const autoClean = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(autoClean.clean).toBe(false);
+
+		// Step 2: hasExistingLogs returns true (rerun mode preserved)
+		expect(await hasExistingLogs(TEST_DIR)).toBe(true);
 	});
 });

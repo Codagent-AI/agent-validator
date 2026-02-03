@@ -743,3 +743,6 @@ export { checkPRStatus, shouldCheckPR };
 
 // Export CI helpers for testing
 export { MAX_CI_WAIT_ATTEMPTS };
+
+// Export status helpers for testing
+export { isIdleStatus, isPassingStatus };

@@ -271,8 +271,8 @@ There are no automated validation tasks that need to be explicitly run. When wor
   - `cat path/to/file | head -n 5` — verify file structure or format
 - Prefix manual CLI steps with "Manual:" to distinguish from automated checks.
 
-5. **Create design.md when needed:**
-Create `design.md` if any of the following apply; otherwise omit it:
+5. **Create design.md for all changes:**
+If a plan document was previoiusly created, include all technical details from the plan in the `design.md`. Also include all of the following, if applicable:
 - Cross-cutting change (multiple services/modules) or a new architectural pattern
 - New external dependency or significant data model changes
 - Security, performance, or migration complexity

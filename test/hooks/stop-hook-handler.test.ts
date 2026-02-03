@@ -9,6 +9,8 @@ import {
 	getPushPRInstructions,
 	getStatusMessage,
 	getStopReasonInstructions,
+	isIdleStatus,
+	isPassingStatus,
 	MAX_CI_WAIT_ATTEMPTS,
 	readCIWaitAttempts,
 	writeCIWaitAttempts,
@@ -401,6 +403,42 @@ describe("StopHookHandler", () => {
 				// Should not throw
 				await cleanCIWaitAttempts(testLogDir);
 			});
+		});
+	});
+
+	describe("isIdleStatus()", () => {
+		it("returns true for interval_not_elapsed", () => {
+			expect(isIdleStatus("interval_not_elapsed")).toBe(true);
+		});
+
+		it("returns true for no_changes", () => {
+			expect(isIdleStatus("no_changes")).toBe(true);
+		});
+
+		it("returns false for passed", () => {
+			expect(isIdleStatus("passed")).toBe(false);
+		});
+
+		it("returns false for failed", () => {
+			expect(isIdleStatus("failed")).toBe(false);
+		});
+	});
+
+	describe("isPassingStatus()", () => {
+		it("returns true for passed", () => {
+			expect(isPassingStatus("passed")).toBe(true);
+		});
+
+		it("returns true for passed_with_warnings", () => {
+			expect(isPassingStatus("passed_with_warnings")).toBe(true);
+		});
+
+		it("returns false for interval_not_elapsed", () => {
+			expect(isPassingStatus("interval_not_elapsed")).toBe(false);
+		});
+
+		it("returns false for failed", () => {
+			expect(isPassingStatus("failed")).toBe(false);
 		});
 	});
 
