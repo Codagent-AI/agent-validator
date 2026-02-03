@@ -1,6 +1,7 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { LoadedCheckGateConfig } from "../config/types.js";
+import { resolveCheckCommand } from "./resolve-check-command.js";
 import type { GateResult } from "./result.js";
 
 const execAsync = promisify(exec);
@@ -12,12 +13,11 @@ export class CheckGateExecutor {
 		config: LoadedCheckGateConfig,
 		workingDirectory: string,
 		logger: (output: string) => Promise<void>,
-		baseBranch?: string,
+		options?: { baseBranch?: string; isRerun?: boolean },
 	): Promise<GateResult> {
 		const startTime = Date.now();
 
-		// Substitute variables in command
-		const command = this.substituteVariables(config.command, { baseBranch });
+		const command = resolveCheckCommand(config, options);
 
 		try {
 			await logger(
@@ -114,16 +114,5 @@ export class CheckGateExecutor {
 		if (config.fixWithSkill) {
 			await logger(`\n--- Fix Skill: ${config.fixWithSkill} ---\n`);
 		}
-	}
-
-	private substituteVariables(
-		command: string,
-		variables: { baseBranch?: string },
-	): string {
-		let result = command;
-		if (variables.baseBranch) {
-			result = result.replace(/\$\{BASE_BRANCH\}/g, variables.baseBranch);
-		}
-		return result;
 	}
 }
