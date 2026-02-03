@@ -1,6 +1,7 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { LoadedCheckGateConfig } from "../config/types.js";
+import { resolveCheckCommand } from "./resolve-check-command.js";
 import type { GateResult } from "./result.js";
 
 const execAsync = promisify(exec);
@@ -16,7 +17,7 @@ export class CheckGateExecutor {
 	): Promise<GateResult> {
 		const startTime = Date.now();
 
-		const command = this.resolveCommand(config, options);
+		const command = resolveCheckCommand(config, options);
 
 		try {
 			await logger(
@@ -113,20 +114,5 @@ export class CheckGateExecutor {
 		if (config.fixWithSkill) {
 			await logger(`\n--- Fix Skill: ${config.fixWithSkill} ---\n`);
 		}
-	}
-
-	private resolveCommand(
-		config: LoadedCheckGateConfig,
-		options?: { baseBranch?: string; isRerun?: boolean },
-	): string {
-		const rawCommand =
-			options?.isRerun && config.rerun_command
-				? config.rerun_command
-				: config.command;
-		let result = rawCommand;
-		if (options?.baseBranch) {
-			result = result.replace(/\$\{BASE_BRANCH\}/g, options.baseBranch);
-		}
-		return result;
 	}
 }

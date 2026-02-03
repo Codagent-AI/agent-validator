@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { Command } from "commander";
 import { registerCheckCommand } from "../../src/commands/check.js";
+import { resolveCheckCommand } from "../../src/gates/resolve-check-command.js";
 
 describe("Check Command", () => {
 	let program: Command;
@@ -25,5 +26,37 @@ describe("Check Command", () => {
 		expect(checkCmd?.options.some((opt) => opt.long === "--uncommitted")).toBe(
 			true,
 		);
+	});
+});
+
+describe("resolveCheckCommand", () => {
+	it("uses rerun_command when isRerun and falls back otherwise", () => {
+		const config = { command: "echo first-run", rerun_command: "echo rerun" };
+
+		// isRerun=true should use rerun_command
+		expect(
+			resolveCheckCommand(config, { baseBranch: "origin/main", isRerun: true }),
+		).toBe("echo rerun");
+
+		// isRerun=false should use command
+		expect(resolveCheckCommand(config, { isRerun: false })).toBe(
+			"echo first-run",
+		);
+
+		// isRerun=true without rerun_command should fall back to command
+		expect(
+			resolveCheckCommand(
+				{ command: "echo first-run" },
+				{ isRerun: true },
+			),
+		).toBe("echo first-run");
+
+		// variable substitution applies to rerun_command
+		expect(
+			resolveCheckCommand(
+				{ command: "run ${BASE_BRANCH}", rerun_command: "rerun ${BASE_BRANCH}" },
+				{ baseBranch: "origin/main", isRerun: true },
+			),
+		).toBe("rerun origin/main");
 	});
 });

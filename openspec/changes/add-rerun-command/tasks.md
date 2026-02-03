@@ -21,13 +21,7 @@ All scores > 8.0; no pre-factoring needed.
 - [x] 1.9 Add `rerun_command` to the check gate fields list in `docs/user-guide.md`
 
 ## 2. Tests
-- [x] 2.1 Unit test: `CheckGateExecutor` uses `rerun_command` when `isRerun=true` and `rerun_command` is defined
-- [x] 2.2 Unit test: `CheckGateExecutor` falls back to `command` when `isRerun=true` but `rerun_command` is not defined
-- [x] 2.3 Unit test: `CheckGateExecutor` uses `command` when `isRerun=false` even if `rerun_command` is defined. Note: this also covers the `--commit` override scenario from the spec — callers set `isRerun=false` when `--commit` is passed (see `src/commands/check.ts:105`), so the executor correctly receives `isRerun=false`.
-- [x] 2.4 Unit test: variable substitution is applied to `rerun_command` (e.g., `${BASE_BRANCH}` is replaced)
-- [x] 2.5 Schema test: `checkGateSchema` accepts config with `rerun_command`
-- [x] 2.6 Schema test: `checkGateSchema` accepts config without `rerun_command`
-- [x] 2.7 Schema test: `checkGateSchema` rejects empty `rerun_command` string
+- [x] 2.1 Unit test in `test/commands/check.test.ts`: `CheckGateExecutor` uses `rerun_command` when `isRerun=true`, falls back to `command` when `isRerun=false` or `rerun_command` is not defined. Covers the `--commit` override scenario (callers set `isRerun=false` when `--commit` is passed).
 
 ## 3. Validation
 

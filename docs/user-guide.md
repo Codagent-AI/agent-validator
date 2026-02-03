@@ -453,17 +453,7 @@ Each entry point:
 
 Each file is parsed as a check gate definition. The gate is keyed by its `name`.
 
-Fields:
-
-- `name` (string, required): Unique gate name
-- `command` (string, required): Shell command to run
-- `rerun_command` (string, optional): Alternate command used in rerun mode. When defined, this command is used instead of `command` during reruns (when log files exist and no `--commit` flag is passed). Supports the same `${BASE_BRANCH}` variable substitution as `command`.
-- `working_directory` (string, optional): Defaults to the entry point path
-- `parallel` (boolean, default: `false`)
-- `run_in_ci` (boolean, default: `true`)
-- `run_locally` (boolean, default: `true`)
-- `timeout` (number seconds, optional)
-- `fail_fast` (boolean, optional): If `true`, stops running other checks or reviews after this check fails. Can only be used when `parallel` is `false`.
+For the full field reference, see [Check gates in the Config Reference](config-reference.md#check-gates-gaunletchecksyml).
 
 Behavior:
 - Passes when the command exits `0`
