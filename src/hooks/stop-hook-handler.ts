@@ -503,6 +503,15 @@ function isPassingStatus(status: GauntletStatus): boolean {
 }
 
 /**
+ * Check if the gauntlet status indicates "nothing to do locally" — gates were not
+ * re-run but there's no failure. These statuses should still trigger PR/CI checks
+ * when auto_push_pr is enabled, since the previous run may have passed.
+ */
+function isIdleStatus(status: GauntletStatus): boolean {
+	return status === "interval_not_elapsed" || status === "no_changes";
+}
+
+/**
  * Refresh execution state (non-fatal on error).
  */
 async function refreshExecutionState(logDir?: string): Promise<void> {
@@ -589,9 +598,8 @@ async function postGauntletPRCheck(
 	gauntletStatus: GauntletStatus,
 	options?: { logDir?: string },
 ): Promise<PostGauntletResult> {
-	const log = getStopHookLogger();
-
-	if (!isPassingStatus(gauntletStatus)) {
+	const idle = isIdleStatus(gauntletStatus);
+	if (!isPassingStatus(gauntletStatus) && !idle) {
 		return { finalStatus: gauntletStatus };
 	}
 
@@ -602,30 +610,55 @@ async function postGauntletPRCheck(
 
 	const prStatus = await checkPRStatus(projectCwd);
 	if (prStatus.error) {
-		log.warn(`PR status check failed: ${prStatus.error}`);
+		getStopHookLogger().warn(`PR status check failed: ${prStatus.error}`);
 		return { finalStatus: gauntletStatus };
 	}
 
-	// PR missing or outdated - block and request push
-	if (!prStatus.prExists || !prStatus.upToDate) {
-		await refreshExecutionState(options?.logDir);
-		return {
-			finalStatus: "pr_push_required",
-			pushPRReason: getPushPRInstructions({
-				hasWarnings: gauntletStatus === "passed_with_warnings",
-			}),
-		};
+	const prReady = prStatus.prExists && prStatus.upToDate;
+
+	// PR missing or outdated: block fresh passes, allow idle statuses
+	if (!prReady) {
+		return idle
+			? { finalStatus: gauntletStatus }
+			: handlePRMissing(gauntletStatus, options?.logDir);
 	}
 
-	// PR exists and is up to date - check if we should wait for CI
-	if (!config.auto_fix_pr || !options?.logDir) {
-		if (config.auto_fix_pr && !options?.logDir) {
-			log.warn("No logDir provided for CI wait workflow");
-		}
+	// PR exists and is up to date — enter CI wait if configured
+	return handleCIWaitIfEnabled(
+		config,
+		projectCwd,
+		gauntletStatus,
+		options?.logDir,
+	);
+}
+
+async function handlePRMissing(
+	gauntletStatus: GauntletStatus,
+	logDir?: string,
+): Promise<PostGauntletResult> {
+	await refreshExecutionState(logDir);
+	return {
+		finalStatus: "pr_push_required",
+		pushPRReason: getPushPRInstructions({
+			hasWarnings: gauntletStatus === "passed_with_warnings",
+		}),
+	};
+}
+
+async function handleCIWaitIfEnabled(
+	config: StopHookConfig,
+	projectCwd: string,
+	gauntletStatus: GauntletStatus,
+	logDir?: string,
+): Promise<PostGauntletResult> {
+	if (!config.auto_fix_pr) {
 		return { finalStatus: gauntletStatus };
 	}
-
-	return handleCIWaitWorkflow(projectCwd, options.logDir, gauntletStatus);
+	if (!logDir) {
+		getStopHookLogger().warn("No logDir provided for CI wait workflow");
+		return { finalStatus: gauntletStatus };
+	}
+	return handleCIWaitWorkflow(projectCwd, logDir, gauntletStatus);
 }
 
 /**
@@ -710,3 +743,6 @@ export { checkPRStatus, shouldCheckPR };
 
 // Export CI helpers for testing
 export { MAX_CI_WAIT_ATTEMPTS };
+
+// Export status helpers for testing
+export { isIdleStatus, isPassingStatus };
