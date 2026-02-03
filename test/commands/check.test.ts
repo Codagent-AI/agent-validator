@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { Command } from "commander";
 import { registerCheckCommand } from "../../src/commands/check.js";
+import { checkGateSchema } from "../../src/config/schema.js";
 import { resolveCheckCommand } from "../../src/gates/resolve-check-command.js";
 
 describe("Check Command", () => {
@@ -26,6 +27,29 @@ describe("Check Command", () => {
 		expect(checkCmd?.options.some((opt) => opt.long === "--uncommitted")).toBe(
 			true,
 		);
+	});
+});
+
+describe("checkGateSchema rerun_command", () => {
+	it("accepts config with rerun_command", () => {
+		const result = checkGateSchema.safeParse({
+			command: "echo test",
+			rerun_command: "echo rerun",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts config without rerun_command", () => {
+		const result = checkGateSchema.safeParse({ command: "echo test" });
+		expect(result.success).toBe(true);
+	});
+
+	it("rejects empty rerun_command", () => {
+		const result = checkGateSchema.safeParse({
+			command: "echo test",
+			rerun_command: "",
+		});
+		expect(result.success).toBe(false);
 	});
 });
 

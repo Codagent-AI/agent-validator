@@ -13,8 +13,9 @@ export function resolveCheckCommand(
 			? config.rerun_command
 			: config.command;
 	let result = rawCommand;
-	if (options?.baseBranch) {
-		result = result.replace(/\$\{BASE_BRANCH\}/g, options.baseBranch);
+	const baseBranch = options?.baseBranch;
+	if (baseBranch) {
+		result = result.replace(/\$\{BASE_BRANCH\}/g, () => baseBranch);
 	}
 	return result;
 }
