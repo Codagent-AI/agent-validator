@@ -8,11 +8,11 @@ allow_parallel: true
 cli:
   default_preference:
     - gemini
-    - claude
     - codex
+    - claude
 stop_hook:
   auto_push_pr: true
-  auto_fix_pr: true
+  auto_fix_pr: false
 entry_points:
   - path: "."
     reviews:

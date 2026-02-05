@@ -9,6 +9,87 @@ import { type CLIAdapter, runStreamingCommand } from "./index.js";
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
+// Matches OTel console exporter metric blocks dumped to stdout at process exit.
+// Requires `descriptor`, `dataPointType`, and `dataPoints` fields which are
+// unique to OTel SDK output and won't appear in normal code review content.
+// Optionally matches [otel] prefix that some exporters add.
+const OTEL_METRIC_BLOCK_RE =
+	/(?:\[otel\]\s*)?\{\s*\n\s*descriptor:\s*\{[\s\S]*?dataPointType:\s*\d+[\s\S]*?dataPoints:\s*\[[\s\S]*?\]\s*,?\s*\n\}/g;
+
+interface OtelUsage {
+	cost?: number;
+	input?: number;
+	output?: number;
+	cacheRead?: number;
+	cacheCreation?: number;
+}
+
+const TOKEN_TYPES = ["input", "output", "cacheRead", "cacheCreation"] as const;
+
+function parseCostBlock(block: string): number | undefined {
+	const match = block.match(/value:\s*([\d.]+)/);
+	return match ? Number.parseFloat(match[1]) : undefined;
+}
+
+function parseTokenBlock(block: string): Partial<OtelUsage> {
+	const result: Partial<OtelUsage> = {};
+	const re = /type:\s*"(\w+)"[\s\S]*?value:\s*(\d+)(?:,|\s*\})/g;
+	for (const match of block.matchAll(re)) {
+		const type = match[1] as (typeof TOKEN_TYPES)[number];
+		if (TOKEN_TYPES.includes(type)) {
+			result[type] = Number.parseInt(match[2], 10);
+		}
+	}
+	return result;
+}
+
+function parseOtelMetrics(blocks: string[]): OtelUsage {
+	const usage: OtelUsage = {};
+	for (const block of blocks) {
+		const nameMatch = block.match(/name:\s*"([^"]+)"/);
+		if (!nameMatch) continue;
+
+		if (nameMatch[1] === "claude_code.cost.usage") {
+			usage.cost = parseCostBlock(block);
+		} else if (nameMatch[1] === "claude_code.token.usage") {
+			Object.assign(usage, parseTokenBlock(block));
+		}
+	}
+	return usage;
+}
+
+function formatOtelSummary(usage: OtelUsage): string | null {
+	if (usage.cost === undefined && usage.input === undefined) return null;
+
+	const parts: string[] = [];
+	if (usage.cost !== undefined) parts.push(`cost=$${usage.cost.toFixed(4)}`);
+	if (usage.input !== undefined) parts.push(`in=${usage.input}`);
+	if (usage.output !== undefined) parts.push(`out=${usage.output}`);
+	if (usage.cacheRead !== undefined) parts.push(`cacheRead=${usage.cacheRead}`);
+	if (usage.cacheCreation !== undefined)
+		parts.push(`cacheWrite=${usage.cacheCreation}`);
+
+	return `[otel] ${parts.join(" ")}`;
+}
+
+function extractOtelMetrics(
+	raw: string,
+	onLog?: (msg: string) => void,
+): string {
+	const blocks = raw.match(OTEL_METRIC_BLOCK_RE);
+	if (!blocks) return raw;
+
+	const summary = formatOtelSummary(parseOtelMetrics(blocks));
+	if (summary) {
+		// Output summary to adapter log
+		onLog?.(`\n${summary}\n`);
+		// Output summary to console log (captured by startConsoleLog)
+		process.stdout.write(`${summary}\n`);
+	}
+
+	return raw.replace(OTEL_METRIC_BLOCK_RE, "").trimEnd();
+}
+
 export class ClaudeAdapter implements CLIAdapter {
 	name = "claude";
 
@@ -43,7 +124,6 @@ export class ClaudeAdapter implements CLIAdapter {
 	}
 
 	getUserCommandDir(): string | null {
-		// Claude supports user-level commands at ~/.claude/commands
 		return path.join(os.homedir(), ".claude", "commands");
 	}
 
@@ -52,12 +132,10 @@ export class ClaudeAdapter implements CLIAdapter {
 	}
 
 	canUseSymlink(): boolean {
-		// Claude uses the same Markdown format as our canonical file
 		return true;
 	}
 
 	transformCommand(markdownContent: string): string {
-		// Claude uses the same Markdown format, no transformation needed
 		return markdownContent;
 	}
 
@@ -71,17 +149,12 @@ export class ClaudeAdapter implements CLIAdapter {
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
 		const tmpDir = os.tmpdir();
-		// Include process.pid for uniqueness across concurrent processes
 		const tmpFile = path.join(
 			tmpDir,
 			`gauntlet-claude-${process.pid}-${Date.now()}.txt`,
 		);
 		await fs.writeFile(tmpFile, fullContent);
 
-		// Recommended invocation per spec:
-		// -p: non-interactive print mode
-		// --allowedTools: explicitly restricts to read-only tools
-		// --max-turns: caps agentic turns
 		const args = [
 			"-p",
 			"--allowedTools",
@@ -90,25 +163,43 @@ export class ClaudeAdapter implements CLIAdapter {
 			"10",
 		];
 
+		const otelEnv: Record<string, string> = {};
+		if (!process.env.CLAUDE_CODE_ENABLE_TELEMETRY) {
+			otelEnv.CLAUDE_CODE_ENABLE_TELEMETRY = "1";
+		}
+		if (!process.env.OTEL_METRICS_EXPORTER) {
+			otelEnv.OTEL_METRICS_EXPORTER = "console";
+		}
+
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
-		// If onOutput callback is provided, use spawn for real-time streaming
 		if (opts.onOutput) {
-			return runStreamingCommand({
+			// Buffer all output to filter OTel blocks before calling onOutput
+			// OTel metrics appear at process exit, so we process the full output
+			const outputBuffer: string[] = [];
+			const raw = await runStreamingCommand({
 				command: "claude",
 				args,
 				tmpFile,
 				timeoutMs: opts.timeoutMs,
-				onOutput: opts.onOutput,
+				onOutput: (chunk: string) => {
+					outputBuffer.push(chunk);
+				},
 				cleanup,
 				env: {
 					...process.env,
 					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
+					...otelEnv,
 				},
 			});
+			// Filter OTel blocks from buffer (stdout+stderr) and output cleaned content
+			const fullOutput = outputBuffer.join("");
+			const cleanedOutput = extractOtelMetrics(fullOutput, opts.onOutput);
+			opts.onOutput(cleanedOutput);
+			// Return cleaned stdout (raw only contains stdout)
+			return raw.replace(OTEL_METRIC_BLOCK_RE, "").trimEnd();
 		}
 
-		// Otherwise use exec for buffered output
 		try {
 			const cmd = `cat "${tmpFile}" | claude -p --allowedTools "Read,Glob,Grep" --max-turns 10`;
 			const { stdout } = await execAsync(cmd, {
@@ -117,9 +208,10 @@ export class ClaudeAdapter implements CLIAdapter {
 				env: {
 					...process.env,
 					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
+					...otelEnv,
 				},
 			});
-			return stdout;
+			return extractOtelMetrics(stdout);
 		} finally {
 			await cleanup();
 		}
