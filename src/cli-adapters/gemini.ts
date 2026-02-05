@@ -25,28 +25,39 @@ const TOKEN_TYPE_MAP: Record<TokenType, keyof GeminiTelemetryUsage> = {
 	tool: "toolTokens",
 };
 
-interface DataPoint {
-	attributes?: Array<{ key: string; value?: { stringValue?: string } }>;
-	asInt?: number;
-	asDouble?: number;
-	sum?: number;
-	value?: number;
+// Gemini CLI telemetry file contains pretty-printed JSON objects (not OTLP).
+// The metric object has { resource, scopeMetrics: [{ scope, metrics }] }.
+// Each metric has { descriptor: { name, type }, dataPoints: [{ value, attributes }] }.
+
+interface SdkDataPoint {
+	value: number | { sum?: number };
+	attributes?: Record<string, string | number | boolean>;
 }
 
-function extractTokenType(dp: DataPoint): TokenType | null {
-	const attr = dp.attributes?.find(
-		(a) => a.key === "type" || a.key === "gen_ai.token.type",
-	);
-	const type = attr?.value?.stringValue;
-	return type && type in TOKEN_TYPE_MAP ? (type as TokenType) : null;
+interface SdkMetric {
+	descriptor?: { name?: string };
+	dataPoints?: SdkDataPoint[];
 }
 
-function extractValue(dp: DataPoint): number {
-	return dp.asInt || dp.asDouble || dp.sum || dp.value || 0;
+interface SdkScopeMetrics {
+	metrics?: SdkMetric[];
+}
+
+function extractTokenType(dp: SdkDataPoint): TokenType | null {
+	const type =
+		dp.attributes?.type ?? dp.attributes?.["gen_ai.token.type"] ?? null;
+	return typeof type === "string" && type in TOKEN_TYPE_MAP
+		? (type as TokenType)
+		: null;
+}
+
+function extractValue(dp: SdkDataPoint): number {
+	if (typeof dp.value === "number") return dp.value;
+	return dp.value?.sum ?? 0;
 }
 
 function processDataPoints(
-	dataPoints: DataPoint[],
+	dataPoints: SdkDataPoint[],
 	usage: GeminiTelemetryUsage,
 ): void {
 	for (const dp of dataPoints) {
@@ -62,58 +73,62 @@ const TOKEN_METRIC_NAMES = new Set([
 	"gen_ai.client.token.usage",
 ]);
 
-interface OtlpMetric {
-	name: string;
-	sum?: { dataPoints?: DataPoint[] };
-	histogram?: { dataPoints?: DataPoint[] };
-}
-
-function getMetricsFromOtlp(data: unknown): OtlpMetric[] {
-	const obj = data as {
-		resourceMetrics?: Array<{
-			scopeMetrics?: Array<{ metrics?: OtlpMetric[] }>;
-		}>;
-	};
-	return obj?.resourceMetrics?.[0]?.scopeMetrics?.[0]?.metrics ?? [];
-}
-
-function getDataPoints(metric: OtlpMetric): DataPoint[] {
-	return metric.sum?.dataPoints ?? metric.histogram?.dataPoints ?? [];
-}
-
-function processMetric(metric: OtlpMetric, usage: GeminiTelemetryUsage): void {
-	if (!TOKEN_METRIC_NAMES.has(metric.name)) return;
-	processDataPoints(getDataPoints(metric), usage);
-}
-
-function parseJsonLine(line: string, usage: GeminiTelemetryUsage): void {
-	const data = JSON.parse(line);
-	for (const metric of getMetricsFromOtlp(data)) {
-		processMetric(metric, usage);
-	}
-}
-
-async function parseGeminiTelemetry(
-	filePath: string,
-): Promise<GeminiTelemetryUsage> {
-	const usage: GeminiTelemetryUsage = {};
-	let content: string;
-
-	try {
-		content = await fs.readFile(filePath, "utf-8");
-	} catch {
-		return usage;
-	}
-
-	for (const line of content.trim().split("\n").filter(Boolean)) {
-		try {
-			parseJsonLine(line, usage);
-		} catch {
-			// Skip malformed lines
+/**
+ * Find [start, end) index pairs for each top-level `{…}` in a string
+ * whose JSON string literals have already been blanked out.
+ */
+function findObjectBoundaries(stripped: string): Array<[number, number]> {
+	const ranges: Array<[number, number]> = [];
+	let depth = 0;
+	let start = -1;
+	for (let i = 0; i < stripped.length; i++) {
+		const ch = stripped[i];
+		if (ch !== "{" && ch !== "}") continue;
+		if (ch === "{") {
+			if (depth === 0) start = i;
+			depth++;
+			continue;
+		}
+		depth--;
+		if (depth !== 0) continue;
+		if (start >= 0) {
+			ranges.push([start, i + 1]);
+			start = -1;
 		}
 	}
+	return ranges;
+}
 
-	return usage;
+/**
+ * Parse top-level JSON objects from telemetry content.
+ * Blanks string literals (preserving length) before brace-counting
+ * so braces inside strings are ignored.
+ */
+function parseJsonObjects(content: string): unknown[] {
+	const stripped = content.replace(/"(?:[^"\\]|\\.)*"/g, (m) =>
+		" ".repeat(m.length),
+	);
+	const objects: unknown[] = [];
+	for (const [s, e] of findObjectBoundaries(stripped)) {
+		try {
+			objects.push(JSON.parse(content.slice(s, e)));
+		} catch {
+			// Skip malformed objects
+		}
+	}
+	return objects;
+}
+
+function processMetricObject(data: unknown, usage: GeminiTelemetryUsage): void {
+	const obj = data as { scopeMetrics?: SdkScopeMetrics[] };
+	if (!obj?.scopeMetrics) return;
+	for (const sm of obj.scopeMetrics) {
+		for (const metric of sm.metrics ?? []) {
+			const name = metric.descriptor?.name;
+			if (!name || !TOKEN_METRIC_NAMES.has(name)) continue;
+			processDataPoints(metric.dataPoints ?? [], usage);
+		}
+	}
 }
 
 const SUMMARY_FIELDS: Array<[keyof GeminiTelemetryUsage, string]> = [
@@ -177,10 +192,16 @@ export class GeminiAdapter implements CLIAdapter {
 	}
 
 	transformCommand(markdownContent: string): string {
-		const { frontmatter, body } =
-			this.parseMarkdownWithFrontmatter(markdownContent);
-		const description =
-			frontmatter.description || "Run the gauntlet verification suite";
+		const fmMatch = markdownContent.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+		let description = "Run the gauntlet verification suite";
+		const body = fmMatch ? (fmMatch[2] ?? "") : markdownContent;
+
+		if (fmMatch) {
+			for (const line of (fmMatch[1] ?? "").split("\n")) {
+				const kv = line.match(/^description:\s*(.*)$/);
+				if (kv?.[1]) description = kv[1].trim();
+			}
+		}
 
 		return `description = ${JSON.stringify(description)}
 prompt = """
@@ -189,44 +210,20 @@ ${body.trim()}
 `;
 	}
 
-	private parseMarkdownWithFrontmatter(content: string): {
-		frontmatter: Record<string, string>;
-		body: string;
-	} {
-		const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-		if (!match) return { frontmatter: {}, body: content };
-
-		const frontmatter: Record<string, string> = {};
-		for (const line of (match[1] ?? "").split("\n")) {
-			const kv = line.match(/^([^:]+):\s*(.*)$/);
-			if (kv?.[1] && kv[2] !== undefined) {
-				frontmatter[kv[1].trim()] = kv[2].trim();
-			}
-		}
-
-		return { frontmatter, body: match[2] ?? "" };
-	}
-
-	private buildEnv(telemetryFile: string): Record<string, string> {
-		const env: Record<string, string> = {};
-		if (!process.env.GEMINI_TELEMETRY_ENABLED) {
-			env.GEMINI_TELEMETRY_ENABLED = "true";
-		}
-		if (!process.env.GEMINI_TELEMETRY_TARGET) {
-			env.GEMINI_TELEMETRY_TARGET = "local";
-		}
-		if (!process.env.GEMINI_TELEMETRY_OUTFILE) {
-			env.GEMINI_TELEMETRY_OUTFILE = telemetryFile;
-		}
-		return env;
-	}
-
 	private async logTelemetry(
 		telemetryFile: string,
 		onOutput: (chunk: string) => void,
 	): Promise<void> {
 		if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
-		const usage = await parseGeminiTelemetry(telemetryFile);
+		const usage: GeminiTelemetryUsage = {};
+		try {
+			const content = await fs.readFile(telemetryFile, "utf-8");
+			for (const obj of parseJsonObjects(content)) {
+				processMetricObject(obj, usage);
+			}
+		} catch {
+			return;
+		}
 		const summary = formatGeminiSummary(usage);
 		if (summary) {
 			onOutput(`\n${summary}\n`);
@@ -251,12 +248,23 @@ ${body.trim()}
 		);
 		await fs.writeFile(tmpFile, fullContent);
 
+		// Use cwd for telemetry file — Gemini's --sandbox restricts writes
+		// to the project directory, so os.tmpdir() would fail with EPERM.
 		const telemetryFile = path.join(
-			tmpDir,
-			`gauntlet-gemini-telemetry-${process.pid}-${Date.now()}.log`,
+			process.cwd(),
+			`.gauntlet-gemini-telemetry-${process.pid}-${Date.now()}.log`,
 		);
 
-		const telemetryEnv = this.buildEnv(telemetryFile);
+		const telemetryEnv: Record<string, string> = {};
+		if (!process.env.GEMINI_TELEMETRY_ENABLED) {
+			telemetryEnv.GEMINI_TELEMETRY_ENABLED = "true";
+		}
+		if (!process.env.GEMINI_TELEMETRY_TARGET) {
+			telemetryEnv.GEMINI_TELEMETRY_TARGET = "local";
+		}
+		if (!process.env.GEMINI_TELEMETRY_OUTFILE) {
+			telemetryEnv.GEMINI_TELEMETRY_OUTFILE = telemetryFile;
+		}
 
 		const args = [
 			"--sandbox",
