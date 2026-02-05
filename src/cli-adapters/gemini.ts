@@ -8,6 +8,129 @@ import { type CLIAdapter, runStreamingCommand } from "./index.js";
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
+interface GeminiTelemetryUsage {
+	inputTokens?: number;
+	outputTokens?: number;
+	thoughtTokens?: number;
+	cacheTokens?: number;
+	toolTokens?: number;
+}
+
+type TokenType = "input" | "output" | "thought" | "cache" | "tool";
+const TOKEN_TYPE_MAP: Record<TokenType, keyof GeminiTelemetryUsage> = {
+	input: "inputTokens",
+	output: "outputTokens",
+	thought: "thoughtTokens",
+	cache: "cacheTokens",
+	tool: "toolTokens",
+};
+
+interface DataPoint {
+	attributes?: Array<{ key: string; value?: { stringValue?: string } }>;
+	asInt?: number;
+	asDouble?: number;
+	sum?: number;
+	value?: number;
+}
+
+function extractTokenType(dp: DataPoint): TokenType | null {
+	const attr = dp.attributes?.find(
+		(a) => a.key === "type" || a.key === "gen_ai.token.type",
+	);
+	const type = attr?.value?.stringValue;
+	return type && type in TOKEN_TYPE_MAP ? (type as TokenType) : null;
+}
+
+function extractValue(dp: DataPoint): number {
+	return dp.asInt || dp.asDouble || dp.sum || dp.value || 0;
+}
+
+function processDataPoints(
+	dataPoints: DataPoint[],
+	usage: GeminiTelemetryUsage,
+): void {
+	for (const dp of dataPoints) {
+		const tokenType = extractTokenType(dp);
+		if (!tokenType) continue;
+		const key = TOKEN_TYPE_MAP[tokenType];
+		usage[key] = (usage[key] || 0) + extractValue(dp);
+	}
+}
+
+const TOKEN_METRIC_NAMES = new Set([
+	"gemini_cli.token.usage",
+	"gen_ai.client.token.usage",
+]);
+
+interface OtlpMetric {
+	name: string;
+	sum?: { dataPoints?: DataPoint[] };
+	histogram?: { dataPoints?: DataPoint[] };
+}
+
+function getMetricsFromOtlp(data: unknown): OtlpMetric[] {
+	const obj = data as {
+		resourceMetrics?: Array<{
+			scopeMetrics?: Array<{ metrics?: OtlpMetric[] }>;
+		}>;
+	};
+	return obj?.resourceMetrics?.[0]?.scopeMetrics?.[0]?.metrics ?? [];
+}
+
+function getDataPoints(metric: OtlpMetric): DataPoint[] {
+	return metric.sum?.dataPoints ?? metric.histogram?.dataPoints ?? [];
+}
+
+function processMetric(metric: OtlpMetric, usage: GeminiTelemetryUsage): void {
+	if (!TOKEN_METRIC_NAMES.has(metric.name)) return;
+	processDataPoints(getDataPoints(metric), usage);
+}
+
+function parseJsonLine(line: string, usage: GeminiTelemetryUsage): void {
+	const data = JSON.parse(line);
+	for (const metric of getMetricsFromOtlp(data)) {
+		processMetric(metric, usage);
+	}
+}
+
+async function parseGeminiTelemetry(
+	filePath: string,
+): Promise<GeminiTelemetryUsage> {
+	const usage: GeminiTelemetryUsage = {};
+	let content: string;
+
+	try {
+		content = await fs.readFile(filePath, "utf-8");
+	} catch {
+		return usage;
+	}
+
+	for (const line of content.trim().split("\n").filter(Boolean)) {
+		try {
+			parseJsonLine(line, usage);
+		} catch {
+			// Skip malformed lines
+		}
+	}
+
+	return usage;
+}
+
+const SUMMARY_FIELDS: Array<[keyof GeminiTelemetryUsage, string]> = [
+	["inputTokens", "in"],
+	["outputTokens", "out"],
+	["thoughtTokens", "thought"],
+	["cacheTokens", "cache"],
+	["toolTokens", "tool"],
+];
+
+function formatGeminiSummary(usage: GeminiTelemetryUsage): string | null {
+	const parts = SUMMARY_FIELDS.filter(([key]) => usage[key] !== undefined).map(
+		([key, label]) => `${label}=${usage[key]}`,
+	);
+	return parts.length > 0 ? `[telemetry] ${parts.join(" ")}` : null;
+}
+
 export class GeminiAdapter implements CLIAdapter {
 	name = "gemini";
 
@@ -42,7 +165,6 @@ export class GeminiAdapter implements CLIAdapter {
 	}
 
 	getUserCommandDir(): string | null {
-		// Gemini supports user-level commands at ~/.gemini/commands
 		return path.join(os.homedir(), ".gemini", "commands");
 	}
 
@@ -51,23 +173,18 @@ export class GeminiAdapter implements CLIAdapter {
 	}
 
 	canUseSymlink(): boolean {
-		// Gemini uses TOML format, needs transformation
 		return false;
 	}
 
 	transformCommand(markdownContent: string): string {
-		// Transform Markdown with YAML frontmatter to Gemini's TOML format
 		const { frontmatter, body } =
 			this.parseMarkdownWithFrontmatter(markdownContent);
-
 		const description =
 			frontmatter.description || "Run the gauntlet verification suite";
-		// Escape the body for TOML multi-line string
-		const escapedBody = body.trim();
 
 		return `description = ${JSON.stringify(description)}
 prompt = """
-${escapedBody}
+${body.trim()}
 """
 `;
 	}
@@ -76,24 +193,46 @@ ${escapedBody}
 		frontmatter: Record<string, string>;
 		body: string;
 	} {
-		const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-		if (!frontmatterMatch) {
-			return { frontmatter: {}, body: content };
-		}
+		const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+		if (!match) return { frontmatter: {}, body: content };
 
-		const frontmatterStr = frontmatterMatch[1] ?? "";
-		const body = frontmatterMatch[2] ?? "";
-
-		// Simple YAML parsing for key: value pairs
 		const frontmatter: Record<string, string> = {};
-		for (const line of frontmatterStr.split("\n")) {
-			const kvMatch = line.match(/^([^:]+):\s*(.*)$/);
-			if (kvMatch?.[1] && kvMatch[2] !== undefined) {
-				frontmatter[kvMatch[1].trim()] = kvMatch[2].trim();
+		for (const line of (match[1] ?? "").split("\n")) {
+			const kv = line.match(/^([^:]+):\s*(.*)$/);
+			if (kv?.[1] && kv[2] !== undefined) {
+				frontmatter[kv[1].trim()] = kv[2].trim();
 			}
 		}
 
-		return { frontmatter, body };
+		return { frontmatter, body: match[2] ?? "" };
+	}
+
+	private buildEnv(telemetryFile: string): Record<string, string> {
+		const env: Record<string, string> = {};
+		if (!process.env.GEMINI_TELEMETRY_ENABLED) {
+			env.GEMINI_TELEMETRY_ENABLED = "true";
+		}
+		if (!process.env.GEMINI_TELEMETRY_TARGET) {
+			env.GEMINI_TELEMETRY_TARGET = "local";
+		}
+		if (!process.env.GEMINI_TELEMETRY_OUTFILE) {
+			env.GEMINI_TELEMETRY_OUTFILE = telemetryFile;
+		}
+		return env;
+	}
+
+	private async logTelemetry(
+		telemetryFile: string,
+		onOutput: (chunk: string) => void,
+	): Promise<void> {
+		if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
+		const usage = await parseGeminiTelemetry(telemetryFile);
+		const summary = formatGeminiSummary(usage);
+		if (summary) {
+			onOutput(`\n${summary}\n`);
+			// Output summary to console log (captured by startConsoleLog)
+			process.stdout.write(`${summary}\n`);
+		}
 	}
 
 	async execute(opts: {
@@ -103,10 +242,8 @@ ${escapedBody}
 		timeoutMs?: number;
 		onOutput?: (chunk: string) => void;
 	}): Promise<string> {
-		// Construct the full prompt content
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
-		// Write to a temporary file to avoid shell escaping issues
 		const tmpDir = os.tmpdir();
 		const tmpFile = path.join(
 			tmpDir,
@@ -114,10 +251,13 @@ ${escapedBody}
 		);
 		await fs.writeFile(tmpFile, fullContent);
 
-		// Use gemini CLI with file input
-		// --sandbox: enables the execution sandbox
-		// --allowed-tools: whitelists read-only tools for non-interactive execution
-		// --output-format text: ensures plain text output
+		const telemetryFile = path.join(
+			tmpDir,
+			`gauntlet-gemini-telemetry-${process.pid}-${Date.now()}.log`,
+		);
+
+		const telemetryEnv = this.buildEnv(telemetryFile);
+
 		const args = [
 			"--sandbox",
 			"--allowed-tools",
@@ -127,29 +267,37 @@ ${escapedBody}
 		];
 
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+		const cleanupTelemetry = () => fs.unlink(telemetryFile).catch(() => {});
 
-		// If onOutput callback is provided, use spawn for real-time streaming
 		if (opts.onOutput) {
-			return runStreamingCommand({
-				command: "gemini",
-				args,
-				tmpFile,
-				timeoutMs: opts.timeoutMs,
-				onOutput: opts.onOutput,
-				cleanup,
-			});
+			try {
+				const result = await runStreamingCommand({
+					command: "gemini",
+					args,
+					tmpFile,
+					timeoutMs: opts.timeoutMs,
+					onOutput: opts.onOutput,
+					cleanup,
+					env: { ...process.env, ...telemetryEnv },
+				});
+				await this.logTelemetry(telemetryFile, opts.onOutput);
+				return result;
+			} finally {
+				await cleanupTelemetry();
+			}
 		}
 
-		// Otherwise use exec for buffered output
 		try {
 			const cmd = `gemini --sandbox --allowed-tools read_file,list_directory,glob,search_file_content --output-format text < "${tmpFile}"`;
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,
+				env: { ...process.env, ...telemetryEnv },
 			});
 			return stdout;
 		} finally {
 			await cleanup();
+			await cleanupTelemetry();
 		}
 	}
 }
