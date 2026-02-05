@@ -77,24 +77,32 @@ const TOKEN_METRIC_NAMES = new Set([
  * Find [start, end) index pairs for each top-level `{…}` in a string
  * whose JSON string literals have already been blanked out.
  */
+function handleOpen(i: number, depth: number, start: number): [number, number] {
+	return [depth + 1, depth === 0 ? i : start];
+}
+
+function handleClose(
+	i: number,
+	depth: number,
+	start: number,
+	ranges: Array<[number, number]>,
+): [number, number] {
+	const next = depth - 1;
+	if (next === 0 && start >= 0) {
+		ranges.push([start, i + 1]);
+		return [next, -1];
+	}
+	return [next, start];
+}
+
 function findObjectBoundaries(stripped: string): Array<[number, number]> {
 	const ranges: Array<[number, number]> = [];
 	let depth = 0;
 	let start = -1;
 	for (let i = 0; i < stripped.length; i++) {
 		const ch = stripped[i];
-		if (ch !== "{" && ch !== "}") continue;
-		if (ch === "{") {
-			if (depth === 0) start = i;
-			depth++;
-			continue;
-		}
-		depth--;
-		if (depth !== 0) continue;
-		if (start >= 0) {
-			ranges.push([start, i + 1]);
-			start = -1;
-		}
+		if (ch === "{") [depth, start] = handleOpen(i, depth, start);
+		else if (ch === "}") [depth, start] = handleClose(i, depth, start, ranges);
 	}
 	return ranges;
 }
@@ -144,6 +152,21 @@ function formatGeminiSummary(usage: GeminiTelemetryUsage): string | null {
 		([key, label]) => `${label}=${usage[key]}`,
 	);
 	return parts.length > 0 ? `[telemetry] ${parts.join(" ")}` : null;
+}
+
+async function logTelemetryToStdout(telemetryFile: string): Promise<void> {
+	if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
+	const usage: GeminiTelemetryUsage = {};
+	try {
+		const raw = await fs.readFile(telemetryFile, "utf-8");
+		for (const obj of parseJsonObjects(raw)) {
+			processMetricObject(obj, usage);
+		}
+	} catch {
+		return;
+	}
+	const summary = formatGeminiSummary(usage);
+	if (summary) process.stdout.write(`${summary}\n`);
 }
 
 export class GeminiAdapter implements CLIAdapter {
@@ -302,6 +325,7 @@ ${body.trim()}
 				maxBuffer: MAX_BUFFER_BYTES,
 				env: { ...process.env, ...telemetryEnv },
 			});
+			await logTelemetryToStdout(telemetryFile);
 			return stdout;
 		} finally {
 			await cleanup();
