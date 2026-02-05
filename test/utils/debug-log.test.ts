@@ -56,6 +56,19 @@ describe("DebugLogger", () => {
 	});
 
 	describe("logging methods", () => {
+		/** Create an enabled logger and return a content reader. */
+		function createTestLogger() {
+			const logger = new DebugLogger(TEST_DIR, {
+				enabled: true,
+				maxSizeMb: 10,
+			});
+			const readLog = async () => {
+				const logPath = path.join(TEST_DIR, ".debug.log");
+				return fs.readFile(logPath, "utf-8");
+			};
+			return { logger, readLog };
+		}
+
 		it("does not write when disabled", async () => {
 			const logger = new DebugLogger(TEST_DIR, {
 				enabled: false,
@@ -68,34 +81,21 @@ describe("DebugLogger", () => {
 		});
 
 		it("writes log entries when enabled", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logCommand("run", ["-b", "main"]);
-
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
-			expect(content).toContain("COMMAND run -b main");
+			expect(await readLog()).toContain("COMMAND run -b main");
 		});
 
 		it("writes RUN_START entries", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logRunStart("full", 5, 3);
-
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
-			expect(content).toContain("RUN_START mode=full changes=5 gates=3");
+			expect(await readLog()).toContain(
+				"RUN_START mode=full changes=5 gates=3",
+			);
 		});
 
 		it("writes RUN_START with diff stats - branch ref", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logRunStartWithDiff(
 				"full",
 				{
@@ -110,8 +110,7 @@ describe("DebugLogger", () => {
 				4,
 			);
 
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
+			const content = await readLog();
 			expect(content).toContain("RUN_START mode=full");
 			expect(content).toContain("base_ref=origin/main");
 			expect(content).toContain("files_changed=10");
@@ -124,10 +123,7 @@ describe("DebugLogger", () => {
 		});
 
 		it("writes RUN_START with diff stats - commit SHA", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logRunStartWithDiff(
 				"verification",
 				{
@@ -142,17 +138,13 @@ describe("DebugLogger", () => {
 				1,
 			);
 
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
+			const content = await readLog();
 			expect(content).toContain("mode=verification");
 			expect(content).toContain("base_ref=abc123def456");
 		});
 
 		it("writes RUN_START with diff stats - uncommitted", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logRunStartWithDiff(
 				"full",
 				{
@@ -166,17 +158,11 @@ describe("DebugLogger", () => {
 				},
 				2,
 			);
-
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
-			expect(content).toContain("base_ref=uncommitted");
+			expect(await readLog()).toContain("base_ref=uncommitted");
 		});
 
 		it("writes RUN_START with diff stats - worktree ref", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logRunStartWithDiff(
 				"verification",
 				{
@@ -190,76 +176,117 @@ describe("DebugLogger", () => {
 				},
 				1,
 			);
-
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
-			expect(content).toContain("base_ref=WORKTREE-abc123");
+			expect(await readLog()).toContain("base_ref=WORKTREE-abc123");
 		});
 
 		it("writes RUN_END entries with duration", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logRunStart("full", 5, 3);
 			await logger.logRunEnd("pass", 2, 1, 0, 1);
-
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
-			expect(content).toContain(
+			expect(await readLog()).toContain(
 				"RUN_END status=pass fixed=2 skipped=1 failed=0 iterations=1 duration=",
 			);
 		});
 
 		it("writes GATE_RESULT entries", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
+			const { logger, readLog } = createTestLogger();
+			await logger.logGateResult("check:src:lint", "pass", 1234, {
+				violations: 0,
 			});
-			await logger.logGateResult("check:src:lint", "pass", 1234, 0);
 
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
+			const content = await readLog();
 			expect(content).toContain("GATE_RESULT check:src:lint status=pass");
 			expect(content).toContain("duration=");
 			expect(content).toContain("violations=0");
 		});
 
-		it("writes CLEAN entries", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
+		it("writes GATE_RESULT entries with cli adapter name", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logGateResult("review:.:code-quality", "fail", 107700, {
+				violations: 3,
+				cli: "gemini",
 			});
-			await logger.logClean("auto", "all_passed");
+			expect(await readLog()).toContain(
+				"GATE_RESULT review:.:code-quality cli=gemini status=fail duration=107.7s violations=3",
+			);
+		});
 
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
-			expect(content).toContain("CLEAN type=auto reason=all_passed");
+		it("writes GATE_RESULT entries without cli when not provided", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logGateResult("check:src:build", "pass", 5000);
+
+			const content = await readLog();
+			expect(content).toContain(
+				"GATE_RESULT check:src:build status=pass duration=5.0s",
+			);
+			expect(content).not.toContain("cli=");
+		});
+
+		it("writes CLEAN entries", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logClean("auto", "all_passed");
+			expect(await readLog()).toContain("CLEAN type=auto reason=all_passed");
 		});
 
 		it("writes STOP_HOOK entries", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logStopHook("allow", "passed");
+			expect(await readLog()).toContain(
+				"STOP_HOOK decision=allow reason=passed",
+			);
+		});
 
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
-			expect(content).toContain("STOP_HOOK decision=allow reason=passed");
+		it("writes STATE_WRITE with changed fields", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logStateWrite({
+				commit: "def456",
+				branch: "main",
+				working_tree_ref: "abc789",
+			});
+			expect(await readLog()).toContain(
+				"STATE_WRITE commit=def456 branch=main working_tree_ref=abc789",
+			);
+		});
+
+		it("writes STATE_WRITE with no fields for timestamp-only refresh", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logStateWrite({});
+			expect(await readLog()).toContain("STATE_WRITE\n");
+		});
+
+		it("writes STATE_DELETE", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logStateDelete();
+			expect(await readLog()).toContain("STATE_DELETE");
+		});
+
+		it("writes STATE_ADAPTER_UNHEALTHY with reason", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logAdapterHealthChange(
+				"gemini",
+				false,
+				"Usage limit exceeded",
+			);
+			expect(await readLog()).toContain(
+				"STATE_ADAPTER_UNHEALTHY adapter=gemini reason=Usage limit exceeded",
+			);
+		});
+
+		it("writes STATE_ADAPTER_HEALTHY", async () => {
+			const { logger, readLog } = createTestLogger();
+			await logger.logAdapterHealthChange("gemini", true);
+			expect(await readLog()).toContain(
+				"STATE_ADAPTER_HEALTHY adapter=gemini",
+			);
 		});
 
 		it("includes timestamp in log entries", async () => {
-			const logger = new DebugLogger(TEST_DIR, {
-				enabled: true,
-				maxSizeMb: 10,
-			});
+			const { logger, readLog } = createTestLogger();
 			await logger.logCommand("test", []);
-
-			const logPath = path.join(TEST_DIR, ".debug.log");
-			const content = await fs.readFile(logPath, "utf-8");
 			// Should have ISO timestamp format
-			expect(content).toMatch(/\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+			expect(await readLog()).toMatch(
+				/\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+			);
 		});
 	});
 
