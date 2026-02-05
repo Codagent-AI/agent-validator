@@ -102,6 +102,7 @@ export class Runner {
 			Map<number, { adapter: string; passIteration: number }>
 		>,
 		private debugLogger?: DebugLogger,
+		private isRerun?: boolean,
 	) {}
 
 	async run(jobs: Job[]): Promise<RunnerOutcome> {
@@ -207,7 +208,7 @@ export class Runner {
 					job.gateConfig as LoadedCheckGateConfig,
 					job.workingDirectory,
 					jobLogger,
-					effectiveBaseBranch,
+					{ baseBranch: effectiveBaseBranch, isRerun: this.isRerun },
 				);
 				result.logPath = logPath;
 			} else {

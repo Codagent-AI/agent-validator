@@ -7,6 +7,7 @@ export const cliConfigSchema = z.object({
 export const checkGateSchema = z
 	.object({
 		command: z.string().min(1),
+		rerun_command: z.string().min(1).optional(),
 		working_directory: z.string().optional(),
 		parallel: z.boolean().default(false),
 		run_locally: z.boolean().default(true),
