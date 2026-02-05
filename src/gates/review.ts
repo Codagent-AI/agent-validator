@@ -203,6 +203,7 @@ export class ReviewGateExecutor {
 			const outputs: Array<{
 				adapter: string;
 				reviewIndex: number;
+				duration?: number;
 				status: "pass" | "fail" | "error";
 				message: string;
 				json?: ReviewJsonOutput;
@@ -442,6 +443,7 @@ export class ReviewGateExecutor {
 						outputs.push({
 							adapter: res.adapter,
 							reviewIndex: res.reviewIndex,
+							duration: res.duration,
 							...res.evaluation,
 						});
 					}
@@ -465,6 +467,7 @@ export class ReviewGateExecutor {
 						outputs.push({
 							adapter: res.adapter,
 							reviewIndex: res.reviewIndex,
+							duration: res.duration,
 							...res.evaluation,
 						});
 					}
@@ -534,6 +537,7 @@ export class ReviewGateExecutor {
 				return {
 					nameSuffix: `(${out.adapter}@${out.reviewIndex})`,
 					status: out.status,
+					duration: out.duration,
 					message: out.message,
 					logPath,
 					errorCount,
@@ -555,9 +559,11 @@ export class ReviewGateExecutor {
 				subResults.push({
 					nameSuffix: `(${skipped.adapter}@${skipped.reviewIndex})`,
 					status: "pass" as const, // Show as pass since it previously passed
+					duration: undefined,
 					message: skipped.message,
 					logPath: specificLog?.replace(/\.log$/, ".json"),
 					errorCount: 0,
+					fixedCount: 0,
 					skipped: undefined,
 				});
 			}
@@ -622,6 +628,7 @@ export class ReviewGateExecutor {
 	): Promise<{
 		adapter: string;
 		reviewIndex: number;
+		duration: number;
 		evaluation: {
 			status: "pass" | "fail" | "error";
 			message: string;
@@ -634,6 +641,7 @@ export class ReviewGateExecutor {
 			}>;
 		};
 	} | null> {
+		const reviewStartTime = Date.now();
 		const adapter = getAdapter(toolName);
 		if (!adapter) return null;
 
@@ -696,6 +704,7 @@ export class ReviewGateExecutor {
 				return {
 					adapter: adapter.name,
 					reviewIndex,
+					duration: Date.now() - reviewStartTime,
 					evaluation: {
 						status: "error",
 						message: reason,
@@ -835,6 +844,7 @@ export class ReviewGateExecutor {
 			return {
 				adapter: adapter.name,
 				reviewIndex,
+				duration: Date.now() - reviewStartTime,
 				evaluation: {
 					status: evaluation.status,
 					message: evaluation.message,
@@ -864,6 +874,7 @@ export class ReviewGateExecutor {
 				return {
 					adapter: adapter.name,
 					reviewIndex,
+					duration: Date.now() - reviewStartTime,
 					evaluation: {
 						status: "error",
 						message: reason,

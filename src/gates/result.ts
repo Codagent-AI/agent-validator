@@ -39,6 +39,7 @@ export interface GateResult {
 	subResults?: Array<{
 		nameSuffix: string;
 		status: GateStatus;
+		duration?: number; // per-reviewer timing in ms
 		message: string;
 		logPath?: string;
 		errorCount?: number;

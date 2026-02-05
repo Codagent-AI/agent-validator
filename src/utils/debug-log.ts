@@ -133,18 +133,20 @@ export class DebugLogger {
 
 	/**
 	 * Log the result of a gate execution.
+	 * When `cli` is provided, the adapter name is included in the log entry.
 	 */
 	async logGateResult(
 		gateId: string,
 		status: string,
 		duration: number,
-		violations?: number,
+		opts?: { violations?: number; cli?: string },
 	): Promise<void> {
 		const durationStr = `${(duration / 1000).toFixed(1)}s`;
+		const cliStr = opts?.cli ? ` cli=${opts.cli}` : "";
 		const violationsStr =
-			violations !== undefined ? ` violations=${violations}` : "";
+			opts?.violations !== undefined ? ` violations=${opts.violations}` : "";
 		await this.write(
-			`GATE_RESULT ${gateId} status=${status} duration=${durationStr}${violationsStr}`,
+			`GATE_RESULT ${gateId}${cliStr} status=${status} duration=${durationStr}${violationsStr}`,
 		);
 	}
 
@@ -227,6 +229,44 @@ export class DebugLogger {
 		await this.write(
 			`STOP_HOOK_EARLY_EXIT source=${source} status=${status}${detailStr}`,
 		);
+	}
+
+	/**
+	 * Log an execution state write, showing only changed fields.
+	 * Skips `last_run_completed_at` since every log line is already timestamped.
+	 */
+	async logStateWrite(changes: Record<string, string>): Promise<void> {
+		const parts = Object.entries(changes).map(
+			([key, value]) => `${key}=${value}`,
+		);
+		await this.write(
+			`STATE_WRITE${parts.length > 0 ? ` ${parts.join(" ")}` : ""}`,
+		);
+	}
+
+	/**
+	 * Log an execution state deletion.
+	 */
+	async logStateDelete(): Promise<void> {
+		await this.write("STATE_DELETE");
+	}
+
+	/**
+	 * Log an adapter health change.
+	 */
+	async logAdapterHealthChange(
+		adapter: string,
+		healthy: boolean,
+		reason?: string,
+	): Promise<void> {
+		if (healthy) {
+			await this.write(`STATE_ADAPTER_HEALTHY adapter=${adapter}`);
+		} else {
+			const reasonStr = reason ? ` reason=${reason}` : "";
+			await this.write(
+				`STATE_ADAPTER_UNHEALTHY adapter=${adapter}${reasonStr}`,
+			);
+		}
 	}
 
 	/**

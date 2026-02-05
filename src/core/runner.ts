@@ -244,14 +244,7 @@ export class Runner {
 
 		this.results.push(result);
 		this.reporter.onJobComplete(job, result);
-
-		// Log gate result
-		await this.debugLogger?.logGateResult(
-			job.id,
-			result.status,
-			result.duration,
-			result.errorCount,
-		);
+		await this.logGateResults(job.id, result);
 
 		// Handle Fail Fast (only for checks, and only when parallel is false)
 		if (
@@ -260,6 +253,37 @@ export class Runner {
 			job.gateConfig.fail_fast
 		) {
 			this.shouldStop = true;
+		}
+	}
+
+	/**
+	 * Log gate results to the debug log.
+	 * For review gates with subResults, logs one entry per reviewer.
+	 * For check gates, logs a single entry.
+	 */
+	private async logGateResults(
+		jobId: string,
+		result: GateResult,
+	): Promise<void> {
+		if (!this.debugLogger) return;
+
+		if (result.subResults && result.subResults.length > 0) {
+			for (const sub of result.subResults) {
+				const cli = sub.nameSuffix.match(/\((.+?)@\d+\)/)?.[1];
+				await this.debugLogger.logGateResult(
+					jobId,
+					sub.status,
+					sub.duration ?? result.duration,
+					{ violations: sub.errorCount, cli },
+				);
+			}
+		} else {
+			await this.debugLogger.logGateResult(
+				jobId,
+				result.status,
+				result.duration,
+				{ violations: result.errorCount },
+			);
 		}
 	}
 }
