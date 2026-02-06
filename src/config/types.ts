@@ -53,6 +53,7 @@ export interface LoadedReviewGateConfig {
 	run_in_ci: boolean;
 	run_locally: boolean;
 	timeout?: number;
+	isBuiltIn?: boolean;
 }
 
 // Combined type for the fully loaded configuration

@@ -10,6 +10,10 @@ Reviews are loaded exclusively from `.gauntlet/reviews/`, meaning every project 
 - `init` command references `built-in:code-quality` instead of creating `.gauntlet/reviews/code-quality.md`
 - CLI preference merging applies to built-in reviews (requires restructuring the merge loop in `loader.ts`)
 
+## Alternatives Considered
+- **Auto-updating templates via `init --upgrade`**: Would require tracking template versions and handling merge conflicts with user customizations. Adds complexity for minimal benefit since built-in reviews track the package version automatically.
+- **Remote review registry**: Fetching reviews from a URL or registry at runtime adds network dependencies and failure modes. Built-in bundling is simpler and works offline.
+
 ## Impact
 - Affected specs: `review-config` (ADDED — built-in prefix syntax, code-quality review content, reserved prefix validation), `init-hook-install` (ADDED — new scenario for built-in review reference; existing requirements unchanged)
 - Affected code:

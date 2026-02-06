@@ -49,6 +49,13 @@ The system MUST support a `built-in:<name>` syntax in entry point review referen
 - **WHEN** the configuration is loaded
 - **THEN** the built-in review SHALL inherit `cli_preference` from `cli.default_preference`
 
+#### Scenario: Built-in review cli_preference validation
+- **GIVEN** a `config.yml` with `cli.default_preference: [claude]`
+- **AND** a built-in review that specifies `cli_preference: [nonexistent-tool]` in its frontmatter
+- **WHEN** the configuration is loaded
+- **THEN** the system MUST reject with an error indicating the tool is not in the project-level allowed list
+- **NOTE** The current `code-quality` built-in does not specify `cli_preference`, so this scenario is not exercisable with shipped built-ins. The validation path is covered by the general CLI preference merging logic applied uniformly to all reviews.
+
 #### Scenario: Entry point referencing built-in review passes validation
 - **GIVEN** a `config.yml` with entry point referencing `built-in:code-quality`
 - **WHEN** the configuration is loaded

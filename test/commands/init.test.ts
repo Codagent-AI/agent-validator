@@ -115,10 +115,10 @@ describe("Init Command", () => {
 		expect(configContent).toContain("mock-cli-1"); // Should be present
 		expect(configContent).not.toContain("mock-cli-2"); // Should not be present (unavailable)
 
-		// Verify review file content
-		const reviewFile = path.join(reviewsDir, "code-quality.md");
-		const reviewContent = await fs.readFile(reviewFile, "utf-8");
-		expect(reviewContent).toContain("mock-cli-1");
+		// Verify config references built-in review instead of creating file
+		expect(configContent).toContain("built-in:code-quality");
+		const reviewFiles = await fs.readdir(reviewsDir);
+		expect(reviewFiles).toHaveLength(0);
 	});
 
 	it("should not create directory if .gauntlet already exists", async () => {

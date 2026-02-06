@@ -14,4 +14,5 @@ The `init` command SHALL reference `built-in:code-quality` in the generated `con
 - **GIVEN** the user runs `agent-gauntlet init -y`
 - **WHEN** the `.gauntlet/` directory is scaffolded
 - **THEN** `config.yml` SHALL contain `built-in:code-quality` in the entry_points reviews list
+- **AND** `.gauntlet/reviews/` directory SHALL exist (empty)
 - **AND** `.gauntlet/reviews/code-quality.md` SHALL NOT be created
