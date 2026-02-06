@@ -30,6 +30,9 @@ const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const MAX_LOG_BUFFER_SIZE = 10000;
 const REVIEW_ADAPTER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
+/** Chars-per-token approximation for rough token estimates. */
+const CHARS_PER_TOKEN = 4;
+
 const JSON_SYSTEM_INSTRUCTION = `
 You are in a read-only mode. You may read files in the repository to gather context.
 Do NOT attempt to modify files or run shell commands that change system state.
@@ -183,9 +186,17 @@ export class ReviewGateExecutor {
 				baseBranch,
 				changeOptions,
 			);
-			log.debug(
-				`getDiff returned ${diff.length} chars, ${diff.split("\n").length} lines`,
-			);
+
+			// Compute and log diff size stats
+			const diffLines = diff.split("\n").length;
+			const diffChars = diff.length;
+			const diffEstTokens = Math.ceil(diffChars / CHARS_PER_TOKEN);
+			const diffFileRanges = parseDiff(diff);
+			const diffFiles = diffFileRanges.size;
+			const diffSizeMsg = `[diff-stats] files=${diffFiles} lines=${diffLines} chars=${diffChars} est_tokens=${diffEstTokens}`;
+			log.debug(diffSizeMsg);
+			await mainLogger(`${diffSizeMsg}\n`);
+
 			if (!diff.trim()) {
 				log.debug(`Empty diff after trim, returning pass`);
 				await mainLogger("No changes found in entry point, skipping review.\n");
@@ -203,6 +214,7 @@ export class ReviewGateExecutor {
 			const outputs: Array<{
 				adapter: string;
 				reviewIndex: number;
+				duration?: number;
 				status: "pass" | "fail" | "error";
 				message: string;
 				json?: ReviewJsonOutput;
@@ -442,6 +454,7 @@ export class ReviewGateExecutor {
 						outputs.push({
 							adapter: res.adapter,
 							reviewIndex: res.reviewIndex,
+							duration: res.duration,
 							...res.evaluation,
 						});
 					}
@@ -465,6 +478,7 @@ export class ReviewGateExecutor {
 						outputs.push({
 							adapter: res.adapter,
 							reviewIndex: res.reviewIndex,
+							duration: res.duration,
 							...res.evaluation,
 						});
 					}
@@ -534,6 +548,7 @@ export class ReviewGateExecutor {
 				return {
 					nameSuffix: `(${out.adapter}@${out.reviewIndex})`,
 					status: out.status,
+					duration: out.duration,
 					message: out.message,
 					logPath,
 					errorCount,
@@ -555,9 +570,11 @@ export class ReviewGateExecutor {
 				subResults.push({
 					nameSuffix: `(${skipped.adapter}@${skipped.reviewIndex})`,
 					status: "pass" as const, // Show as pass since it previously passed
+					duration: undefined,
 					message: skipped.message,
 					logPath: specificLog?.replace(/\.log$/, ".json"),
 					errorCount: 0,
+					fixedCount: 0,
 					skipped: undefined,
 				});
 			}
@@ -622,6 +639,7 @@ export class ReviewGateExecutor {
 	): Promise<{
 		adapter: string;
 		reviewIndex: number;
+		duration: number;
 		evaluation: {
 			status: "pass" | "fail" | "error";
 			message: string;
@@ -634,6 +652,7 @@ export class ReviewGateExecutor {
 			}>;
 		};
 	} | null> {
+		const reviewStartTime = Date.now();
 		const adapter = getAdapter(toolName);
 		if (!adapter) return null;
 
@@ -660,6 +679,16 @@ export class ReviewGateExecutor {
 				config,
 				adapterPreviousViolations,
 			);
+
+			// Log prompt + diff size so we can compare against actual token usage from telemetry
+			const promptChars = finalPrompt.length;
+			const diffChars = diff.length;
+			const totalInputChars = promptChars + diffChars;
+			const promptEstTokens = Math.ceil(promptChars / CHARS_PER_TOKEN);
+			const diffEstTokens = Math.ceil(diffChars / CHARS_PER_TOKEN);
+			const totalEstTokens = promptEstTokens + diffEstTokens;
+			const inputSizeMsg = `[input-stats] prompt_chars=${promptChars} diff_chars=${diffChars} total_chars=${totalInputChars} prompt_est_tokens=${promptEstTokens} diff_est_tokens=${diffEstTokens} total_est_tokens=${totalEstTokens}`;
+			await adapterLogger(`${inputSizeMsg}\n`);
 
 			const output = await adapter.execute({
 				prompt: finalPrompt,
@@ -696,6 +725,7 @@ export class ReviewGateExecutor {
 				return {
 					adapter: adapter.name,
 					reviewIndex,
+					duration: Date.now() - reviewStartTime,
 					evaluation: {
 						status: "error",
 						message: reason,
@@ -835,6 +865,7 @@ export class ReviewGateExecutor {
 			return {
 				adapter: adapter.name,
 				reviewIndex,
+				duration: Date.now() - reviewStartTime,
 				evaluation: {
 					status: evaluation.status,
 					message: evaluation.message,
@@ -864,6 +895,7 @@ export class ReviewGateExecutor {
 				return {
 					adapter: adapter.name,
 					reviewIndex,
+					duration: Date.now() - reviewStartTime,
 					evaluation: {
 						status: "error",
 						message: reason,

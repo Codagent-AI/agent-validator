@@ -58,42 +58,23 @@ wt list
 
 ## Release Workflow
 
-### Trunk-Based Development
-1. Create feature branch from `main`
-2. PR from feature branch to `main`
-3. On merge to main, Changesets creates "Version Packages" PR
-4. Merge "Version Packages" PR when ready to release → publishes to npm
+Releases are driven by the `/release` slash command in Claude Code.
 
-### Creating Changesets
-Include a changeset in your feature PR (or add separately before merging):
+### How it works
 
-#### Option A: Interactive CLI
+Run `/release` from the project root. The command will:
 
-```bash
-bun changeset
-```
+1. Find the last release tag (`v*`)
+2. Query all PRs merged to `main` since that tag
+3. Generate a changeset file for each PR (bump type derived from conventional commit prefix)
+4. Run `changeset version` to update `CHANGELOG.md` and bump `package.json`
+5. Create a release PR (e.g., `chore: release v1.0.0`)
 
-#### Option B: Manual file creation
-Create `.changeset/<descriptive-name>.md`:
-```markdown
----
-"agent-gauntlet": patch  # or minor, major
----
+### Publishing
 
-Description of changes for the changelog
-```
+When the release PR is merged to `main`, the publish workflow automatically:
+- Checks if the version is already published on npm
+- Publishes the new version to npm (`npm publish`)
+- Creates a GitHub release (`softprops/action-gh-release`)
 
-### When to Create Changesets
-- **Create:** New features, bug fixes, breaking changes
-- **Skip:** Internal refactors, docs-only, test-only changes
-
-### Future Enhancement: Auto-generate Changesets
-
-**Goal:** Streamline workflow with a script/command that generates changesets from PR diff.
-
-**Implementation ideas:**
-- Claude Code slash command (`/changeset`) that reads PR diff and generates changeset
-- Shell script that uses `git log` to summarize changes
-- GitHub Action that auto-generates changeset on PR creation
-
-This is a future enhancement - for now, manually run `bun changeset` or create files directly.
+One merge → publish. No manual changeset creation needed.

@@ -204,17 +204,20 @@ lists targeted refactorings to complete **before** the main implementation work.
 The scope is strictly **files touched by this change** — not all hotspots in the project.
 
 **How to populate the Pre-factoring section (requires CodeScene MCP server):**
+
+> **HOTSPOT_THRESHOLD = 8.5** (Code Health score; files at or below are hotspot candidates)
+
 1. Determine which source files will be modified by the change (from the Impact section of `proposal.md`).
 2. For each affected file, run `code_health_score` to get its Code Health score (1.0–10.0).
-   - **Score ≤ 8.0** → the file is a hotspot candidate. Proceed to step 3.
-   - **Score > 8.0** → the file is healthy. No pre-factoring needed for it.
-3. For each file scoring ≤ 8.0, get refactoring priorities:
+   - **Score ≤ HOTSPOT_THRESHOLD** → the file is a hotspot candidate. Proceed to step 3.
+   - **Score > HOTSPOT_THRESHOLD** → the file is healthy. No pre-factoring needed for it.
+3. For each file scoring ≤ HOTSPOT_THRESHOLD, get refactoring priorities:
    - `code_health_review` — get the full Code Health review listing code smells.
    - `code_health_auto_refactor` — get an automated refactoring recommendation for the worst-scoring function.
 4. Optionally, cross-reference with project-level data if available:
    - `list_technical_debt_hotspots_for_project_file` — check if the file is a known project hotspot.
    - `list_technical_debt_hotspots_for_project` — list all project hotspots and filter to affected files.
-5. Record the results in the Pre-factoring section. If none of the files touched by this change score ≤ 8.0, write "No hotspots modified."
+5. Record the results in the Pre-factoring section. If none of the files touched by this change score ≤ HOTSPOT_THRESHOLD, write "No hotspots modified."
 
 > **Note:** If the CodeScene MCP server is not available, write "CodeScene not available — hotspot analysis skipped." in the Pre-factoring section and proceed with implementation. See the [CodeScene MCP server documentation](https://github.com/codescene-oss/codescene-mcp) for setup instructions.
 
@@ -271,8 +274,8 @@ There are no automated validation tasks that need to be explicitly run. When wor
   - `cat path/to/file | head -n 5` — verify file structure or format
 - Prefix manual CLI steps with "Manual:" to distinguish from automated checks.
 
-5. **Create design.md when needed:**
-Create `design.md` if any of the following apply; otherwise omit it:
+5. **Create design.md for all changes:**
+If a plan document was previoiusly created, include all technical details from the plan in the `design.md`. Also include all of the following, if applicable:
 - Cross-cutting change (multiple services/modules) or a new architectural pattern
 - New external dependency or significant data model changes
 - Security, performance, or migration complexity

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { getDebugLogger } from "./debug-log.js";
 
 const EXECUTION_STATE_FILENAME = ".execution_state";
 const SESSION_REF_FILENAME = ".session_ref";
@@ -162,6 +163,22 @@ export async function writeExecutionState(logDir: string): Promise<void> {
 	if (existingUnhealthy) {
 		state.unhealthy_adapters = existingUnhealthy;
 	}
+
+	// Log changed fields (skip last_run_completed_at since every log line is timestamped)
+	const changes: Record<string, string> = {};
+	const oldState = rawState as Record<string, unknown> | null;
+	if (oldState) {
+		if (oldState.branch !== branch) changes.branch = branch;
+		if (oldState.commit !== commit) changes.commit = commit;
+		if (oldState.working_tree_ref !== workingTreeRef)
+			changes.working_tree_ref = workingTreeRef;
+	} else {
+		// First write - log all fields
+		changes.branch = branch;
+		changes.commit = commit;
+		changes.working_tree_ref = workingTreeRef;
+	}
+	await getDebugLogger()?.logStateWrite(changes);
 
 	// Ensure the log directory exists
 	await fs.mkdir(logDir, { recursive: true });
@@ -394,6 +411,8 @@ export async function markAdapterUnhealthy(
 	adapterName: string,
 	reason: string,
 ): Promise<void> {
+	await getDebugLogger()?.logAdapterHealthChange(adapterName, false, reason);
+
 	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
 	const rawData = (await readRawState(statePath)) ?? {};
 
@@ -417,6 +436,8 @@ export async function markAdapterHealthy(
 	logDir: string,
 	adapterName: string,
 ): Promise<void> {
+	await getDebugLogger()?.logAdapterHealthChange(adapterName, true);
+
 	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
 	const rawData = await readRawState(statePath);
 	if (!rawData) return;
@@ -442,6 +463,7 @@ export async function markAdapterHealthy(
  */
 export async function deleteExecutionState(logDir: string): Promise<void> {
 	try {
+		await getDebugLogger()?.logStateDelete();
 		const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
 		await fs.rm(statePath, { force: true });
 	} catch {
