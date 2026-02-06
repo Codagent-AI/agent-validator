@@ -7,11 +7,11 @@ debug_log:
 allow_parallel: true
 cli:
   default_preference:
-    - gemini
-    - codex
     - claude
+    - codex
+    - gemini
 stop_hook:
-  auto_push_pr: true
+  auto_push_pr: false
   auto_fix_pr: false
 entry_points:
   - path: "."
