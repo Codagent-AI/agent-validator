@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { GAUNTLET_STOP_HOOK_ACTIVE_ENV } from "../commands/stop-hook.js";
+import { getDebugLogger } from "../utils/debug-log.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
 
 const execAsync = promisify(exec);
@@ -68,49 +69,43 @@ function parseOtelMetrics(blocks: string[]): OtelUsage {
 const OTEL_LOG_BLOCK_RE =
 	/\{\s*\n\s*resource:\s*\{[\s\S]*?body:\s*'claude_code\.\w+'[\s\S]*?\n\}/g;
 
-/** Extract a single-quoted attribute value from a util.inspect() block. */
-function extractAttr(block: string, key: string): string | undefined {
-	const re = new RegExp(`${key}:\\s*'([^']*)'`);
-	return block.match(re)?.[1];
-}
+/** Pre-compiled regexes for extracting single-quoted attribute values from OTel log blocks. */
+const OTEL_ATTR_RE = {
+	body: /body:\s*'([^']*)'/,
+	tool_result_size_bytes: /tool_result_size_bytes:\s*'([^']*)'/,
+	input_tokens: /input_tokens:\s*'([^']*)'/,
+	output_tokens: /output_tokens:\s*'([^']*)'/,
+	cache_read_tokens: /cache_read_tokens:\s*'([^']*)'/,
+	cache_creation_tokens: /cache_creation_tokens:\s*'([^']*)'/,
+	cost_usd: /cost_usd:\s*'([^']*)'/,
+} as const;
 
-/** Extract a numeric attribute value stored as a quoted string. */
-function extractNumAttr(block: string, key: string): number | undefined {
-	const val = extractAttr(block, key);
-	return val !== undefined ? Number(val) : undefined;
-}
+/** Maps OTel api_request attribute regexes to OtelUsage fields. */
+const API_REQUEST_FIELDS: Array<[RegExp, keyof OtelUsage]> = [
+	[OTEL_ATTR_RE.input_tokens, "input"],
+	[OTEL_ATTR_RE.output_tokens, "output"],
+	[OTEL_ATTR_RE.cache_read_tokens, "cacheRead"],
+	[OTEL_ATTR_RE.cache_creation_tokens, "cacheCreation"],
+	[OTEL_ATTR_RE.cost_usd, "cost"],
+];
 
-/** Accumulate a single tool_result event into usage. */
+/** Accumulate a tool_result log block into usage. */
 function accumulateToolResult(block: string, usage: OtelUsage): void {
 	usage.toolCalls = (usage.toolCalls || 0) + 1;
-	const bytes = extractNumAttr(block, "tool_result_size_bytes");
+	const bytes = block.match(OTEL_ATTR_RE.tool_result_size_bytes)?.[1];
 	if (bytes !== undefined) {
-		usage.toolContentBytes = (usage.toolContentBytes || 0) + bytes;
+		usage.toolContentBytes = (usage.toolContentBytes || 0) + Number(bytes);
 	}
 }
 
-/** Accumulate a single api_request event into usage. */
+/** Accumulate an api_request log block into usage. */
 function accumulateApiRequest(block: string, usage: OtelUsage): void {
 	usage.apiRequests = (usage.apiRequests || 0) + 1;
-	const inputTokens = extractNumAttr(block, "input_tokens");
-	if (inputTokens !== undefined) {
-		usage.input = (usage.input || 0) + inputTokens;
-	}
-	const outputTokens = extractNumAttr(block, "output_tokens");
-	if (outputTokens !== undefined) {
-		usage.output = (usage.output || 0) + outputTokens;
-	}
-	const cacheRead = extractNumAttr(block, "cache_read_tokens");
-	if (cacheRead !== undefined) {
-		usage.cacheRead = (usage.cacheRead || 0) + cacheRead;
-	}
-	const cacheCreation = extractNumAttr(block, "cache_creation_tokens");
-	if (cacheCreation !== undefined) {
-		usage.cacheCreation = (usage.cacheCreation || 0) + cacheCreation;
-	}
-	const costUsd = extractNumAttr(block, "cost_usd");
-	if (costUsd !== undefined) {
-		usage.cost = (usage.cost || 0) + costUsd;
+	for (const [re, field] of API_REQUEST_FIELDS) {
+		const val = block.match(re)?.[1];
+		if (val !== undefined) {
+			usage[field] = (usage[field] || 0) + Number(val);
+		}
 	}
 }
 
@@ -119,7 +114,7 @@ function parseOtelLogEvents(raw: string, usage: OtelUsage): void {
 	const blocks = raw.match(OTEL_LOG_BLOCK_RE);
 	if (!blocks) return;
 	for (const block of blocks) {
-		const body = extractAttr(block, "body");
+		const body = block.match(OTEL_ATTR_RE.body)?.[1];
 		if (body === "claude_code.tool_result") {
 			accumulateToolResult(block, usage);
 		} else if (body === "claude_code.api_request") {
@@ -128,21 +123,24 @@ function parseOtelLogEvents(raw: string, usage: OtelUsage): void {
 	}
 }
 
+const OTEL_SUMMARY_FIELDS: Array<[keyof OtelUsage, string]> = [
+	["input", "in"],
+	["output", "out"],
+	["cacheRead", "cacheRead"],
+	["cacheCreation", "cacheWrite"],
+	["toolCalls", "tool_calls"],
+	["toolContentBytes", "tool_content_bytes"],
+	["apiRequests", "api_requests"],
+];
+
 function formatOtelSummary(usage: OtelUsage): string | null {
 	if (usage.cost === undefined && usage.input === undefined) return null;
 
 	const parts: string[] = [];
 	if (usage.cost !== undefined) parts.push(`cost=$${usage.cost.toFixed(4)}`);
-	if (usage.input !== undefined) parts.push(`in=${usage.input}`);
-	if (usage.output !== undefined) parts.push(`out=${usage.output}`);
-	if (usage.cacheRead !== undefined) parts.push(`cacheRead=${usage.cacheRead}`);
-	if (usage.cacheCreation !== undefined)
-		parts.push(`cacheWrite=${usage.cacheCreation}`);
-	if (usage.toolCalls !== undefined) parts.push(`tool_calls=${usage.toolCalls}`);
-	if (usage.toolContentBytes !== undefined)
-		parts.push(`tool_content_bytes=${usage.toolContentBytes}`);
-	if (usage.apiRequests !== undefined)
-		parts.push(`api_requests=${usage.apiRequests}`);
+	for (const [key, label] of OTEL_SUMMARY_FIELDS) {
+		if (usage[key] !== undefined) parts.push(`${label}=${usage[key]}`);
+	}
 
 	return `[otel] ${parts.join(" ")}`;
 }
@@ -159,12 +157,34 @@ function extractOtelMetrics(
 
 	const summary = formatOtelSummary(usage);
 	if (summary) {
-		// Output summary to adapter log
 		onLog?.(`\n${summary}\n`);
-		// Output summary to console log (captured by startConsoleLog)
 		process.stdout.write(`${summary}\n`);
+		getDebugLogger()?.logTelemetry({ adapter: "claude", summary });
 	}
 
+	return raw
+		.replace(OTEL_METRIC_BLOCK_RE, "")
+		.replace(OTEL_LOG_BLOCK_RE, "")
+		.trimEnd();
+}
+
+/** Build OTel environment overrides for console export. */
+function buildOtelEnv(): Record<string, string> {
+	const env: Record<string, string> = {};
+	if (!process.env.CLAUDE_CODE_ENABLE_TELEMETRY) {
+		env.CLAUDE_CODE_ENABLE_TELEMETRY = "1";
+	}
+	if (!process.env.OTEL_METRICS_EXPORTER) {
+		env.OTEL_METRICS_EXPORTER = "console";
+	}
+	if (!process.env.OTEL_LOGS_EXPORTER) {
+		env.OTEL_LOGS_EXPORTER = "console";
+	}
+	return env;
+}
+
+/** Strip OTel metric and log blocks from raw output. */
+function stripOtelBlocks(raw: string): string {
 	return raw
 		.replace(OTEL_METRIC_BLOCK_RE, "")
 		.replace(OTEL_LOG_BLOCK_RE, "")
@@ -244,22 +264,15 @@ export class ClaudeAdapter implements CLIAdapter {
 			"10",
 		];
 
-		const otelEnv: Record<string, string> = {};
-		if (!process.env.CLAUDE_CODE_ENABLE_TELEMETRY) {
-			otelEnv.CLAUDE_CODE_ENABLE_TELEMETRY = "1";
-		}
-		if (!process.env.OTEL_METRICS_EXPORTER) {
-			otelEnv.OTEL_METRICS_EXPORTER = "console";
-		}
-		if (!process.env.OTEL_LOGS_EXPORTER) {
-			otelEnv.OTEL_LOGS_EXPORTER = "console";
-		}
-
+		const otelEnv = buildOtelEnv();
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+		const execEnv = {
+			...process.env,
+			[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
+			...otelEnv,
+		};
 
 		if (opts.onOutput) {
-			// Buffer all output to filter OTel blocks before calling onOutput
-			// OTel metrics appear at process exit, so we process the full output
 			const outputBuffer: string[] = [];
 			const raw = await runStreamingCommand({
 				command: "claude",
@@ -270,21 +283,14 @@ export class ClaudeAdapter implements CLIAdapter {
 					outputBuffer.push(chunk);
 				},
 				cleanup,
-				env: {
-					...process.env,
-					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
-					...otelEnv,
-				},
+				env: execEnv,
 			});
-			// Filter OTel blocks from buffer (stdout+stderr) and output cleaned content
-			const fullOutput = outputBuffer.join("");
-			const cleanedOutput = extractOtelMetrics(fullOutput, opts.onOutput);
+			const cleanedOutput = extractOtelMetrics(
+				outputBuffer.join(""),
+				opts.onOutput,
+			);
 			opts.onOutput(cleanedOutput);
-			// Return cleaned stdout (raw only contains stdout)
-			return raw
-				.replace(OTEL_METRIC_BLOCK_RE, "")
-				.replace(OTEL_LOG_BLOCK_RE, "")
-				.trimEnd();
+			return stripOtelBlocks(raw);
 		}
 
 		try {
@@ -292,11 +298,7 @@ export class ClaudeAdapter implements CLIAdapter {
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,
-				env: {
-					...process.env,
-					[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
-					...otelEnv,
-				},
+				env: execEnv,
 			});
 			return extractOtelMetrics(stdout);
 		} finally {

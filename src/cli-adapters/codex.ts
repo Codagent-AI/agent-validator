@@ -3,13 +3,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getDebugLogger } from "../utils/debug-log.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
-interface CodexUsage {❯ /plan-review /Users/pcaplan/.cursor/plans/telemetry-and-adapter-config_718274bd.plan.md
-  as response to /Users/pcaplan/paul/agent-gauntlet/docs/token-usage-investigation.md
+interface CodexUsage {
 	inputTokens?: number;
 	cachedInputTokens?: number;
 	outputTokens?: number;
@@ -30,29 +30,25 @@ function parseJsonlLine(
 	return undefined;
 }
 
+/** Maps Codex turn usage JSON fields to CodexUsage fields. */
+const TURN_USAGE_MAP: Array<[string, keyof CodexUsage]> = [
+	["input_tokens", "inputTokens"],
+	["cached_input_tokens", "cachedInputTokens"],
+	["output_tokens", "outputTokens"],
+];
+
 /** Accumulate a turn.completed event's usage into totals. */
 function accumulateTurnUsage(
 	event: { type: string; [key: string]: unknown },
 	usage: CodexUsage,
 ): void {
-	const u = event.usage as
-		| {
-				input_tokens?: number;
-				cached_input_tokens?: number;
-				output_tokens?: number;
-		  }
-		| undefined;
+	const u = event.usage as Record<string, number | undefined> | undefined;
 	if (!u) return;
 	usage.apiRequests = (usage.apiRequests || 0) + 1;
-	if (u.input_tokens !== undefined) {
-		usage.inputTokens = (usage.inputTokens || 0) + u.input_tokens;
-	}
-	if (u.cached_input_tokens !== undefined) {
-		usage.cachedInputTokens =
-			(usage.cachedInputTokens || 0) + u.cached_input_tokens;
-	}
-	if (u.output_tokens !== undefined) {
-		usage.outputTokens = (usage.outputTokens || 0) + u.output_tokens;
+	for (const [jsonKey, usageKey] of TURN_USAGE_MAP) {
+		if (u[jsonKey] !== undefined) {
+			usage[usageKey] = (usage[usageKey] || 0) + u[jsonKey]!;
+		}
 	}
 }
 
@@ -91,10 +87,48 @@ const SUMMARY_FIELDS: Array<[keyof CodexUsage, string]> = [
 ];
 
 function formatCodexSummary(usage: CodexUsage): string | null {
-	const parts = SUMMARY_FIELDS.filter(
-		([key]) => usage[key] !== undefined,
-	).map(([key, label]) => `${label}=${usage[key]}`);
+	const parts = SUMMARY_FIELDS.filter(([key]) => usage[key] !== undefined).map(
+		([key, label]) => `${label}=${usage[key]}`,
+	);
 	return parts.length > 0 ? `[codex-telemetry] ${parts.join(" ")}` : null;
+}
+
+/** Process a single item.completed event, updating usage and returning any agent message. */
+function processItemCompleted(
+	event: { type: string; [key: string]: unknown },
+	usage: CodexUsage,
+): string | undefined {
+	if (isToolCallItem(event)) {
+		usage.toolCalls = (usage.toolCalls || 0) + 1;
+	}
+	return extractAgentMessage(event);
+}
+
+/** Route a parsed JSONL event to the appropriate handler, returning any agent message. */
+function processCodexEvent(
+	event: { type: string; [key: string]: unknown },
+	usage: CodexUsage,
+): string | undefined {
+	if (event.type === "turn.completed") {
+		accumulateTurnUsage(event, usage);
+		return undefined;
+	}
+	if (event.type === "item.completed") {
+		return processItemCompleted(event, usage);
+	}
+	return undefined;
+}
+
+/** Emit a telemetry summary to logs and debug log. */
+function emitCodexSummary(
+	usage: CodexUsage,
+	onLog?: (msg: string) => void,
+): void {
+	const summary = formatCodexSummary(usage);
+	if (!summary) return;
+	onLog?.(`\n${summary}\n`);
+	process.stdout.write(`${summary}\n`);
+	getDebugLogger()?.logTelemetry({ adapter: "codex", summary });
 }
 
 /**
@@ -109,30 +143,13 @@ function parseCodexJsonl(
 	let lastAgentMessage = "";
 
 	for (const line of raw.split("\n")) {
-		const trimmed = line.trim();
-		if (!trimmed) continue;
-		const event = parseJsonlLine(trimmed);
+		const event = parseJsonlLine(line.trim());
 		if (!event) continue;
-
-		if (event.type === "turn.completed") {
-			accumulateTurnUsage(event, usage);
-		} else if (event.type === "item.completed") {
-			if (isToolCallItem(event)) {
-				usage.toolCalls = (usage.toolCalls || 0) + 1;
-			}
-			const msg = extractAgentMessage(event);
-			if (msg !== undefined) {
-				lastAgentMessage = msg;
-			}
-		}
+		const msg = processCodexEvent(event, usage);
+		if (msg !== undefined) lastAgentMessage = msg;
 	}
 
-	const summary = formatCodexSummary(usage);
-	if (summary) {
-		onLog?.(`\n${summary}\n`);
-		process.stdout.write(`${summary}\n`);
-	}
-
+	emitCodexSummary(usage, onLog);
 	return { text: lastAgentMessage, usage };
 }
 

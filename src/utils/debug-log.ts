@@ -270,6 +270,18 @@ export class DebugLogger {
 	}
 
 	/**
+	 * Log a telemetry summary line from an adapter.
+	 * Persists the summary (e.g. "[otel] cost=$0.12 in=5 out=100")
+	 * so it survives log cleaning for longitudinal analysis.
+	 */
+	async logTelemetry(entry: {
+		adapter: string;
+		summary: string;
+	}): Promise<void> {
+		await this.write(`TELEMETRY adapter=${entry.adapter} ${entry.summary}`);
+	}
+
+	/**
 	 * Write a log entry with timestamp.
 	 */
 	private async write(message: string): Promise<void> {

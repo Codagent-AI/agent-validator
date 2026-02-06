@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getDebugLogger } from "../utils/debug-log.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
 
 const execAsync = promisify(exec);
@@ -256,7 +257,10 @@ async function logTelemetryToStdout(telemetryFile: string): Promise<void> {
 	if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
 	const usage = await parseGeminiTelemetry(telemetryFile);
 	const summary = formatGeminiSummary(usage);
-	if (summary) process.stdout.write(`${summary}\n`);
+	if (summary) {
+		process.stdout.write(`${summary}\n`);
+		getDebugLogger()?.logTelemetry({ adapter: "gemini", summary });
+	}
 }
 
 export class GeminiAdapter implements CLIAdapter {
@@ -332,8 +336,8 @@ ${body.trim()}
 		const summary = formatGeminiSummary(usage);
 		if (summary) {
 			onOutput(`\n${summary}\n`);
-			// Output summary to console log (captured by startConsoleLog)
 			process.stdout.write(`${summary}\n`);
+			getDebugLogger()?.logTelemetry({ adapter: "gemini", summary });
 		}
 	}
 
