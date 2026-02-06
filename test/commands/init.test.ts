@@ -115,10 +115,19 @@ describe("Init Command", () => {
 		expect(configContent).toContain("mock-cli-1"); // Should be present
 		expect(configContent).not.toContain("mock-cli-2"); // Should not be present (unavailable)
 
-		// Verify config references built-in review instead of creating file
-		expect(configContent).toContain("built-in:code-quality");
+		// Verify config references code-quality review (file-based, not built-in: prefix)
+		expect(configContent).toContain("code-quality");
+		expect(configContent).not.toContain("built-in:code-quality");
+
+		// Verify YAML review file was created
 		const reviewFiles = await fs.readdir(reviewsDir);
-		expect(reviewFiles).toHaveLength(0);
+		expect(reviewFiles).toContain("code-quality.yml");
+		const reviewContent = await fs.readFile(
+			path.join(reviewsDir, "code-quality.yml"),
+			"utf-8",
+		);
+		expect(reviewContent).toContain("builtin: code-quality");
+		expect(reviewContent).toContain("num_reviews: 2");
 	});
 
 	it("should not create directory if .gauntlet already exists", async () => {

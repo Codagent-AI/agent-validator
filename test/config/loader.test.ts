@@ -149,7 +149,7 @@ fail_fast: true
 	});
 });
 
-describe("Built-in Reviews", () => {
+describe("Built-in Reviews (YAML builtin attribute)", () => {
 	let tmpDir: string;
 
 	async function setupTestEnv(configYml: string, reviewFiles?: Record<string, string>) {
@@ -177,48 +177,7 @@ describe("Built-in Reviews", () => {
 		}
 	});
 
-	it("should load built-in:code-quality with expected prompt content and defaults", async () => {
-		await setupTestEnv(`
-base_branch: origin/main
-cli:
-  default_preference:
-    - claude
-entry_points:
-  - path: "."
-    reviews:
-      - built-in:code-quality
-`);
-		const config = await loadConfig(tmpDir);
-
-		const review = config.reviews["built-in:code-quality"];
-		expect(review).toBeDefined();
-		expect(review.promptContent).toContain("Bugs");
-		expect(review.promptContent).toContain("Security");
-		expect(review.promptContent).toContain("Maintainability");
-		expect(review.promptContent).toContain("Performance");
-		expect(review.num_reviews).toBe(1);
-		expect(review.parallel).toBe(true);
-		expect(review.run_in_ci).toBe(true);
-		expect(review.run_locally).toBe(true);
-	});
-
-	it("should throw for unknown built-in name", async () => {
-		await setupTestEnv(`
-base_branch: origin/main
-cli:
-  default_preference:
-    - claude
-entry_points:
-  - path: "."
-    reviews:
-      - built-in:nonexistent
-`);
-		await expect(loadConfig(tmpDir)).rejects.toThrow(
-			'Unknown built-in review: "nonexistent"',
-		);
-	});
-
-	it("should allow user-defined review and built-in review to coexist", async () => {
+	it("should load YAML review with builtin: code-quality successfully", async () => {
 		await setupTestEnv(
 			`
 base_branch: origin/main
@@ -228,28 +187,111 @@ cli:
 entry_points:
   - path: "."
     reviews:
-      - built-in:code-quality
-      - my-custom-review
+      - code-quality
 `,
 			{
-				"my-custom-review.md": `---
-num_reviews: 2
----
-
-# Custom Review
-Custom prompt.
-`,
+				"code-quality.yml": `builtin: code-quality\nnum_reviews: 2\n`,
 			},
 		);
 		const config = await loadConfig(tmpDir);
 
-		expect(config.reviews["built-in:code-quality"]).toBeDefined();
-		expect(config.reviews["my-custom-review"]).toBeDefined();
-		expect(config.reviews["my-custom-review"].num_reviews).toBe(2);
+		const review = config.reviews["code-quality"];
+		expect(review).toBeDefined();
+		expect(review.promptContent).toContain("Bugs");
+		expect(review.promptContent).toContain("Security");
+		expect(review.promptContent).toContain("Maintainability");
+		expect(review.promptContent).toContain("Performance");
+		expect(review.num_reviews).toBe(2);
 	});
 
-	it("should apply CLI preference merging to built-in reviews", async () => {
-		await setupTestEnv(`
+	async function setupSingleReviewEnv(yamlContent: string) {
+		return setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - my-review
+`,
+			{ "my-review.yml": yamlContent },
+		);
+	}
+
+	it("should throw for unknown builtin name", async () => {
+		await setupSingleReviewEnv("builtin: nonexistent\n");
+		await expect(loadConfig(tmpDir)).rejects.toThrow(
+			'Unknown built-in review: "nonexistent"',
+		);
+	});
+
+	it("should reject YAML review with both builtin and prompt_file", async () => {
+		await setupSingleReviewEnv("builtin: code-quality\nprompt_file: reviews/custom.md\n");
+		await expect(loadConfig(tmpDir)).rejects.toThrow(/mutually exclusive/);
+	});
+
+	it("should reject YAML review with both builtin and skill_name", async () => {
+		await setupSingleReviewEnv("builtin: code-quality\nskill_name: my-skill\n");
+		await expect(loadConfig(tmpDir)).rejects.toThrow(/mutually exclusive/);
+	});
+
+	it("should use schema defaults when builtin review has no other settings", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - minimal
+`,
+			{
+				"minimal.yml": `builtin: code-quality\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+
+		const review = config.reviews.minimal;
+		expect(review).toBeDefined();
+		expect(review.num_reviews).toBe(1);
+		expect(review.parallel).toBe(true);
+		expect(review.run_in_ci).toBe(true);
+		expect(review.run_locally).toBe(true);
+	});
+
+	it("should allow user-defined .md review and YAML builtin review to coexist", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - my-builtin
+      - my-custom
+`,
+			{
+				"my-builtin.yml": `builtin: code-quality\n`,
+				"my-custom.md": `---\nnum_reviews: 3\n---\n\n# Custom Review\nCustom prompt.\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+
+		expect(config.reviews["my-builtin"]).toBeDefined();
+		expect(config.reviews["my-builtin"].promptContent).toContain("Bugs");
+		expect(config.reviews["my-custom"]).toBeDefined();
+		expect(config.reviews["my-custom"].num_reviews).toBe(3);
+	});
+
+	it("should apply CLI preference merging to YAML builtin reviews", async () => {
+		await setupTestEnv(
+			`
 base_branch: origin/main
 cli:
   default_preference:
@@ -258,35 +300,21 @@ cli:
 entry_points:
   - path: "."
     reviews:
-      - built-in:code-quality
-`);
+      - code-quality
+`,
+			{
+				"code-quality.yml": `builtin: code-quality\n`,
+			},
+		);
 		const config = await loadConfig(tmpDir);
 
-		expect(config.reviews["built-in:code-quality"].cli_preference).toEqual([
+		expect(config.reviews["code-quality"].cli_preference).toEqual([
 			"claude",
 			"gemini",
 		]);
 	});
 
-	it("should set isBuiltIn to true and prompt to built-in:code-quality", async () => {
-		await setupTestEnv(`
-base_branch: origin/main
-cli:
-  default_preference:
-    - claude
-entry_points:
-  - path: "."
-    reviews:
-      - built-in:code-quality
-`);
-		const config = await loadConfig(tmpDir);
-
-		const review = config.reviews["built-in:code-quality"];
-		expect(review.isBuiltIn).toBe(true);
-		expect(review.prompt).toBe("built-in:code-quality");
-	});
-
-	it("should allow user review named code-quality alongside built-in:code-quality", async () => {
+	it("should load built-in prompt as pure markdown with expected focus areas", async () => {
 		await setupTestEnv(
 			`
 base_branch: origin/main
@@ -296,42 +324,25 @@ cli:
 entry_points:
   - path: "."
     reviews:
-      - built-in:code-quality
       - code-quality
 `,
 			{
-				"code-quality.md": `---
-num_reviews: 3
----
-
-# User Code Quality
-User prompt.
-`,
+				"code-quality.yml": `builtin: code-quality\n`,
 			},
 		);
 		const config = await loadConfig(tmpDir);
+		const content = config.reviews["code-quality"].promptContent!;
 
-		expect(config.reviews["built-in:code-quality"]).toBeDefined();
-		expect(config.reviews["code-quality"]).toBeDefined();
-		expect(config.reviews["built-in:code-quality"].isBuiltIn).toBe(true);
-		expect(config.reviews["code-quality"].isBuiltIn).toBeUndefined();
-		expect(config.reviews["code-quality"].num_reviews).toBe(3);
-	});
-
-	it("should pass entry point validation with built-in:code-quality reference", async () => {
-		await setupTestEnv(`
-base_branch: origin/main
-cli:
-  default_preference:
-    - claude
-entry_points:
-  - path: "."
-    reviews:
-      - built-in:code-quality
-`);
-		// Should not throw
-		const config = await loadConfig(tmpDir);
-		expect(config.reviews["built-in:code-quality"]).toBeDefined();
+		// Pure markdown — no frontmatter delimiters
+		expect(content).not.toMatch(/^---/);
+		// Expected focus areas
+		expect(content).toContain("Bugs");
+		expect(content).toContain("Security");
+		expect(content).toContain("Performance");
+		expect(content).toContain("Maintainability");
+		// Should NOT contain Documentation references (project-specific)
+		expect(content).not.toContain("Documentation");
+		expect(content).not.toContain("docs/");
 	});
 
 	it("should reject user-defined review file with built-in: prefix in filename", async () => {
@@ -344,15 +355,11 @@ cli:
 entry_points:
   - path: "."
     reviews:
-      - built-in:code-quality
+      - test
 `,
 			{
-				"built-in:code-quality.md": `---
-num_reviews: 1
----
-
-# Fake built-in
-`,
+				"built-in:code-quality.md": `---\nnum_reviews: 1\n---\n\n# Fake built-in\n`,
+				"test.yml": `builtin: code-quality\n`,
 			},
 		);
 		await expect(loadConfig(tmpDir)).rejects.toThrow(

@@ -189,23 +189,16 @@ export async function loadConfig(
 					review.skillName = parsed.skill_name;
 				}
 
+				if (parsed.builtin) {
+					review.promptContent = loadBuiltInReview(parsed.builtin);
+				}
+
 				reviews[name] = review;
 			}
 		}
 	}
 
-	// 3b. Load built-in reviews referenced by entry points
-	for (const entryPoint of projectConfig.entry_points) {
-		if (entryPoint.reviews) {
-			for (const reviewName of entryPoint.reviews) {
-				if (isBuiltInReview(reviewName) && !reviews[reviewName]) {
-					reviews[reviewName] = loadBuiltInReview(reviewName);
-				}
-			}
-		}
-	}
-
-	// 3c. Merge default CLI preference if not specified (applies to all reviews: file-based + built-in)
+	// 3b. Merge default CLI preference if not specified (applies to all reviews)
 	for (const [name, review] of Object.entries(reviews)) {
 		if (!review.cli_preference) {
 			review.cli_preference = projectConfig.cli.default_preference;

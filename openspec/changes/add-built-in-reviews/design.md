@@ -54,5 +54,9 @@ Code smells identified:
 - **Bun text import in compiled binary**: Must verify `bun build --compile` correctly bundles `.md` text imports. Mitigation: test early in implementation; fall back to string constant if needed.
 - **No migration for existing projects**: Projects created with `init` before this change still have file-based `code-quality`. This is fine — they continue to work. No forced migration needed.
 
+## Migration Plan
+- **No migration needed**: Existing projects using file-based reviews continue to work. New projects created with `init` get `built-in:code-quality` automatically. No forced migration required.
+- **Rollback**: Revert the code changes to restore file-based `code-quality.md` creation during `init`.
+
 ## Open Questions
 - None — design decisions are straightforward given the codebase conventions.

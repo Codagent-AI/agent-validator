@@ -174,7 +174,13 @@ command: ${config.testCmd || "# command: TODO - add your test command (e.g., npm
 				console.log(chalk.green("Created .gauntlet/checks/unit-tests.yml"));
 			}
 
-			// 5. Default code review (built-in reference, no file needed)
+			// 5. Default code review (YAML config referencing built-in prompt)
+			const reviewYamlContent = `builtin: code-quality\nnum_reviews: 2\n`;
+			await fs.writeFile(
+				path.join(targetDir, "reviews", "code-quality.yml"),
+				reviewYamlContent,
+			);
+			console.log(chalk.green("Created .gauntlet/reviews/code-quality.yml"));
 
 			// Write the canonical gauntlet command file
 			const canonicalCommandPath = path.join(targetDir, "run_gauntlet.md");
@@ -414,7 +420,7 @@ function generateConfigYml(config: InitConfig): string {
 	// Always include root entry point for reviews
 	entryPoints += `  - path: "."
     reviews:
-      - built-in:code-quality`;
+      - code-quality`;
 
 	return `base_branch: ${config.baseBranch}
 log_dir: gauntlet_logs
