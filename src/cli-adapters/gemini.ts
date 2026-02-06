@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getDebugLogger } from "../utils/debug-log.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
 
 const execAsync = promisify(exec);
@@ -14,6 +15,9 @@ interface GeminiTelemetryUsage {
 	thoughtTokens?: number;
 	cacheTokens?: number;
 	toolTokens?: number;
+	toolCalls?: number;
+	toolContentChars?: number;
+	apiRequests?: number;
 }
 
 type TokenType = "input" | "output" | "thought" | "cache" | "tool";
@@ -127,16 +131,108 @@ function parseJsonObjects(content: string): unknown[] {
 	return objects;
 }
 
+/** Sum all data point values for a counter metric. */
+function sumDataPoints(dataPoints: SdkDataPoint[]): number {
+	let total = 0;
+	for (const dp of dataPoints) {
+		total += extractValue(dp);
+	}
+	return total;
+}
+
+/** Route a single metric to the appropriate usage field. */
+function processMetric(metric: SdkMetric, usage: GeminiTelemetryUsage): void {
+	const name = metric.descriptor?.name;
+	if (!name) return;
+	const dataPoints = metric.dataPoints ?? [];
+
+	if (TOKEN_METRIC_NAMES.has(name)) {
+		processDataPoints(dataPoints, usage);
+		return;
+	}
+	if (name === "gemini_cli.tool.call.count") {
+		usage.toolCalls = (usage.toolCalls || 0) + sumDataPoints(dataPoints);
+		return;
+	}
+	if (name === "gemini_cli.api.request.count") {
+		usage.apiRequests = (usage.apiRequests || 0) + sumDataPoints(dataPoints);
+	}
+}
+
 function processMetricObject(data: unknown, usage: GeminiTelemetryUsage): void {
 	const obj = data as { scopeMetrics?: SdkScopeMetrics[] };
 	if (!obj?.scopeMetrics) return;
 	for (const sm of obj.scopeMetrics) {
 		for (const metric of sm.metrics ?? []) {
-			const name = metric.descriptor?.name;
-			if (!name || !TOKEN_METRIC_NAMES.has(name)) continue;
-			processDataPoints(metric.dataPoints ?? [], usage);
+			processMetric(metric, usage);
 		}
 	}
+}
+
+/**
+ * Extract tool call details from OTel log records.
+ * The Gemini CLI emits `gemini_cli.tool_call` log events with
+ * content_length attributes that reveal how much data tools read.
+ */
+interface SdkLogRecord {
+	body?: { stringValue?: string };
+	attributes?: Array<{
+		key: string;
+		value: { intValue?: string; stringValue?: string };
+	}>;
+}
+
+interface SdkScopeLogs {
+	logRecords?: SdkLogRecord[];
+}
+
+/** Extract content_length from a tool_call log record, or 0 if absent. */
+function extractToolContentLength(record: SdkLogRecord): number {
+	const attr = record.attributes?.find((a) => a.key === "content_length");
+	if (!attr?.value?.intValue) return 0;
+	const len = parseInt(attr.value.intValue, 10);
+	return Number.isNaN(len) ? 0 : len;
+}
+
+/** Sum content_length across all tool_call log records in a scope. */
+function sumToolContentChars(records: SdkLogRecord[]): number {
+	let total = 0;
+	for (const record of records) {
+		if (record.body?.stringValue !== "gemini_cli.tool_call") continue;
+		total += extractToolContentLength(record);
+	}
+	return total;
+}
+
+function processLogObject(data: unknown, usage: GeminiTelemetryUsage): void {
+	const obj = data as { scopeLogs?: SdkScopeLogs[] };
+	if (!obj?.scopeLogs) return;
+	for (const sl of obj.scopeLogs) {
+		const chars = sumToolContentChars(sl.logRecords ?? []);
+		if (chars > 0) {
+			usage.toolContentChars = (usage.toolContentChars || 0) + chars;
+		}
+	}
+}
+
+async function parseGeminiTelemetry(
+	filePath: string,
+): Promise<GeminiTelemetryUsage> {
+	const usage: GeminiTelemetryUsage = {};
+	let content: string;
+
+	try {
+		content = await fs.readFile(filePath, "utf-8");
+	} catch {
+		return usage;
+	}
+
+	for (const obj of parseJsonObjects(content)) {
+		processMetricObject(obj, usage);
+		processLogObject(obj, usage);
+	}
+
+	return usage;
 }
 
 const SUMMARY_FIELDS: Array<[keyof GeminiTelemetryUsage, string]> = [
@@ -145,6 +241,9 @@ const SUMMARY_FIELDS: Array<[keyof GeminiTelemetryUsage, string]> = [
 	["thoughtTokens", "thought"],
 	["cacheTokens", "cache"],
 	["toolTokens", "tool"],
+	["toolCalls", "tool_calls"],
+	["toolContentChars", "tool_content_chars"],
+	["apiRequests", "api_requests"],
 ];
 
 function formatGeminiSummary(usage: GeminiTelemetryUsage): string | null {
@@ -156,17 +255,12 @@ function formatGeminiSummary(usage: GeminiTelemetryUsage): string | null {
 
 async function logTelemetryToStdout(telemetryFile: string): Promise<void> {
 	if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
-	const usage: GeminiTelemetryUsage = {};
-	try {
-		const raw = await fs.readFile(telemetryFile, "utf-8");
-		for (const obj of parseJsonObjects(raw)) {
-			processMetricObject(obj, usage);
-		}
-	} catch {
-		return;
-	}
+	const usage = await parseGeminiTelemetry(telemetryFile);
 	const summary = formatGeminiSummary(usage);
-	if (summary) process.stdout.write(`${summary}\n`);
+	if (summary) {
+		process.stdout.write(`${summary}\n`);
+		getDebugLogger()?.logTelemetry({ adapter: "gemini", summary });
+	}
 }
 
 export class GeminiAdapter implements CLIAdapter {
@@ -238,20 +332,12 @@ ${body.trim()}
 		onOutput: (chunk: string) => void,
 	): Promise<void> {
 		if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
-		const usage: GeminiTelemetryUsage = {};
-		try {
-			const content = await fs.readFile(telemetryFile, "utf-8");
-			for (const obj of parseJsonObjects(content)) {
-				processMetricObject(obj, usage);
-			}
-		} catch {
-			return;
-		}
+		const usage = await parseGeminiTelemetry(telemetryFile);
 		const summary = formatGeminiSummary(usage);
 		if (summary) {
 			onOutput(`\n${summary}\n`);
-			// Output summary to console log (captured by startConsoleLog)
 			process.stdout.write(`${summary}\n`);
+			getDebugLogger()?.logTelemetry({ adapter: "gemini", summary });
 		}
 	}
 
