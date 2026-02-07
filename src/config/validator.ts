@@ -60,7 +60,7 @@ export async function validateConfig(
 				projectConfig = gauntletConfigSchema.parse(raw);
 			} catch (error: unknown) {
 				if (error instanceof ZodError) {
-					error.errors.forEach((err) => {
+					error.issues.forEach((err) => {
 						issues.push({
 							file: configPath,
 							severity: "error",
@@ -132,7 +132,7 @@ export async function validateConfig(
 						// Use filename-based name since name is no longer in YAML
 						existingCheckNames.add(name);
 						if (error instanceof ZodError) {
-							error.errors.forEach((err) => {
+							error.issues.forEach((err) => {
 								issues.push({
 									file: filePath,
 									severity: "error",
@@ -269,7 +269,7 @@ export async function validateConfig(
 	// 4. Cross-reference validation (entry points referencing gates)
 	if (projectConfig?.entry_points) {
 		for (let i = 0; i < projectConfig.entry_points.length; i++) {
-			const entryPoint = projectConfig.entry_points[i];
+			const entryPoint = projectConfig.entry_points[i]!;
 			const entryPointPath = `entry_points[${i}]`;
 
 			// Validate entry point schema
@@ -277,7 +277,7 @@ export async function validateConfig(
 				entryPointSchema.parse(entryPoint);
 			} catch (error: unknown) {
 				if (error instanceof ZodError) {
-					error.errors.forEach((err) => {
+					error.issues.forEach((err) => {
 						issues.push({
 							file: configPath,
 							severity: "error",
@@ -400,7 +400,7 @@ export async function validateConfig(
 			} else {
 				// Validate defaults are valid tools
 				for (let i = 0; i < defaults.length; i++) {
-					const toolName = defaults[i];
+					const toolName = defaults[i]!;
 					if (!getValidCLITools().includes(toolName)) {
 						issues.push({
 							file: configPath,
@@ -420,7 +420,7 @@ export async function validateConfig(
 							reviewSourceFiles[reviewName] ||
 							path.join(reviewsPath, `${reviewName}.md`);
 						for (let i = 0; i < pref.length; i++) {
-							const tool = pref[i];
+							const tool = pref[i]!;
 							if (!allowedTools.has(tool)) {
 								issues.push({
 									file: reviewFile,
@@ -479,7 +479,7 @@ function validateReviewSemantics(
 			});
 		} else {
 			for (let i = 0; i < parsed.cli_preference.length; i++) {
-				const toolName = parsed.cli_preference[i];
+				const toolName = parsed.cli_preference[i]!;
 				if (!getValidCLITools().includes(toolName)) {
 					issues.push({
 						file: filePath,
@@ -517,7 +517,7 @@ function handleReviewValidationError(
 	issues: ValidationIssue[],
 ): void {
 	if (error instanceof ZodError) {
-		error.errors.forEach((err) => {
+		error.issues.forEach((err) => {
 			const fieldPath =
 				err.path && Array.isArray(err.path) ? err.path.join(".") : undefined;
 			const message =

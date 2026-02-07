@@ -205,35 +205,30 @@ async function shouldRunBasedOnInterval(
 /**
  * Get status message for a given status.
  */
+const statusMessages: Record<GauntletStatus, string> = {
+	passed: "All gates passed.",
+	passed_with_warnings: "Passed with warnings — some issues were skipped.",
+	no_applicable_gates: "No applicable gates for these changes.",
+	no_changes: "No changes detected.",
+	failed: "Gates failed — issues must be fixed.",
+	retry_limit_exceeded:
+		"Retry limit exceeded — run `agent-gauntlet clean` to archive and continue.",
+	lock_conflict: "Another gauntlet run is already in progress.",
+	error: "Unexpected error occurred.",
+	no_config: "No .gauntlet/config.yml found.",
+	stop_hook_active: "Stop hook already active.",
+	interval_not_elapsed: "Run interval not elapsed.",
+	invalid_input: "Invalid input.",
+	stop_hook_disabled: "Stop hook is disabled via configuration.",
+	pr_push_required: "Gates passed — PR needs to be created/updated.",
+	ci_pending: "CI checks still running.",
+	ci_failed: "CI checks failed or review changes requested.",
+	ci_passed: "CI checks passed, no blocking reviews.",
+	ci_timeout: "CI wait attempts exhausted.",
+};
+
 function getStatusMessage(status: GauntletStatus): string {
-	switch (status) {
-		case "passed":
-			return "All gates passed.";
-		case "passed_with_warnings":
-			return "Passed with warnings — some issues were skipped.";
-		case "no_applicable_gates":
-			return "No applicable gates for these changes.";
-		case "no_changes":
-			return "No changes detected.";
-		case "failed":
-			return "Gates failed — issues must be fixed.";
-		case "retry_limit_exceeded":
-			return "Retry limit exceeded — run `agent-gauntlet clean` to archive and continue.";
-		case "lock_conflict":
-			return "Another gauntlet run is already in progress.";
-		case "error":
-			return "Unexpected error occurred.";
-		case "no_config":
-			return "No .gauntlet/config.yml found.";
-		case "stop_hook_active":
-			return "Stop hook already active.";
-		case "interval_not_elapsed":
-			return "Run interval not elapsed.";
-		case "invalid_input":
-			return "Invalid input.";
-		case "stop_hook_disabled":
-			return "Stop hook is disabled via configuration.";
-	}
+	return statusMessages[status] || "Unknown status";
 }
 
 /**

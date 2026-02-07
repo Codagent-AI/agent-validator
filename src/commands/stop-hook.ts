@@ -22,7 +22,10 @@ import {
 	initLogger,
 	resetLogger,
 } from "../output/app-logger.js";
-import type { GauntletStatus } from "../types/gauntlet-status.js";
+import {
+	type GauntletStatus,
+	isBlockingStatus,
+} from "../types/gauntlet-status.js";
 import { DebugLogger, mergeDebugLogConfig } from "../utils/debug-log.js";
 
 /**
@@ -215,7 +218,7 @@ export function outputHookResponse(
 	},
 ): void {
 	const claudeAdapter = new ClaudeStopHookAdapter();
-	const shouldBlock = status === "failed" || status === "pr_push_required";
+	const shouldBlock = isBlockingStatus(status);
 	const message = getStatusMessage(status, {
 		intervalMinutes: options?.intervalMinutes,
 		errorMessage: options?.errorMessage,
@@ -252,7 +255,7 @@ export function registerStopHookCommand(program: Command): void {
 		.description("Claude Code stop hook - validates gauntlet completion")
 		.action(async () => {
 			// Default to Claude adapter for error handling before detection
-			let adapter: StopHookAdapter = adapters[1];
+			let adapter: StopHookAdapter = adapters[1]!;
 			let debugLogger: DebugLogger | null = null;
 			let loggerInitialized = false;
 			let markerFilePath: string | null = null;
@@ -417,7 +420,7 @@ export function registerStopHookCommand(program: Command): void {
 				}
 
 				// Detect protocol and select adapter
-				adapter = adapters.find((a) => a.detect(parsed)) ?? adapters[1];
+				adapter = adapters.find((a) => a.detect(parsed)) ?? adapters[1]!;
 
 				// Parse input using selected adapter
 				const ctx = adapter.parseInput(parsed);

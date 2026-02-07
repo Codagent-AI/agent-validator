@@ -219,7 +219,7 @@ export class ConsoleReporter {
 				const sectionLines = violationsSection.split("\n");
 
 				for (let i = 0; i < sectionLines.length; i++) {
-					const line = sectionLines[i];
+					const line = sectionLines[i]!;
 					// Match numbered violation lines: "1. file:line - issue" (line can be a number or '?')
 					const violationMatch = line.match(
 						/^\d+\.\s+(.+?):(\d+|\?)\s+-\s+(.+)$/,
@@ -234,7 +234,7 @@ export class ConsoleReporter {
 
 						// Check next line for "Fix:" suggestion
 						if (i + 1 < sectionLines.length) {
-							const nextLine = sectionLines[i + 1].trim();
+							const nextLine = sectionLines[i + 1]!.trim();
 							if (nextLine.startsWith("Fix:")) {
 								const fix = nextLine.substring(4).trim();
 								details.push(`    ${chalk.dim("Fix:")} ${fix}`);
@@ -290,7 +290,7 @@ export class ConsoleReporter {
 				const errorIndex = logContent.indexOf("Error:");
 				if (errorIndex !== -1) {
 					const afterError = logContent.substring(errorIndex + 6).trim();
-					const firstErrorLine = afterError.split("\n")[0].trim();
+					const firstErrorLine = afterError.split("\n")[0]!.trim();
 					if (
 						firstErrorLine &&
 						!firstErrorLine.startsWith("Usage:") &&

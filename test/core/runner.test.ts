@@ -8,17 +8,17 @@ import type { DebugLogger } from "../../src/utils/debug-log";
 
 // Mock dependencies
 const mockLogger = {
-	init: mock(async () => {}),
-	createJobLogger: mock(async () => async () => {}),
-	createLoggerFactory: mock(async () => async () => {}),
+	init: mock(async () => { }),
+	createJobLogger: mock(async () => async () => { }),
+	createLoggerFactory: mock(async () => async () => { }),
 	getLogPath: mock(async () => "/tmp/log.log"),
 	getRunNumber: mock(() => 1),
 } as unknown as Logger;
 
 const mockReporter = {
-	onJobStart: mock(() => {}),
-	onJobComplete: mock(() => {}),
-	printSummary: mock(async () => {}),
+	onJobStart: mock(() => { }),
+	onJobComplete: mock(() => { }),
+	printSummary: mock(async () => { }),
 } as unknown as ConsoleReporter;
 
 const mockConfig = {
@@ -56,9 +56,9 @@ mock.module("../../src/gates/check.js", () => ({
 
 describe("Runner", () => {
 	afterEach(() => {
-		mockExecuteReview.mockClear();
-		mockReporter.onJobStart.mockClear();
-		mockReporter.onJobComplete.mockClear();
+		(mockExecuteReview as ReturnType<typeof mock>).mockClear();
+		(mockReporter.onJobStart as ReturnType<typeof mock>).mockClear();
+		(mockReporter.onJobComplete as ReturnType<typeof mock>).mockClear();
 	});
 
 	it("should handle synchronous errors in executeJob gracefully", async () => {
@@ -85,7 +85,7 @@ describe("Runner", () => {
 		// Suppress console.error during this test to prevent bun from misinterpreting
 		// the expected error output as a test failure
 		const originalError = console.error;
-		console.error = () => {};
+		console.error = () => { };
 
 		const outcome = await runner.run([job]);
 
@@ -165,7 +165,7 @@ describe("Runner", () => {
 			// Suppress console.error and save exitCode during this test to prevent
 			// the expected error handling from affecting the test runner
 			const originalError = console.error;
-			console.error = () => {};
+			console.error = () => { };
 
 			const outcome = await runner.run([]);
 
@@ -201,7 +201,8 @@ describe("Runner", () => {
 
 		// Verify logDir is passed to execute (index 9, before adapterConfigs at index 10)
 		expect(mockExecuteReview).toHaveBeenCalled();
-		const callArgs = mockExecuteReview.mock.calls[0];
+		// biome-ignore lint/suspicious/noExplicitAny: Testing mock call arguments
+		const callArgs = (mockExecuteReview as any).mock.calls[0] as unknown[];
 		expect(callArgs?.[9]).toBe("/tmp/logs");
 	});
 });

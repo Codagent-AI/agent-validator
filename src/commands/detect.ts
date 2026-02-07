@@ -36,7 +36,7 @@ async function resolveFreshFixBase(
 ): Promise<string | undefined> {
 	const state = await readExecutionState(logDir);
 	if (!state) return undefined;
-	return (await resolveFixBase(state, baseBranch)).fixBase;
+	return (await resolveFixBase(state, baseBranch)).fixBase ?? undefined;
 }
 
 /**

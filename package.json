@@ -35,6 +35,7 @@
     "build": "bun build --compile --minify --sourcemap ./src/index.ts --outfile bin/agent-gauntlet",
     "test": "bun test",
     "lint": "biome check src",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "changeset publish"

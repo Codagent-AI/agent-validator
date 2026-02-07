@@ -21,7 +21,7 @@ let spawnMock: ReturnType<typeof mock>;
 mock.module("node:child_process", () => {
 	return {
 		spawn: (...args: unknown[]) => spawnMock?.(...args),
-		exec: mock(() => {}),
+		exec: mock(() => { }),
 		execFile: mock(
 			(
 				cmd: string,
@@ -82,10 +82,10 @@ describe("Stop Hook Command", () => {
 		spawnMock = mock(() => {
 			const mockChild = {
 				stdout: {
-					on: mock(() => {}),
+					on: mock(() => { }),
 				},
 				stderr: {
-					on: mock(() => {}),
+					on: mock(() => { }),
 				},
 				on: mock((event: string, callback: (code: number) => void) => {
 					if (event === "close") {
@@ -108,22 +108,22 @@ describe("Stop Hook Command", () => {
 				recursive: true,
 				force: true,
 			})
-			.catch(() => {});
+			.catch(() => { });
 		await fs
 			.rm(path.join(TEST_DIR, "gauntlet_logs"), {
 				recursive: true,
 				force: true,
 			})
-			.catch(() => {});
+			.catch(() => { });
 		await fs
 			.rm(path.join(TEST_DIR, "src"), {
 				recursive: true,
 				force: true,
 			})
-			.catch(() => {});
+			.catch(() => { });
 		await fs
 			.rm(path.join(TEST_DIR, "package.json"), { force: true })
-			.catch(() => {});
+			.catch(() => { });
 	});
 
 	describe("Command Registration", () => {
@@ -156,7 +156,7 @@ describe("Stop Hook Command", () => {
 						}),
 					},
 					stderr: {
-						on: mock(() => {}),
+						on: mock(() => { }),
 					},
 					on: mock((event: string, callback: (code: number) => void) => {
 						if (event === "close") {
@@ -560,7 +560,7 @@ describe("Stop Hook Command", () => {
 					recursive: true,
 					force: true,
 				})
-				.catch(() => {});
+				.catch(() => { });
 
 			// Create gauntlet config without execution state
 			await fs.mkdir(path.join(TEST_DIR, ".gauntlet"), { recursive: true });
@@ -681,7 +681,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for passed status", () => {
 			outputHookResponse("passed");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("passed");
 			expect(response.message).toContain("Gauntlet passed");
@@ -690,7 +690,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for no_applicable_gates status", () => {
 			outputHookResponse("no_applicable_gates");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("no_applicable_gates");
 			expect(response.message).toContain("no applicable gates");
@@ -699,7 +699,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for passed_with_warnings status", () => {
 			outputHookResponse("passed_with_warnings");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("passed_with_warnings");
 			expect(response.message).toContain("passed with warnings");
@@ -708,7 +708,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for retry_limit_exceeded status", () => {
 			outputHookResponse("retry_limit_exceeded");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("retry_limit_exceeded");
 			expect(response.message).toContain("retry limit exceeded");
@@ -717,7 +717,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for interval_not_elapsed status", () => {
 			outputHookResponse("interval_not_elapsed", { intervalMinutes: 10 });
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("interval_not_elapsed");
 			expect(response.message).toContain("10 min");
@@ -726,7 +726,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for lock_conflict status", () => {
 			outputHookResponse("lock_conflict");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("lock_conflict");
 			expect(response.message).toContain("already in progress");
@@ -735,7 +735,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for no_changes status", () => {
 			outputHookResponse("no_changes");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("no_changes");
 			expect(response.message).toContain("no changes detected");
@@ -744,7 +744,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with decision=block for failed status", () => {
 			outputHookResponse("failed", { reason: "Fix the issues" });
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("block");
 			expect(response.status).toBe("failed");
 			expect(response.message).toContain("Gauntlet failed");
@@ -754,7 +754,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for no_config status", () => {
 			outputHookResponse("no_config");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("no_config");
 			expect(response.message).toContain("Not a gauntlet project");
@@ -763,7 +763,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for stop_hook_active status", () => {
 			outputHookResponse("stop_hook_active");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("stop_hook_active");
 			expect(response.message).toContain("Stop hook cycle");
@@ -772,7 +772,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for error status", () => {
 			outputHookResponse("error", { errorMessage: "Something went wrong" });
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("error");
 			expect(response.message).toContain("Something went wrong");
@@ -781,7 +781,7 @@ describe("Stop Hook Command", () => {
 		it("should output JSON with status and message for invalid_input status", () => {
 			outputHookResponse("invalid_input");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("approve");
 			expect(response.status).toBe("invalid_input");
 			expect(response.message).toContain("Invalid hook input");
@@ -791,24 +791,30 @@ describe("Stop Hook Command", () => {
 			const allStatuses: StopHookStatus[] = [
 				"passed",
 				"no_applicable_gates",
-				"termination_passed",
-				"termination_warnings",
-				"termination_retry_limit",
+				"passed_with_warnings",
+				"no_changes",
+				"retry_limit_exceeded",
 				"interval_not_elapsed",
-				"lock_exists",
-				"infrastructure_error",
+				"lock_conflict",
+				"error",
 				"failed",
 				"no_config",
 				"stop_hook_active",
-				"error",
 				"invalid_input",
+				"pr_push_required",
+				"ci_pending",
+				"ci_failed",
+				"ci_passed",
+				"ci_timeout",
+				"stop_hook_disabled",
 			];
 
 			for (const status of allStatuses) {
 				logs = []; // Clear logs for each test
 				outputHookResponse(status);
-				const response = JSON.parse(logs[0]);
-				if (status === "failed") {
+				const response = JSON.parse(logs[0]!);
+				const blockingStatuses = ["failed", "pr_push_required", "ci_pending", "ci_failed"];
+				if (blockingStatuses.includes(status)) {
 					expect(response.decision).toBe("block");
 				} else {
 					expect(response.decision).toBe("approve");
@@ -818,7 +824,7 @@ describe("Stop Hook Command", () => {
 
 		it("should output single-line JSON for all responses", () => {
 			outputHookResponse("passed");
-			expect(logs[0].includes("\n")).toBe(false);
+			expect(logs[0]!.includes("\n")).toBe(false);
 		});
 	});
 
@@ -827,7 +833,7 @@ describe("Stop Hook Command", () => {
 			const instructions = "**GAUNTLET FAILED** - Fix the issues";
 			outputHookResponse("failed", { reason: instructions });
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.stopReason).toBe(instructions);
 			expect(response.reason).toBe(instructions);
 		});
@@ -835,7 +841,7 @@ describe("Stop Hook Command", () => {
 		it("should include stopReason with human-friendly message for passed status", () => {
 			outputHookResponse("passed");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.stopReason).toBeDefined();
 			expect(response.stopReason).toContain("Gauntlet passed");
 		});
@@ -843,7 +849,7 @@ describe("Stop Hook Command", () => {
 		it("should include stopReason for interval_not_elapsed indicating interval not elapsed", () => {
 			outputHookResponse("interval_not_elapsed", { intervalMinutes: 10 });
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.stopReason).toBeDefined();
 			expect(response.stopReason).toContain("10 min");
 			expect(response.stopReason).toContain("not elapsed");
@@ -852,7 +858,7 @@ describe("Stop Hook Command", () => {
 		it("should include stopReason for no_config indicating not a gauntlet project", () => {
 			outputHookResponse("no_config");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.stopReason).toBeDefined();
 			expect(response.stopReason).toContain("Not a gauntlet project");
 		});
@@ -860,7 +866,7 @@ describe("Stop Hook Command", () => {
 		it("should include stopReason for lock_conflict indicating another run in progress", () => {
 			outputHookResponse("lock_conflict");
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.stopReason).toBeDefined();
 			expect(response.stopReason).toContain("already in progress");
 		});
@@ -883,7 +889,7 @@ describe("Stop Hook Command", () => {
 			for (const status of nonBlockingStatuses) {
 				logs = []; // Clear logs for each test
 				outputHookResponse(status);
-				const response = JSON.parse(logs[0]);
+				const response = JSON.parse(logs[0]!);
 				expect(response.stopReason).toBeDefined();
 				expect(typeof response.stopReason).toBe("string");
 				expect(response.stopReason.length).toBeGreaterThan(0);
@@ -906,7 +912,7 @@ describe("Stop Hook Command", () => {
 						}
 					}),
 					readableEnded: false,
-					removeListener: mock(() => {}),
+					removeListener: mock(() => { }),
 				};
 				// biome-ignore lint/suspicious/noExplicitAny: Mock stdin for testing
 				(process as any).stdin = mockStdin;
@@ -976,7 +982,7 @@ describe("Stop Hook Command", () => {
 						}
 					}),
 					readableEnded: false,
-					removeListener: mock(() => {}),
+					removeListener: mock(() => { }),
 				};
 				// biome-ignore lint/suspicious/noExplicitAny: Mock stdin for testing
 				(process as any).stdin = mockStdin;
@@ -1196,7 +1202,7 @@ describe("Stop Hook Command", () => {
 			const instructions = "Create a PR";
 			outputHookResponse("pr_push_required", { reason: instructions });
 			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]);
+			const response = JSON.parse(logs[0]!);
 			expect(response.decision).toBe("block");
 			expect(response.status).toBe("pr_push_required");
 			expect(response.reason).toBe(instructions);
