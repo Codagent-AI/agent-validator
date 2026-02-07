@@ -174,31 +174,13 @@ command: ${config.testCmd || "# command: TODO - add your test command (e.g., npm
 				console.log(chalk.green("Created .gauntlet/checks/unit-tests.yml"));
 			}
 
-			// 5. Improved Default Code Review Prompt
-			const reviewContent = `---
-num_reviews: 1
-# parallel: true
-# timeout: 300
-# cli_preference:
-#   - ${config.selectedAdapters[0]?.name || "claude"}
----
-
-# Code Review
-
-Review the diff for quality issues:
-
-- **Bugs**: Logic errors, null handling, edge cases, race conditions
-- **Security**: Input validation, secrets exposure, injection risks
-- **Maintainability**: Unclear code, missing error handling, duplication
-- **Performance**: Unnecessary work, N+1 queries, missing optimizations
-
-For each issue: cite file:line, explain the problem, suggest a fix.
-`;
+			// 5. Default code review (YAML config referencing built-in prompt)
+			const reviewYamlContent = `builtin: code-quality\nnum_reviews: 2\n`;
 			await fs.writeFile(
-				path.join(targetDir, "reviews", "code-quality.md"),
-				reviewContent,
+				path.join(targetDir, "reviews", "code-quality.yml"),
+				reviewYamlContent,
 			);
-			console.log(chalk.green("Created .gauntlet/reviews/code-quality.md"));
+			console.log(chalk.green("Created .gauntlet/reviews/code-quality.yml"));
 
 			// Write the canonical gauntlet command file
 			const canonicalCommandPath = path.join(targetDir, "run_gauntlet.md");

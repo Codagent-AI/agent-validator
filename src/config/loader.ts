@@ -3,6 +3,10 @@ import path from "node:path";
 import matter from "gray-matter";
 import YAML from "yaml";
 import {
+	isBuiltInReview,
+	loadBuiltInReview,
+} from "../built-in-reviews/index.js";
+import {
 	checkGateSchema,
 	gauntletConfigSchema,
 	reviewPromptFrontmatterSchema,
@@ -92,6 +96,14 @@ export async function loadConfig(
 				file.endsWith(".yaml")
 			) {
 				const name = path.basename(file, path.extname(file));
+
+				// Reject user-defined review files with the reserved built-in: prefix
+				if (isBuiltInReview(name)) {
+					throw new Error(
+						`Review file "${file}" uses the reserved "built-in:" prefix. Rename the file to avoid conflicts with built-in reviews.`,
+					);
+				}
+
 				const sources = reviewNameSources.get(name) || [];
 				sources.push(file);
 				reviewNameSources.set(name, sources);
@@ -177,22 +189,26 @@ export async function loadConfig(
 					review.skillName = parsed.skill_name;
 				}
 
+				if (parsed.builtin) {
+					review.promptContent = loadBuiltInReview(parsed.builtin);
+				}
+
 				reviews[name] = review;
 			}
 		}
+	}
 
-		// Merge default CLI preference if not specified
-		for (const [name, review] of Object.entries(reviews)) {
-			if (!review.cli_preference) {
-				review.cli_preference = projectConfig.cli.default_preference;
-			} else {
-				const allowedTools = new Set(projectConfig.cli.default_preference);
-				for (const tool of review.cli_preference) {
-					if (!allowedTools.has(tool)) {
-						throw new Error(
-							`Review "${name}" uses CLI tool "${tool}" which is not in the project-level allowed list (cli.default_preference).`,
-						);
-					}
+	// 3b. Merge default CLI preference if not specified (applies to all reviews)
+	for (const [name, review] of Object.entries(reviews)) {
+		if (!review.cli_preference) {
+			review.cli_preference = projectConfig.cli.default_preference;
+		} else {
+			const allowedTools = new Set(projectConfig.cli.default_preference);
+			for (const tool of review.cli_preference) {
+				if (!allowedTools.has(tool)) {
+					throw new Error(
+						`Review "${name}" uses CLI tool "${tool}" which is not in the project-level allowed list (cli.default_preference).`,
+					);
 				}
 			}
 		}

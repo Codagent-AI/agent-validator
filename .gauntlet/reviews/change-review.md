@@ -34,6 +34,10 @@ The task plan lives at `openspec/changes/*/tasks.md`
 *   **Actionability:** Are the tasks broken down enough to be safe and clear?
 *   **Validation:** Do the validation steps cover the critical user paths?
 *   **Test Coverage:** Is there a sufficient breadth and clarity of test cases?
+*   **Documentation updates:** Is there a task for updating documentation if any of the following apply?
+    *   The change adds or modifies CLI commands/options (`docs/user-guide.md#commands`)
+    *   The change adds or modifies config fields (`docs/config-reference.md`)
+    *   The change affects workflows, entry points, or gate behavior (`docs/user-guide.md`)
 
 ### 4. OpenSpec Standards Compliance
 Reference: `openspec/AGENTS.md`
