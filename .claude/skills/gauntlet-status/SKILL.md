@@ -1,7 +1,7 @@
 ---
-name: status
+name: gauntlet-status
 description: Show a summary of the most recent gauntlet session
-disable-model-invocation: false
+disable-model-invocation: true
 allowed-tools: Bash, Read
 ---
 

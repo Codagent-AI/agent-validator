@@ -561,26 +561,19 @@ describe("Skills Installation for Claude", () => {
 		expect(content).toContain("agent-gauntlet check");
 	});
 
-	it("should set disable-model-invocation correctly per skill", async () => {
+	it("should set correct frontmatter for all skills", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
 
-		// Action skills should have disable-model-invocation: true
-		for (const action of ["run", "check", "push-pr", "fix-pr"]) {
+		for (const action of ["run", "check", "push-pr", "fix-pr", "status"]) {
 			const content = await fs.readFile(
 				path.join(skillsBase, `gauntlet-${action}`, "SKILL.md"),
 				"utf-8",
 			);
+			expect(content).toContain(`name: gauntlet-${action}`);
 			expect(content).toContain("disable-model-invocation: true");
 		}
-
-		// Status skill should have disable-model-invocation: false
-		const statusContent = await fs.readFile(
-			path.join(skillsBase, "gauntlet-status", "SKILL.md"),
-			"utf-8",
-		);
-		expect(statusContent).toContain("disable-model-invocation: false");
 	});
 
 	it("should install non-Claude commands as flat files alongside Claude skills", async () => {

@@ -2,7 +2,7 @@
 /**
  * Gauntlet Status Script
  *
- * Parses gauntlet_logs/ (or gauntlet_logs/previous/) to produce a structured
+ * Parses the configured log_dir (default: gauntlet_logs/) to produce a structured
  * summary of the most recent gauntlet session.
  *
  * Usage: bun .gauntlet/skills/gauntlet/status/scripts/status.ts
@@ -347,9 +347,26 @@ function formatSession(
 
 // --- Main ---
 
+/**
+ * Read the configured log_dir from .gauntlet/config.yml.
+ * Falls back to "gauntlet_logs" if not found.
+ */
+function getLogDir(cwd: string): string {
+	const configPath = path.join(cwd, ".gauntlet", "config.yml");
+	try {
+		const content = fs.readFileSync(configPath, "utf-8");
+		const match = content.match(/^log_dir:\s*(.+)$/m);
+		if (match?.[1]) return match[1].trim();
+	} catch {
+		// Config not found — use default
+	}
+	return "gauntlet_logs";
+}
+
 function main(): void {
 	const cwd = process.cwd();
-	const activeDir = path.join(cwd, "gauntlet_logs");
+	const logDirName = getLogDir(cwd);
+	const activeDir = path.join(cwd, logDirName);
 	const previousDir = path.join(activeDir, "previous");
 	const debugLogName = ".debug.log";
 
@@ -368,20 +385,29 @@ function main(): void {
 		logDir = activeDir;
 		debugLogPath = path.join(activeDir, debugLogName);
 	} else if (fs.existsSync(previousDir)) {
-		// Fall back to most recent previous directory
-		const prevDirs = fs
-			.readdirSync(previousDir)
-			.map((d) => path.join(previousDir, d))
-			.filter((d) => fs.statSync(d).isDirectory())
-			.sort()
-			.reverse();
+		// Fall back to previous directory — cleanLogs archives files directly here
+		const prevEntries = fs.readdirSync(previousDir);
+		const hasDirectFiles = prevEntries.some(
+			(f) => f.endsWith(".log") || f.endsWith(".json"),
+		);
 
-		if (prevDirs.length === 0) {
-			console.log("No gauntlet logs found.");
-			process.exit(0);
+		if (hasDirectFiles) {
+			logDir = previousDir;
+		} else {
+			// Legacy: check for timestamped subdirectories
+			const prevDirs = prevEntries
+				.map((d) => path.join(previousDir, d))
+				.filter((d) => fs.statSync(d).isDirectory())
+				.sort()
+				.reverse();
+
+			if (prevDirs.length === 0) {
+				console.log("No gauntlet logs found.");
+				process.exit(0);
+			}
+
+			logDir = prevDirs[0]!;
 		}
-
-		logDir = prevDirs[0]!;
 		// Debug log stays in the main gauntlet_logs dir, not in previous/
 		debugLogPath = path.join(activeDir, debugLogName);
 	} else {

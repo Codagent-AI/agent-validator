@@ -1,5 +1,5 @@
 ---
-name: run
+name: gauntlet-run
 description: Run the full verification gauntlet
 disable-model-invocation: true
 allowed-tools: Bash

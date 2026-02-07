@@ -1,5 +1,5 @@
 ---
-name: check
+name: gauntlet-check
 description: Run checks only (no reviews)
 disable-model-invocation: true
 allowed-tools: Bash

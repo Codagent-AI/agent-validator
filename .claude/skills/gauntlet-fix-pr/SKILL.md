@@ -1,5 +1,5 @@
 ---
-name: fix-pr
+name: gauntlet-fix-pr
 description: Fix CI failures or address review comments on a pull request
 disable-model-invocation: true
 allowed-tools: Bash

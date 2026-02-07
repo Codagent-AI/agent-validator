@@ -1,5 +1,5 @@
 ---
-name: push-pr
+name: gauntlet-push-pr
 description: Commit changes, push to remote, and create or update a pull request
 disable-model-invocation: true
 allowed-tools: Bash

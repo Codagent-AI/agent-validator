@@ -29,7 +29,7 @@ function buildGauntletSkillContent(mode: "run" | "check"): string {
 		: "Run the gauntlet checks only \u2014 no AI reviews.";
 
 	const frontmatter = `---
-name: ${name}
+name: gauntlet-${name}
 description: ${description}
 disable-model-invocation: true
 allowed-tools: Bash
@@ -112,7 +112,7 @@ const GAUNTLET_RUN_SKILL_CONTENT = buildGauntletSkillContent("run");
 const GAUNTLET_CHECK_SKILL_CONTENT = buildGauntletSkillContent("check");
 
 const PUSH_PR_SKILL_CONTENT = `---
-name: push-pr
+name: gauntlet-push-pr
 description: Commit changes, push to remote, and create or update a pull request
 disable-model-invocation: true
 allowed-tools: Bash
@@ -125,7 +125,7 @@ After the PR is created or updated, verify it exists by running \`gh pr view\`.
 `;
 
 const FIX_PR_SKILL_CONTENT = `---
-name: fix-pr
+name: gauntlet-fix-pr
 description: Fix CI failures or address review comments on a pull request
 disable-model-invocation: true
 allowed-tools: Bash
@@ -141,9 +141,9 @@ Fix CI failures or address review comments on the current pull request.
 `;
 
 const GAUNTLET_STATUS_SKILL_CONTENT = `---
-name: status
+name: gauntlet-status
 description: Show a summary of the most recent gauntlet session
-disable-model-invocation: false
+disable-model-invocation: true
 allowed-tools: Bash, Read
 ---
 
@@ -383,7 +383,7 @@ async function promptForConfig(
 				break;
 			}
 
-			const chosen = parseAdapterSelections(selections, availableAdapters);
+			const chosen = parseSelections(selections, availableAdapters);
 			if (chosen) {
 				selectedAdapters = chosen;
 				break;
@@ -440,8 +440,9 @@ async function promptForConfig(
 
 /**
  * Parse numeric selections into adapter list. Returns null if any selection is invalid.
+ * Used by both CLI selection (returns adapters) and agent selection (caller maps to names).
  */
-function parseAdapterSelections(
+function parseSelections(
 	selections: string[],
 	adapters: CLIAdapter[],
 ): CLIAdapter[] | null {
@@ -609,35 +610,11 @@ async function promptAgentSelection(
 			continue;
 		}
 
-		const agents = parseAgentSelections(selections, installableAdapters);
-		if (agents) return agents;
+		const chosen = parseSelections(selections, installableAdapters);
+		if (chosen) return chosen.map((a) => a.name);
 
 		answer = await questionFn(promptText);
 	}
-}
-
-/**
- * Parse numeric selections into agent name list. Returns null if any selection is invalid.
- */
-function parseAgentSelections(
-	selections: string[],
-	adapters: CLIAdapter[],
-): string[] | null {
-	const agents: string[] = [];
-	for (const sel of selections) {
-		const num = parseInt(sel, 10);
-		if (Number.isNaN(num) || num < 1 || num > adapters.length + 1) {
-			console.log(chalk.yellow(`Invalid selection: ${sel}`));
-			return null;
-		}
-		if (num === adapters.length + 1) {
-			agents.push(...adapters.map((a) => a.name));
-		} else {
-			const adapter = adapters[num - 1];
-			if (adapter) agents.push(adapter.name);
-		}
-	}
-	return [...new Set(agents)];
 }
 
 async function promptAndInstallCommands(
@@ -728,6 +705,11 @@ interface SkillCommand {
 	content: string;
 }
 
+interface InstallContext {
+	isUserLevel: boolean;
+	projectRoot: string;
+}
+
 interface InstallCommandsOptions {
 	level: InstallLevel;
 	agentNames: string[];
@@ -740,8 +722,7 @@ interface InstallCommandsOptions {
  */
 async function installSkill(
 	skillDir: string,
-	isUserLevel: boolean,
-	projectRoot: string,
+	ctx: InstallContext,
 	command: SkillCommand,
 ): Promise<void> {
 	const actionDir = path.join(skillDir, `gauntlet-${command.action}`);
@@ -750,17 +731,17 @@ async function installSkill(
 	await fs.mkdir(actionDir, { recursive: true });
 
 	if (await exists(skillPath)) {
-		const relPath = isUserLevel
+		const relPath = ctx.isUserLevel
 			? skillPath
-			: path.relative(projectRoot, skillPath);
+			: path.relative(ctx.projectRoot, skillPath);
 		console.log(chalk.dim(`  claude: ${relPath} already exists, skipping`));
 		return;
 	}
 
 	await fs.writeFile(skillPath, command.content);
-	const relPath = isUserLevel
+	const relPath = ctx.isUserLevel
 		? skillPath
-		: path.relative(projectRoot, skillPath);
+		: path.relative(ctx.projectRoot, skillPath);
 	console.log(chalk.green(`Created ${relPath}`));
 }
 
@@ -771,8 +752,7 @@ async function installSkill(
 async function installFlatCommand(
 	adapter: CLIAdapter,
 	commandDir: string,
-	isUserLevel: boolean,
-	projectRoot: string,
+	ctx: InstallContext,
 	command: SkillCommand,
 ): Promise<void> {
 	// Non-Claude agents get flat files named "gauntlet" (for run) or the action name
@@ -781,9 +761,9 @@ async function installFlatCommand(
 	const filePath = path.join(commandDir, fileName);
 
 	if (await exists(filePath)) {
-		const relPath = isUserLevel
+		const relPath = ctx.isUserLevel
 			? filePath
-			: path.relative(projectRoot, filePath);
+			: path.relative(ctx.projectRoot, filePath);
 		console.log(
 			chalk.dim(`  ${adapter.name}: ${relPath} already exists, skipping`),
 		);
@@ -792,7 +772,9 @@ async function installFlatCommand(
 
 	const transformedContent = adapter.transformCommand(command.content);
 	await fs.writeFile(filePath, transformedContent);
-	const relPath = isUserLevel ? filePath : path.relative(projectRoot, filePath);
+	const relPath = ctx.isUserLevel
+		? filePath
+		: path.relative(ctx.projectRoot, filePath);
 	console.log(chalk.green(`Created ${relPath}`));
 }
 
@@ -802,16 +784,15 @@ async function installFlatCommand(
 async function installSkillsForAdapter(
 	adapter: CLIAdapter,
 	skillDir: string,
-	isUserLevel: boolean,
-	projectRoot: string,
+	ctx: InstallContext,
 	commands: SkillCommand[],
 ): Promise<void> {
-	const resolvedSkillDir = isUserLevel
+	const resolvedSkillDir = ctx.isUserLevel
 		? skillDir
-		: path.join(projectRoot, skillDir);
+		: path.join(ctx.projectRoot, skillDir);
 	try {
 		for (const command of commands) {
-			await installSkill(resolvedSkillDir, isUserLevel, projectRoot, command);
+			await installSkill(resolvedSkillDir, ctx, command);
 		}
 	} catch (error: unknown) {
 		const err = error as { message?: string };
@@ -829,13 +810,12 @@ async function installSkillsForAdapter(
 async function installFlatCommandsForAdapter(
 	adapter: CLIAdapter,
 	commandDir: string,
-	isUserLevel: boolean,
-	projectRoot: string,
+	ctx: InstallContext,
 	commands: SkillCommand[],
 ): Promise<void> {
-	const resolvedCommandDir = isUserLevel
+	const resolvedCommandDir = ctx.isUserLevel
 		? commandDir
-		: path.join(projectRoot, commandDir);
+		: path.join(ctx.projectRoot, commandDir);
 	try {
 		await fs.mkdir(resolvedCommandDir, { recursive: true });
 		// Non-Claude agents only get run, push-pr, and fix-pr (not check/status)
@@ -843,13 +823,7 @@ async function installFlatCommandsForAdapter(
 			(c) => c.action !== "check" && c.action !== "status",
 		);
 		for (const command of flatCommands) {
-			await installFlatCommand(
-				adapter,
-				resolvedCommandDir,
-				isUserLevel,
-				projectRoot,
-				command,
-			);
+			await installFlatCommand(adapter, resolvedCommandDir, ctx, command);
 		}
 	} catch (error: unknown) {
 		const err = error as { message?: string };
@@ -868,23 +842,19 @@ async function installCommands(options: InstallCommandsOptions): Promise<void> {
 	console.log();
 	const allAdapters = getAllAdapters();
 
+	const isUserLevel = level === "user";
+	const ctx: InstallContext = { isUserLevel, projectRoot };
+
 	for (const agentName of agentNames) {
 		const adapter = allAdapters.find((a) => a.name === agentName);
 		if (!adapter) continue;
 
-		const isUserLevel = level === "user";
 		const skillDir = isUserLevel
 			? adapter.getUserSkillDir()
 			: adapter.getProjectSkillDir();
 
 		if (skillDir) {
-			await installSkillsForAdapter(
-				adapter,
-				skillDir,
-				isUserLevel,
-				projectRoot,
-				commands,
-			);
+			await installSkillsForAdapter(adapter, skillDir, ctx, commands);
 			continue;
 		}
 
@@ -893,13 +863,7 @@ async function installCommands(options: InstallCommandsOptions): Promise<void> {
 			: adapter.getProjectCommandDir();
 		if (!commandDir) continue;
 
-		await installFlatCommandsForAdapter(
-			adapter,
-			commandDir,
-			isUserLevel,
-			projectRoot,
-			commands,
-		);
+		await installFlatCommandsForAdapter(adapter, commandDir, ctx, commands);
 	}
 }
 
