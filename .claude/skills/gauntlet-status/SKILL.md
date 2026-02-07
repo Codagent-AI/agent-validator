@@ -5,7 +5,7 @@ disable-model-invocation: false
 allowed-tools: Bash, Read
 ---
 
-# /gauntlet:status
+# /gauntlet-status
 Show a structured summary of the most recent gauntlet session.
 
 Run the bundled status script and present the output:

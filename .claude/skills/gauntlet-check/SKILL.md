@@ -5,7 +5,7 @@ disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# /gauntlet:check
+# /gauntlet-check
 Run the gauntlet checks only — no AI reviews.
 
 1. Run `bun src/index.ts clean` to archive any previous log files

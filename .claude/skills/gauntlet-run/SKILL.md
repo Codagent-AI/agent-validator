@@ -15,7 +15,7 @@ allowed-tools: Bash
 -->
 <!-- trust_level: medium -->
 
-# /gauntlet:run
+# /gauntlet-run
 Execute the autonomous verification suite.
 
 **Review trust level: medium** — Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.

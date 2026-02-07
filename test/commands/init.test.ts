@@ -526,14 +526,14 @@ describe("Skills Installation for Claude", () => {
 			.catch(() => {});
 	});
 
-	it("should install Claude skills as SKILL.md files under .claude/skills/gauntlet/", async () => {
+	it("should install Claude skills as SKILL.md files under .claude/skills/gauntlet-*/", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const skillsDir = path.join(TEST_DIR, ".claude-mock", "skills");
 		const actions = ["run", "check", "push-pr", "fix-pr", "status"];
 
 		for (const action of actions) {
-			const skillPath = path.join(skillsDir, "gauntlet", action, "SKILL.md");
+			const skillPath = path.join(skillsDir, `gauntlet-${action}`, "SKILL.md");
 			const stat = await fs.stat(skillPath);
 			expect(stat.isFile()).toBe(true);
 
@@ -546,15 +546,14 @@ describe("Skills Installation for Claude", () => {
 		}
 	});
 
-	it("should reference agent-gauntlet check in gauntlet:check SKILL.md", async () => {
+	it("should reference agent-gauntlet check in gauntlet-check SKILL.md", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const checkPath = path.join(
 			TEST_DIR,
 			".claude-mock",
 			"skills",
-			"gauntlet",
-			"check",
+			"gauntlet-check",
 			"SKILL.md",
 		);
 		const content = await fs.readFile(checkPath, "utf-8");
@@ -565,17 +564,12 @@ describe("Skills Installation for Claude", () => {
 	it("should set disable-model-invocation correctly per skill", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const skillsBase = path.join(
-			TEST_DIR,
-			".claude-mock",
-			"skills",
-			"gauntlet",
-		);
+		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
 
 		// Action skills should have disable-model-invocation: true
 		for (const action of ["run", "check", "push-pr", "fix-pr"]) {
 			const content = await fs.readFile(
-				path.join(skillsBase, action, "SKILL.md"),
+				path.join(skillsBase, `gauntlet-${action}`, "SKILL.md"),
 				"utf-8",
 			);
 			expect(content).toContain("disable-model-invocation: true");
@@ -583,7 +577,7 @@ describe("Skills Installation for Claude", () => {
 
 		// Status skill should have disable-model-invocation: false
 		const statusContent = await fs.readFile(
-			path.join(skillsBase, "status", "SKILL.md"),
+			path.join(skillsBase, "gauntlet-status", "SKILL.md"),
 			"utf-8",
 		);
 		expect(statusContent).toContain("disable-model-invocation: false");
@@ -612,8 +606,7 @@ describe("Skills Installation for Claude", () => {
 			TEST_DIR,
 			".claude-mock",
 			"skills",
-			"gauntlet",
-			"run",
+			"gauntlet-run",
 		);
 		await fs.mkdir(existingDir, { recursive: true });
 		await fs.writeFile(

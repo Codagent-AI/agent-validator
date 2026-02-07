@@ -90,7 +90,7 @@ allowed-tools: Bash
 -->
 <!-- trust_level: medium -->
 
-# /gauntlet:${name}
+# /gauntlet-${name}
 ${heading}
 
 **Review trust level: medium** \u2014 Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
@@ -101,7 +101,7 @@ ${steps.join("\n")}
 
 	return `${frontmatter}
 
-# /gauntlet:${name}
+# /gauntlet-${name}
 ${heading}
 
 ${steps.join("\n")}
@@ -118,7 +118,7 @@ disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# /gauntlet:push-pr
+# /gauntlet-push-pr
 Commit all changes, push to remote, and create or update a pull request for the current branch.
 
 After the PR is created or updated, verify it exists by running \`gh pr view\`.
@@ -131,7 +131,7 @@ disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# /gauntlet:fix-pr
+# /gauntlet-fix-pr
 Fix CI failures or address review comments on the current pull request.
 
 1. Check CI status and review comments: \`gh pr checks\` and \`gh pr view --comments\`
@@ -147,7 +147,7 @@ disable-model-invocation: false
 allowed-tools: Bash, Read
 ---
 
-# /gauntlet:status
+# /gauntlet-status
 Show a structured summary of the most recent gauntlet session.
 
 Run the bundled status script and present the output:
@@ -528,7 +528,7 @@ async function copyStatusScript(targetDir: string): Promise<void> {
 	} else {
 		console.log(
 			chalk.yellow(
-				"Warning: bundled status script not found; /gauntlet:status may fail.",
+				"Warning: bundled status script not found; /gauntlet-status may fail.",
 			),
 		);
 	}
@@ -744,7 +744,7 @@ async function installSkill(
 	projectRoot: string,
 	command: SkillCommand,
 ): Promise<void> {
-	const actionDir = path.join(skillDir, "gauntlet", command.action);
+	const actionDir = path.join(skillDir, `gauntlet-${command.action}`);
 	const skillPath = path.join(actionDir, "SKILL.md");
 
 	await fs.mkdir(actionDir, { recursive: true });
