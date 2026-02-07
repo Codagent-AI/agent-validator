@@ -132,7 +132,7 @@ The system SHALL provide a `/gauntlet:fix-pr` skill (migrated from `fix_pr.md`) 
 #### Scenario: Template prioritizes project-level instructions
 - **GIVEN** the `/gauntlet:fix-pr` skill is invoked
 - **WHEN** the agent reads the instructions
-- **THEN** it SHALL first look for project-level instructions or skills for addressing PR feedback
+- **THEN** it SHALL first look for project-level instructions or skills for addressing PR feedback (e.g., a `/fix-pr` skill, `.claude/commands/fix-pr.md`)
 
 #### Scenario: Template includes minimal fallback
 - **GIVEN** the `/gauntlet:fix-pr` skill is invoked

@@ -74,10 +74,10 @@ interface ReviewJson {
 
 function parseKeyValue(text: string): Record<string, string> {
 	const result: Record<string, string> = {};
-	const re = /(\w+)=(\S+)/g;
-	let match: RegExpExecArray | null;
-	while ((match = re.exec(text)) !== null) {
-		result[match[1]!] = match[2]!;
+	for (const match of text.matchAll(/(\w+)=(\S+)/g)) {
+		const key = match[1];
+		const value = match[2];
+		if (key && value) result[key] = value;
 	}
 	return result;
 }
@@ -138,7 +138,8 @@ function parseDebugLog(content: string): SessionRun[] {
 					cli: kv.cli,
 					status: kv.status ?? "unknown",
 					duration: kv.duration ?? "?",
-					violations: kv.violations !== undefined ? Number(kv.violations) : undefined,
+					violations:
+						kv.violations !== undefined ? Number(kv.violations) : undefined,
 				});
 				break;
 			}
@@ -192,17 +193,91 @@ function parseReviewFiles(logDir: string): Map<string, ReviewJson> {
 
 // --- Summary output ---
 
-function formatSession(sessions: SessionRun[], reviews: Map<string, ReviewJson>): string {
-	const lines: string[] = [];
+function formatStatusLine(end: RunEnd): string {
+	const label =
+		end.status === "pass"
+			? "PASSED"
+			: end.status === "fail"
+				? "FAILED"
+				: end.status.toUpperCase();
+	return label;
+}
 
+function formatViolationsSummary(reviews: Map<string, ReviewJson>): string[] {
+	const lines: string[] = [];
+	const allViolations = Array.from(reviews.values()).flatMap(
+		(r) => r.violations ?? [],
+	);
+	const total = allViolations.length;
+	const fixed = allViolations.filter((v) => v.status === "fixed").length;
+	const skipped = allViolations.filter((v) => v.status === "skipped").length;
+	const outstanding = total - fixed - skipped;
+
+	lines.push("### Violations Summary");
+	lines.push(`- Total: ${total}`);
+	lines.push(`- Fixed: ${fixed}`);
+	lines.push(`- Skipped: ${skipped}`);
+	lines.push(`- Outstanding: ${outstanding}`);
+	lines.push("");
+
+	if (outstanding > 0) {
+		lines.push(...formatOutstandingViolations(reviews));
+	}
+	return lines;
+}
+
+function formatOutstandingViolations(
+	reviews: Map<string, ReviewJson>,
+): string[] {
+	const lines: string[] = [];
+	lines.push("#### Outstanding Violations");
+	for (const [file, review] of reviews) {
+		const pending = (review.violations ?? []).filter(
+			(v) => v.status !== "fixed" && v.status !== "skipped",
+		);
+		if (pending.length === 0) continue;
+		lines.push(`\n**${file}** (${review.adapter ?? "unknown"}):`);
+		for (const v of pending) {
+			const loc = v.file ? `${v.file}:${v.line ?? "?"}` : "?";
+			lines.push(
+				`- [${v.priority ?? "?"}] ${loc}: ${v.issue ?? "no description"}`,
+			);
+		}
+	}
+	lines.push("");
+	return lines;
+}
+
+function formatAllRuns(sessions: SessionRun[]): string[] {
+	const lines: string[] = [];
+	lines.push("### All Runs in Session");
+	lines.push("");
+	for (let i = 0; i < sessions.length; i++) {
+		const s = sessions[i];
+		if (!s) continue;
+		const status = s.end ? s.end.status : "in-progress";
+		const duration = s.end ? s.end.duration : "?";
+		lines.push(
+			`${i + 1}. [${s.start.timestamp}] mode=${s.start.mode} status=${status} duration=${duration}`,
+		);
+	}
+	lines.push("");
+	return lines;
+}
+
+function formatSession(
+	sessions: SessionRun[],
+	reviews: Map<string, ReviewJson>,
+): string {
 	if (sessions.length === 0) {
-		lines.push("No gauntlet runs found in logs.");
-		return lines.join("\n");
+		return "No gauntlet runs found in logs.";
 	}
 
-	// Use the last complete session (has RUN_END) or fall back to the last session
 	const lastComplete = [...sessions].reverse().find((s) => s.end);
-	const session = lastComplete ?? sessions[sessions.length - 1]!;
+	const session = lastComplete ?? sessions[sessions.length - 1];
+	if (!session) return "No gauntlet runs found in logs.";
+
+	const lines: string[] = [];
 
 	// Header
 	lines.push("## Gauntlet Session Summary");
@@ -210,12 +285,12 @@ function formatSession(sessions: SessionRun[], reviews: Map<string, ReviewJson>)
 
 	// Overall status
 	if (session.end) {
-		const statusEmoji = session.end.status === "pass" ? "PASSED" :
-			session.end.status === "fail" ? "FAILED" : session.end.status.toUpperCase();
-		lines.push(`**Status:** ${statusEmoji}`);
+		lines.push(`**Status:** ${formatStatusLine(session.end)}`);
 		lines.push(`**Iterations:** ${session.end.iterations}`);
 		lines.push(`**Duration:** ${session.end.duration}`);
-		lines.push(`**Fixed:** ${session.end.fixed} | **Skipped:** ${session.end.skipped} | **Failed:** ${session.end.failed}`);
+		lines.push(
+			`**Fixed:** ${session.end.fixed} | **Skipped:** ${session.end.skipped} | **Failed:** ${session.end.failed}`,
+		);
 	} else {
 		lines.push("**Status:** In Progress (no RUN_END found)");
 	}
@@ -228,7 +303,9 @@ function formatSession(sessions: SessionRun[], reviews: Map<string, ReviewJson>)
 		lines.push(`- Base ref: ${session.start.baseRef}`);
 	}
 	lines.push(`- Files changed: ${session.start.filesChanged}`);
-	lines.push(`- Lines: +${session.start.linesAdded} / -${session.start.linesRemoved}`);
+	lines.push(
+		`- Lines: +${session.start.linesAdded} / -${session.start.linesRemoved}`,
+	);
 	lines.push(`- Gates: ${session.start.gates}`);
 	lines.push("");
 
@@ -238,9 +315,12 @@ function formatSession(sessions: SessionRun[], reviews: Map<string, ReviewJson>)
 	lines.push("| Gate | CLI | Status | Duration | Violations |");
 	lines.push("|------|-----|--------|----------|------------|");
 	for (const gate of session.gates) {
-		const violations = gate.violations !== undefined ? String(gate.violations) : "-";
+		const violations =
+			gate.violations !== undefined ? String(gate.violations) : "-";
 		const statusIcon = gate.status === "pass" ? "pass" : "FAIL";
-		lines.push(`| ${gate.gateId} | ${gate.cli ?? "-"} | ${statusIcon} | ${gate.duration} | ${violations} |`);
+		lines.push(
+			`| ${gate.gateId} | ${gate.cli ?? "-"} | ${statusIcon} | ${gate.duration} | ${violations} |`,
+		);
 	}
 	lines.push("");
 
@@ -252,56 +332,14 @@ function formatSession(sessions: SessionRun[], reviews: Map<string, ReviewJson>)
 		lines.push("");
 	}
 
-	// Review violations summary
+	// Violations summary
 	if (reviews.size > 0) {
-		const totalViolations = Array.from(reviews.values()).reduce(
-			(sum, r) => sum + (r.violations?.length ?? 0), 0,
-		);
-		const fixed = Array.from(reviews.values()).reduce(
-			(sum, r) => sum + (r.violations?.filter((v) => v.status === "fixed").length ?? 0), 0,
-		);
-		const skipped = Array.from(reviews.values()).reduce(
-			(sum, r) => sum + (r.violations?.filter((v) => v.status === "skipped").length ?? 0), 0,
-		);
-		const outstanding = totalViolations - fixed - skipped;
-
-		lines.push("### Violations Summary");
-		lines.push(`- Total: ${totalViolations}`);
-		lines.push(`- Fixed: ${fixed}`);
-		lines.push(`- Skipped: ${skipped}`);
-		lines.push(`- Outstanding: ${outstanding}`);
-		lines.push("");
-
-		// List outstanding violations
-		if (outstanding > 0) {
-			lines.push("#### Outstanding Violations");
-			for (const [file, review] of reviews) {
-				const pending = review.violations?.filter(
-					(v) => v.status !== "fixed" && v.status !== "skipped",
-				);
-				if (pending && pending.length > 0) {
-					lines.push(`\n**${file}** (${review.adapter ?? "unknown"}):`);
-					for (const v of pending) {
-						const loc = v.file ? `${v.file}:${v.line ?? "?"}` : "?";
-						lines.push(`- [${v.priority ?? "?"}] ${loc}: ${v.issue ?? "no description"}`);
-					}
-				}
-			}
-			lines.push("");
-		}
+		lines.push(...formatViolationsSummary(reviews));
 	}
 
 	// All sessions summary (if multiple runs)
 	if (sessions.length > 1) {
-		lines.push("### All Runs in Session");
-		lines.push("");
-		for (let i = 0; i < sessions.length; i++) {
-			const s = sessions[i]!;
-			const status = s.end ? s.end.status : "in-progress";
-			const duration = s.end ? s.end.duration : "?";
-			lines.push(`${i + 1}. [${s.start.timestamp}] mode=${s.start.mode} status=${status} duration=${duration}`);
-		}
-		lines.push("");
+		lines.push(...formatAllRuns(sessions));
 	}
 
 	return lines.join("\n");
@@ -320,15 +358,19 @@ function main(): void {
 	let debugLogPath: string;
 
 	// Check active directory first for non-debug log files
-	const activeHasLogs = fs.existsSync(activeDir) &&
-		fs.readdirSync(activeDir).some((f) => !f.startsWith(".") && f !== "previous");
+	const activeHasLogs =
+		fs.existsSync(activeDir) &&
+		fs
+			.readdirSync(activeDir)
+			.some((f) => !f.startsWith(".") && f !== "previous");
 
 	if (activeHasLogs) {
 		logDir = activeDir;
 		debugLogPath = path.join(activeDir, debugLogName);
 	} else if (fs.existsSync(previousDir)) {
 		// Fall back to most recent previous directory
-		const prevDirs = fs.readdirSync(previousDir)
+		const prevDirs = fs
+			.readdirSync(previousDir)
 			.map((d) => path.join(previousDir, d))
 			.filter((d) => fs.statSync(d).isDirectory())
 			.sort()

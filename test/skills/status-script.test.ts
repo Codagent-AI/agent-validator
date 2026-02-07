@@ -1,19 +1,10 @@
-import {
-	afterAll,
-	afterEach,
-	beforeAll,
-	describe,
-	expect,
-	it,
-} from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const TEST_DIR = path.join(process.cwd(), `test-status-${Date.now()}`);
-const SCRIPT_PATH = path.resolve(
-	".gauntlet/skills/gauntlet/status/scripts/status.ts",
-);
+const SCRIPT_PATH = path.resolve("src/scripts/status.ts");
 
 function runStatus(cwd: string): string {
 	return execSync(`bun ${SCRIPT_PATH}`, {

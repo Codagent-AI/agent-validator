@@ -2,8 +2,8 @@
 
 `src/commands/init.ts` has Code Health 6.37 — Bumpy Road, Complex Method, Large Method in `promptAndInstallCommands` (cc=24, 158 LoC), `promptForConfig` (cc=18, 99 LoC), `registerInitCommand` (cc=11, 154 LoC), `installCommands` (cc=10).
 
-- [x] 0.1 Refactor `promptAndInstallCommands` in `src/commands/init.ts` — extract agent selection loop into a reusable `promptAgentSelection` function; extract install-level prompt into its own function
-- [x] 0.2 Refactor `registerInitCommand` in `src/commands/init.ts` — extract skill file creation logic into a separate `scaffoldSkills` function
+- [x] 0.1 `src/commands/init.ts` (Code Health 6.37; Bumpy Road, Complex Method, Large Method) — refactor `promptAndInstallCommands` by extracting `promptAgentSelection` and the install-level prompt
+- [x] 0.2 `src/commands/init.ts` (Code Health 6.37; Bumpy Road, Complex Method, Large Method) — refactor `registerInitCommand` by extracting `scaffoldSkills`
 
 ## 1. Implementation
 
@@ -45,6 +45,7 @@
 
 ## 3. Validation
 
+If there is a "Pre-factoring" section above, confirm those refactorings are complete before marking the task complete.
 If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.
 
 There are no automated validation tasks that need to be explicitly run. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.

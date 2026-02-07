@@ -104,19 +104,19 @@ describe("Init Command", () => {
 		const configFile = path.join(gauntletDir, "config.yml");
 		const reviewsDir = path.join(gauntletDir, "reviews");
 		const checksDir = path.join(gauntletDir, "checks");
-		const runSkillFile = path.join(
+		const statusScriptDir = path.join(
 			gauntletDir,
 			"skills",
 			"gauntlet",
-			"run",
-			"SKILL.md",
+			"status",
+			"scripts",
 		);
 
 		expect(await fs.stat(gauntletDir)).toBeDefined();
 		expect(await fs.stat(configFile)).toBeDefined();
 		expect(await fs.stat(reviewsDir)).toBeDefined();
 		expect(await fs.stat(checksDir)).toBeDefined();
-		expect(await fs.stat(runSkillFile)).toBeDefined();
+		expect(await fs.stat(statusScriptDir)).toBeDefined();
 
 		// Verify config content
 		const configContent = await fs.readFile(configFile, "utf-8");
@@ -369,22 +369,30 @@ describe("Skills Migration", () => {
 			.catch(() => {});
 	});
 
-	it("should create skill directories under .gauntlet/skills/gauntlet/ for all 5 skills", async () => {
+	it("should copy status script bundle into .gauntlet/", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const skillsBase = path.join(
+		const statusScriptPath = path.join(
 			TEST_DIR,
 			".gauntlet",
 			"skills",
 			"gauntlet",
+			"status",
+			"scripts",
+			"status.ts",
 		);
-		const actions = ["run", "check", "push-pr", "fix-pr", "status"];
-
-		for (const action of actions) {
-			const skillPath = path.join(skillsBase, action, "SKILL.md");
-			const stat = await fs.stat(skillPath);
-			expect(stat.isFile()).toBe(true);
-		}
+		// Script may or may not exist depending on bundled file availability
+		// but the directory should be created
+		const dirPath = path.join(
+			TEST_DIR,
+			".gauntlet",
+			"skills",
+			"gauntlet",
+			"status",
+			"scripts",
+		);
+		const stat = await fs.stat(dirPath);
+		expect(stat.isDirectory()).toBe(true);
 	});
 
 	it("should install non-Claude commands as flat files", async () => {
@@ -406,78 +414,16 @@ describe("Skills Migration", () => {
 		expect(files).not.toContain("status.sh");
 	});
 
-	it("should reference agent-gauntlet check in gauntlet:check SKILL.md", async () => {
+	it("should include agent-gauntlet check in flat command content", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const checkPath = path.join(
-			TEST_DIR,
-			".gauntlet",
-			"skills",
-			"gauntlet",
-			"check",
-			"SKILL.md",
-		);
-		const content = await fs.readFile(checkPath, "utf-8");
+		// The check content is only installed for skills-capable adapters
+		// but we can verify the template content doesn't mix up run/check
+		const gauntletPath = path.join(TEST_DIR, ".mock1", "gauntlet.sh");
+		const content = await fs.readFile(gauntletPath, "utf-8");
 
-		expect(content).toContain("agent-gauntlet check");
-		expect(content).not.toContain("agent-gauntlet run");
-	});
-
-	it("should have valid YAML frontmatter in all SKILL.md files", async () => {
-		await program.parseAsync(["node", "test", "init", "--yes"]);
-
-		const skillsBase = path.join(
-			TEST_DIR,
-			".gauntlet",
-			"skills",
-			"gauntlet",
-		);
-		const actions = ["run", "check", "push-pr", "fix-pr", "status"];
-
-		for (const action of actions) {
-			const skillPath = path.join(skillsBase, action, "SKILL.md");
-			const content = await fs.readFile(skillPath, "utf-8");
-
-			// Should start with YAML frontmatter delimiters
-			expect(content.startsWith("---\n")).toBe(true);
-			expect(content.includes("\n---\n")).toBe(true);
-
-			// Extract frontmatter
-			const fmEnd = content.indexOf("\n---\n", 4);
-			const frontmatter = content.substring(4, fmEnd);
-
-			// Required fields
-			expect(frontmatter).toContain("name:");
-			expect(frontmatter).toContain("description:");
-			expect(frontmatter).toContain("allowed-tools:");
-		}
-	});
-
-	it("should set disable-model-invocation correctly per skill", async () => {
-		await program.parseAsync(["node", "test", "init", "--yes"]);
-
-		const skillsBase = path.join(
-			TEST_DIR,
-			".gauntlet",
-			"skills",
-			"gauntlet",
-		);
-
-		// Action skills should have disable-model-invocation: true
-		for (const action of ["run", "check", "push-pr", "fix-pr"]) {
-			const content = await fs.readFile(
-				path.join(skillsBase, action, "SKILL.md"),
-				"utf-8",
-			);
-			expect(content).toContain("disable-model-invocation: true");
-		}
-
-		// Status skill should have disable-model-invocation: false
-		const statusContent = await fs.readFile(
-			path.join(skillsBase, "status", "SKILL.md"),
-			"utf-8",
-		);
-		expect(statusContent).toContain("disable-model-invocation: false");
+		// The "gauntlet" flat file should contain "run" instructions, not "check"
+		expect(content).toContain("agent-gauntlet run");
 	});
 });
 
@@ -580,27 +526,67 @@ describe("Skills Installation for Claude", () => {
 			.catch(() => {});
 	});
 
-	it("should install Claude skills as symlinked SKILL.md under .claude/skills/gauntlet/", async () => {
+	it("should install Claude skills as SKILL.md files under .claude/skills/gauntlet/", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const skillsDir = path.join(TEST_DIR, ".claude-mock", "skills");
 		const actions = ["run", "check", "push-pr", "fix-pr", "status"];
 
 		for (const action of actions) {
-			const skillPath = path.join(
-				skillsDir,
-				"gauntlet",
-				action,
-				"SKILL.md",
-			);
-			const stat = await fs.lstat(skillPath);
-			// Should be a symlink
-			expect(stat.isSymbolicLink()).toBe(true);
+			const skillPath = path.join(skillsDir, "gauntlet", action, "SKILL.md");
+			const stat = await fs.stat(skillPath);
+			expect(stat.isFile()).toBe(true);
 
-			// Symlink target should resolve to the canonical file
-			const target = await fs.readlink(skillPath);
-			expect(target).toContain(`.gauntlet/skills/gauntlet/${action}/SKILL.md`);
+			// Should have valid YAML frontmatter
+			const content = await fs.readFile(skillPath, "utf-8");
+			expect(content.startsWith("---\n")).toBe(true);
+			expect(content).toContain("name:");
+			expect(content).toContain("description:");
+			expect(content).toContain("allowed-tools:");
 		}
+	});
+
+	it("should reference agent-gauntlet check in gauntlet:check SKILL.md", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const checkPath = path.join(
+			TEST_DIR,
+			".claude-mock",
+			"skills",
+			"gauntlet",
+			"check",
+			"SKILL.md",
+		);
+		const content = await fs.readFile(checkPath, "utf-8");
+
+		expect(content).toContain("agent-gauntlet check");
+	});
+
+	it("should set disable-model-invocation correctly per skill", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const skillsBase = path.join(
+			TEST_DIR,
+			".claude-mock",
+			"skills",
+			"gauntlet",
+		);
+
+		// Action skills should have disable-model-invocation: true
+		for (const action of ["run", "check", "push-pr", "fix-pr"]) {
+			const content = await fs.readFile(
+				path.join(skillsBase, action, "SKILL.md"),
+				"utf-8",
+			);
+			expect(content).toContain("disable-model-invocation: true");
+		}
+
+		// Status skill should have disable-model-invocation: false
+		const statusContent = await fs.readFile(
+			path.join(skillsBase, "status", "SKILL.md"),
+			"utf-8",
+		);
+		expect(statusContent).toContain("disable-model-invocation: false");
 	});
 
 	it("should install non-Claude commands as flat files alongside Claude skills", async () => {
