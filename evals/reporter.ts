@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import type { EvalResults, GroundTruthIssue } from "./types.js";
+import type { ConfigAggregate, EvalResults, GroundTruthIssue } from "./types.js";
 
 export function printReport(
 	results: EvalResults,
@@ -12,7 +12,13 @@ export function printReport(
 	console.log(`Ground truth issues: ${results.groundTruthCount}`);
 	console.log("");
 
-	// Config comparison table sorted by F1 desc
+	printConfigTable(results);
+	printDetectionRates(results, groundTruth);
+
+	console.log("");
+}
+
+function printConfigTable(results: EvalResults): void {
 	const sorted = [...results.configs].sort((a, b) => b.meanF1 - a.meanF1);
 
 	console.log(chalk.bold("Configuration Comparison (sorted by F1):"));
@@ -29,34 +35,39 @@ export function printReport(
 	console.log(chalk.dim("-".repeat(71)));
 
 	for (const config of sorted) {
-		const consistency =
-			Object.values(config.consistency).length > 0
-				? Object.values(config.consistency).reduce((a, b) => a + b, 0) /
-					Object.values(config.consistency).length
-				: 0;
-
-		const timeStr = `${(config.meanDurationMs / 1000).toFixed(1)}s`;
-		const f1Color =
-			config.meanF1 >= 0.7
-				? chalk.green
-				: config.meanF1 >= 0.4
-					? chalk.yellow
-					: chalk.red;
-
-		console.log(
-			config.configLabel.padEnd(35) +
-				config.meanPrecision.toFixed(2).padStart(7) +
-				config.meanRecall.toFixed(2).padStart(7) +
-				f1Color(config.meanF1.toFixed(2).padStart(7)) +
-				(consistency * 100).toFixed(0).padStart(6) +
-				"%" +
-				timeStr.padStart(7),
-		);
+		console.log(formatConfigRow(config));
 	}
 
 	console.log("");
+}
 
-	// Per-issue detection rates
+function formatConfigRow(config: ConfigAggregate): string {
+	const vals = Object.values(config.consistency);
+	const consistency =
+		vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+	const timeStr = `${(config.meanDurationMs / 1000).toFixed(1)}s`;
+	const f1Color =
+		config.meanF1 >= 0.7
+			? chalk.green
+			: config.meanF1 >= 0.4
+				? chalk.yellow
+				: chalk.red;
+
+	return (
+		config.configLabel.padEnd(35) +
+		config.meanPrecision.toFixed(2).padStart(7) +
+		config.meanRecall.toFixed(2).padStart(7) +
+		f1Color(config.meanF1.toFixed(2).padStart(7)) +
+		(consistency * 100).toFixed(0).padStart(6) +
+		"%" +
+		timeStr.padStart(7)
+	);
+}
+
+function printDetectionRates(
+	results: EvalResults,
+	groundTruth: GroundTruthIssue[],
+): void {
 	console.log(chalk.bold("Per-Issue Detection Rates:"));
 
 	const byDifficulty = {
@@ -77,26 +88,33 @@ export function printReport(
 		);
 
 		for (const issueId of issueIds) {
-			const gt = groundTruth.find((g) => g.id === issueId);
-			if (!gt) continue;
-			const rates: string[] = [];
-
-			for (const config of results.configs) {
-				const rate = config.consistency[issueId] ?? 0;
-				const pct = `${(rate * 100).toFixed(0)}%`;
-				const colored =
-					rate >= 0.67
-						? chalk.green(pct)
-						: rate >= 0.33
-							? chalk.yellow(pct)
-							: chalk.red(pct);
-				rates.push(`${config.configLabel.split("/")[0]}:${colored}`);
-			}
-
-			const toolUseTag = gt.requires_tool_use ? chalk.cyan(" [tool-use]") : "";
-			console.log(`    ${issueId}${toolUseTag}: ${rates.join("  ")}`);
+			printIssueLine(issueId, groundTruth, results);
 		}
 	}
+}
 
-	console.log("");
+function printIssueLine(
+	issueId: string,
+	groundTruth: GroundTruthIssue[],
+	results: EvalResults,
+): void {
+	const gt = groundTruth.find((g) => g.id === issueId);
+	if (!gt) return;
+	const rates = formatIssueRates(issueId, results);
+	const toolUseTag = gt.requires_tool_use ? chalk.cyan(" [tool-use]") : "";
+	console.log(`    ${issueId}${toolUseTag}: ${rates.join("  ")}`);
+}
+
+function colorByRate(rate: number, pct: string): string {
+	if (rate >= 0.67) return chalk.green(pct);
+	if (rate >= 0.33) return chalk.yellow(pct);
+	return chalk.red(pct);
+}
+
+function formatIssueRates(issueId: string, results: EvalResults): string[] {
+	return results.configs.map((config) => {
+		const rate = config.consistency[issueId] ?? 0;
+		const pct = `${(rate * 100).toFixed(0)}%`;
+		return `${config.configLabel.split("/")[0]}:${colorByRate(rate, pct)}`;
+	});
 }

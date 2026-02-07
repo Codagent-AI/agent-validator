@@ -6,28 +6,37 @@ interface ParsedOutput {
 }
 
 export function parseAdapterOutput(raw: string): ParsedOutput {
-	// Try markdown code block first: ```json ... ```
-	const codeBlockMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-	if (codeBlockMatch?.[1]) {
-		const parsed = tryParseJson(codeBlockMatch[1]);
-		if (parsed) return normalize(parsed);
-	}
+	const fromCodeBlock = tryParseCodeBlock(raw);
+	if (fromCodeBlock) return normalize(fromCodeBlock);
 
-	// Try finding a JSON object with "status" field
-	const jsonObjects = extractJsonObjects(raw);
-	for (const obj of jsonObjects) {
-		const parsed = tryParseJson(obj);
-		if (parsed?.status) return normalize(parsed);
-	}
+	const fromStatusObj = tryParseStatusObject(raw);
+	if (fromStatusObj) return normalize(fromStatusObj);
 
-	// Try first JSON object found
-	const first = jsonObjects[0];
-	if (first) {
-		const parsed = tryParseJson(first);
-		if (parsed) return normalize(parsed);
-	}
+	const fromFirstObj = tryParseFirstObject(raw);
+	if (fromFirstObj) return normalize(fromFirstObj);
 
 	return { status: "error", violations: [] };
+}
+
+function tryParseCodeBlock(raw: string): Record<string, unknown> | null {
+	const match = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+	if (!match?.[1]) return null;
+	return tryParseJson(match[1]);
+}
+
+function tryParseStatusObject(raw: string): Record<string, unknown> | null {
+	for (const obj of extractJsonObjects(raw)) {
+		const parsed = tryParseJson(obj);
+		if (parsed?.status) return parsed;
+	}
+	return null;
+}
+
+function tryParseFirstObject(raw: string): Record<string, unknown> | null {
+	const objects = extractJsonObjects(raw);
+	const first = objects[0];
+	if (!first) return null;
+	return tryParseJson(first);
 }
 
 function extractJsonObjects(text: string): string[] {
@@ -36,16 +45,13 @@ function extractJsonObjects(text: string): string[] {
 	let start = -1;
 
 	for (let i = 0; i < text.length; i++) {
-		if (text[i] === "{") {
-			if (depth === 0) start = i;
-			depth++;
-		} else if (text[i] === "}") {
-			depth--;
-			if (depth === 0 && start !== -1) {
-				results.push(text.slice(start, i + 1));
-				start = -1;
-			}
-		}
+		const ch = text[i];
+		if (ch === "{" && depth++ === 0) start = i;
+		if (ch !== "}") continue;
+		depth--;
+		if (depth !== 0 || start === -1) continue;
+		results.push(text.slice(start, i + 1));
+		start = -1;
 	}
 
 	return results;

@@ -28,13 +28,8 @@ export async function judgeRun(
 		timeoutMs: 120_000,
 	});
 
-	// Parse the judge's JSON response
-	const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
-	if (!jsonMatch) {
-		throw new Error("Judge did not return valid JSON");
-	}
-
-	const parsed = JSON.parse(jsonMatch[0]);
+	// Parse the judge's JSON response — prefer fenced code block, fall back to brace extraction
+	const parsed = parseJudgeResponse(rawOutput);
 
 	return {
 		matches: Array.isArray(parsed.matches)
@@ -56,4 +51,30 @@ export async function judgeRun(
 			: [],
 		reasoning: String(parsed.reasoning ?? ""),
 	};
+}
+
+function parseJudgeResponse(raw: string): Record<string, unknown> {
+	// Prefer fenced JSON code block
+	const fenced = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+	if (fenced?.[1]) {
+		try {
+			return JSON.parse(fenced[1].trim());
+		} catch {
+			// fall through to brace extraction
+		}
+	}
+
+	// Fall back to outermost brace pair
+	const braceMatch = raw.match(/\{[\s\S]*\}/);
+	if (!braceMatch) {
+		throw new Error("Judge did not return valid JSON");
+	}
+
+	try {
+		return JSON.parse(braceMatch[0]);
+	} catch (err) {
+		throw new Error(
+			`Judge returned malformed JSON: ${err instanceof Error ? err.message : err}`,
+		);
+	}
 }
