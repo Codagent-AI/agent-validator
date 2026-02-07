@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ClaudeStopHookAdapter } from "../../../src/hooks/adapters/claude-stop-hook.js";
-import type {
-	GauntletStatus,
-	StopHookResult,
-} from "../../../src/hooks/adapters/types.js";
+import type { GauntletStatus } from "../../../src/types/gauntlet-status.js";
+import type { StopHookResult } from "../../../src/hooks/adapters/types.js";
 
 /**
  * Factory for creating test StopHookResult objects with sensible defaults.

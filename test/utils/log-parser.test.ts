@@ -63,7 +63,7 @@ Status: FAIL
 		const result = await parseLogFile(logPath);
 		expect(result).not.toBeNull();
 		expect(result?.jobId).toBe("check_src");
-		expect(result?.adapterFailures[0].adapterName).toBe("check");
+		expect(result?.adapterFailures[0]?.adapterName).toBe("check");
 	});
 
 	it("returns null for passing review", async () => {
@@ -142,8 +142,8 @@ Status: FAIL
 
 		const result = await findPreviousFailures(TEST_DIR);
 		expect(result.length).toBe(1);
-		expect(result[0].jobId).toBe("review_src_claude");
-		expect(result[0].adapterFailures[0].violations[0].issue).toBe("New issue");
+		expect(result[0]!.jobId).toBe("review_src_claude");
+		expect(result[0]!.adapterFailures[0]?.violations[0]?.issue).toBe("New issue");
 	});
 
 	it("groups independently for different prefixes", async () => {
@@ -183,6 +183,6 @@ Status: FAIL
 
 		const result = await findPreviousFailures(TEST_DIR, "review");
 		expect(result.length).toBe(1);
-		expect(result[0].jobId).toBe("review_src_claude");
+		expect(result[0]!.jobId).toBe("review_src_claude");
 	});
 });

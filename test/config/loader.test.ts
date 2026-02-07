@@ -82,23 +82,23 @@ Check style.
 		expect(config.project.base_branch).toBe("origin/dev");
 		expect(config.project.log_dir).toBe("test_logs");
 		expect(config.project.entry_points).toHaveLength(1);
-		expect(config.project.entry_points[0].path).toBe("src/");
+		expect(config.project.entry_points[0]!.path).toBe("src/");
 	});
 
 	it("should load check gates correctly", async () => {
 		const config = await loadConfig(TEST_DIR);
 
 		expect(Object.keys(config.checks)).toContain("lint");
-		expect(config.checks.lint.command).toBe("npm run lint");
+		expect(config.checks.lint!.command).toBe("npm run lint");
 	});
 
 	it("should load review gates correctly", async () => {
 		const config = await loadConfig(TEST_DIR);
 
 		expect(Object.keys(config.reviews)).toContain("security");
-		expect(config.reviews.security.name).toBe("security");
-		expect(config.reviews.security.cli_preference).toEqual(["gemini"]);
-		expect(config.reviews.security.promptContent).toContain(
+		expect(config.reviews.security!.name).toBe("security");
+		expect(config.reviews.security!.cli_preference).toEqual(["gemini"]);
+		expect(config.reviews.security!.promptContent).toContain(
 			"Check for vulnerabilities.",
 		);
 	});
@@ -107,7 +107,7 @@ Check style.
 		const config = await loadConfig(TEST_DIR);
 
 		expect(Object.keys(config.reviews)).toContain("style");
-		expect(config.reviews.style.cli_preference).toEqual(["claude", "gemini"]);
+		expect(config.reviews.style!.cli_preference).toEqual(["claude", "gemini"]);
 	});
 
 	it("should reject check gate with fail_fast when parallel is true", async () => {
@@ -130,7 +130,7 @@ fail_fast: true
 		// Clean up the invalid file first
 		try {
 			await fs.unlink(path.join(CHECKS_DIR, "invalid.yml"));
-		} catch {}
+		} catch { }
 
 		await fs.writeFile(
 			path.join(CHECKS_DIR, "valid.yml"),
@@ -144,8 +144,8 @@ fail_fast: true
 
 		const config = await loadConfig(TEST_DIR);
 		expect(config.checks.valid).toBeDefined();
-		expect(config.checks.valid.fail_fast).toBe(true);
-		expect(config.checks.valid.parallel).toBe(false);
+		expect(config.checks.valid!.fail_fast).toBe(true);
+		expect(config.checks.valid!.parallel).toBe(false);
 	});
 });
 
@@ -197,11 +197,11 @@ entry_points:
 
 		const review = config.reviews["code-quality"];
 		expect(review).toBeDefined();
-		expect(review.promptContent).toContain("Bugs");
-		expect(review.promptContent).toContain("Security");
-		expect(review.promptContent).toContain("Maintainability");
-		expect(review.promptContent).toContain("Performance");
-		expect(review.num_reviews).toBe(2);
+		expect(review!.promptContent).toContain("Bugs");
+		expect(review!.promptContent).toContain("Security");
+		expect(review!.promptContent).toContain("Maintainability");
+		expect(review!.promptContent).toContain("Performance");
+		expect(review!.num_reviews).toBe(2);
 	});
 
 	async function setupSingleReviewEnv(yamlContent: string) {
@@ -257,10 +257,10 @@ entry_points:
 
 		const review = config.reviews.minimal;
 		expect(review).toBeDefined();
-		expect(review.num_reviews).toBe(1);
-		expect(review.parallel).toBe(true);
-		expect(review.run_in_ci).toBe(true);
-		expect(review.run_locally).toBe(true);
+		expect(review!.num_reviews).toBe(1);
+		expect(review!.parallel).toBe(true);
+		expect(review!.run_in_ci).toBe(true);
+		expect(review!.run_locally).toBe(true);
 	});
 
 	it("should allow user-defined .md review and YAML builtin review to coexist", async () => {
@@ -284,9 +284,9 @@ entry_points:
 		const config = await loadConfig(tmpDir);
 
 		expect(config.reviews["my-builtin"]).toBeDefined();
-		expect(config.reviews["my-builtin"].promptContent).toContain("Bugs");
+		expect(config.reviews["my-builtin"]!.promptContent).toContain("Bugs");
 		expect(config.reviews["my-custom"]).toBeDefined();
-		expect(config.reviews["my-custom"].num_reviews).toBe(3);
+		expect(config.reviews["my-custom"]!.num_reviews).toBe(3);
 	});
 
 	it("should apply CLI preference merging to YAML builtin reviews", async () => {
@@ -308,7 +308,7 @@ entry_points:
 		);
 		const config = await loadConfig(tmpDir);
 
-		expect(config.reviews["code-quality"].cli_preference).toEqual([
+		expect(config.reviews["code-quality"]!.cli_preference).toEqual([
 			"claude",
 			"gemini",
 		]);
@@ -331,7 +331,7 @@ entry_points:
 			},
 		);
 		const config = await loadConfig(tmpDir);
-		const content = config.reviews["code-quality"].promptContent!;
+		const content = config.reviews["code-quality"]!.promptContent!;
 
 		// Pure markdown — no frontmatter delimiters
 		expect(content).not.toMatch(/^---/);

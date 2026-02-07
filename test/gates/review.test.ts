@@ -91,11 +91,15 @@ index abc123..def456 100644
 
 	it("should only create adapter-specific logs and no generic log", async () => {
 		const jobId = "review:src:code-quality";
-		const config: ReviewGateConfig & ReviewPromptFrontmatter = {
+		const config = {
 			name: "code-quality",
 			cli_preference: ["codex", "claude"],
 			num_reviews: 2,
-		};
+			prompt: "Review the code",
+			parallel: true,
+			run_in_ci: true,
+			run_locally: true,
+		} as ReviewGateConfig & ReviewPromptFrontmatter;
 
 		const loggerFactory = logger.createLoggerFactory(jobId);
 
@@ -127,19 +131,21 @@ index abc123..def456 100644
 		}
 
 		// With round-robin dispatch, log files use @<index> pattern
-		if (
-			!result.logPaths[0]?.includes("review_src_code-quality_codex@1.1.log")
-		) {
+		const hasCodex = result.logPaths.some((p) =>
+			p.includes("review_src_code-quality_codex@1.1.log"),
+		);
+		if (!hasCodex) {
 			throw new Error(
-				`Expected result.logPaths[0] to contain "review_src_code-quality_codex@1.1.log" but got "${result.logPaths[0]}"`,
+				`Expected result.logPaths to contain "review_src_code-quality_codex@1.1.log" but got full list: ${JSON.stringify(result.logPaths)}`,
 			);
 		}
 
-		if (
-			!result.logPaths[1]?.includes("review_src_code-quality_claude@2.1.log")
-		) {
+		const hasClaude = result.logPaths.some((p) =>
+			p.includes("review_src_code-quality_claude@2.1.log"),
+		);
+		if (!hasClaude) {
 			throw new Error(
-				`Expected result.logPaths[1] to contain "review_src_code-quality_claude@2.1.log" but got "${result.logPaths[1]}"`,
+				`Expected result.logPaths to contain "review_src_code-quality_claude@2.1.log" but got full list: ${JSON.stringify(result.logPaths)}`,
 			);
 		}
 
@@ -165,36 +171,37 @@ index abc123..def456 100644
 			);
 		}
 
-		// Verify multiplexed content - with round-robin, codex is @1, claude is @2
-		const codexLog = await fs.readFile(
-			path.join(logsDir, "review_src_code-quality_codex@1.1.log"),
-			"utf-8",
-		);
-		if (!codexLog.includes("Starting review: code-quality")) {
-			throw new Error(
-				`Expected codex log to contain "Starting review: code-quality" but got: ${codexLog.substring(0, 200)}...`,
-			);
-		}
-		if (!codexLog.includes("Review result (codex@1): pass")) {
-			throw new Error(
-				`Expected codex log to contain "Review result (codex@1): pass" but got: ${codexLog.substring(0, 200)}...`,
-			);
-		}
+		// Helper to verify log content
+		const verifyLogContent = async (options: {
+			filename: string;
+			adapterName: string;
+			id: string;
+		}) => {
+			const { filename, adapterName, id } = options;
+			const content = await fs.readFile(path.join(logsDir, filename), "utf-8");
+			if (!content.includes("Starting review: code-quality")) {
+				throw new Error(
+					`Expected ${adapterName} log to contain "Starting review: code-quality" but got: ${content.substring(0, 200)}...`,
+				);
+			}
+			const expectedResult = `Review result (${adapterName}@${id}): pass`;
+			if (!content.includes(expectedResult)) {
+				throw new Error(
+					`Expected ${adapterName} log to contain "${expectedResult}" but got: ${content.substring(0, 200)}...`,
+				);
+			}
+		};
 
-		const claudeLog = await fs.readFile(
-			path.join(logsDir, "review_src_code-quality_claude@2.1.log"),
-			"utf-8",
-		);
-		if (!claudeLog.includes("Starting review: code-quality")) {
-			throw new Error(
-				`Expected claude log to contain "Starting review: code-quality" but got: ${claudeLog.substring(0, 200)}...`,
-			);
-		}
-		if (!claudeLog.includes("Review result (claude@2): pass")) {
-			throw new Error(
-				`Expected claude log to contain "Review result (claude@2): pass" but got: ${claudeLog.substring(0, 200)}...`,
-			);
-		}
+		await verifyLogContent({
+			filename: "review_src_code-quality_codex@1.1.log",
+			adapterName: "codex",
+			id: "1",
+		});
+		await verifyLogContent({
+			filename: "review_src_code-quality_claude@2.1.log",
+			adapterName: "claude",
+			id: "2",
+		});
 	});
 
 	it("should be handled correctly by ConsoleReporter", async () => {
@@ -328,11 +335,15 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 		executor: ReviewGateExecutor,
 		preferences: string[],
 	) {
-		const config: ReviewGateConfig & ReviewPromptFrontmatter = {
+		const config = {
 			name: "code-quality",
 			cli_preference: preferences,
 			num_reviews: 1,
-		};
+			prompt: "Review the code",
+			parallel: true,
+			run_in_ci: true,
+			run_locally: true,
+		} as ReviewGateConfig & ReviewPromptFrontmatter;
 		const loggerFactory = logger.createLoggerFactory("review:src:test");
 		return executor.execute(
 			"review:src:test",
@@ -411,7 +422,10 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 		expect(result.status).toBe("pass");
 		expect(result.subResults).toBeDefined();
 		if (result.subResults) {
-			expect(result.subResults.map((r) => r.adapter)).not.toContain("codex");
+			// biome-ignore lint/suspicious/noExplicitAny: Testing subResults adapter property
+			expect(result.subResults.map((r: any) => r.adapter)).not.toContain(
+				"codex",
+			);
 		}
 	});
 

@@ -5,63 +5,82 @@ export type DiffFileRange = Set<number>;
  * Valid line numbers are those that appear in the diff as added or modified lines.
  */
 export function parseDiff(diff: string): Map<string, DiffFileRange> {
-	const fileRanges = new Map<string, DiffFileRange>();
-	const lines = diff.split("\n");
+	return new DiffParser().parse(diff);
+}
 
-	let currentFile: string | null = null;
-	let currentRanges: DiffFileRange | null = null;
-	let currentLineNumber = 0;
+class DiffParser {
+	private fileRanges = new Map<string, DiffFileRange>();
+	private currentFile: string | null = null;
+	private currentRanges: DiffFileRange | null = null;
+	private currentLineNumber = 0;
 
-	for (const line of lines) {
-		// Parse file header: diff --git a/path/to/file b/path/to/file
-		if (line.startsWith("diff --git")) {
-			const parts = line.split(" ");
-			if (parts.length >= 4) {
-				// Extract filename from b/path/to/file (target file)
-				const targetPath = parts[3];
-				// Remove 'b/' prefix
-				currentFile = targetPath.startsWith("b/")
-					? targetPath.substring(2)
-					: targetPath;
-
-				// Skip .git/ paths
-				if (currentFile.startsWith(".git/")) {
-					currentFile = null;
-					currentRanges = null;
-					continue;
-				}
-
-				currentRanges = new Set<number>();
-				fileRanges.set(currentFile, currentRanges);
-			}
-			continue;
+	parse(diff: string): Map<string, DiffFileRange> {
+		const lines = diff.split("\n");
+		for (const line of lines) {
+			this.processLine(line);
 		}
-
-		// Skip if we're ignoring this file (e.g. .git/)
-		if (!currentFile || !currentRanges) continue;
-
-		// Parse hunk header: @@ -old,count +new,count @@
-		if (line.startsWith("@@")) {
-			const match = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-			if (match?.[1]) {
-				currentLineNumber = parseInt(match[1], 10);
-			}
-			continue;
-		}
-
-		// Track added lines
-		if (line.startsWith("+") && !line.startsWith("+++")) {
-			currentRanges.add(currentLineNumber);
-			currentLineNumber++;
-		}
-		// Track context lines (unchanged) to keep line count correct
-		else if (line.startsWith(" ")) {
-			currentLineNumber++;
-		}
-		// Removed lines (-) do not increment the new line counter
+		return this.fileRanges;
 	}
 
-	return fileRanges;
+	private processLine(line: string): void {
+		if (this.tryParseFileHeader(line)) return;
+		if (!this.currentFile || !this.currentRanges) return;
+		if (this.tryParseHunkHeader(line)) return;
+		this.processContentLine(line);
+	}
+
+	private tryParseFileHeader(line: string): boolean {
+		if (!line.startsWith("diff --git")) return false;
+
+		const result = parseFileHeader(line);
+		if (result) {
+			this.currentFile = result;
+			this.currentRanges = new Set<number>();
+			this.fileRanges.set(this.currentFile, this.currentRanges);
+		} else {
+			this.currentFile = null;
+			this.currentRanges = null;
+		}
+		return true;
+	}
+
+	private tryParseHunkHeader(line: string): boolean {
+		if (!line.startsWith("@@")) return false;
+
+		const newLine = parseHunkHeader(line);
+		if (newLine !== null) {
+			this.currentLineNumber = newLine;
+		}
+		return true;
+	}
+
+	private processContentLine(line: string): void {
+		if (!this.currentRanges) return;
+
+		if (line.startsWith("+") && !line.startsWith("+++")) {
+			this.currentRanges.add(this.currentLineNumber);
+			this.currentLineNumber++;
+		} else if (line.startsWith(" ")) {
+			this.currentLineNumber++;
+		}
+	}
+}
+
+function parseFileHeader(line: string): string | null {
+	const parts = line.split(" ");
+	const targetPath = parts[3];
+	if (parts.length >= 4 && targetPath) {
+		const file = targetPath.startsWith("b/")
+			? targetPath.substring(2)
+			: targetPath;
+		return file.startsWith(".git/") ? null : file;
+	}
+	return null;
+}
+
+function parseHunkHeader(line: string): number | null {
+	const match = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+	return match?.[1] ? parseInt(match[1], 10) : null;
 }
 
 /**

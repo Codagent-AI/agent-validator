@@ -121,3 +121,20 @@ The init command SHALL install the fix-pr template command alongside the gauntle
 - **THEN** the existing file SHALL NOT be overwritten
 - **AND** the system SHALL log a message indicating the file already exists and was preserved
 
+### Requirement: Init generates YAML review config with built-in reference
+The `init` command SHALL generate a `.gauntlet/reviews/code-quality.yml` file that references the built-in code-quality review prompt. The generated `config.yml` SHALL reference `code-quality` (the file-based review name) in entry point reviews.
+
+#### Scenario: Default init creates YAML review config
+- **GIVEN** a user runs `agent-gauntlet init`
+- **WHEN** the `.gauntlet/` directory is scaffolded
+- **THEN** `.gauntlet/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
+- **AND** the YAML file SHALL include default settings (`num_reviews: 2`)
+- **AND** `.gauntlet/config.yml` entry points SHALL reference `code-quality` (not `built-in:code-quality`)
+
+#### Scenario: Init with --yes flag creates YAML review config
+- **GIVEN** a user runs `agent-gauntlet init --yes`
+- **WHEN** the `.gauntlet/` directory is scaffolded
+- **THEN** `.gauntlet/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
+- **AND** the YAML file SHALL include default settings (`num_reviews: 2`)
+- **AND** `.gauntlet/config.yml` entry points SHALL reference `code-quality` (not `built-in:code-quality`)
+
