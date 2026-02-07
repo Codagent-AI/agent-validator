@@ -267,7 +267,8 @@ export class CodexAdapter implements CLIAdapter {
 
 		// Otherwise use exec for buffered output
 		try {
-			const cmd = `cat "${tmpFile}" | codex ${args.join(" ")}`;
+			const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, "\\$1")}"`;
+			const cmd = `cat "${tmpFile}" | codex ${args.map(quoteArg).join(" ")}`;
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,

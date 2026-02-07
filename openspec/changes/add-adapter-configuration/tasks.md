@@ -1,6 +1,9 @@
 ## 0. Pre-factoring
 
-No hotspots require pre-factoring. Both hotspot files (`review.ts` at 7.2, `runner.ts` at 8.37) are modified only with additive parameter changes that do not interact with the complex code paths (see `design.md` Pre-factoring section).
+- [x] src/gates/review.ts (Code Health 7.2) — smells: Bumpy Road Ahead, Complex Method, Large Method, Primitive Obsession.
+      Deferral rationale: Changes are additive parameter threading only (adding `adapterConfigs` param to `execute()` and `runSingleReview()`). No interaction with existing complex code paths. Pre-factoring would risk destabilizing unrelated logic.
+- [x] src/core/runner.ts (Code Health 8.37) — smells: Bumpy Road Ahead, Deep Nested Complexity, Complex Method.
+      Deferral rationale: Only change is passing `this.config.project.cli?.adapters` as an additional argument to `reviewExecutor.execute()`. Hoisted `effectiveBaseBranch` to reduce cyclomatic complexity back to baseline.
 
 ## 1. Implementation
 

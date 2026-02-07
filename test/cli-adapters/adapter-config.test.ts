@@ -1,15 +1,15 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-	adapterConfigSchema,
-	cliConfigSchema,
-} from "../../src/config/schema.js";
 import {
 	CLAUDE_THINKING_TOKENS,
 	CODEX_REASONING_EFFORT,
 	GEMINI_THINKING_BUDGET,
 } from "../../src/cli-adapters/thinking-budget.js";
+import {
+	adapterConfigSchema,
+	cliConfigSchema,
+} from "../../src/config/schema.js";
 
 // ─── 2.1 Adapter config schema validation ──────────────────────────────────
 
@@ -40,9 +40,7 @@ describe("adapterConfigSchema", () => {
 		expect(() =>
 			adapterConfigSchema.parse({ thinking_budget: "extreme" }),
 		).toThrow();
-		expect(() =>
-			adapterConfigSchema.parse({ thinking_budget: 42 }),
-		).toThrow();
+		expect(() => adapterConfigSchema.parse({ thinking_budget: 42 })).toThrow();
 	});
 
 	it("rejects non-boolean allow_tool_use", () => {
@@ -124,12 +122,25 @@ describe("thinking budget maps", () => {
 describe("GeminiAdapter applyThinkingSettings", () => {
 	const settingsDir = path.join(process.cwd(), ".gemini");
 	const settingsPath = path.join(settingsDir, "settings.json");
+	let originalSettings: string | null = null;
+	let hadOriginalSettings = false;
+
+	beforeEach(async () => {
+		try {
+			originalSettings = await fs.readFile(settingsPath, "utf-8");
+			hadOriginalSettings = true;
+		} catch {
+			originalSettings = null;
+			hadOriginalSettings = false;
+		}
+	});
 
 	afterEach(async () => {
-		try {
-			await fs.unlink(settingsPath);
-		} catch {
-			// Ignore
+		if (hadOriginalSettings && originalSettings !== null) {
+			await fs.mkdir(settingsDir, { recursive: true });
+			await fs.writeFile(settingsPath, originalSettings);
+		} else {
+			await fs.unlink(settingsPath).catch(() => {});
 		}
 	});
 
@@ -141,9 +152,7 @@ describe("GeminiAdapter applyThinkingSettings", () => {
 		}
 
 		// Import the real GeminiAdapter class directly
-		const { GeminiAdapter } = await import(
-			"../../src/cli-adapters/gemini.js"
-		);
+		const { GeminiAdapter } = await import("../../src/cli-adapters/gemini.js");
 		const adapter = new GeminiAdapter();
 
 		// biome-ignore lint/suspicious/noExplicitAny: Testing private method
@@ -168,9 +177,7 @@ describe("GeminiAdapter applyThinkingSettings", () => {
 		const original = JSON.stringify({ existingKey: "value" });
 		await fs.writeFile(settingsPath, original);
 
-		const { GeminiAdapter } = await import(
-			"../../src/cli-adapters/gemini.js"
-		);
+		const { GeminiAdapter } = await import("../../src/cli-adapters/gemini.js");
 		const adapter = new GeminiAdapter();
 
 		// biome-ignore lint/suspicious/noExplicitAny: Testing private method

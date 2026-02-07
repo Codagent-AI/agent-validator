@@ -386,12 +386,15 @@ ${body.trim()}
 		}
 
 		return async () => {
-			if (existed && backup !== null) {
-				await fs.writeFile(settingsPath, backup);
-			} else {
-				await fs.unlink(settingsPath).catch(() => {});
+			try {
+				if (existed && backup !== null) {
+					await fs.writeFile(settingsPath, backup);
+				} else {
+					await fs.unlink(settingsPath).catch(() => {});
+				}
+			} finally {
+				releaseLock();
 			}
-			releaseLock();
 		};
 	}
 
