@@ -1,0 +1,1 @@
+../../../../.gauntlet/skills/gauntlet/push-pr/SKILL.md

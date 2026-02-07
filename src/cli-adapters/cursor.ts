@@ -48,6 +48,14 @@ export class CursorAdapter implements CLIAdapter {
 		return null;
 	}
 
+	getProjectSkillDir(): string | null {
+		return null;
+	}
+
+	getUserSkillDir(): string | null {
+		return null;
+	}
+
 	getCommandExtension(): string {
 		return ".md";
 	}

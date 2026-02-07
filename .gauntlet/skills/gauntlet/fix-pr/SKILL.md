@@ -1,9 +1,11 @@
 ---
+name: fix-pr
 description: Fix CI failures or address review comments on a pull request
+disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# /fix-pr
+# /gauntlet:fix-pr
 Fix CI failures or address review comments on the current pull request.
 
 1. Check CI status and review comments: `gh pr checks` and `gh pr view --comments`
