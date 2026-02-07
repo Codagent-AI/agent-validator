@@ -30,7 +30,7 @@ This change supersedes `add-built-in-reviews`. That change should be archived be
 
 ### `init` generates YAML review file
 - **Decision**: `init` creates `.gauntlet/reviews/code-quality.yml` containing `builtin: code-quality` with default settings (`num_reviews: 2`). Config.yml references `code-quality` in entry point reviews.
-- **Rationale**: Gives users a visible file they can inspect and customize. The YAML format makes the builtin reference and settings explicit.
+- **Rationale**: Gives users a visible file they can inspect and customize. The YAML format makes the built-in reference and settings explicit.
 
 ### Remove `built-in:` prefix from entry points
 - **Decision**: Remove the `isBuiltInReview()` check and `loadBuiltInReview()` call from the entry point resolution in `loader.ts`. Built-in reviews are now loaded through the normal YAML review file path.
