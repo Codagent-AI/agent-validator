@@ -5,7 +5,7 @@
       "matching_content_path": "test/**",
       "rules": [
         {
-          "name": "DRY Violations",
+          "name": "Code Duplication",
           "weight": 0.5
         },
         {
@@ -26,7 +26,7 @@
       "matching_content_path": "src/**",
       "rules": [
         {
-          "name": "DRY Violations",
+          "name": "Code Duplication",
           "weight": 1.0
         }
       ]

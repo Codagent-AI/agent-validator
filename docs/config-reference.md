@@ -187,7 +187,7 @@ The review prompt is the Markdown content after the YAML frontmatter. Optionally
 
 ### YAML reviews (`.yml`/`.yaml`)
 
-YAML review files must specify exactly one of `prompt_file` or `skill_name`.
+YAML review files must specify exactly one of `prompt_file`, `skill_name`, or `builtin`.
 
 ### Schema (frontmatter for `.md`, top-level for `.yml`)
 
@@ -206,9 +206,11 @@ YAML review files must specify exactly one of `prompt_file` or `skill_name`.
 - **model**: string (optional)
   Optional model hint passed to adapters that support it. Adapters that don't support model selection will ignore this value.
 - **prompt_file**: string (optional)
-  Path to an external file containing the review prompt. Relative paths resolve from `.gauntlet/`. Absolute paths are allowed but log a security warning. For `.md` files, this overrides the markdown body. For `.yml` files, this is one of two required prompt sources. Mutually exclusive with `skill_name`.
+  Path to an external file containing the review prompt. Relative paths resolve from `.gauntlet/`. Absolute paths are allowed but log a security warning. For `.md` files, this overrides the markdown body. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `skill_name` and `builtin`.
 - **skill_name**: string (optional)
-  Name of a CLI skill to delegate the review to. When set, no prompt content is loaded. For `.yml` files, this is one of two required prompt sources. Mutually exclusive with `prompt_file`.
+  Name of a CLI skill to delegate the review to. When set, no prompt content is loaded. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `prompt_file` and `builtin`.
+- **builtin**: string (optional, `.yml` only)
+  Name of a built-in review prompt bundled with the package (e.g. `code-quality`). Loads the prompt from the built-in review library. Mutually exclusive with `prompt_file` and `skill_name`.
 
 **JSON Output format**
 
@@ -256,5 +258,12 @@ cli_preference:
 
 ```yaml
 skill_name: code-review
+num_reviews: 2
+```
+
+**YAML review with built-in prompt:**
+
+```yaml
+builtin: code-quality
 num_reviews: 2
 ```

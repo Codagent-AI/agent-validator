@@ -90,14 +90,26 @@ export const reviewYamlSchema = z
 		timeout: z.number().optional(),
 		prompt_file: z.string().optional(),
 		skill_name: z.string().optional(),
+		builtin: z.string().optional(),
 	})
-	.refine((data) => !(data.prompt_file && data.skill_name), {
-		message:
-			"'prompt_file' and 'skill_name' are mutually exclusive. Specify only one.",
-	})
-	.refine((data) => data.prompt_file || data.skill_name, {
-		message:
-			"YAML review files must specify exactly one of 'prompt_file' or 'skill_name'.",
+	.superRefine((data, ctx) => {
+		const sources = [data.prompt_file, data.skill_name, data.builtin].filter(
+			Boolean,
+		);
+		if (sources.length > 1) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message:
+					"'prompt_file', 'skill_name', and 'builtin' are mutually exclusive. Specify only one.",
+			});
+		}
+		if (sources.length === 0) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message:
+					"YAML review files must specify exactly one of 'prompt_file', 'skill_name', or 'builtin'.",
+			});
+		}
 	});
 
 export const entryPointSchema = z.object({
