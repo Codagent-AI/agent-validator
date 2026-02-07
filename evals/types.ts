@@ -1,0 +1,89 @@
+export type EvalAdapterName = "claude" | "codex" | "gemini";
+
+export interface EvalConfiguration {
+	adapter: EvalAdapterName;
+	allowToolUse: boolean;
+	thinkingBudget: string;
+	label: string;
+}
+
+export interface GroundTruthIssue {
+	id: string;
+	file: string;
+	line_range: [number, number];
+	description: string;
+	category: "bug" | "security" | "performance";
+	difficulty: "easy" | "medium" | "hard";
+	priority: "critical" | "high" | "medium" | "low";
+	requires_tool_use: boolean;
+}
+
+export interface AdapterViolation {
+	file: string;
+	line: number;
+	issue: string;
+	fix?: string;
+	priority: string;
+	status: string;
+}
+
+export interface AdapterRunResult {
+	configLabel: string;
+	adapter: EvalAdapterName;
+	runIndex: number;
+	rawOutput: string;
+	violations: AdapterViolation[];
+	status: "pass" | "fail" | "error";
+	durationMs: number;
+	error?: string;
+	telemetry: string[];
+}
+
+export interface JudgeMatch {
+	groundTruthId: string;
+	violationIndex: number;
+	confidence: "high" | "medium" | "low";
+	reasoning: string;
+}
+
+export interface JudgeResult {
+	matches: JudgeMatch[];
+	missedIssues: string[];
+	falsePositives: number[];
+	reasoning: string;
+}
+
+export interface RunScore {
+	configLabel: string;
+	adapter: EvalAdapterName;
+	runIndex: number;
+	durationMs: number;
+	truePositives: number;
+	falsePositives: number;
+	missedIssues: string[];
+	precision: number;
+	recall: number;
+	f1: number;
+}
+
+export interface ConfigAggregate {
+	configLabel: string;
+	adapter: EvalAdapterName;
+	allowToolUse: boolean;
+	thinkingBudget: string;
+	runs: RunScore[];
+	meanPrecision: number;
+	meanRecall: number;
+	meanF1: number;
+	meanDurationMs: number;
+	consistency: Record<string, number>;
+}
+
+export interface EvalResults {
+	timestamp: string;
+	fixture: string;
+	groundTruthCount: number;
+	configs: ConfigAggregate[];
+	rawRuns: AdapterRunResult[];
+	judgeResults: JudgeResult[];
+}

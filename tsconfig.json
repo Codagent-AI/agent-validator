@@ -27,6 +27,7 @@
   },
   "exclude": [
     "test/**/*",
-    "test_filter.ts"
+    "test_filter.ts",
+    "evals/fixtures/**/*"
   ]
 }

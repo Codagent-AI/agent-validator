@@ -34,3 +34,7 @@ gauntlet_logs
 # Finder (MacOS) folder config
 .DS_Store
 bin/
+
+# eval results (except .gitkeep)
+evals/results/*
+!evals/results/.gitkeep

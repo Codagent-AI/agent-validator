@@ -1,0 +1,121 @@
+issues:
+  - id: sql-injection
+    file: src/api/handler.ts
+    line_range: [31, 31]
+    description: >
+      SQL injection via string concatenation. User-supplied userId is interpolated
+      directly into a SQL query string without parameterization or escaping.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+
+  - id: hardcoded-secret
+    file: src/api/handler.ts
+    line_range: [133, 134]
+    description: >
+      Hardcoded API key and database credentials exposed in source code. The config
+      object contains a live API key and a database connection string with plaintext
+      password.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+
+  - id: null-deref
+    file: src/api/handler.ts
+    line_range: [66, 67]
+    description: >
+      Null dereference on findUser() return value. findUser() returns
+      Record<string, unknown> | null, but the result is accessed with .email
+      without a null check, causing a runtime error when user is not found.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+
+  - id: missing-await
+    file: src/api/handler.ts
+    line_range: [34, 34]
+    description: >
+      Missing await on async cache.set() call. The cache write is fire-and-forget,
+      so subsequent reads may not see the cached value, and errors are silently lost.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+
+  - id: cache-leak
+    file: src/utils/cache.ts
+    line_range: [10, 12]
+    description: >
+      The Cache constructor starts a setInterval for auto-cleanup but the Cache
+      instance created at module scope (userCache) is never disposed. The interval
+      prevents garbage collection and leaks if Cache instances are created dynamically.
+    category: performance
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+
+  - id: input-validation
+    file: src/api/handler.ts
+    line_range: [57, 57]
+    description: >
+      The age field from the request body is passed directly to updateUser without
+      type checking or validation. A malicious client could send a non-numeric value,
+      negative number, or unreasonable value.
+    category: security
+    difficulty: medium
+    priority: medium
+    requires_tool_use: false
+
+  - id: error-swallow
+    file: src/api/handler.ts
+    line_range: [73, 74]
+    description: >
+      The catch block in handleDeleteUser returns HTTP 200 success even when the
+      delete operation throws an error. The caller believes the deletion succeeded
+      when it may have failed.
+    category: bug
+    difficulty: medium
+    priority: medium
+    requires_tool_use: false
+
+  - id: race-condition
+    file: src/api/handler.ts
+    line_range: [82, 82]
+    description: >
+      The session.refresh() function (in auth/session.ts) has a TOCTOU race condition.
+      It reads the session, performs an async operation, then writes back without
+      atomic check-and-set. Another request could revoke the session between read
+      and write, causing a revoked session to be silently refreshed.
+    category: bug
+    difficulty: hard
+    priority: high
+    requires_tool_use: true
+
+  - id: sanitize-bypass
+    file: src/api/handler.ts
+    line_range: [43, 43]
+    description: >
+      The sanitize() function (in utils/sanitize.ts) strips HTML tags and encodes
+      entities but does not normalize unicode before sanitization. Fullwidth angle
+      brackets and other unicode lookalikes bypass the tag stripper, then get
+      normalized to real angle brackets by downstream systems, enabling XSS.
+    category: security
+    difficulty: hard
+    priority: high
+    requires_tool_use: true
+
+  - id: auth-bypass
+    file: src/api/handler.ts
+    line_range: [24, 24]
+    description: >
+      The checkAuth() function (in api/middleware.ts) only validates session expiry
+      but never checks the session's revoked flag. A revoked session will pass
+      authentication until it naturally expires, allowing continued access after
+      logout or security revocation.
+    category: security
+    difficulty: hard
+    priority: critical
+    requires_tool_use: true

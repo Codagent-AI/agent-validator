@@ -1,0 +1,26 @@
+fixture: fixtures/review-quality
+
+matrix:
+  adapters:
+    - claude
+    - codex
+    - gemini
+  configurations:
+    - name: tools-on-thinking-off
+      allow_tool_use: true
+      thinking_budget: "off"
+    - name: tools-on-thinking-high
+      allow_tool_use: true
+      thinking_budget: "high"
+    - name: tools-off-thinking-off
+      allow_tool_use: false
+      thinking_budget: "off"
+    - name: tools-off-thinking-high
+      allow_tool_use: false
+      thinking_budget: "high"
+
+runs_per_config: 3
+timeout_ms: 300000
+judge:
+  adapter: claude
+  thinking_budget: "high"
