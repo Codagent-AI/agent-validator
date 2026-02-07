@@ -3,9 +3,12 @@
  * Gauntlet Status Script
  *
  * Parses the configured log_dir (default: gauntlet_logs/) to produce a structured
- * summary of the most recent gauntlet session.
+ * summary of the most recent gauntlet session from the .debug.log, plus a file
+ * inventory of all log/JSON files for further inspection.
  *
- * Usage: bun .gauntlet/skills/gauntlet/status/scripts/status.ts
+ * This script handles structured data only (debug log events). Detailed failure
+ * analysis (reading individual check logs, review JSONs) is left to the caller
+ * (the /gauntlet-status skill) since log formats vary by check type.
  */
 
 import fs from "node:fs";
@@ -55,21 +58,6 @@ interface SessionRun {
 	stopHook?: StopHookEntry;
 }
 
-interface ReviewViolation {
-	file?: string;
-	line?: number | string;
-	issue?: string;
-	priority?: string;
-	status?: string;
-	result?: string;
-}
-
-interface ReviewJson {
-	adapter?: string;
-	status?: string;
-	violations?: ReviewViolation[];
-}
-
 // --- Parsing helpers ---
 
 function parseKeyValue(text: string): Record<string, string> {
@@ -99,7 +87,7 @@ function parseEventBody(line: string): string {
 
 // --- Debug log parsing ---
 
-function parseDebugLog(content: string): SessionRun[] {
+function parseDebugLog(content: string, sessionStartTime?: Date): SessionRun[] {
 	const lines = content.split("\n").filter((l) => l.trim());
 	const sessions: SessionRun[] = [];
 	let current: SessionRun | null = null;
@@ -111,6 +99,11 @@ function parseDebugLog(content: string): SessionRun[] {
 
 		switch (event) {
 			case "RUN_START": {
+				// Skip runs that predate the current session's log files
+				if (sessionStartTime && new Date(ts) < sessionStartTime) {
+					current = null;
+					break;
+				}
 				const kv = parseKeyValue(body);
 				current = {
 					start: {
@@ -129,7 +122,6 @@ function parseDebugLog(content: string): SessionRun[] {
 			}
 			case "GATE_RESULT": {
 				if (!current) break;
-				// Body format: <gateId> [cli=<name>] status=<s> duration=<d> [violations=<n>]
 				const gateIdMatch = body.match(/^(\S+)/);
 				const kv = parseKeyValue(body);
 				current.gates.push({
@@ -173,79 +165,75 @@ function parseDebugLog(content: string): SessionRun[] {
 	return sessions;
 }
 
-// --- Review JSON parsing ---
-
-function parseReviewFiles(logDir: string): Map<string, ReviewJson> {
-	const results = new Map<string, ReviewJson>();
-	const files = fs.readdirSync(logDir).filter((f) => f.endsWith(".json"));
-
-	for (const file of files) {
-		try {
-			const content = fs.readFileSync(path.join(logDir, file), "utf-8");
-			const parsed = JSON.parse(content) as ReviewJson;
-			results.set(file, parsed);
-		} catch {
-			// Skip unparseable files
+/**
+ * Find the earliest mtime of non-hidden log files in the directory.
+ * This marks the start of the current session.
+ */
+function getSessionStartTime(logDir: string): Date | undefined {
+	const entries = fs.readdirSync(logDir).filter((f) => !f.startsWith(".") && f !== "previous");
+	let earliest: number | undefined;
+	for (const entry of entries) {
+		const mtime = fs.statSync(path.join(logDir, entry)).mtimeMs;
+		if (earliest === undefined || mtime < earliest) {
+			earliest = mtime;
 		}
 	}
-	return results;
+	return earliest !== undefined ? new Date(earliest) : undefined;
+}
+
+// --- File inventory ---
+
+function formatFileInventory(logDir: string): string[] {
+	const lines: string[] = [];
+	const entries = fs.readdirSync(logDir).filter((f) => !f.startsWith(".") && f !== "previous");
+	if (entries.length === 0) return lines;
+
+	const checks: string[] = [];
+	const reviews: string[] = [];
+	const other: string[] = [];
+
+	for (const entry of entries.sort()) {
+		const fullPath = path.join(logDir, entry);
+		const stat = fs.statSync(fullPath);
+		const sizeKB = (stat.size / 1024).toFixed(1);
+		const line = `- ${fullPath} (${sizeKB} KB)`;
+
+		if (entry.startsWith("review_")) {
+			reviews.push(line);
+		} else if (entry.startsWith("check_")) {
+			checks.push(line);
+		} else {
+			other.push(line);
+		}
+	}
+
+	lines.push("### Log Files");
+	lines.push("");
+	if (checks.length > 0) {
+		lines.push("**Check logs:**");
+		lines.push(...checks);
+	}
+	if (reviews.length > 0) {
+		lines.push("**Review logs/JSON:**");
+		lines.push(...reviews);
+	}
+	if (other.length > 0) {
+		lines.push("**Other:**");
+		lines.push(...other);
+	}
+	lines.push("");
+
+	return lines;
 }
 
 // --- Summary output ---
 
 function formatStatusLine(end: RunEnd): string {
-	const label =
-		end.status === "pass"
-			? "PASSED"
-			: end.status === "fail"
-				? "FAILED"
-				: end.status.toUpperCase();
-	return label;
-}
-
-function formatViolationsSummary(reviews: Map<string, ReviewJson>): string[] {
-	const lines: string[] = [];
-	const allViolations = Array.from(reviews.values()).flatMap(
-		(r) => r.violations ?? [],
-	);
-	const total = allViolations.length;
-	const fixed = allViolations.filter((v) => v.status === "fixed").length;
-	const skipped = allViolations.filter((v) => v.status === "skipped").length;
-	const outstanding = total - fixed - skipped;
-
-	lines.push("### Violations Summary");
-	lines.push(`- Total: ${total}`);
-	lines.push(`- Fixed: ${fixed}`);
-	lines.push(`- Skipped: ${skipped}`);
-	lines.push(`- Outstanding: ${outstanding}`);
-	lines.push("");
-
-	if (outstanding > 0) {
-		lines.push(...formatOutstandingViolations(reviews));
-	}
-	return lines;
-}
-
-function formatOutstandingViolations(
-	reviews: Map<string, ReviewJson>,
-): string[] {
-	const lines: string[] = [];
-	lines.push("#### Outstanding Violations");
-	for (const [file, review] of reviews) {
-		const pending = (review.violations ?? []).filter(
-			(v) => v.status !== "fixed" && v.status !== "skipped",
-		);
-		if (pending.length === 0) continue;
-		lines.push(`\n**${file}** (${review.adapter ?? "unknown"}):`);
-		for (const v of pending) {
-			const loc = v.file ? `${v.file}:${v.line ?? "?"}` : "?";
-			lines.push(
-				`- [${v.priority ?? "?"}] ${loc}: ${v.issue ?? "no description"}`,
-			);
-		}
-	}
-	lines.push("");
-	return lines;
+	return end.status === "pass"
+		? "PASSED"
+		: end.status === "fail"
+			? "FAILED"
+			: end.status.toUpperCase();
 }
 
 function formatAllRuns(sessions: SessionRun[]): string[] {
@@ -265,10 +253,7 @@ function formatAllRuns(sessions: SessionRun[]): string[] {
 	return lines;
 }
 
-function formatSession(
-	sessions: SessionRun[],
-	reviews: Map<string, ReviewJson>,
-): string {
+function formatSession(sessions: SessionRun[], logDir: string): string {
 	if (sessions.length === 0) {
 		return "No gauntlet runs found in logs.";
 	}
@@ -332,10 +317,8 @@ function formatSession(
 		lines.push("");
 	}
 
-	// Violations summary
-	if (reviews.size > 0) {
-		lines.push(...formatViolationsSummary(reviews));
-	}
+	// File inventory
+	lines.push(...formatFileInventory(logDir));
 
 	// All sessions summary (if multiple runs)
 	if (sessions.length > 1) {
@@ -415,18 +398,16 @@ function main(): void {
 		process.exit(0);
 	}
 
-	// Parse debug log
+	// Parse debug log, filtering to current session based on log file timestamps
 	let sessions: SessionRun[] = [];
 	if (fs.existsSync(debugLogPath)) {
 		const debugContent = fs.readFileSync(debugLogPath, "utf-8");
-		sessions = parseDebugLog(debugContent);
+		const sessionStart = getSessionStartTime(logDir);
+		sessions = parseDebugLog(debugContent, sessionStart);
 	}
 
-	// Parse review JSON files
-	const reviews = parseReviewFiles(logDir);
-
 	// Format and output
-	const output = formatSession(sessions, reviews);
+	const output = formatSession(sessions, logDir);
 	console.log(output);
 }
 
