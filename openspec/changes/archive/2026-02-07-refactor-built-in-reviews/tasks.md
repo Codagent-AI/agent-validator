@@ -11,7 +11,7 @@ All other affected files score above the threshold:
 
 ## 0.5 Prerequisites
 
-- [ ] 0.5.1 Archive the `add-built-in-reviews` change (`openspec archive add-built-in-reviews --yes`) so REMOVED/MODIFIED spec deltas reference existing canonical spec requirements. *(Run before applying spec deltas, not during implementation.)*
+- [x] 0.5.1 Archive the `add-built-in-reviews` change (`openspec archive add-built-in-reviews --yes`) so REMOVED/MODIFIED spec deltas reference existing canonical spec requirements. *(Run before applying spec deltas, not during implementation.)*
 
 ## 1. Implementation
 

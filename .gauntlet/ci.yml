@@ -21,3 +21,6 @@ checks:
     setup:
       - name: Install Semgrep
         run: python3 -m pip install semgrep
+
+  - name: typecheck
+    requires_runtimes: [bun]
