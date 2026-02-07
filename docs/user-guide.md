@@ -388,65 +388,27 @@ Notes:
 
 ## Project config (`.gauntlet/config.yml`)
 
-### `base_branch` (string, default: `origin/main`)
+For the full schema reference including all fields and their defaults, see [Project config in the Config Reference](config-reference.md#project-config-gauntletconfigyml).
 
-The branch/ref to diff against in local runs.
+Key configuration sections:
+- **base_branch**: The branch/ref to diff against in local runs
+- **log_dir**: Directory where job logs are written
+- **cli**: CLI tool preferences for reviews
+- **entry_points**: Maps paths to their applicable gates
+- **stop_hook**: Stop hook behavior for CLI agents (see also [Environment Variable Overrides](config-reference.md#environment-variable-overrides))
 
-### `log_dir` (string, default: `gauntlet_logs`)
-
-Directory where job logs are written.
-
-### `cli` (object, required)
-
-- `default_preference`: string[] (required) - Default list of CLI tools to use for reviews.
-
-### `allow_parallel` (boolean, default: `true`)
-
-Controls scheduling mode:
-- `true`: gates with `parallel: true` run concurrently; `parallel: false` run sequentially (but concurrently with the parallel batch)
-- `false`: all gates run sequentially
-
-### `max_retries` (number, default: `3`)
-
-Maximum number of retry attempts. After the initial run, the system allows up to this many additional runs.
-
-### `rerun_new_issue_threshold` (enum, default: `"medium"`)
-
-Priority threshold for filtering new violations during reruns. Valid values: `"critical"`, `"high"`, `"medium"`, `"low"`. During verification mode, new violations with priority below this threshold are filtered out.
-
-### `debug_log` (object, optional)
-
-Configuration for persistent debug logging:
-- `enabled` (boolean, default: `false`): Whether to enable debug logging
-- `max_size_mb` (number, default: `10`): Maximum log file size before rotation
-
-### `stop_hook` (object, optional)
-
-Configuration for the stop hook (used by CLI agents like Claude Code and Cursor):
-- `enabled` (boolean, default: `true`): Whether the stop hook is enabled
-- `run_interval_minutes` (number, default: `5`): Minimum interval between stop hook runs
-- `auto_push_pr` (boolean, default: `false`): Automatically prompt to create/update PR after gates pass
-- `auto_fix_pr` (boolean, default: `false`): Automatically monitor CI and prompt to fix failures after PR is pushed. Requires `auto_push_pr` to be enabled.
-
-When `auto_fix_pr` is enabled, the stop hook will:
-1. Wait for CI checks to complete (up to 3 attempts)
-2. If CI fails or reviews request changes, block with fix instructions
-3. If CI passes, allow the agent to stop
-
-Environment variables can override these settings:
-- `GAUNTLET_STOP_HOOK_ENABLED`: `true`/`1` or `false`/`0`
-- `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES`: Non-negative integer
-- `GAUNTLET_AUTO_PUSH_PR`: `true`/`1` or `false`/`0`
-- `GAUNTLET_AUTO_FIX_PR`: `true`/`1` or `false`/`0`
-
-### `entry_points` (array, required)
-
-Each entry point:
+### Entry points example
 
 ```yaml
-- path: "..."
-  checks: ["checkName", ...]   # optional
-  reviews: ["reviewName", ...] # optional
+- path: "."
+  reviews: ["code-quality"]    # runs on any change
+
+- path: "apps/api"
+  checks: ["test", "lint"]     # runs when apps/api/** changes
+  reviews: ["architecture"]
+
+- path: "packages/*"
+  checks: ["lint"]             # expands to one job per changed package
 ```
 
 ## Check gates (`.gauntlet/checks/*.yml`)
@@ -467,15 +429,7 @@ Review gates are defined by Markdown files with YAML frontmatter.
 - The gate name is the filename without `.md` (e.g. `security.md` → `security`)
 - The prompt body is the Markdown content after the frontmatter
 
-### Frontmatter fields
-
-- `cli_preference` (string[], optional): ordered list of tools. If omitted, uses `cli.default_preference` from project config.
-- `num_reviews` (number, default: `1`): number of tools to run (chooses the first N available from `cli_preference`)
-- `model` (string, optional): passed through to adapters that support it
-- `parallel` (boolean, default: `true`)
-- `run_in_ci` (boolean, default: `true`)
-- `run_locally` (boolean, default: `true`)
-- `timeout` (number seconds, optional)
+For the full frontmatter schema, see [Review gates in the Config Reference](config-reference.md#review-gates-gauntletreviewsmd-and-gauntletreviewsyml).
 
 ### Pass/fail detection
 
