@@ -243,12 +243,16 @@ export class Runner {
 		this.reporter.onJobComplete(job, result);
 		await this.logGateResults(job.id, result);
 
-		// Handle Fail Fast (only for checks, and only when parallel is false)
-		if (
-			result.status !== "pass" &&
-			job.type === "check" &&
-			job.gateConfig.fail_fast
-		) {
+		this.checkFailFast(job, result);
+	}
+
+	private checkFailFast(job: Job, result: GateResult): void {
+		if (result.status === "pass") return;
+		if (job.type !== "check") return;
+
+		// We know it's a check gate, so cast to check config to access fail_fast safely
+		const config = job.gateConfig as LoadedCheckGateConfig;
+		if (config.fail_fast) {
 			this.shouldStop = true;
 		}
 	}

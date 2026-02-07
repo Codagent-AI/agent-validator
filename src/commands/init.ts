@@ -344,7 +344,7 @@ async function promptForConfig(
 				if (num === availableAdapters.length + 1) {
 					chosen.push(...availableAdapters);
 				} else {
-					chosen.push(availableAdapters[num - 1]);
+					chosen.push(availableAdapters[num - 1]!);
 				}
 			}
 
@@ -583,7 +583,7 @@ async function promptAndInstallCommands(
 				if (num === installableAdapters.length + 1) {
 					agents.push(...installableAdapters.map((a) => a.name));
 				} else {
-					agents.push(installableAdapters[num - 1].name);
+					agents.push(installableAdapters[num - 1]!.name);
 				}
 			}
 

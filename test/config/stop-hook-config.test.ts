@@ -248,7 +248,7 @@ describe("stop-hook-config", () => {
 		beforeEach(() => {
 			envManager.save();
 			envManager.clearAll();
-			consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+			consoleErrorSpy = spyOn(console, "error").mockImplementation(() => { });
 		});
 
 		afterEach(() => {
@@ -292,7 +292,7 @@ describe("stop-hook-config", () => {
 			const projectConfig = { run_interval_minutes: 5 };
 			const globalConfig = {
 				...DEFAULT_GLOBAL_CONFIG,
-				stop_hook: { enabled: false, run_interval_minutes: 5 },
+				stop_hook: { enabled: false, run_interval_minutes: 5, auto_push_pr: false, auto_fix_pr: false },
 			};
 			const result = resolveStopHookConfig(projectConfig, globalConfig);
 			expect(result.enabled).toBe(true); // from env var

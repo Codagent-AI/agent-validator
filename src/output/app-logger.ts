@@ -66,7 +66,7 @@ function createDebugLogSink(logDir: string): (record: LogRecord) => void {
 	return (record: LogRecord) => {
 		if (debugLogFd === null) return;
 
-		const timestamp = record.timestamp.toISOString();
+		const timestamp = new Date(record.timestamp).toISOString();
 		const level = record.level.toUpperCase();
 		const category = record.category.join(".");
 		const message = record.message

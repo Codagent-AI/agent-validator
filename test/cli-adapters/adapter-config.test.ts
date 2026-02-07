@@ -30,7 +30,8 @@ describe("adapterConfigSchema", () => {
 	});
 
 	it("accepts all valid thinking_budget levels", () => {
-		for (const level of ["off", "low", "medium", "high"]) {
+		const validLevels = ["off", "low", "medium", "high"] as const;
+		for (const level of validLevels) {
 			const result = adapterConfigSchema.parse({ thinking_budget: level });
 			expect(result.thinking_budget).toBe(level);
 		}
@@ -140,7 +141,7 @@ describe("GeminiAdapter applyThinkingSettings", () => {
 			await fs.mkdir(settingsDir, { recursive: true });
 			await fs.writeFile(settingsPath, originalSettings);
 		} else {
-			await fs.unlink(settingsPath).catch(() => {});
+			await fs.unlink(settingsPath).catch(() => { });
 		}
 	});
 

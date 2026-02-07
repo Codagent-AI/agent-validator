@@ -14,8 +14,8 @@ function stripAnsi(text: string): string {
 /**
  * Format an ISO timestamp for log output.
  */
-function formatTimestamp(date: Date): string {
-	return date.toISOString();
+function formatTimestamp(timestamp: number): string {
+	return new Date(timestamp).toISOString();
 }
 
 /**

@@ -31,6 +31,7 @@ entry_points:
     checks:
       - build
       - lint
+      - typecheck
       - test
       - security-code
       - schema-validate
