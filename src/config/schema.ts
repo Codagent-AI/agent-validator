@@ -1,7 +1,13 @@
 import { z } from "zod";
 
+export const adapterConfigSchema = z.object({
+	allow_tool_use: z.boolean().default(true),
+	thinking_budget: z.enum(["off", "low", "medium", "high"]).optional(),
+});
+
 export const cliConfigSchema = z.object({
 	default_preference: z.array(z.string().min(1)).min(1),
+	adapters: z.record(z.string(), adapterConfigSchema).optional(),
 });
 
 export const checkGateSchema = z

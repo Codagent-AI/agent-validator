@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getDebugLogger } from "../utils/debug-log.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import { CODEX_REASONING_EFFORT } from "./thinking-budget.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -207,12 +208,35 @@ export class CodexAdapter implements CLIAdapter {
 		return markdownContent;
 	}
 
+	private buildArgs(allowToolUse?: boolean, thinkingBudget?: string): string[] {
+		const args = [
+			"exec",
+			"--cd",
+			process.cwd(),
+			"--sandbox",
+			"read-only",
+			"-c",
+			'ask_for_approval="never"',
+		];
+		if (allowToolUse === false) {
+			args.push("--disable", "shell_tool");
+		}
+		if (thinkingBudget && thinkingBudget in CODEX_REASONING_EFFORT) {
+			const effort = CODEX_REASONING_EFFORT[thinkingBudget];
+			args.push("-c", `model_reasoning_effort="${effort}"`);
+		}
+		args.push("--json", "-");
+		return args;
+	}
+
 	async execute(opts: {
 		prompt: string;
 		diff: string;
 		model?: string;
 		timeoutMs?: number;
 		onOutput?: (chunk: string) => void;
+		allowToolUse?: boolean;
+		thinkingBudget?: string;
 	}): Promise<string> {
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
@@ -220,32 +244,12 @@ export class CodexAdapter implements CLIAdapter {
 		const tmpFile = path.join(tmpDir, `gauntlet-codex-${Date.now()}.txt`);
 		await fs.writeFile(tmpFile, fullContent);
 
-		// Get absolute path to repo root (CWD)
-		const repoRoot = process.cwd();
-
-		// Recommended invocation per spec:
-		// --cd: sets working directory to repo root
-		// --sandbox read-only: prevents file modifications
-		// -c ask_for_approval="never": prevents blocking on prompts
-		// --json: structured JSONL output for telemetry parsing
-		// -: reads prompt from stdin
-		const args = [
-			"exec",
-			"--cd",
-			repoRoot,
-			"--sandbox",
-			"read-only",
-			"-c",
-			'ask_for_approval="never"',
-			"--json",
-			"-",
-		];
+		const args = this.buildArgs(opts.allowToolUse, opts.thinkingBudget);
 
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
 		// If onOutput callback is provided, use spawn for real-time streaming
 		if (opts.onOutput) {
-			// Buffer stdout for JSONL parsing while also streaming to onOutput
 			const raw = await runStreamingCommand({
 				command: "codex",
 				args,
@@ -257,14 +261,14 @@ export class CodexAdapter implements CLIAdapter {
 				cleanup,
 			});
 
-			// Parse JSONL events from stdout for telemetry and final message
 			const { text } = parseCodexJsonl(raw, opts.onOutput);
 			return text || raw.trimEnd();
 		}
 
 		// Otherwise use exec for buffered output
 		try {
-			const cmd = `cat "${tmpFile}" | codex exec --cd "${repoRoot}" --sandbox read-only -c 'ask_for_approval="never"' --json -`;
+			const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, "\\$1")}"`;
+			const cmd = `cat "${tmpFile}" | codex ${args.map(quoteArg).join(" ")}`;
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,

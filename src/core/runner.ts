@@ -197,12 +197,13 @@ export class Runner {
 
 		let result: GateResult;
 
+		const effectiveBaseBranch =
+			this.baseBranchOverride || this.config.project.base_branch;
+
 		try {
 			if (job.type === "check") {
 				const logPath = await this.logger.getLogPath(job.id);
 				const jobLogger = await this.logger.createJobLogger(job.id);
-				const effectiveBaseBranch =
-					this.baseBranchOverride || this.config.project.base_branch;
 				result = await this.checkExecutor.execute(
 					job.id,
 					job.gateConfig as LoadedCheckGateConfig,
@@ -214,22 +215,18 @@ export class Runner {
 			} else {
 				// Use sanitized Job ID for lookup because that's what log-parser uses (based on filenames)
 				const safeJobId = sanitizeJobId(job.id);
-				const previousFailures = this.previousFailuresMap?.get(safeJobId);
-				const passedSlots = this.passedSlotsMap?.get(safeJobId);
-				const loggerFactory = this.logger.createLoggerFactory(job.id);
-				const effectiveBaseBranch =
-					this.baseBranchOverride || this.config.project.base_branch;
 				result = await this.reviewExecutor.execute(
 					job.id,
 					job.gateConfig as LoadedReviewGateConfig,
 					job.entryPoint,
-					loggerFactory,
+					this.logger.createLoggerFactory(job.id),
 					effectiveBaseBranch,
-					previousFailures,
+					this.previousFailuresMap?.get(safeJobId),
 					this.changeOptions,
 					this.config.project.rerun_new_issue_threshold,
-					passedSlots,
+					this.passedSlotsMap?.get(safeJobId),
 					this.config.project.log_dir,
+					this.config.project.cli?.adapters,
 				);
 			}
 		} catch (err) {

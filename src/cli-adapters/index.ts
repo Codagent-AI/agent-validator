@@ -155,6 +155,10 @@ export interface CLIAdapter {
 		timeoutMs?: number;
 		/** Optional callback for real-time output streaming */
 		onOutput?: (chunk: string) => void;
+		/** Whether to allow tool use for this adapter. Defaults to true. */
+		allowToolUse?: boolean;
+		/** Thinking budget level (off/low/medium/high). */
+		thinkingBudget?: string;
 	}): Promise<string>;
 	/**
 	 * Returns the project-scoped command directory path (relative to project root).

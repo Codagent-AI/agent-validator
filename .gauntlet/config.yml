@@ -10,6 +10,16 @@ cli:
     - claude
     - codex
     - gemini
+  adapters:
+    claude:
+      allow_tool_use: true
+      thinking_budget: high
+    codex:
+      allow_tool_use: true
+      thinking_budget: high
+    gemini:
+      allow_tool_use: false
+      thinking_budget: high
 stop_hook:
   auto_push_pr: false
   auto_fix_pr: false

@@ -7,6 +7,7 @@ import type {
 	serviceConfigSchema,
 } from "./ci-schema.js";
 import type {
+	adapterConfigSchema,
 	checkGateSchema,
 	cliConfigSchema,
 	entryPointSchema,
@@ -24,6 +25,7 @@ export type ReviewPromptFrontmatter = z.infer<
 export type EntryPointConfig = z.infer<typeof entryPointSchema>;
 export type GauntletConfig = z.infer<typeof gauntletConfigSchema>;
 export type CLIConfig = z.infer<typeof cliConfigSchema>;
+export type AdapterConfig = z.infer<typeof adapterConfigSchema>;
 
 export type CIConfig = z.infer<typeof ciConfigSchema>;
 export type CICheckConfig = z.infer<typeof ciCheckConfigSchema>;

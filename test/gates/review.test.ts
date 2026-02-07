@@ -62,6 +62,10 @@ describe("ReviewGateExecutor Logging", () => {
 			getValidCLITools: () => ["codex", "claude", "gemini"],
 			isUsageLimit: (output: string) =>
 				output.toLowerCase().includes("usage limit"),
+			runStreamingCommand: async () => "",
+			collectStderr: () => () => "",
+			processExitError: () => new Error("mock"),
+			finalizeProcessClose: async () => {},
 		}));
 
 		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
@@ -305,6 +309,10 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 			getValidCLITools: () => names,
 			isUsageLimit: (output: string) =>
 				output.toLowerCase().includes("usage limit"),
+			runStreamingCommand: async () => "",
+			collectStderr: () => () => "",
+			processExitError: () => new Error("mock"),
+			finalizeProcessClose: async () => {},
 		}));
 	}
 

@@ -24,6 +24,10 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 	getValidCLITools: () => ["mock-adapter"],
 	isUsageLimit: (output: string) =>
 		output.toLowerCase().includes("usage limit"),
+	runStreamingCommand: async () => "",
+	collectStderr: () => () => "",
+	processExitError: () => new Error("mock"),
+	finalizeProcessClose: async () => {},
 }));
 
 // We need to import after mocking

@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { GAUNTLET_STOP_HOOK_ACTIVE_ENV } from "../commands/stop-hook.js";
 import { getDebugLogger } from "../utils/debug-log.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import { CLAUDE_THINKING_TOKENS } from "./thinking-budget.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -246,6 +247,8 @@ export class ClaudeAdapter implements CLIAdapter {
 		model?: string;
 		timeoutMs?: number;
 		onOutput?: (chunk: string) => void;
+		allowToolUse?: boolean;
+		thinkingBudget?: string;
 	}): Promise<string> {
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
@@ -256,20 +259,28 @@ export class ClaudeAdapter implements CLIAdapter {
 		);
 		await fs.writeFile(tmpFile, fullContent);
 
-		const args = [
-			"-p",
-			"--allowedTools",
-			"Read,Glob,Grep",
-			"--max-turns",
-			"10",
-		];
+		const args = ["-p"];
+		if (opts.allowToolUse === false) {
+			args.push("--tools", "");
+		} else {
+			args.push("--allowedTools", "Read,Glob,Grep");
+		}
+		args.push("--max-turns", "10");
 
 		const otelEnv = buildOtelEnv();
+		const thinkingEnv: Record<string, string> = {};
+		if (opts.thinkingBudget && opts.thinkingBudget in CLAUDE_THINKING_TOKENS) {
+			thinkingEnv.MAX_THINKING_TOKENS = String(
+				CLAUDE_THINKING_TOKENS[opts.thinkingBudget],
+			);
+		}
+
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 		const execEnv = {
 			...process.env,
 			[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
 			...otelEnv,
+			...thinkingEnv,
 		};
 
 		if (opts.onOutput) {
@@ -294,7 +305,7 @@ export class ClaudeAdapter implements CLIAdapter {
 		}
 
 		try {
-			const cmd = `cat "${tmpFile}" | claude -p --allowedTools "Read,Glob,Grep" --max-turns 10`;
+			const cmd = `cat "${tmpFile}" | claude ${args.map((a) => (a === "" ? '""' : a)).join(" ")}`;
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,
