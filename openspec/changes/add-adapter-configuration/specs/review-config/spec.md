@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Per-Adapter Configuration
-The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.gauntlet/config.yml`. Each adapter entry is keyed by adapter name and MAY include `allow_tool_use` (boolean, defaults to `true`) and `thinking_budget` (one of `off`, `low`, `medium`, `high`). When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
+The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.gauntlet/config.yml`. Each adapter entry is keyed by adapter name and MAY include `allow_tool_use` (boolean, defaults to `true`) and `thinking_budget` (one of `off`, `low`, `medium`, `high`). When `thinking_budget` is not specified, the adapter MUST use its built-in default behavior (no thinking budget override is applied). Unknown adapter names in the config are silently ignored at the schema level. When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
 
 #### Scenario: Adapter with tool use disabled
 - **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.gemini.allow_tool_use: false`
@@ -23,10 +23,15 @@ The system MUST support optional per-adapter configuration under the `cli.adapte
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error
 
+#### Scenario: Adapter with partial configuration
+- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.gemini.allow_tool_use: false` and no `thinking_budget` setting
+- **WHEN** a review is executed using the Gemini adapter
+- **THEN** tools MUST be disabled AND the thinking budget MUST use the adapter's built-in default
+
 #### Scenario: No adapter config section
 - **GIVEN** a `.gauntlet/config.yml` with no `cli.adapters` section
 - **WHEN** reviews are executed
-- **THEN** all adapters MUST use their default hardcoded settings
+- **THEN** all adapters MUST use their default hardcoded settings (tool use enabled, no thinking budget override)
 
 ### Requirement: Adapter Thinking Budget Level Mapping
 The system MUST map the unified `thinking_budget` level string to adapter-specific values. The mapping MUST be:
@@ -49,7 +54,9 @@ The system MUST map the unified `thinking_budget` level string to adapter-specif
 - **GIVEN** a review configured with `thinking_budget: low` for Gemini
 - **WHEN** the Gemini CLI is invoked
 - **THEN** a `.gemini/settings.json` file MUST be written with `thinkingConfig.thinkingBudget` set to `4096`
+- **AND** if the `.gemini/` directory does not exist, it MUST be created
 - **AND** the original settings file (if any) MUST be restored after execution completes
+- **AND** if no `.gemini/settings.json` existed before execution, the file MUST be removed after execution completes
 
 #### Scenario: Gemini settings file cleanup on error
 - **GIVEN** a review configured with `thinking_budget: low` for Gemini

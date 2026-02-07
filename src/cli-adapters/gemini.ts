@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getDebugLogger } from "../utils/debug-log.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import { GEMINI_THINKING_BUDGET } from "./thinking-budget.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -341,12 +342,100 @@ ${body.trim()}
 		}
 	}
 
+	/**
+	 * Serialize access to .gemini/settings.json across concurrent Gemini instances.
+	 * When multiple Gemini adapters run in parallel (num_reviews > 1 with
+	 * cli_preference: ["gemini"]), each waits for the previous to finish
+	 * before writing its settings.
+	 */
+	private static settingsLock: Promise<void> = Promise.resolve();
+
+	private async applyThinkingSettings(
+		budget: number,
+	): Promise<() => Promise<void>> {
+		let releaseLock = () => {};
+		const prev = GeminiAdapter.settingsLock;
+		GeminiAdapter.settingsLock = new Promise((resolve) => {
+			releaseLock = resolve;
+		});
+		await prev;
+
+		const settingsPath = path.join(process.cwd(), ".gemini", "settings.json");
+		let backup: string | null = null;
+		let existed = false;
+
+		try {
+			try {
+				backup = await fs.readFile(settingsPath, "utf-8");
+				existed = true;
+			} catch {
+				// No existing file
+			}
+
+			const existing = backup ? JSON.parse(backup) : {};
+			const merged = {
+				...existing,
+				thinkingConfig: { ...existing.thinkingConfig, thinkingBudget: budget },
+			};
+
+			await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+			await fs.writeFile(settingsPath, JSON.stringify(merged, null, 2));
+		} catch (err) {
+			releaseLock();
+			throw err;
+		}
+
+		return async () => {
+			if (existed && backup !== null) {
+				await fs.writeFile(settingsPath, backup);
+			} else {
+				await fs.unlink(settingsPath).catch(() => {});
+			}
+			releaseLock();
+		};
+	}
+
+	private buildTelemetryEnv(telemetryFile: string): Record<string, string> {
+		const env: Record<string, string> = {};
+		if (!process.env.GEMINI_TELEMETRY_ENABLED) {
+			env.GEMINI_TELEMETRY_ENABLED = "true";
+		}
+		if (!process.env.GEMINI_TELEMETRY_TARGET) {
+			env.GEMINI_TELEMETRY_TARGET = "local";
+		}
+		if (!process.env.GEMINI_TELEMETRY_OUTFILE) {
+			env.GEMINI_TELEMETRY_OUTFILE = telemetryFile;
+		}
+		return env;
+	}
+
+	private buildArgs(allowToolUse?: boolean): string[] {
+		const args = ["--sandbox"];
+		if (allowToolUse !== false) {
+			args.push(
+				"--allowed-tools",
+				"read_file,list_directory,glob,search_file_content",
+			);
+		}
+		args.push("--output-format", "text");
+		return args;
+	}
+
+	private async maybeApplyThinking(
+		level?: string,
+	): Promise<(() => Promise<void>) | undefined> {
+		if (!level || !(level in GEMINI_THINKING_BUDGET)) return undefined;
+		return this.applyThinkingSettings(GEMINI_THINKING_BUDGET[level] as number);
+	}
+
 	async execute(opts: {
 		prompt: string;
 		diff: string;
 		model?: string;
 		timeoutMs?: number;
 		onOutput?: (chunk: string) => void;
+		allowToolUse?: boolean;
+		thinkingBudget?: string;
 	}): Promise<string> {
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
@@ -364,58 +453,47 @@ ${body.trim()}
 			`.gauntlet-gemini-telemetry-${process.pid}-${Date.now()}.log`,
 		);
 
-		const telemetryEnv: Record<string, string> = {};
-		if (!process.env.GEMINI_TELEMETRY_ENABLED) {
-			telemetryEnv.GEMINI_TELEMETRY_ENABLED = "true";
-		}
-		if (!process.env.GEMINI_TELEMETRY_TARGET) {
-			telemetryEnv.GEMINI_TELEMETRY_TARGET = "local";
-		}
-		if (!process.env.GEMINI_TELEMETRY_OUTFILE) {
-			telemetryEnv.GEMINI_TELEMETRY_OUTFILE = telemetryFile;
-		}
-
-		const args = [
-			"--sandbox",
-			"--allowed-tools",
-			"read_file,list_directory,glob,search_file_content",
-			"--output-format",
-			"text",
-		];
+		const telemetryEnv = this.buildTelemetryEnv(telemetryFile);
+		const args = this.buildArgs(opts.allowToolUse);
+		const cleanupThinking = await this.maybeApplyThinking(opts.thinkingBudget);
 
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 		const cleanupTelemetry = () => fs.unlink(telemetryFile).catch(() => {});
 
-		if (opts.onOutput) {
+		try {
+			if (opts.onOutput) {
+				try {
+					const result = await runStreamingCommand({
+						command: "gemini",
+						args,
+						tmpFile,
+						timeoutMs: opts.timeoutMs,
+						onOutput: opts.onOutput,
+						cleanup,
+						env: { ...process.env, ...telemetryEnv },
+					});
+					await this.logTelemetry(telemetryFile, opts.onOutput);
+					return result;
+				} finally {
+					await cleanupTelemetry();
+				}
+			}
+
 			try {
-				const result = await runStreamingCommand({
-					command: "gemini",
-					args,
-					tmpFile,
-					timeoutMs: opts.timeoutMs,
-					onOutput: opts.onOutput,
-					cleanup,
+				const cmd = `gemini ${args.join(" ")} < "${tmpFile}"`;
+				const { stdout } = await execAsync(cmd, {
+					timeout: opts.timeoutMs,
+					maxBuffer: MAX_BUFFER_BYTES,
 					env: { ...process.env, ...telemetryEnv },
 				});
-				await this.logTelemetry(telemetryFile, opts.onOutput);
-				return result;
+				await logTelemetryToStdout(telemetryFile);
+				return stdout;
 			} finally {
+				await cleanup();
 				await cleanupTelemetry();
 			}
-		}
-
-		try {
-			const cmd = `gemini --sandbox --allowed-tools read_file,list_directory,glob,search_file_content --output-format text < "${tmpFile}"`;
-			const { stdout } = await execAsync(cmd, {
-				timeout: opts.timeoutMs,
-				maxBuffer: MAX_BUFFER_BYTES,
-				env: { ...process.env, ...telemetryEnv },
-			});
-			await logTelemetryToStdout(telemetryFile);
-			return stdout;
 		} finally {
-			await cleanup();
-			await cleanupTelemetry();
+			await cleanupThinking?.();
 		}
 	}
 }

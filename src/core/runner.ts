@@ -230,6 +230,7 @@ export class Runner {
 					this.config.project.rerun_new_issue_threshold,
 					passedSlots,
 					this.config.project.log_dir,
+					this.config.project.cli?.adapters,
 				);
 			}
 		} catch (err) {

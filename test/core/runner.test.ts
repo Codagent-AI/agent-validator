@@ -199,10 +199,9 @@ describe("Runner", () => {
 
 		await runner.run([job]);
 
-		// Verify logDir is passed as the last argument to execute
+		// Verify logDir is passed to execute (index 9, before adapterConfigs at index 10)
 		expect(mockExecuteReview).toHaveBeenCalled();
 		const callArgs = mockExecuteReview.mock.calls[0];
-		// logDir is the last argument
-		expect(callArgs?.[callArgs.length - 1]).toBe("/tmp/logs");
+		expect(callArgs?.[9]).toBe("/tmp/logs");
 	});
 });

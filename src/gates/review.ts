@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getAdapter, isUsageLimit } from "../cli-adapters/index.js";
-import type { LoadedReviewGateConfig } from "../config/types.js";
+import type { AdapterConfig, LoadedReviewGateConfig } from "../config/types.js";
 import { getCategoryLogger } from "../output/app-logger.js";
 import {
 	type DiffFileRange,
@@ -131,6 +131,7 @@ export class ReviewGateExecutor {
 		rerunThreshold: "critical" | "high" | "medium" | "low" = "high",
 		passedSlots?: Map<number, { adapter: string; passIteration: number }>,
 		logDir?: string,
+		adapterConfigs?: Record<string, AdapterConfig>,
 	): Promise<GateResult> {
 		const startTime = Date.now();
 		const logBuffer: string[] = [];
@@ -445,6 +446,7 @@ export class ReviewGateExecutor {
 							previousFailures,
 							rerunThreshold,
 							logDir,
+							adapterConfigs,
 						),
 					),
 				);
@@ -473,6 +475,7 @@ export class ReviewGateExecutor {
 						previousFailures,
 						rerunThreshold,
 						logDir,
+						adapterConfigs,
 					);
 					if (res) {
 						outputs.push({
@@ -636,6 +639,7 @@ export class ReviewGateExecutor {
 		previousFailures?: Map<string, PreviousViolation[]>,
 		rerunThreshold: "critical" | "high" | "medium" | "low" = "high",
 		logDir?: string,
+		adapterConfigs?: Record<string, AdapterConfig>,
 	): Promise<{
 		adapter: string;
 		reviewIndex: number;
@@ -690,6 +694,7 @@ export class ReviewGateExecutor {
 			const inputSizeMsg = `[input-stats] prompt_chars=${promptChars} diff_chars=${diffChars} total_chars=${totalInputChars} prompt_est_tokens=${promptEstTokens} diff_est_tokens=${diffEstTokens} total_est_tokens=${totalEstTokens}`;
 			await adapterLogger(`${inputSizeMsg}\n`);
 
+			const adapterCfg = adapterConfigs?.[toolName];
 			const output = await adapter.execute({
 				prompt: finalPrompt,
 				diff,
@@ -701,6 +706,8 @@ export class ReviewGateExecutor {
 					// Stream output to log file in real-time
 					adapterLogger(chunk);
 				},
+				allowToolUse: adapterCfg?.allow_tool_use,
+				thinkingBudget: adapterCfg?.thinking_budget,
 			});
 
 			await adapterLogger(
