@@ -42,6 +42,37 @@ gauntlet-help/
 - `references/question-playbooks.md`: targeted playbooks for high-frequency user asks (for example: "no changes", "configured checks", "what happened last run")
 - `references/output-contract.md`: fixed response shape (`Diagnosis`, `Evidence`, `Confidence`, `Next steps`)
 
+## Per-File Content Guidance
+### `SKILL.md`
+- Define invocation scope as diagnosis-only and prompt-only.
+- Route investigations by question type/status and load only needed references.
+- Require `log_dir` resolution from `.gauntlet/config.yml` before any log reads.
+
+### `references/diagnostic-workflow.md`
+- Define ordered triage steps from evidence collection to conclusion.
+- Clarify when to rely on passive artifacts versus when to run commands.
+- Include fallback behavior when evidence is incomplete.
+
+### `references/evidence-sources.md`
+- List required files and paths (`config.yml`, resolved `log_dir`, `.debug.log`, `.execution_state`, gate/review outputs).
+- Describe what each evidence source can and cannot confirm.
+- Define when `agent-gauntlet list`, `agent-gauntlet health`, and `agent-gauntlet detect` should be run.
+
+### `references/status-playbooks.md`
+- Cover every supported gauntlet stop-hook status in one compact playbook.
+- For each status, include meaning, likely causes, and verification signals.
+- Prefer actionable checks over implementation-level internals.
+
+### `references/question-playbooks.md`
+- Provide focused guides for high-frequency user questions.
+- Map each question to minimum evidence needed and likely next commands.
+- Keep playbooks concise and bias toward resolving ambiguity quickly.
+
+### `references/output-contract.md`
+- Define required response sections: `Diagnosis`, `Evidence`, `Confidence`, `Next steps`.
+- Define confidence levels (`high`/`medium`/`low`) and when to downgrade confidence.
+- Require explicit separation of confirmed facts versus inference.
+
 ## Investigation Strategy
 1. Read `.gauntlet/config.yml` and resolve `log_dir`.
 2. Start with passive evidence from logs/state (`.debug.log`, `.execution_state`, latest gate/review logs).
