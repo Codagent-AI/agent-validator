@@ -6,6 +6,9 @@ interface ParsedOutput {
 }
 
 export function parseAdapterOutput(raw: string): ParsedOutput {
+	const direct = tryParseJson(raw.trim());
+	if (direct) return normalize(direct);
+
 	const fromCodeBlock = tryParseCodeBlock(raw);
 	if (fromCodeBlock) return normalize(fromCodeBlock);
 
@@ -46,6 +49,10 @@ function extractJsonObjects(text: string): string[] {
 
 	for (let i = 0; i < text.length; i++) {
 		const ch = text[i];
+		if (ch === '"') {
+			i = skipQuotedString(text, i);
+			continue;
+		}
 		if (ch === "{" && depth++ === 0) start = i;
 		if (ch !== "}") continue;
 		depth--;
@@ -55,6 +62,17 @@ function extractJsonObjects(text: string): string[] {
 	}
 
 	return results;
+}
+
+function skipQuotedString(text: string, openQuote: number): number {
+	for (let i = openQuote + 1; i < text.length; i++) {
+		if (text[i] === "\\" && i + 1 < text.length) {
+			i++;
+		} else if (text[i] === '"') {
+			return i;
+		}
+	}
+	return text.length - 1;
 }
 
 function tryParseJson(text: string): Record<string, unknown> | null {
@@ -67,25 +85,29 @@ function tryParseJson(text: string): Record<string, unknown> | null {
 	}
 }
 
+const VALID_STATUSES = new Set<ParsedOutput["status"]>(["pass", "fail"]);
+
+function normalizeStatus(raw: unknown): ParsedOutput["status"] {
+	return VALID_STATUSES.has(raw as ParsedOutput["status"])
+		? (raw as ParsedOutput["status"])
+		: "error";
+}
+
+function toViolation(v: Record<string, unknown>): AdapterViolation {
+	return {
+		file: String(v.file ?? ""),
+		line: Number(v.line ?? 0),
+		issue: String(v.issue ?? ""),
+		fix: v.fix ? String(v.fix) : undefined,
+		priority: String(v.priority ?? "medium"),
+		status: String(v.status ?? "new"),
+	};
+}
+
 function normalize(obj: Record<string, unknown>): ParsedOutput {
-	const status =
-		obj.status === "pass" ? "pass" : obj.status === "fail" ? "fail" : "error";
-	const violations: AdapterViolation[] = [];
-
-	if (Array.isArray(obj.violations)) {
-		for (const v of obj.violations) {
-			if (typeof v === "object" && v !== null) {
-				violations.push({
-					file: String(v.file ?? ""),
-					line: Number(v.line ?? 0),
-					issue: String(v.issue ?? ""),
-					fix: v.fix ? String(v.fix) : undefined,
-					priority: String(v.priority ?? "medium"),
-					status: String(v.status ?? "new"),
-				});
-			}
-		}
-	}
-
-	return { status, violations };
+	const raw = Array.isArray(obj.violations) ? obj.violations : [];
+	const violations = raw
+		.filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null)
+		.map(toViolation);
+	return { status: normalizeStatus(obj.status), violations };
 }

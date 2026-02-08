@@ -27,6 +27,16 @@ export interface AdapterViolation {
 	status: string;
 }
 
+export interface TelemetrySummary {
+	inputTokens: number;
+	outputTokens: number;
+	thinkingTokens: number;
+	cacheTokens: number;
+	cost?: number;
+	toolCalls: number;
+	apiRequests: number;
+}
+
 export interface AdapterRunResult {
 	configLabel: string;
 	adapter: EvalAdapterName;
@@ -37,6 +47,7 @@ export interface AdapterRunResult {
 	durationMs: number;
 	error?: string;
 	telemetry: string[];
+	telemetrySummary?: TelemetrySummary;
 }
 
 export interface JudgeMatch {
@@ -51,6 +62,7 @@ export interface JudgeResult {
 	missedIssues: string[];
 	falsePositives: number[];
 	reasoning: string;
+	telemetrySummary?: TelemetrySummary;
 }
 
 export interface RunScore {
@@ -64,6 +76,8 @@ export interface RunScore {
 	precision: number;
 	recall: number;
 	f1: number;
+	adapterTokens?: TelemetrySummary;
+	judgeTokens?: TelemetrySummary;
 }
 
 export interface ConfigAggregate {
@@ -77,12 +91,20 @@ export interface ConfigAggregate {
 	meanF1: number;
 	meanDurationMs: number;
 	consistency: Record<string, number>;
+	totalTokens: TelemetrySummary;
+}
+
+export interface AdapterVersionInfo {
+	adapter: EvalAdapterName;
+	cliVersion: string;
+	model?: string;
 }
 
 export interface EvalResults {
 	timestamp: string;
 	fixture: string;
 	groundTruthCount: number;
+	versions: AdapterVersionInfo[];
 	configs: ConfigAggregate[];
 	rawRuns: AdapterRunResult[];
 	judgeResults: JudgeResult[];

@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import YAML from "yaml";
@@ -6,9 +7,11 @@ import { getAdapter } from "../src/cli-adapters/index.js";
 import { JSON_SYSTEM_INSTRUCTION } from "../src/gates/review.js";
 import { runAdapter } from "./adapter-runner.js";
 import { judgeRun } from "./judge.js";
+import { sumTelemetry } from "./parse-telemetry.js";
 import { printReport } from "./reporter.js";
 import type {
 	AdapterRunResult,
+	AdapterVersionInfo,
 	ConfigAggregate,
 	EvalAdapterName,
 	EvalConfiguration,
@@ -41,6 +44,52 @@ export interface RunEvalOptions {
 	configFilter?: string;
 	dryRun?: boolean;
 	skipJudge?: boolean;
+}
+
+/** CLI commands to retrieve the version string for each adapter. */
+const VERSION_COMMANDS: Record<EvalAdapterName, string> = {
+	claude: "claude --version",
+	codex: "codex --version",
+	gemini: "gemini --version",
+};
+
+const MODEL_DETECTORS: Record<EvalAdapterName, () => string | undefined> = {
+	claude: () => {
+		try {
+			return execSync("claude -p 'reply with only your model ID' --output-format text", {
+				timeout: 30_000,
+			}).toString().trim();
+		} catch { return undefined; }
+	},
+	codex: () => {
+		try {
+			const toml = readFileSync(
+				resolve(process.env.HOME ?? "~", ".codex/config.toml"),
+				"utf-8",
+			);
+			const match = toml.match(/^model\s*=\s*"(.+)"/m);
+			return match?.[1];
+		} catch { return undefined; }
+	},
+	gemini: () => {
+		// Gemini CLI uses its default model; no config file specifies it
+		return undefined;
+	},
+};
+
+function getAdapterVersionInfo(
+	adapter: EvalAdapterName,
+	skipModelDetection = false,
+): AdapterVersionInfo {
+	let cliVersion = "unknown";
+	try {
+		cliVersion = execSync(VERSION_COMMANDS[adapter], { timeout: 10_000 })
+			.toString()
+			.trim();
+	} catch { /* CLI not available */ }
+
+	const model = skipModelDetection ? undefined : MODEL_DETECTORS[adapter]();
+	return { adapter, cliVersion, ...(model && { model }) };
 }
 
 export async function runEval(
@@ -112,6 +161,17 @@ export async function runEval(
 	}
 	matrix = matrix.filter((c) => availableAdapters.has(c.adapter));
 
+	// Collect version info for all adapters in the matrix
+	// Skip model detection in dry-run mode to avoid API calls (e.g. claude -p)
+	const adapterNames = [...new Set(matrix.map((c) => c.adapter))];
+	const versions = adapterNames.map((a) =>
+		getAdapterVersionInfo(a, options.dryRun),
+	);
+	for (const v of versions) {
+		const modelStr = v.model ? `, model: ${v.model}` : "";
+		console.log(`  ${v.adapter}: ${v.cliVersion}${modelStr}`);
+	}
+
 	console.log(
 		`\nEval matrix: ${matrix.length} configurations x ${evalConfig.runs_per_config} runs = ${matrix.length * evalConfig.runs_per_config} total runs`,
 	);
@@ -126,6 +186,7 @@ export async function runEval(
 			timestamp: new Date().toISOString(),
 			fixture: evalConfig.fixture,
 			groundTruthCount: groundTruth.length,
+			versions,
 			configs: [],
 			rawRuns: [],
 			judgeResults: [],
@@ -230,6 +291,7 @@ export async function runEval(
 					precision: 0,
 					recall: 0,
 					f1: 0,
+					adapterTokens: run.telemetrySummary,
 				});
 				continue;
 			}
@@ -254,6 +316,8 @@ export async function runEval(
 				precision,
 				recall,
 				f1,
+				adapterTokens: run.telemetrySummary,
+				judgeTokens: judgeResult.telemetrySummary,
 			});
 		}
 
@@ -288,6 +352,12 @@ export async function runEval(
 				? runScores.reduce((s, r) => s + r.durationMs, 0) / runScores.length
 				: 0;
 
+		const allTelemetry = runScores.flatMap((r) => [
+			r.adapterTokens,
+			r.judgeTokens,
+		]);
+		const totalTokens = sumTelemetry(allTelemetry);
+
 		configAggregates.push({
 			configLabel: config.label,
 			adapter: config.adapter,
@@ -299,6 +369,7 @@ export async function runEval(
 			meanF1,
 			meanDurationMs,
 			consistency,
+			totalTokens,
 		});
 	}
 
@@ -306,6 +377,7 @@ export async function runEval(
 		timestamp: new Date().toISOString(),
 		fixture: evalConfig.fixture,
 		groundTruthCount: groundTruth.length,
+		versions,
 		configs: configAggregates,
 		rawRuns: allRuns,
 		judgeResults: [...judgeResultsByRun.values()],

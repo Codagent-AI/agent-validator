@@ -1,5 +1,9 @@
 import chalk from "chalk";
-import type { ConfigAggregate, EvalResults, GroundTruthIssue } from "./types.js";
+import type {
+	ConfigAggregate,
+	EvalResults,
+	GroundTruthIssue,
+} from "./types.js";
 
 export function printReport(
 	results: EvalResults,
@@ -10,6 +14,12 @@ export function printReport(
 	console.log(`Timestamp: ${results.timestamp}`);
 	console.log(`Fixture: ${results.fixture}`);
 	console.log(`Ground truth issues: ${results.groundTruthCount}`);
+	if (results.versions?.length) {
+		for (const v of results.versions) {
+			const modelStr = v.model ? ` (model: ${v.model})` : "";
+			console.log(`Adapter: ${v.adapter} ${v.cliVersion}${modelStr}`);
+		}
+	}
 	console.log("");
 
 	printConfigTable(results);
@@ -29,10 +39,15 @@ function printConfigTable(results: EvalResults): void {
 				"Rec".padStart(7) +
 				"F1".padStart(7) +
 				"Cons".padStart(7) +
-				"Time".padStart(8),
+				"Time".padStart(8) +
+				"In".padStart(9) +
+				"Out".padStart(9) +
+				"Think".padStart(9) +
+				"Total".padStart(9) +
+				"Tools".padStart(7),
 		),
 	);
-	console.log(chalk.dim("-".repeat(71)));
+	console.log(chalk.dim("-".repeat(107)));
 
 	for (const config of sorted) {
 		console.log(formatConfigRow(config));
@@ -53,6 +68,9 @@ function formatConfigRow(config: ConfigAggregate): string {
 				? chalk.yellow
 				: chalk.red;
 
+	const t = config.totalTokens;
+	const totalTok = t.inputTokens + t.outputTokens + t.thinkingTokens;
+
 	return (
 		config.configLabel.padEnd(35) +
 		config.meanPrecision.toFixed(2).padStart(7) +
@@ -60,7 +78,12 @@ function formatConfigRow(config: ConfigAggregate): string {
 		f1Color(config.meanF1.toFixed(2).padStart(7)) +
 		(consistency * 100).toFixed(0).padStart(6) +
 		"%" +
-		timeStr.padStart(7)
+		timeStr.padStart(7) +
+		formatTokenCount(t.inputTokens).padStart(9) +
+		formatTokenCount(t.outputTokens).padStart(9) +
+		formatTokenCount(t.thinkingTokens).padStart(9) +
+		formatTokenCount(totalTok).padStart(9) +
+		String(t.toolCalls).padStart(7)
 	);
 }
 
@@ -117,4 +140,10 @@ function formatIssueRates(issueId: string, results: EvalResults): string[] {
 		const pct = `${(rate * 100).toFixed(0)}%`;
 		return `${config.configLabel.split("/")[0]}:${colorByRate(rate, pct)}`;
 	});
+}
+
+function formatTokenCount(tokens: number): string {
+	if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+	if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+	return String(tokens);
 }

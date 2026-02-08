@@ -1,5 +1,6 @@
 import { getAdapter, isUsageLimit } from "../src/cli-adapters/index.js";
 import { parseAdapterOutput } from "./parse-output.js";
+import { parseTelemetry } from "./parse-telemetry.js";
 import type { AdapterRunResult, EvalConfiguration } from "./types.js";
 
 export async function runAdapter(
@@ -10,17 +11,7 @@ export async function runAdapter(
 ): Promise<AdapterRunResult> {
 	const adapter = getAdapter(config.adapter);
 	if (!adapter) {
-		return {
-			configLabel: config.label,
-			adapter: config.adapter,
-			runIndex: 0,
-			rawOutput: "",
-			violations: [],
-			status: "error",
-			durationMs: 0,
-			error: `Adapter "${config.adapter}" not found`,
-			telemetry: [],
-		};
+		return errorResult(config, 0, `Adapter "${config.adapter}" not found`);
 	}
 
 	const telemetry: string[] = [];
@@ -40,14 +31,8 @@ export async function runAdapter(
 
 		if (isUsageLimit(rawOutput)) {
 			return {
-				configLabel: config.label,
-				adapter: config.adapter,
-				runIndex: 0,
+				...errorResult(config, durationMs, "Usage limit reached"),
 				rawOutput,
-				violations: [],
-				status: "error",
-				durationMs,
-				error: "Usage limit reached",
 				telemetry,
 			};
 		}
@@ -63,18 +48,34 @@ export async function runAdapter(
 			status: parsed.status,
 			durationMs,
 			telemetry,
+			telemetrySummary: parseTelemetry(telemetry),
 		};
 	} catch (err) {
 		return {
-			configLabel: config.label,
-			adapter: config.adapter,
-			runIndex: 0,
-			rawOutput: "",
-			violations: [],
-			status: "error",
-			durationMs: Date.now() - start,
-			error: err instanceof Error ? err.message : String(err),
+			...errorResult(
+				config,
+				Date.now() - start,
+				err instanceof Error ? err.message : String(err),
+			),
 			telemetry,
 		};
 	}
+}
+
+function errorResult(
+	config: EvalConfiguration,
+	durationMs: number,
+	error: string,
+): AdapterRunResult {
+	return {
+		configLabel: config.label,
+		adapter: config.adapter,
+		runIndex: 0,
+		rawOutput: "",
+		violations: [],
+		status: "error",
+		durationMs,
+		error,
+		telemetry: [],
+	};
 }

@@ -68,7 +68,7 @@ After each adapter run, a judge LLM receives the adapter's violations alongside 
 - **Missed issues** — ground truth issues not detected
 - **False positives** — adapter findings that don't match any expected issue
 
-From these, standard metrics are computed: precision (TP / reported), recall (TP / expected), F1 (harmonic mean).
+From these, standard metrics are computed: precision (True Positives / reported), recall (True Positives / expected), F1 (harmonic mean).
 
 The judge uses a single consistent model across all runs (Claude with high thinking) to avoid introducing scoring variance.
 
@@ -116,3 +116,111 @@ The eval should reveal:
 4. **Optimal defaults**: The configuration that maximizes F1 per dollar (or per second) becomes the recommended default.
 
 5. **Consistency**: Which adapter/configuration is most reliable? A config that finds 8/10 issues every time may be preferable to one that finds 10/10 sometimes and 5/10 other times.
+
+## Running the Eval
+
+### Quick start
+
+```bash
+# Full eval (all adapters, all configs, multiple runs)
+bun run evals/run-eval.ts
+
+# Dry run — validate config and check adapter availability without making API calls
+bun run evals/run-eval.ts --dry-run
+
+# Skip judge scoring — run adapters only, no LLM judge pass
+bun run evals/run-eval.ts --skip-judge
+
+# Filter to a single adapter
+bun run evals/run-eval.ts --adapter=claude
+
+# Filter to a specific configuration
+bun run evals/run-eval.ts --config=tools-off-thinking-high
+
+# Combine filters
+bun run evals/run-eval.ts --adapter=gemini --config=tools-on
+```
+
+### Configuration
+
+Edit `evals/eval-config.yml` to control the eval matrix:
+
+```yaml
+fixture: fixtures/review-quality    # path to test fixture (relative to evals/)
+
+matrix:
+  adapters:
+    - claude
+    - codex
+    - gemini
+  configurations:
+    - name: tools-off-thinking-high
+      allow_tool_use: false
+      thinking_budget: "high"
+    # uncomment to add more configurations:
+    # - name: tools-on-thinking-high
+    #   allow_tool_use: true
+    #   thinking_budget: "high"
+
+runs_per_config: 1    # number of runs per adapter/config pair (use 3+ for consistency data)
+timeout_ms: 300000    # per-adapter timeout in milliseconds
+
+judge:
+  adapter: claude         # which adapter scores the results
+  thinking_budget: "high" # thinking budget for the judge
+```
+
+### Output
+
+Results are written to `evals/results/eval-<timestamp>.json` and a summary table is printed to the console.
+
+## Interpreting Results
+
+### Configuration comparison table
+
+The main output is a table sorted by F1 score:
+
+```
+Config                                Prec    Rec     F1   Cons    Time     Cost    Tokens
+------------------------------------------------------------------------------------------
+gemini/tools-off-thinking-high        0.86   0.60   0.71    50% 132.2s    n/a     435.0k
+codex/tools-off-thinking-high         0.80   0.40   0.53    40%  96.4s    n/a      11.6k
+claude/tools-off-thinking-high        0.00   0.00   0.00     0% 124.7s   $0.28     6.8k
+```
+
+### Per-issue detection rates
+
+Below the table, each ground truth issue is listed with its detection rate per adapter, grouped by difficulty:
+
+```
+EASY (3 issues):
+    sql-injection: claude:100%  codex:100%  gemini:100%
+    hardcoded-secret: claude:100%  codex:100%  gemini:100%
+
+MEDIUM (4 issues):
+    missing-await: claude:0%  codex:0%  gemini:0%
+    cache-leak: claude:0%  codex:0%  gemini:100%
+
+HARD (3 issues):
+    race-condition [tool-use]: claude:0%  codex:0%  gemini:0%
+```
+
+Issues tagged `[tool-use]` require the adapter to read files outside the diff. These should only be detected when `allow_tool_use: true`.
+
+## Glossary
+
+| Term | Column | Definition |
+|------|--------|------------|
+| **Precision** | `Prec` | Fraction of reported violations that match real issues. `TP / (TP + FP)`. High precision means few false alarms. |
+| **Recall** | `Rec` | Fraction of real issues that the adapter detected. `TP / (TP + FN)`. High recall means few missed bugs. |
+| **F1 Score** | `F1` | Harmonic mean of precision and recall. `2 * (Prec * Rec) / (Prec + Rec)`. Balances both metrics into a single quality score (0.0 to 1.0). |
+| **Consistency** | `Cons` | Average detection rate across all ground truth issues over repeated runs. 100% means every issue was found on every run. |
+| **Time** | `Time` | Mean wall-clock duration per run (adapter execution only, not including judge scoring). |
+| **Cost** | `Cost` | Total API cost across all runs and judge calls for this config. Only available for adapters that report cost (Claude via `[otel]`). Shows `n/a` when cost data is unavailable. |
+| **Tokens** | `Tokens` | Total input + output tokens consumed across all runs and judge calls for this config. |
+| **True Positive (TP)** | — | A violation reported by the adapter that matches a ground truth issue. |
+| **False Positive (FP)** | — | A violation reported by the adapter that does not match any ground truth issue. |
+| **False Negative (FN)** | — | A ground truth issue that the adapter failed to detect (shown as "missed issues"). |
+| **Ground Truth** | — | The set of known, seeded issues in the test fixture, each with an ID, file, line range, difficulty, and category. |
+| **Judge** | — | An LLM (default: Claude with high thinking) that evaluates whether adapter violations match ground truth issues. Provides semantic matching rather than brittle keyword matching. |
+| **Telemetry** | — | Token usage and cost data emitted by adapter CLIs during execution. Parsed from `[otel]`, `[codex-telemetry]`, or `[telemetry]` output lines. |

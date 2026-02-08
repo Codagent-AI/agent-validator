@@ -1,5 +1,6 @@
 import { getAdapter } from "../src/cli-adapters/index.js";
 import { buildJudgePrompt } from "./judge-prompt.js";
+import { parseTelemetry } from "./parse-telemetry.js";
 import type {
 	AdapterViolation,
 	EvalAdapterName,
@@ -20,12 +21,14 @@ export async function judgeRun(
 
 	const prompt = buildJudgePrompt(groundTruth, violations);
 
+	const judgeTelemetry: string[] = [];
 	const rawOutput = await adapter.execute({
 		prompt,
 		diff: "",
 		allowToolUse: false,
 		thinkingBudget,
 		timeoutMs: 120_000,
+		onOutput: (chunk) => judgeTelemetry.push(chunk),
 	});
 
 	// Parse the judge's JSON response — prefer fenced code block, fall back to brace extraction
@@ -50,6 +53,7 @@ export async function judgeRun(
 			? parsed.falsePositives.map(Number)
 			: [],
 		reasoning: String(parsed.reasoning ?? ""),
+		telemetrySummary: parseTelemetry(judgeTelemetry),
 	};
 }
 
