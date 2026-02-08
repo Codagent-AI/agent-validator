@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 import {
 	acquireLock,
 	cleanLogs,
@@ -329,6 +333,29 @@ describe("shouldAutoClean", () => {
 	// Note: Testing "commit merged" scenario requires a real git repository
 	// with specific commit history, which is harder to set up in unit tests.
 	// Integration tests would be more appropriate for that scenario.
+
+	it("returns resetState: true when commit is merged (unconditional)", async () => {
+		// Create state with a commit that IS an ancestor of the base branch.
+		// Use the base branch's own HEAD commit, which is trivially an ancestor.
+		const { stdout } = await execAsync("git rev-parse origin/main");
+		const mergedCommit = stdout.trim();
+
+		const state = {
+			last_run_completed_at: new Date().toISOString(),
+			branch: await getCurrentBranch(),
+			commit: mergedCommit,
+			working_tree_ref: mergedCommit, // A valid ref — old code would set resetState: false
+		};
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify(state),
+		);
+
+		const result = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(result.clean).toBe(true);
+		expect(result.reason).toBe("commit merged");
+		expect(result.resetState).toBe(true); // MUST be true, regardless of working_tree_ref validity
+	});
 });
 
 describe("auto-clean during rerun mode", () => {
