@@ -160,11 +160,11 @@ The agent can stop when any of these conditions are met:
 
 - **"Status: Passed"** — All gates passed successfully
 - **"Status: Passed with warnings"** — Some issues were skipped (marked as `status: "skipped"`)
-- **"Status: Retry limit exceeded"** — Too many fix attempts (`max_retries`, default 3); requires `agent-gauntlet clean` to archive and reset
+- **"Status: Retry limit exceeded"** — Too many fix attempts (`max_retries`, default 3); logs are automatically archived
 
 ### Retry Limits
 
-The `max_retries` setting (default: `3`) controls how many additional runs the gauntlet allows after the initial run. After the initial run plus `max_retries` re-runs, the gauntlet reports "Retry limit exceeded" and allows the agent to stop. At that point, run `agent-gauntlet clean` to archive the session.
+The `max_retries` setting (default: `3`) controls how many additional runs the gauntlet allows after the initial run. After the initial run plus `max_retries` re-runs, the gauntlet reports "Retry limit exceeded" and allows the agent to stop. Logs are automatically archived at this point.
 
 ### Review Trust Level
 
@@ -373,7 +373,7 @@ The hook has built-in infinite loop prevention. If `stop_hook_active: true` is s
 
 3. **Handle skipped issues**: Use `"status": "skipped"` with a reason for issues you intentionally don't fix. This allows the gauntlet to pass with warnings.
 
-4. **Clean between branches**: Run `agent-gauntlet clean` when switching branches to avoid confusion from stale logs. This archives log files and deletes execution state (including unhealthy adapter entries).
+4. **Clean between branches**: Run `agent-gauntlet clean` when switching branches to avoid confusion from stale logs. This archives log files into rotated `previous/` directories. Execution state is preserved (only reset automatically on branch change or commit merge).
 
 ## Protocol Differences
 

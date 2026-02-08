@@ -187,9 +187,9 @@ Uses the same options as `run` (see above). When using `--gate <name>`, filters 
 
 ### `agent-gauntlet clean`
 
-Archives logs by moving current `.log` files into `previous/` (after clearing old `previous/` contents).
+Archives logs using configurable N-deep rotation. Current `.log` and `.json` files are moved into `previous/`, while existing `previous/` archives shift to `previous.1/`, `previous.2/`, etc. The oldest archive beyond `max_previous_logs` (default: 3) is evicted. Execution state is preserved.
 
-This is also triggered automatically when a run completes with all gates passing.
+This is also triggered automatically when a run completes with all gates passing, or when the retry limit is exceeded.
 
 ### Automatic verification mode
 
