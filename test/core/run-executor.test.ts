@@ -309,7 +309,7 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 
 		// The "passed" auto-clean should pass max_previous_logs
 		expect(sourceFile).toMatch(
-			/status\s*===\s*"passed"[\s\S]*?cleanLogs\([^,]+,\s*config\.project\.max_previous_logs\)/,
+			/status\s*===\s*"passed"[\s\S]*?cleanLogs\([\s\S]*?config\.project\.max_previous_logs/,
 		);
 	});
 });

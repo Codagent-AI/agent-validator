@@ -36,7 +36,10 @@ export function registerCleanCommand(program: Command): void {
 				await debugLogger?.logCommand("clean", []);
 				await debugLogger?.logClean("manual", "user_request");
 
-				await cleanLogs(config.project.log_dir, config.project.max_previous_logs);
+				await cleanLogs(
+					config.project.log_dir,
+					config.project.max_previous_logs,
+				);
 				await releaseLock(config.project.log_dir);
 				console.log(chalk.green("Logs archived successfully."));
 			} catch (error: unknown) {

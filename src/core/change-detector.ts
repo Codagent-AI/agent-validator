@@ -3,6 +3,11 @@ import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 
+/** Validate that a string is a safe git ref (hex SHA or branch-like name). */
+function isValidGitRef(ref: string): boolean {
+	return /^[a-zA-Z0-9._\-/]+$/.test(ref);
+}
+
 export interface ChangeDetectorOptions {
 	commit?: string; // If provided, get diff for this commit vs its parent
 	uncommitted?: boolean; // If true, only get uncommitted changes (staged + unstaged)
@@ -27,7 +32,7 @@ export class ChangeDetector {
 		}
 
 		// Priority 3: If fixBase is provided, diff against it
-		if (this.options.fixBase) {
+		if (this.options.fixBase && isValidGitRef(this.options.fixBase)) {
 			return this.getFixBaseChangedFiles(this.options.fixBase);
 		}
 
@@ -66,40 +71,43 @@ export class ChangeDetector {
 		}
 	}
 
-	private async getLocalChangedFiles(): Promise<string[]> {
-		// 1. Committed changes relative to base branch
-		const { stdout: committed } = await execAsync(
-			`git diff --name-only ${this.baseBranch}...HEAD`,
-		);
-
-		// 2. Uncommitted changes (staged and unstaged)
-		const { stdout: uncommitted } = await execAsync(
-			"git diff --name-only HEAD",
-		);
-
-		// 3. Untracked files
+	/** Collect uncommitted (staged + unstaged) and untracked file paths. */
+	private async getWorkingTreeFiles(): Promise<string[]> {
+		const { stdout: staged } = await execAsync("git diff --name-only --cached");
+		const { stdout: unstaged } = await execAsync("git diff --name-only");
 		const { stdout: untracked } = await execAsync(
 			"git ls-files --others --exclude-standard",
 		);
+		return [
+			...this.parseOutput(staged),
+			...this.parseOutput(unstaged),
+			...this.parseOutput(untracked),
+		];
+	}
 
+	/** Combine committed diff (against a base ref) with working tree changes. */
+	private async getDiffWithWorkingTree(baseRef: string): Promise<string[]> {
+		const { stdout: committed } = await execAsync(
+			`git diff --name-only ${baseRef}...HEAD`,
+		);
 		const files = new Set([
 			...this.parseOutput(committed),
-			...this.parseOutput(uncommitted),
-			...this.parseOutput(untracked),
+			...(await this.getWorkingTreeFiles()),
 		]);
-
 		return Array.from(files);
 	}
 
+	private async getLocalChangedFiles(): Promise<string[]> {
+		return this.getDiffWithWorkingTree(this.baseBranch);
+	}
+
 	private async getCommitChangedFiles(commit: string): Promise<string[]> {
-		// Get diff for commit vs its parent
 		try {
 			const { stdout } = await execAsync(
 				`git diff --name-only ${commit}^..${commit}`,
 			);
 			return this.parseOutput(stdout);
 		} catch (_error) {
-			// If commit has no parent (initial commit), just get files in that commit
 			try {
 				const { stdout } = await execAsync(
 					`git diff --name-only --root ${commit}`,
@@ -112,42 +120,11 @@ export class ChangeDetector {
 	}
 
 	private async getFixBaseChangedFiles(fixBase: string): Promise<string[]> {
-		// Get all files changed since fixBase (committed + uncommitted + untracked)
-		const { stdout: committed } = await execAsync(
-			`git diff --name-only ${fixBase}...HEAD`,
-		);
-
-		const { stdout: uncommitted } = await execAsync(
-			"git diff --name-only HEAD",
-		);
-
-		const { stdout: untracked } = await execAsync(
-			"git ls-files --others --exclude-standard",
-		);
-
-		const files = new Set([
-			...this.parseOutput(committed),
-			...this.parseOutput(uncommitted),
-			...this.parseOutput(untracked),
-		]);
-
-		return Array.from(files);
+		return this.getDiffWithWorkingTree(fixBase);
 	}
 
 	private async getUncommittedChangedFiles(): Promise<string[]> {
-		// Get uncommitted changes (staged + unstaged) and untracked files
-		const { stdout: staged } = await execAsync("git diff --name-only --cached");
-		const { stdout: unstaged } = await execAsync("git diff --name-only");
-		const { stdout: untracked } = await execAsync(
-			"git ls-files --others --exclude-standard",
-		);
-
-		const files = new Set([
-			...this.parseOutput(staged),
-			...this.parseOutput(unstaged),
-			...this.parseOutput(untracked),
-		]);
-
+		const files = new Set(await this.getWorkingTreeFiles());
 		return Array.from(files);
 	}
 

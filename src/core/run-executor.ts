@@ -348,7 +348,11 @@ export async function executeRun(
 		if (autoCleanResult.clean) {
 			log.debug(`Auto-cleaning logs (${autoCleanResult.reason})...`);
 			await debugLogger?.logClean("auto", autoCleanResult.reason || "unknown");
-			await performAutoClean(config.project.log_dir, autoCleanResult, config.project.max_previous_logs);
+			await performAutoClean(
+				config.project.log_dir,
+				autoCleanResult,
+				config.project.max_previous_logs,
+			);
 		}
 
 		// Detect rerun mode after auto-clean (clean may have removed logs)
@@ -564,10 +568,16 @@ export async function executeRun(
 			// Clean logs on success or retry limit exceeded
 			if (status === "passed") {
 				await debugLogger?.logClean("auto", "all_passed");
-				await cleanLogs(config.project.log_dir, config.project.max_previous_logs);
+				await cleanLogs(
+					config.project.log_dir,
+					config.project.max_previous_logs,
+				);
 			} else if (status === "retry_limit_exceeded") {
 				await debugLogger?.logClean("auto", "retry_limit_exceeded");
-				await cleanLogs(config.project.log_dir, config.project.max_previous_logs);
+				await cleanLogs(
+					config.project.log_dir,
+					config.project.max_previous_logs,
+				);
 			}
 
 			consoleLogHandle?.restore();

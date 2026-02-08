@@ -183,72 +183,76 @@ async function hasCurrentLogs(logDir: string): Promise<boolean> {
 	}
 }
 
-export async function cleanLogs(logDir: string, maxPreviousLogs = 3): Promise<void> {
-	try {
-		// Guard: Return early if log directory doesn't exist
-		if (!(await exists(logDir))) {
-			return;
-		}
+/** Get current log files (excludes previous dirs and persistent files). */
+function getCurrentLogFiles(files: string[]): string[] {
+	const persistentFiles = getPersistentFiles();
+	return files.filter(
+		(file) => !file.startsWith("previous") && !persistentFiles.has(file),
+	);
+}
 
-		// Guard: Return early if no current logs to archive
-		if (!(await hasCurrentLogs(logDir))) {
-			return;
+/** Delete current logs without archiving (maxPreviousLogs === 0). */
+async function deleteCurrentLogs(logDir: string): Promise<void> {
+	const files = await fs.readdir(logDir);
+	await Promise.all(
+		getCurrentLogFiles(files).map((file) =>
+			fs.rm(path.join(logDir, file), { recursive: true, force: true }),
+		),
+	);
+}
+
+/** Rotate existing previous/ directories to make room for a new archive. */
+async function rotatePreviousDirs(
+	logDir: string,
+	maxPreviousLogs: number,
+): Promise<void> {
+	const oldestSuffix = maxPreviousLogs - 1;
+	const oldestDir =
+		oldestSuffix === 0 ? "previous" : `previous.${oldestSuffix}`;
+	const oldestPath = path.join(logDir, oldestDir);
+	if (await exists(oldestPath)) {
+		await fs.rm(oldestPath, { recursive: true, force: true });
+	}
+
+	for (let i = oldestSuffix - 1; i >= 0; i--) {
+		const fromName = i === 0 ? "previous" : `previous.${i}`;
+		const toName = `previous.${i + 1}`;
+		const fromPath = path.join(logDir, fromName);
+		const toPath = path.join(logDir, toName);
+		if (await exists(fromPath)) {
+			await fs.rename(fromPath, toPath);
 		}
+	}
+}
+
+export async function cleanLogs(
+	logDir: string,
+	maxPreviousLogs = 3,
+): Promise<void> {
+	try {
+		if (!(await exists(logDir))) return;
+		if (!(await hasCurrentLogs(logDir))) return;
 
 		if (maxPreviousLogs === 0) {
-			// No archiving — delete current logs
-			const files = await fs.readdir(logDir);
-			const persistentFiles = getPersistentFiles();
-			await Promise.all(
-				files
-					.filter((file) => !file.startsWith("previous") && !persistentFiles.has(file))
-					.map((file) =>
-						fs.rm(path.join(logDir, file), { recursive: true, force: true }),
-					),
-			);
+			await deleteCurrentLogs(logDir);
 			return;
 		}
 
-		// Logrotate-style rotation: shift from highest to lowest
-		// 1. Evict the oldest (previous.{max-1}/)
-		const oldestSuffix = maxPreviousLogs - 1;
-		const oldestDir = oldestSuffix === 0 ? "previous" : `previous.${oldestSuffix}`;
-		const oldestPath = path.join(logDir, oldestDir);
-		if (await exists(oldestPath)) {
-			await fs.rm(oldestPath, { recursive: true, force: true });
-		}
+		await rotatePreviousDirs(logDir, maxPreviousLogs);
 
-		// 2. Shift from highest to lowest to avoid clobbering
-		for (let i = oldestSuffix - 1; i >= 0; i--) {
-			const fromName = i === 0 ? "previous" : `previous.${i}`;
-			const toName = `previous.${i + 1}`;
-			const fromPath = path.join(logDir, fromName);
-			const toPath = path.join(logDir, toName);
-			if (await exists(fromPath)) {
-				await fs.rename(fromPath, toPath);
-			}
-		}
-
-		// 3. Create fresh previous/
 		const previousDir = path.join(logDir, "previous");
 		await fs.mkdir(previousDir, { recursive: true });
 
-		// 4. Move current logs into previous/
 		const files = await fs.readdir(logDir);
-		const persistentFiles = getPersistentFiles();
-
 		await Promise.all(
-			files
-				.filter((file) => !file.startsWith("previous") && !persistentFiles.has(file))
-				.map((file) =>
-					fs.rename(path.join(logDir, file), path.join(previousDir, file)),
-				),
+			getCurrentLogFiles(files).map((file) =>
+				fs.rename(path.join(logDir, file), path.join(previousDir, file)),
+			),
 		);
 
-		// 5. Delete legacy .session_ref if it exists (migration cleanup)
+		// Delete legacy .session_ref if it exists (migration cleanup)
 		try {
-			const sessionRefPath = path.join(logDir, SESSION_REF_FILENAME);
-			await fs.rm(sessionRefPath, { force: true });
+			await fs.rm(path.join(logDir, SESSION_REF_FILENAME), { force: true });
 		} catch {
 			// Ignore errors
 		}
