@@ -181,7 +181,6 @@ Combine the script's session summary with the detailed failure information into 
  * Build the gauntlet-help skill bundle content.
  * Returns { content, references } for the multi-file skill.
  */
-// Builds the full gauntlet-help skill bundle (SKILL.md + reference files)
 function buildHelpSkillBundle(): {
 	content: string;
 	references: Record<string, string>;
