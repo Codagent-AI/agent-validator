@@ -194,6 +194,14 @@ export class CodexAdapter implements CLIAdapter {
 		return path.join(os.homedir(), ".codex", "prompts");
 	}
 
+	getProjectSkillDir(): string | null {
+		return null;
+	}
+
+	getUserSkillDir(): string | null {
+		return null;
+	}
+
 	getCommandExtension(): string {
 		return ".md";
 	}

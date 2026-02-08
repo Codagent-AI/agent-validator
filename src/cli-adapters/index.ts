@@ -171,6 +171,16 @@ export interface CLIAdapter {
 	 */
 	getUserCommandDir(): string | null;
 	/**
+	 * Returns the project-scoped skill directory path (relative to project root).
+	 * Returns null if the CLI doesn't support the skills model.
+	 */
+	getProjectSkillDir(): string | null;
+	/**
+	 * Returns the user-level skill directory path (absolute path).
+	 * Returns null if the CLI doesn't support the skills model.
+	 */
+	getUserSkillDir(): string | null;
+	/**
 	 * Returns the command file extension used by this CLI.
 	 */
 	getCommandExtension(): string;

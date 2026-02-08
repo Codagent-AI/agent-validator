@@ -8,10 +8,77 @@ import { exists } from "./shared.js";
 
 const MAX_PROMPT_ATTEMPTS = 10;
 
-const GAUNTLET_COMMAND_CONTENT = `---
-description: Run the full verification gauntlet
+// --- Skill content templates ---
+// These are used for both skills (Claude) and flat commands (other agents).
+// The frontmatter fields (name, disable-model-invocation) are only meaningful
+// for skills but are harmless in flat command files.
+
+/**
+ * Build gauntlet run/check skill content. Shared structure avoids duplication
+ * between the "run" and "check" skills.
+ */
+function buildGauntletSkillContent(mode: "run" | "check"): string {
+	const isRun = mode === "run";
+	const name = isRun ? "run" : "check";
+	const description = isRun
+		? "Run the full verification gauntlet"
+		: "Run checks only (no reviews)";
+	const command = isRun ? "agent-gauntlet run" : "agent-gauntlet check";
+	const heading = isRun
+		? "Execute the autonomous verification suite."
+		: "Run the gauntlet checks only \u2014 no AI reviews.";
+
+	const frontmatter = `---
+name: gauntlet-${name}
+description: ${description}
+disable-model-invocation: true
 allowed-tools: Bash
----
+---`;
+
+	// Common prefix: archive old logs, then run the command
+	const steps = [
+		`1. Run \`agent-gauntlet clean\` to archive any previous log files`,
+		`2. Run \`${command}\``,
+	];
+
+	if (isRun) {
+		steps.push(
+			`3. If it fails:
+   - Identify the failed gates from the console output.
+   - For CHECK failures: Read the \`.log\` file path provided in the output.
+   - For REVIEW failures: Read the \`.json\` file path provided in the "Review: <path>" output.
+4. Address the violations:
+   - For REVIEW violations: You MUST update the \`"status"\` and \`"result"\` fields in the provided \`.json\` file for EACH violation.
+     - Set \`"status": "fixed"\` and add a brief description to \`"result"\` for issues you fix.
+     - Set \`"status": "skipped"\` and add a brief reason to \`"result"\` for issues you skip (based on the trust level).
+     - Do NOT modify any other attributes (file, line, issue, priority) in the JSON file.
+   - Apply the trust level above when deciding whether to act on AI reviewer feedback.
+5. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries. The tool detects existing logs and automatically switches to verification mode.
+6. Repeat steps 3-5 until one of the following termination conditions is met:
+   - "Status: Passed" appears in the output (logs are automatically archived)
+   - "Status: Passed with warnings" appears in the output (remaining issues were skipped)
+   - "Status: Retry limit exceeded" appears in the output -> Run \`agent-gauntlet clean\` to archive logs for the session record. Do NOT retry after cleaning.
+7. Provide a summary of the session:
+   - Issues Fixed: (list key fixes)
+   - Issues Skipped: (list skipped items and reasons)
+   - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)`,
+		);
+	} else {
+		steps.push(
+			`3. If any checks fail:
+   - Read the \`.log\` file path provided in the output for each failed check.
+   - Fix the issues found.
+4. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries.
+5. Repeat steps 3-4 until all checks pass or you've made 3 attempts.
+6. Provide a summary of the session:
+   - Checks Passed: (list)
+   - Checks Failed: (list with brief reason)
+   - Fixes Applied: (list key fixes)`,
+		);
+	}
+
+	if (isRun) {
+		return `${frontmatter}
 <!--
   REVIEW TRUST LEVEL
   Controls how aggressively the agent acts on AI reviewer feedback.
@@ -23,44 +90,48 @@ allowed-tools: Bash
 -->
 <!-- trust_level: medium -->
 
-# /gauntlet
-Execute the autonomous verification suite.
+# /gauntlet-${name}
+${heading}
 
-**Review trust level: medium** — Fix issues you reasonably agree with or believe the human wants fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
+**Review trust level: medium** \u2014 Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
 
-1. Run \`agent-gauntlet run\`.
-2. If it fails:
-   - Check the console output for "Fix instructions: available" messages.
-   - Read the log files in \`gauntlet_logs/\` to understand exactly what went wrong.
-   - If fix instructions are available, they will be in the log file under a "--- Fix Instructions ---" section—carefully read and apply them FIRST before attempting other fixes.
-3. Fix any code or logic errors found by the tools or AI reviewers, prioritizing higher-priority violations (critical > high > medium > low).
-4. Apply the trust level above when deciding whether to act on AI reviewer feedback. If you skip an issue due to the trust threshold, report it with a brief explanation (e.g., "Skipped: [issue summary] — reason: [stylistic/subjective/disagree]").
-5. Do NOT commit your changes yet—keep them uncommitted so the next run can verify them.
-6. Run \`agent-gauntlet run\` again to verify your fixes. It will detect existing logs and automatically switch to verification mode (uncommitted changes + previous failure context).
-7. Repeat steps 2-6 until one of the following termination conditions is met:
-   - All gates pass (logs are automatically archived)
-   - You disagree with remaining failures (ask the human how to proceed)
-   - Still failing after 3 attempts
-8. Once all gates pass, do NOT commit or push your changes—await the human's review and explicit instruction to commit.
+${steps.join("\n")}
 `;
+	}
 
-const PUSH_PR_COMMAND_CONTENT = `---
+	return `${frontmatter}
+
+# /gauntlet-${name}
+${heading}
+
+${steps.join("\n")}
+`;
+}
+
+const GAUNTLET_RUN_SKILL_CONTENT = buildGauntletSkillContent("run");
+const GAUNTLET_CHECK_SKILL_CONTENT = buildGauntletSkillContent("check");
+
+const PUSH_PR_SKILL_CONTENT = `---
+name: gauntlet-push-pr
 description: Commit changes, push to remote, and create or update a pull request
+disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# /push-pr
+# /gauntlet-push-pr
 Commit all changes, push to remote, and create or update a pull request for the current branch.
 
 After the PR is created or updated, verify it exists by running \`gh pr view\`.
 `;
 
-const FIX_PR_COMMAND_CONTENT = `---
+const FIX_PR_SKILL_CONTENT = `---
+name: gauntlet-fix-pr
 description: Fix CI failures or address review comments on a pull request
+disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# /fix-pr
+# /gauntlet-fix-pr
 Fix CI failures or address review comments on the current pull request.
 
 1. Check CI status and review comments: \`gh pr checks\` and \`gh pr view --comments\`
@@ -68,6 +139,55 @@ Fix CI failures or address review comments on the current pull request.
 3. Commit and push your changes
 4. After pushing, verify the PR is updated: \`gh pr view\`
 `;
+
+const GAUNTLET_STATUS_SKILL_CONTENT = `---
+name: gauntlet-status
+description: Show a summary of the most recent gauntlet session
+disable-model-invocation: true
+allowed-tools: Bash, Read
+---
+
+# /gauntlet-status
+Show a detailed summary of the most recent gauntlet session.
+
+## Step 1: Run the status script
+
+\`\`\`bash
+bun .gauntlet/skills/gauntlet/status/scripts/status.ts 2>&1
+\`\`\`
+
+The script parses the \`.debug.log\` for session-level data (run count, gate results, pass/fail status) and lists all log files with their paths and sizes.
+
+## Step 2: Read failed gate details
+
+For each gate marked **FAIL** in the Gate Results table, read the corresponding log files to extract failure details:
+
+- **Check failures** (e.g., \`check:src:code-health\`): Read the matching \`check_*.log\` file. Check log formats vary by tool (linters, test runners, code health analyzers) — read the file and extract the relevant error/warning output.
+- **Review failures** (e.g., \`review:.:code-quality\`): Read the matching \`review_*.json\` file(s). These contain structured violation data with \`file\`, \`line\`, \`issue\`, \`priority\`, and \`status\` fields.
+
+Use the file paths from the "Log Files" section of the script output. Match gate IDs to file names: \`check:.:lint\` corresponds to \`check_._lint.*.log\`, \`review:.:code-quality\` corresponds to \`review_._code-quality_*.{log,json}\`.
+
+## Step 3: Present the results
+
+Combine the script's session summary with the detailed failure information into a comprehensive report:
+
+1. Session overview (status, iterations, duration, fixed/skipped/failed counts)
+2. Gate results table
+3. For any failed gates: the specific errors, violations, or test failures from the log files
+4. For reviews with violations: list each violation with file, line, issue, priority, and current status (fixed/skipped/outstanding)
+`;
+
+/**
+ * Skill definitions used by installCommands.
+ * Each entry maps a skill action name to its content and metadata.
+ */
+const SKILL_DEFINITIONS = [
+	{ action: "run", content: GAUNTLET_RUN_SKILL_CONTENT },
+	{ action: "check", content: GAUNTLET_CHECK_SKILL_CONTENT },
+	{ action: "push-pr", content: PUSH_PR_SKILL_CONTENT },
+	{ action: "fix-pr", content: FIX_PR_SKILL_CONTENT },
+	{ action: "status", content: GAUNTLET_STATUS_SKILL_CONTENT },
+] as const;
 
 type InstallLevel = "none" | "project" | "user";
 
@@ -182,79 +302,36 @@ command: ${config.testCmd || "# command: TODO - add your test command (e.g., npm
 			);
 			console.log(chalk.green("Created .gauntlet/reviews/code-quality.yml"));
 
-			// Write the canonical gauntlet command file
-			const canonicalCommandPath = path.join(targetDir, "run_gauntlet.md");
-			await fs.writeFile(canonicalCommandPath, GAUNTLET_COMMAND_CONTENT);
-			console.log(chalk.green("Created .gauntlet/run_gauntlet.md"));
+			// Copy status script bundle into .gauntlet/
+			await copyStatusScript(targetDir);
 
-			// Write the push-pr command file
-			const pushPrCommandPath = path.join(targetDir, "push_pr.md");
-			if (await exists(pushPrCommandPath)) {
-				console.log(
-					chalk.dim(
-						".gauntlet/push_pr.md already exists, preserving existing file",
-					),
-				);
-			} else {
-				await fs.writeFile(pushPrCommandPath, PUSH_PR_COMMAND_CONTENT);
-				console.log(chalk.green("Created .gauntlet/push_pr.md"));
-			}
-
-			// Write the fix-pr command file
-			const fixPrCommandPath = path.join(targetDir, "fix_pr.md");
-			if (await exists(fixPrCommandPath)) {
-				console.log(
-					chalk.dim(
-						".gauntlet/fix_pr.md already exists, preserving existing file",
-					),
-				);
-			} else {
-				await fs.writeFile(fixPrCommandPath, FIX_PR_COMMAND_CONTENT);
-				console.log(chalk.green("Created .gauntlet/fix_pr.md"));
-			}
+			// Build the commands list from skill definitions
+			const commands: SkillCommand[] = SKILL_DEFINITIONS.map((skill) => ({
+				action: skill.action,
+				content: skill.content,
+			}));
 
 			// Handle command installation
 			if (options.yes) {
 				// Default: install at project level for all selected agents (if they support it)
 				const adaptersToInstall = config.selectedAdapters.filter(
-					(a) => a.getProjectCommandDir() !== null,
+					(a) =>
+						a.getProjectCommandDir() !== null ||
+						a.getProjectSkillDir() !== null,
 				);
 				if (adaptersToInstall.length > 0) {
 					await installCommands({
 						level: "project",
 						agentNames: adaptersToInstall.map((a) => a.name),
 						projectRoot,
-						commands: [
-							{
-								name: "gauntlet",
-								content: GAUNTLET_COMMAND_CONTENT,
-								canonicalPath: canonicalCommandPath,
-								symlinkLabel: ".gauntlet/run_gauntlet.md",
-							},
-							{
-								name: "push-pr",
-								content: PUSH_PR_COMMAND_CONTENT,
-								canonicalPath: pushPrCommandPath,
-								symlinkLabel: ".gauntlet/push_pr.md",
-							},
-							{
-								name: "fix-pr",
-								content: FIX_PR_COMMAND_CONTENT,
-								canonicalPath: fixPrCommandPath,
-								symlinkLabel: ".gauntlet/fix_pr.md",
-							},
-						],
+						commands,
 					});
 				}
 			} else {
-				// Interactive prompts - passing available adapters to avoid re-checking or offering unavailable ones
+				// Interactive prompts
 				await promptAndInstallCommands({
 					projectRoot,
-					commandPaths: {
-						gauntlet: canonicalCommandPath,
-						pushPr: pushPrCommandPath,
-						fixPr: fixPrCommandPath,
-					},
+					commands,
 					availableAdapters,
 				});
 			}
@@ -273,10 +350,10 @@ async function detectAvailableCLIs(): Promise<CLIAdapter[]> {
 	for (const adapter of allAdapters) {
 		const isAvailable = await adapter.isAvailable();
 		if (isAvailable) {
-			console.log(chalk.green(`  ✓ ${adapter.name}`));
+			console.log(chalk.green(`  \u2713 ${adapter.name}`));
 			available.push(adapter);
 		} else {
-			console.log(chalk.dim(`  ✗ ${adapter.name} (not installed)`));
+			console.log(chalk.dim(`  \u2717 ${adapter.name} (not installed)`));
 		}
 	}
 	return available;
@@ -320,36 +397,13 @@ async function promptForConfig(
 				.filter((s) => s);
 
 			if (selections.length === 0) {
-				// Default to all if empty? Or force selection? Plan says "Which CLIs...".
-				// Let's assume user must pick or we default to all if they just hit enter?
-				// Actually, usually enter means default. Let's make All the default if just Enter.
 				selectedAdapters = availableAdapters;
 				break;
 			}
 
-			let valid = true;
-			const chosen: CLIAdapter[] = [];
-
-			for (const sel of selections) {
-				const num = parseInt(sel, 10);
-				if (
-					Number.isNaN(num) ||
-					num < 1 ||
-					num > availableAdapters.length + 1
-				) {
-					console.log(chalk.yellow(`Invalid selection: ${sel}`));
-					valid = false;
-					break;
-				}
-				if (num === availableAdapters.length + 1) {
-					chosen.push(...availableAdapters);
-				} else {
-					chosen.push(availableAdapters[num - 1]!);
-				}
-			}
-
-			if (valid) {
-				selectedAdapters = [...new Set(chosen)];
+			const chosen = parseSelections(selections, availableAdapters);
+			if (chosen) {
+				selectedAdapters = chosen;
 				break;
 			}
 		}
@@ -402,6 +456,31 @@ async function promptForConfig(
 	}
 }
 
+/**
+ * Parse numeric selections into adapter list. Returns null if any selection is invalid.
+ * Used by both CLI selection (returns adapters) and agent selection (caller maps to names).
+ */
+function parseSelections(
+	selections: string[],
+	adapters: CLIAdapter[],
+): CLIAdapter[] | null {
+	const chosen: CLIAdapter[] = [];
+	for (const sel of selections) {
+		const num = parseInt(sel, 10);
+		if (Number.isNaN(num) || num < 1 || num > adapters.length + 1) {
+			console.log(chalk.yellow(`Invalid selection: ${sel}`));
+			return null;
+		}
+		if (num === adapters.length + 1) {
+			chosen.push(...adapters);
+		} else {
+			const adapter = adapters[num - 1];
+			if (adapter) chosen.push(adapter);
+		}
+	}
+	return [...new Set(chosen)];
+}
+
 function generateConfigYml(config: InitConfig): string {
 	const cliList = config.selectedAdapters
 		.map((a) => `    - ${a.name}`)
@@ -437,21 +516,129 @@ ${entryPoints}
 `;
 }
 
+/**
+ * Copy the status script bundle into .gauntlet/skills/gauntlet/status/scripts/.
+ * The script is sourced from the package's src/scripts/status.ts.
+ */
+async function copyStatusScript(targetDir: string): Promise<void> {
+	const statusScriptDir = path.join(
+		targetDir,
+		"skills",
+		"gauntlet",
+		"status",
+		"scripts",
+	);
+	const statusScriptPath = path.join(statusScriptDir, "status.ts");
+	await fs.mkdir(statusScriptDir, { recursive: true });
+
+	if (await exists(statusScriptPath)) return;
+
+	const bundledScript = path.join(
+		path.dirname(new URL(import.meta.url).pathname),
+		"..",
+		"scripts",
+		"status.ts",
+	);
+	if (await exists(bundledScript)) {
+		await fs.copyFile(bundledScript, statusScriptPath);
+		console.log(
+			chalk.green("Created .gauntlet/skills/gauntlet/status/scripts/status.ts"),
+		);
+	} else {
+		console.log(
+			chalk.yellow(
+				"Warning: bundled status script not found; /gauntlet-status may fail.",
+			),
+		);
+	}
+}
+
 interface PromptAndInstallOptions {
 	projectRoot: string;
-	commandPaths: {
-		gauntlet: string;
-		pushPr: string;
-		fixPr: string;
-	};
+	commands: SkillCommand[];
 	availableAdapters: CLIAdapter[];
+}
+
+/**
+ * Prompt the user to select an install level (none, project, user).
+ */
+async function promptInstallLevel(
+	questionFn: (prompt: string) => Promise<string>,
+): Promise<InstallLevel> {
+	console.log("Where would you like to install the /gauntlet command?");
+	console.log("  1) Don't install commands");
+	console.log(
+		"  2) Project level (in this repo's .claude/skills, .gemini/commands, etc.)",
+	);
+	console.log(
+		"  3) User level (in ~/.claude/skills, ~/.gemini/commands, etc.)",
+	);
+	console.log();
+
+	let answer = await questionFn("Select option [1-3]: ");
+	let attempts = 0;
+
+	while (true) {
+		attempts++;
+		if (attempts > MAX_PROMPT_ATTEMPTS)
+			throw new Error("Too many invalid attempts");
+
+		if (answer === "1") return "none";
+		if (answer === "2") return "project";
+		if (answer === "3") return "user";
+
+		console.log(chalk.yellow("Please enter 1, 2, or 3"));
+		answer = await questionFn("Select option [1-3]: ");
+	}
+}
+
+/**
+ * Prompt the user to select which agents to install commands for.
+ * Returns the selected agent names (deduplicated).
+ */
+async function promptAgentSelection(
+	questionFn: (prompt: string) => Promise<string>,
+	installableAdapters: CLIAdapter[],
+): Promise<string[]> {
+	console.log();
+	console.log("Which CLI agents would you like to install the command for?");
+	installableAdapters.forEach((adapter, i) => {
+		console.log(`  ${i + 1}) ${adapter.name}`);
+	});
+	console.log(`  ${installableAdapters.length + 1}) All of the above`);
+	console.log();
+
+	const promptText = `Select options (comma-separated, e.g., 1,2 or ${installableAdapters.length + 1} for all): `;
+	let answer = await questionFn(promptText);
+	let attempts = 0;
+
+	while (true) {
+		attempts++;
+		if (attempts > MAX_PROMPT_ATTEMPTS)
+			throw new Error("Too many invalid attempts");
+
+		const selections = answer
+			.split(",")
+			.map((s) => s.trim())
+			.filter((s) => s);
+
+		if (selections.length === 0) {
+			console.log(chalk.yellow("Please select at least one option"));
+			answer = await questionFn(promptText);
+			continue;
+		}
+
+		const chosen = parseSelections(selections, installableAdapters);
+		if (chosen) return chosen.map((a) => a.name);
+
+		answer = await questionFn(promptText);
+	}
 }
 
 async function promptAndInstallCommands(
 	options: PromptAndInstallOptions,
 ): Promise<void> {
-	const { projectRoot, commandPaths, availableAdapters } = options;
-	// Only proceed if we have available adapters
+	const { projectRoot, commands, availableAdapters } = options;
 	if (availableAdapters.length === 0) return;
 
 	const rl = readline.createInterface({
@@ -477,40 +664,7 @@ async function promptAndInstallCommands(
 		);
 		console.log();
 
-		// Question 1: Install level
-		console.log("Where would you like to install the /gauntlet command?");
-		console.log("  1) Don't install commands");
-		console.log(
-			"  2) Project level (in this repo's .claude/commands, .gemini/commands, etc.)",
-		);
-		console.log(
-			"  3) User level (in ~/.claude/commands, ~/.gemini/commands, etc.)",
-		);
-		console.log();
-
-		let installLevel: InstallLevel = "none";
-		let answer = await question("Select option [1-3]: ");
-		let installLevelAttempts = 0;
-
-		while (true) {
-			installLevelAttempts++;
-			if (installLevelAttempts > MAX_PROMPT_ATTEMPTS)
-				throw new Error("Too many invalid attempts");
-
-			if (answer === "1") {
-				installLevel = "none";
-				break;
-			} else if (answer === "2") {
-				installLevel = "project";
-				break;
-			} else if (answer === "3") {
-				installLevel = "user";
-				break;
-			} else {
-				console.log(chalk.yellow("Please enter 1, 2, or 3"));
-				answer = await question("Select option [1-3]: ");
-			}
-		}
+		const installLevel = await promptInstallLevel(question);
 
 		if (installLevel === "none") {
 			console.log(chalk.dim("\nSkipping command installation."));
@@ -518,11 +672,17 @@ async function promptAndInstallCommands(
 			return;
 		}
 
-		// Filter available adapters based on install level support
 		const installableAdapters =
 			installLevel === "project"
-				? availableAdapters.filter((a) => a.getProjectCommandDir() !== null)
-				: availableAdapters.filter((a) => a.getUserCommandDir() !== null);
+				? availableAdapters.filter(
+						(a) =>
+							a.getProjectCommandDir() !== null ||
+							a.getProjectSkillDir() !== null,
+					)
+				: availableAdapters.filter(
+						(a) =>
+							a.getUserCommandDir() !== null || a.getUserSkillDir() !== null,
+					);
 
 		if (installableAdapters.length === 0) {
 			console.log(
@@ -534,95 +694,18 @@ async function promptAndInstallCommands(
 			return;
 		}
 
-		console.log();
-		console.log("Which CLI agents would you like to install the command for?");
-		installableAdapters.forEach((adapter, i) => {
-			console.log(`  ${i + 1}) ${adapter.name}`);
-		});
-		console.log(`  ${installableAdapters.length + 1}) All of the above`);
-		console.log();
-
-		let selectedAgents: string[] = [];
-		answer = await question(
-			`Select options (comma-separated, e.g., 1,2 or ${installableAdapters.length + 1} for all): `,
+		const selectedAgents = await promptAgentSelection(
+			question,
+			installableAdapters,
 		);
-		let agentSelectionAttempts = 0;
-
-		while (true) {
-			agentSelectionAttempts++;
-			if (agentSelectionAttempts > MAX_PROMPT_ATTEMPTS)
-				throw new Error("Too many invalid attempts");
-
-			const selections = answer
-				.split(",")
-				.map((s) => s.trim())
-				.filter((s) => s);
-
-			if (selections.length === 0) {
-				console.log(chalk.yellow("Please select at least one option"));
-				answer = await question(
-					`Select options (comma-separated, e.g., 1,2 or ${installableAdapters.length + 1} for all): `,
-				);
-				continue;
-			}
-
-			let valid = true;
-			const agents: string[] = [];
-
-			for (const sel of selections) {
-				const num = parseInt(sel, 10);
-				if (
-					Number.isNaN(num) ||
-					num < 1 ||
-					num > installableAdapters.length + 1
-				) {
-					console.log(chalk.yellow(`Invalid selection: ${sel}`));
-					valid = false;
-					break;
-				}
-				if (num === installableAdapters.length + 1) {
-					agents.push(...installableAdapters.map((a) => a.name));
-				} else {
-					agents.push(installableAdapters[num - 1]!.name);
-				}
-			}
-
-			if (valid) {
-				selectedAgents = [...new Set(agents)]; // Dedupe
-				break;
-			}
-			answer = await question(
-				`Select options (comma-separated, e.g., 1,2 or ${installableAdapters.length + 1} for all): `,
-			);
-		}
 
 		rl.close();
 
-		// Install commands
 		await installCommands({
 			level: installLevel,
 			agentNames: selectedAgents,
 			projectRoot,
-			commands: [
-				{
-					name: "gauntlet",
-					content: GAUNTLET_COMMAND_CONTENT,
-					canonicalPath: commandPaths.gauntlet,
-					symlinkLabel: ".gauntlet/run_gauntlet.md",
-				},
-				{
-					name: "push-pr",
-					content: PUSH_PR_COMMAND_CONTENT,
-					canonicalPath: commandPaths.pushPr,
-					symlinkLabel: ".gauntlet/push_pr.md",
-				},
-				{
-					name: "fix-pr",
-					content: FIX_PR_COMMAND_CONTENT,
-					canonicalPath: commandPaths.fixPr,
-					symlinkLabel: ".gauntlet/fix_pr.md",
-				},
-			],
+			commands,
 		});
 	} catch (error: unknown) {
 		rl.close();
@@ -630,107 +713,175 @@ async function promptAndInstallCommands(
 	}
 }
 
+/**
+ * A skill/command to be installed.
+ */
+interface SkillCommand {
+	/** The skill action name (e.g., "run", "check", "push-pr"). */
+	action: string;
+	/** The Markdown content (with YAML frontmatter). */
+	content: string;
+}
+
+interface InstallContext {
+	isUserLevel: boolean;
+	projectRoot: string;
+}
+
 interface InstallCommandsOptions {
 	level: InstallLevel;
 	agentNames: string[];
 	projectRoot: string;
-	commands: Array<{
-		name: string;
-		content: string;
-		canonicalPath?: string;
-		symlinkLabel?: string;
-	}>;
+	commands: SkillCommand[];
 }
 
 /**
- * Install a single command file for an adapter, using symlink or transform as appropriate.
+ * Install a single skill for Claude as a SKILL.md in a nested directory.
  */
-async function installSingleCommand(
-	adapter: ReturnType<typeof getAllAdapters>[number],
-	commandDir: string,
-	isUserLevel: boolean,
-	projectRoot: string,
-	command: InstallCommandsOptions["commands"][number],
+async function installSkill(
+	skillDir: string,
+	ctx: InstallContext,
+	command: SkillCommand,
 ): Promise<void> {
-	const fileName = `${command.name}${adapter.getCommandExtension()}`;
+	const actionDir = path.join(skillDir, `gauntlet-${command.action}`);
+	const skillPath = path.join(actionDir, "SKILL.md");
+
+	await fs.mkdir(actionDir, { recursive: true });
+
+	if (await exists(skillPath)) {
+		const relPath = ctx.isUserLevel
+			? skillPath
+			: path.relative(ctx.projectRoot, skillPath);
+		console.log(chalk.dim(`  claude: ${relPath} already exists, skipping`));
+		return;
+	}
+
+	await fs.writeFile(skillPath, command.content);
+	const relPath = ctx.isUserLevel
+		? skillPath
+		: path.relative(ctx.projectRoot, skillPath);
+	console.log(chalk.green(`Created ${relPath}`));
+}
+
+/**
+ * Install a single flat command file for a non-Claude adapter.
+ * Uses the "gauntlet" name prefix for non-namespaced agents.
+ */
+async function installFlatCommand(
+	adapter: CLIAdapter,
+	commandDir: string,
+	ctx: InstallContext,
+	command: SkillCommand,
+): Promise<void> {
+	// Non-Claude agents get flat files named "gauntlet" (for run) or the action name
+	const name = command.action === "run" ? "gauntlet" : command.action;
+	const fileName = `${name}${adapter.getCommandExtension()}`;
 	const filePath = path.join(commandDir, fileName);
 
 	if (await exists(filePath)) {
-		const relPath = isUserLevel
+		const relPath = ctx.isUserLevel
 			? filePath
-			: path.relative(projectRoot, filePath);
+			: path.relative(ctx.projectRoot, filePath);
 		console.log(
 			chalk.dim(`  ${adapter.name}: ${relPath} already exists, skipping`),
 		);
 		return;
 	}
 
-	if (!isUserLevel && adapter.canUseSymlink() && command.canonicalPath) {
-		const relativePath = path.relative(commandDir, command.canonicalPath);
-		await fs.symlink(relativePath, filePath);
-		const relPath = path.relative(projectRoot, filePath);
-		const label = command.symlinkLabel ?? command.canonicalPath;
-		console.log(chalk.green(`Created ${relPath} (symlink to ${label})`));
-	} else {
-		const transformedContent = adapter.transformCommand(command.content);
-		await fs.writeFile(filePath, transformedContent);
-		const relPath = isUserLevel
-			? filePath
-			: path.relative(projectRoot, filePath);
-		console.log(chalk.green(`Created ${relPath}`));
+	const transformedContent = adapter.transformCommand(command.content);
+	await fs.writeFile(filePath, transformedContent);
+	const relPath = ctx.isUserLevel
+		? filePath
+		: path.relative(ctx.projectRoot, filePath);
+	console.log(chalk.green(`Created ${relPath}`));
+}
+
+/**
+ * Install skills for a skills-capable adapter (e.g., Claude).
+ */
+async function installSkillsForAdapter(
+	adapter: CLIAdapter,
+	skillDir: string,
+	ctx: InstallContext,
+	commands: SkillCommand[],
+): Promise<void> {
+	const resolvedSkillDir = ctx.isUserLevel
+		? skillDir
+		: path.join(ctx.projectRoot, skillDir);
+	try {
+		for (const command of commands) {
+			await installSkill(resolvedSkillDir, ctx, command);
+		}
+	} catch (error: unknown) {
+		const err = error as { message?: string };
+		console.log(
+			chalk.yellow(
+				`  ${adapter.name}: Could not create skill - ${err.message}`,
+			),
+		);
+	}
+}
+
+/**
+ * Install flat command files for a non-skills adapter.
+ */
+async function installFlatCommandsForAdapter(
+	adapter: CLIAdapter,
+	commandDir: string,
+	ctx: InstallContext,
+	commands: SkillCommand[],
+): Promise<void> {
+	const resolvedCommandDir = ctx.isUserLevel
+		? commandDir
+		: path.join(ctx.projectRoot, commandDir);
+	try {
+		await fs.mkdir(resolvedCommandDir, { recursive: true });
+		// Non-Claude agents only get run, push-pr, and fix-pr (not check/status)
+		const flatCommands = commands.filter(
+			(c) => c.action !== "check" && c.action !== "status",
+		);
+		for (const command of flatCommands) {
+			await installFlatCommand(adapter, resolvedCommandDir, ctx, command);
+		}
+	} catch (error: unknown) {
+		const err = error as { message?: string };
+		console.log(
+			chalk.yellow(
+				`  ${adapter.name}: Could not create command - ${err.message}`,
+			),
+		);
 	}
 }
 
 async function installCommands(options: InstallCommandsOptions): Promise<void> {
 	const { level, agentNames, projectRoot, commands } = options;
-	if (level === "none" || agentNames.length === 0) {
-		return;
-	}
+	if (level === "none" || agentNames.length === 0) return;
 
 	console.log();
 	const allAdapters = getAllAdapters();
+
+	const isUserLevel = level === "user";
+	const ctx: InstallContext = { isUserLevel, projectRoot };
 
 	for (const agentName of agentNames) {
 		const adapter = allAdapters.find((a) => a.name === agentName);
 		if (!adapter) continue;
 
-		let commandDir: string | null;
-		let isUserLevel: boolean;
+		const skillDir = isUserLevel
+			? adapter.getUserSkillDir()
+			: adapter.getProjectSkillDir();
 
-		if (level === "project") {
-			commandDir = adapter.getProjectCommandDir();
-			isUserLevel = false;
-			if (commandDir) {
-				commandDir = path.join(projectRoot, commandDir);
-			}
-		} else {
-			commandDir = adapter.getUserCommandDir();
-			isUserLevel = true;
-		}
-
-		if (!commandDir) {
+		if (skillDir) {
+			await installSkillsForAdapter(adapter, skillDir, ctx, commands);
 			continue;
 		}
 
-		try {
-			await fs.mkdir(commandDir, { recursive: true });
-			for (const command of commands) {
-				await installSingleCommand(
-					adapter,
-					commandDir,
-					isUserLevel,
-					projectRoot,
-					command,
-				);
-			}
-		} catch (error: unknown) {
-			const err = error as { message?: string };
-			console.log(
-				chalk.yellow(
-					`  ${adapter.name}: Could not create command - ${err.message}`,
-				),
-			);
-		}
+		const commandDir = isUserLevel
+			? adapter.getUserCommandDir()
+			: adapter.getProjectCommandDir();
+		if (!commandDir) continue;
+
+		await installFlatCommandsForAdapter(adapter, commandDir, ctx, commands);
 	}
 }
 

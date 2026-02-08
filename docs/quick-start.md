@@ -30,9 +30,8 @@ agent-gauntlet init
 
 This creates the `.gauntlet/` directory with:
 - Configuration files for checks, reviews, and entry points (see [Configuration Layout](#configuration-layout))
-- `run_gauntlet.md` — agent loop rules for the `/gauntlet` command
 
-Optionally, the interactive setup can also install `/gauntlet` as a slash command for your AI agents (Claude, Gemini, etc.).
+Optionally, the interactive setup can also install gauntlet skills for your AI agents (Claude, Gemini, etc.). See the [Skills Guide](skills-guide.md) for details.
 
 ## Configuration Concepts
 
@@ -52,9 +51,9 @@ When you run `agent-gauntlet`, it detects which entry points have changed files 
 agent-gauntlet run
 ```
 
-## Agent Loop Rules
+## Agent Skills
 
-The `.gauntlet/run_gauntlet.md` file defines how AI agents should interact with the gauntlet. By default, agents will terminate after 4 runs (1 initial + 3 fix attempts). You can increase this limit by manually editing the termination conditions in that file.
+Agent Gauntlet can install skills (for Claude Code) and flat commands (for other CLI agents) that let you invoke gauntlet workflows directly from your AI agent session. For example, `/gauntlet-run` runs the full verification suite and iterates on failures. See the [Skills Guide](skills-guide.md) for the full list of skills and configuration options.
 
 ## Configuration Layout
 
@@ -214,6 +213,7 @@ For detailed configuration options, troubleshooting, and advanced usage, see the
 
 ## Further Reading
 - [User Guide](user-guide.md) — full usage details
+- [Skills Guide](skills-guide.md) — gauntlet skills for AI agents
 - [Configuration Reference](config-reference.md) — all configuration fields + defaults
 - [CLI Invocation Details](cli-invocation-details.md) — how we securely invoke AI CLIs
 - [Stop Hook Guide](stop-hook-guide.md) — stop hook configuration and troubleshooting

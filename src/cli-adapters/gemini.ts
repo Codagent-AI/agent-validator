@@ -301,6 +301,14 @@ export class GeminiAdapter implements CLIAdapter {
 		return path.join(os.homedir(), ".gemini", "commands");
 	}
 
+	getProjectSkillDir(): string | null {
+		return null;
+	}
+
+	getUserSkillDir(): string | null {
+		return null;
+	}
+
 	getCommandExtension(): string {
 		return ".toml";
 	}

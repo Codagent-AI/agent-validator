@@ -229,6 +229,14 @@ export class ClaudeAdapter implements CLIAdapter {
 		return path.join(os.homedir(), ".claude", "commands");
 	}
 
+	getProjectSkillDir(): string | null {
+		return ".claude/skills";
+	}
+
+	getUserSkillDir(): string | null {
+		return path.join(os.homedir(), ".claude", "skills");
+	}
+
 	getCommandExtension(): string {
 		return ".md";
 	}

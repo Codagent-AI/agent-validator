@@ -57,7 +57,8 @@ class DiffParser {
 	private processContentLine(line: string): void {
 		if (!this.currentRanges) return;
 
-		if (line.startsWith("+") && !line.startsWith("+++")) {
+		if (line.startsWith("+")) {
+			if (line.startsWith("+++ ") || line.startsWith("+++\t")) return;
 			this.currentRanges.add(this.currentLineNumber);
 			this.currentLineNumber++;
 		} else if (line.startsWith(" ")) {
@@ -67,15 +68,10 @@ class DiffParser {
 }
 
 function parseFileHeader(line: string): string | null {
-	const parts = line.split(" ");
-	const targetPath = parts[3];
-	if (parts.length >= 4 && targetPath) {
-		const file = targetPath.startsWith("b/")
-			? targetPath.substring(2)
-			: targetPath;
-		return file.startsWith(".git/") ? null : file;
-	}
-	return null;
+	const match = line.match(/^diff --git a\/.+ b\/(.+)$/);
+	if (!match?.[1]) return null;
+	const file = match[1];
+	return file.startsWith(".git/") ? null : file;
 }
 
 function parseHunkHeader(line: string): number | null {
