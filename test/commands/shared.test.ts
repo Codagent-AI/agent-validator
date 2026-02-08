@@ -518,3 +518,18 @@ describe("auto-clean workflow integration", () => {
 		expect(await hasExistingLogs(TEST_DIR)).toBe(true);
 	});
 });
+
+describe("performAutoClean with maxPreviousLogs", () => {
+	it("performAutoClean accepts maxPreviousLogs parameter", () => {
+		const { readFileSync } = require("node:fs");
+		const { join } = require("node:path");
+		const sourceFile = readFileSync(
+			join(process.cwd(), "src/commands/shared.ts"),
+			"utf-8",
+		);
+
+		// performAutoClean should accept maxPreviousLogs and pass it to cleanLogs
+		expect(sourceFile).toMatch(/performAutoClean[\s\S]*?maxPreviousLogs/);
+		expect(sourceFile).toMatch(/cleanLogs\(logDir,\s*maxPreviousLogs\)/);
+	});
+});

@@ -348,7 +348,7 @@ export async function executeRun(
 		if (autoCleanResult.clean) {
 			log.debug(`Auto-cleaning logs (${autoCleanResult.reason})...`);
 			await debugLogger?.logClean("auto", autoCleanResult.reason || "unknown");
-			await performAutoClean(config.project.log_dir, autoCleanResult);
+			await performAutoClean(config.project.log_dir, autoCleanResult, config.project.max_previous_logs);
 		}
 
 		// Detect rerun mode after auto-clean (clean may have removed logs)

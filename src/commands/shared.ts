@@ -68,8 +68,9 @@ export async function shouldAutoClean(
 export async function performAutoClean(
 	logDir: string,
 	result: AutoCleanResult,
+	maxPreviousLogs = 3,
 ): Promise<void> {
-	await cleanLogs(logDir);
+	await cleanLogs(logDir, maxPreviousLogs);
 
 	// Delete execution state if context changed (branch changed or commit merged)
 	if (result.resetState) {
