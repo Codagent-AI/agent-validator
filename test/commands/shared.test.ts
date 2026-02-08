@@ -194,6 +194,92 @@ describe("cleanLogs", () => {
 	});
 });
 
+describe("cleanLogs rotation", () => {
+	beforeEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	it("rotates with maxPreviousLogs=3: evicts oldest, shifts, creates new previous/", async () => {
+		// Setup: previous/, previous.1/, previous.2/ all exist
+		await fs.mkdir(path.join(TEST_DIR, "previous"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous", "run-a.log"), "a");
+		await fs.mkdir(path.join(TEST_DIR, "previous.1"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous.1", "run-b.log"), "b");
+		await fs.mkdir(path.join(TEST_DIR, "previous.2"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous.2", "run-c.log"), "c");
+		// Current logs
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "current");
+
+		await cleanLogs(TEST_DIR, 3);
+
+		// previous.2/ should have what was in previous.1/
+		const prev2 = await fs.readdir(path.join(TEST_DIR, "previous.2"));
+		expect(prev2).toEqual(["run-b.log"]);
+		// previous.1/ should have what was in previous/
+		const prev1 = await fs.readdir(path.join(TEST_DIR, "previous.1"));
+		expect(prev1).toEqual(["run-a.log"]);
+		// previous/ should have current logs
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+		// Root should have no log files
+		const root = await fs.readdir(TEST_DIR);
+		expect(root.filter((f) => f.endsWith(".log") && !f.startsWith("."))).toEqual([]);
+	});
+
+	it("maxPreviousLogs=0: deletes current logs, no archiving", async () => {
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "content");
+
+		await cleanLogs(TEST_DIR, 0);
+
+		const files = await fs.readdir(TEST_DIR);
+		expect(files.filter((f) => f.endsWith(".log"))).toEqual([]);
+		// No previous/ directory created
+		expect(files).not.toContain("previous");
+	});
+
+	it("maxPreviousLogs=1: single previous/ directory (pre-existing behavior)", async () => {
+		await fs.mkdir(path.join(TEST_DIR, "previous"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous", "old.log"), "old");
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "new");
+
+		await cleanLogs(TEST_DIR, 1);
+
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+	});
+
+	it("skips missing intermediate directories without error", async () => {
+		// previous/ exists but previous.1/ does NOT
+		await fs.mkdir(path.join(TEST_DIR, "previous"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous", "run-a.log"), "a");
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "current");
+
+		await cleanLogs(TEST_DIR, 3);
+
+		// previous.1/ should have what was in previous/
+		const prev1 = await fs.readdir(path.join(TEST_DIR, "previous.1"));
+		expect(prev1).toEqual(["run-a.log"]);
+		// previous/ should have current logs
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+	});
+
+	it("backward compatible: cleanLogs without maxPreviousLogs defaults to 3", async () => {
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "content");
+
+		// Call without the second argument — should default to 3
+		await cleanLogs(TEST_DIR);
+
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+	});
+});
+
 describe("getLockFilename", () => {
 	it("returns the correct lock filename", () => {
 		expect(getLockFilename()).toBe(".gauntlet-run.lock");
