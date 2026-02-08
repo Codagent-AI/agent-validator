@@ -16,16 +16,22 @@ export class ChangeDetector {
 	) {}
 
 	async getChangedFiles(): Promise<string[]> {
-		// If commit option is provided, use that
+		// Priority 1: If commit option is provided, use that
 		if (this.options.commit) {
 			return this.getCommitChangedFiles(this.options.commit);
 		}
 
-		// If uncommitted option is provided, only get uncommitted changes
+		// Priority 2: If uncommitted option is provided, only get uncommitted changes
 		if (this.options.uncommitted) {
 			return this.getUncommittedChangedFiles();
 		}
 
+		// Priority 3: If fixBase is provided, diff against it
+		if (this.options.fixBase) {
+			return this.getFixBaseChangedFiles(this.options.fixBase);
+		}
+
+		// Priority 4: CI detection / local base branch diff
 		const isCI =
 			process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 
@@ -103,6 +109,29 @@ export class ChangeDetector {
 				throw new Error(`Failed to get changes for commit ${commit}`);
 			}
 		}
+	}
+
+	private async getFixBaseChangedFiles(fixBase: string): Promise<string[]> {
+		// Get all files changed since fixBase (committed + uncommitted + untracked)
+		const { stdout: committed } = await execAsync(
+			`git diff --name-only ${fixBase}...HEAD`,
+		);
+
+		const { stdout: uncommitted } = await execAsync(
+			"git diff --name-only HEAD",
+		);
+
+		const { stdout: untracked } = await execAsync(
+			"git ls-files --others --exclude-standard",
+		);
+
+		const files = new Set([
+			...this.parseOutput(committed),
+			...this.parseOutput(uncommitted),
+			...this.parseOutput(untracked),
+		]);
+
+		return Array.from(files);
 	}
 
 	private async getUncommittedChangedFiles(): Promise<string[]> {
