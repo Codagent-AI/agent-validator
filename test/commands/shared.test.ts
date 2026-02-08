@@ -1,10 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { exec } from "node:child_process";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
-
-const execAsync = promisify(exec);
 import {
 	acquireLock,
 	cleanLogs,
@@ -14,6 +10,7 @@ import {
 	releaseLock,
 	shouldAutoClean,
 } from "../../src/commands/shared.js";
+import * as executionState from "../../src/utils/execution-state.js";
 import {
 	getCurrentBranch,
 	getExecutionStateFilename,
@@ -335,14 +332,13 @@ describe("shouldAutoClean", () => {
 	// Integration tests would be more appropriate for that scenario.
 
 	it("returns resetState: true when commit is merged (unconditional)", async () => {
-		// Create state with a commit that IS an ancestor of the base branch.
-		// Use the base branch's own HEAD commit, which is trivially an ancestor.
-		const { stdout } = await execAsync("git rev-parse origin/main");
-		const mergedCommit = stdout.trim();
+		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
+		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
 
 		const state = {
 			last_run_completed_at: new Date().toISOString(),
-			branch: await getCurrentBranch(),
+			branch: "test-branch",
 			commit: mergedCommit,
 			working_tree_ref: mergedCommit, // A valid ref — old code would set resetState: false
 		};
@@ -355,6 +351,9 @@ describe("shouldAutoClean", () => {
 		expect(result.clean).toBe(true);
 		expect(result.reason).toBe("commit merged");
 		expect(result.resetState).toBe(true); // MUST be true, regardless of working_tree_ref validity
+
+		branchSpy.mockRestore();
+		mergedSpy.mockRestore();
 	});
 });
 

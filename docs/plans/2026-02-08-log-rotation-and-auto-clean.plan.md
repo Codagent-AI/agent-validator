@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add `max_previous_logs` config field
+## Task 1: Add `max_previous_logs` config field
 
 **Files:**
 - Modify: `src/config/schema.ts:151-164`
@@ -87,7 +87,7 @@ git commit -m "feat: add max_previous_logs config field (default: 3)"
 
 ---
 
-### Task 2: Implement logrotate-style rotation in `cleanLogs()`
+## Task 2: Implement logrotate-style rotation in `cleanLogs()`
 
 **Files:**
 - Modify: `src/commands/shared.ts:192-246`
@@ -291,7 +291,7 @@ git commit -m "feat: implement logrotate-style N-deep log rotation in cleanLogs(
 
 ---
 
-### Task 3: Bug fix — `shouldAutoClean()` always resets state on merge
+## Task 3: Bug fix — `shouldAutoClean()` always resets state on merge
 
 **Files:**
 - Modify: `src/commands/shared.ts:53-67`
@@ -371,7 +371,7 @@ git commit -m "fix: always reset execution state on commit merged (remove stash 
 
 ---
 
-### Task 4: Bug fix — manual `clean` preserves execution state
+## Task 4: Bug fix — manual `clean` preserves execution state
 
 **Files:**
 - Modify: `src/commands/clean.ts:10-11,40-41`
@@ -501,7 +501,7 @@ git commit -m "fix: manual clean preserves execution state, passes max_previous_
 
 ---
 
-### Task 5: Auto-clean on `retry_limit_exceeded`
+## Task 5: Auto-clean on `retry_limit_exceeded`
 
 **Files:**
 - Modify: `src/core/run-executor.ts:214-215,564-568`
@@ -612,7 +612,7 @@ git commit -m "feat: auto-clean logs on retry_limit_exceeded, pass max_previous_
 
 ---
 
-### Task 6: Bug fix — `ChangeDetector` uses `fixBase`
+## Task 6: Bug fix — `ChangeDetector` uses `fixBase`
 
 **Files:**
 - Modify: `src/core/change-detector.ts:18-37`
@@ -773,7 +773,7 @@ git commit -m "fix: ChangeDetector uses fixBase for gate selection (commit > unc
 
 ---
 
-### Task 7: Pass `max_previous_logs` through `performAutoClean()`
+## Task 7: Pass `max_previous_logs` through `performAutoClean()`
 
 **Files:**
 - Modify: `src/commands/shared.ts:75-85`
@@ -849,7 +849,7 @@ git commit -m "feat: thread max_previous_logs through performAutoClean and run-e
 
 ---
 
-### Task 8: Apply openspec spec changes
+## Task 8: Apply openspec spec changes
 
 **Files:**
 - Modify: `openspec/specs/run-lifecycle/spec.md`
@@ -879,7 +879,7 @@ git commit -m "spec: apply log rotation and auto-clean spec changes"
 
 ---
 
-### Task 9: Update skills
+## Task 9: Update skills
 
 **Files:**
 - Modify: `.claude/skills/gauntlet-run/SKILL.md`
@@ -890,13 +890,13 @@ git commit -m "spec: apply log rotation and auto-clean spec changes"
 
 In the termination conditions list (step 6), change the retry limit bullet from:
 
-```
+```text
    - "Status: Retry limit exceeded" appears in the output -> Run `bun src/index.ts clean` to archive logs for the session record. Do NOT retry after cleaning.
 ```
 
 to:
 
-```
+```text
    - "Status: Retry limit exceeded" appears in the output (logs are automatically archived). Do NOT retry.
 ```
 
@@ -933,7 +933,7 @@ git commit -m "docs: update skills for auto-archive on retry limit and log rotat
 
 ---
 
-### Task 10: Update documentation
+## Task 10: Update documentation
 
 **Files:**
 - Modify: `docs/config-reference.md`
@@ -1035,7 +1035,7 @@ git commit -m "docs: update docs for log rotation and auto-archive on retry limi
 
 ---
 
-### Task 11: Run full test suite and gauntlet
+## Task 11: Run full test suite and gauntlet
 
 **Step 1: Run all tests**
 

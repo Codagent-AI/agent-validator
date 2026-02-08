@@ -1,51 +1,66 @@
-import { describe, expect, it } from "bun:test";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import { describe, expect, it, spyOn } from "bun:test";
 import { ChangeDetector } from "../../src/core/change-detector.js";
-
-const execAsync = promisify(exec);
 
 describe("ChangeDetector fixBase support", () => {
 	it("uses fixBase when provided and no commit/uncommitted set", async () => {
-		// Get a known good commit to use as fixBase
-		const { stdout } = await execAsync("git rev-parse HEAD~1");
-		const fixBase = stdout.trim();
-
+		const fixBase = "abc123def456";
 		const detector = new ChangeDetector("origin/main", { fixBase });
-		const files = await detector.getChangedFiles();
+		const spy = spyOn(
+			detector as any,
+			"getDiffWithWorkingTree",
+		).mockResolvedValue(["src/foo.ts"]);
 
-		// Should return files — the exact list depends on what changed since HEAD~1
-		// The key assertion is that it doesn't throw and returns an array
-		expect(Array.isArray(files)).toBe(true);
+		const files = await detector.getChangedFiles();
+		expect(spy).toHaveBeenCalledWith(fixBase);
+		expect(files).toEqual(["src/foo.ts"]);
+		spy.mockRestore();
 	});
 
 	it("explicit commit overrides fixBase", async () => {
-		const { stdout: commitSha } = await execAsync("git rev-parse HEAD");
-		const commit = commitSha.trim();
-		const { stdout: fixBaseSha } = await execAsync("git rev-parse HEAD~2");
-		const fixBase = fixBaseSha.trim();
-
+		const commit = "abc123";
+		const fixBase = "def456";
 		const detector = new ChangeDetector("origin/main", { commit, fixBase });
-		const files = await detector.getChangedFiles();
+		const commitSpy = spyOn(
+			detector as any,
+			"getCommitChangedFiles",
+		).mockResolvedValue(["src/bar.ts"]);
+		const fixBaseSpy = spyOn(
+			detector as any,
+			"getDiffWithWorkingTree",
+		).mockResolvedValue(["src/foo.ts"]);
 
-		// Should use commit diff, not fixBase diff
-		// Verify by checking that commit mode was used (commit diff is commit^..commit)
-		expect(Array.isArray(files)).toBe(true);
+		const files = await detector.getChangedFiles();
+		expect(commitSpy).toHaveBeenCalledWith(commit);
+		expect(fixBaseSpy).not.toHaveBeenCalled();
+		expect(files).toEqual(["src/bar.ts"]);
+		commitSpy.mockRestore();
+		fixBaseSpy.mockRestore();
 	});
 
 	it("explicit uncommitted overrides fixBase", async () => {
-		const { stdout: fixBaseSha } = await execAsync("git rev-parse HEAD~2");
-		const fixBase = fixBaseSha.trim();
+		const fixBase = "def456";
+		const detector = new ChangeDetector("origin/main", {
+			uncommitted: true,
+			fixBase,
+		});
+		const uncommittedSpy = spyOn(
+			detector as any,
+			"getUncommittedChangedFiles",
+		).mockResolvedValue(["src/baz.ts"]);
+		const fixBaseSpy = spyOn(
+			detector as any,
+			"getDiffWithWorkingTree",
+		).mockResolvedValue(["src/foo.ts"]);
 
-		const detector = new ChangeDetector("origin/main", { uncommitted: true, fixBase });
 		const files = await detector.getChangedFiles();
-
-		// Should use uncommitted diff, not fixBase diff
-		expect(Array.isArray(files)).toBe(true);
+		expect(uncommittedSpy).toHaveBeenCalled();
+		expect(fixBaseSpy).not.toHaveBeenCalled();
+		expect(files).toEqual(["src/baz.ts"]);
+		uncommittedSpy.mockRestore();
+		fixBaseSpy.mockRestore();
 	});
 
 	it("priority order: commit > uncommitted > fixBase > default", () => {
-		// Structural test: verify the code checks in the right order
 		const { readFileSync } = require("node:fs");
 		const { join } = require("node:path");
 		const sourceFile = readFileSync(
@@ -57,12 +72,10 @@ describe("ChangeDetector fixBase support", () => {
 		const uncommittedCheck = sourceFile.indexOf("this.options.uncommitted");
 		const fixBaseCheck = sourceFile.indexOf("this.options.fixBase");
 
-		// All three must exist
 		expect(commitCheck).toBeGreaterThan(-1);
 		expect(uncommittedCheck).toBeGreaterThan(-1);
 		expect(fixBaseCheck).toBeGreaterThan(-1);
 
-		// commit before uncommitted before fixBase
 		expect(commitCheck).toBeLessThan(uncommittedCheck);
 		expect(uncommittedCheck).toBeLessThan(fixBaseCheck);
 	});
