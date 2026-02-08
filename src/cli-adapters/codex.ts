@@ -128,7 +128,7 @@ function emitCodexSummary(
 	const summary = formatCodexSummary(usage);
 	if (!summary) return;
 	onLog?.(`\n${summary}\n`);
-	process.stdout.write(`${summary}\n`);
+	process.stderr.write(`${summary}\n`);
 	getDebugLogger()?.logTelemetry({ adapter: "codex", summary });
 }
 
