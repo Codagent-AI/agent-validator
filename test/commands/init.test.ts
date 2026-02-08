@@ -530,7 +530,7 @@ describe("Skills Installation for Claude", () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const skillsDir = path.join(TEST_DIR, ".claude-mock", "skills");
-		const actions = ["run", "check", "push-pr", "fix-pr", "status"];
+		const actions = ["run", "check", "push-pr", "fix-pr", "status", "help"];
 
 		for (const action of actions) {
 			const skillPath = path.join(skillsDir, `gauntlet-${action}`, "SKILL.md");
@@ -588,9 +588,75 @@ describe("Skills Installation for Claude", () => {
 		expect(files).toContain("push-pr.md");
 		expect(files).toContain("fix-pr.md");
 
-		// Should NOT have check or status (non-Claude exclusion)
+		// Should NOT have check, status, or help (non-Claude exclusion)
 		expect(files).not.toContain("check.md");
 		expect(files).not.toContain("status.md");
+		expect(files).not.toContain("help.md");
+	});
+
+	it("should install gauntlet-help SKILL.md for Claude", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const helpSkillPath = path.join(
+			TEST_DIR,
+			".claude-mock",
+			"skills",
+			"gauntlet-help",
+			"SKILL.md",
+		);
+		const stat = await fs.stat(helpSkillPath);
+		expect(stat.isFile()).toBe(true);
+
+		const content = await fs.readFile(helpSkillPath, "utf-8");
+		expect(content).toContain("name: gauntlet-help");
+		expect(content).toContain("diagnosis-only");
+		expect(content).toContain("Evidence Sources");
+		expect(content).toContain("Routing Logic");
+		expect(content).toContain("Output Contract");
+	});
+
+	it("should install all 6 reference files for gauntlet-help", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const refsDir = path.join(
+			TEST_DIR,
+			".claude-mock",
+			"skills",
+			"gauntlet-help",
+			"references",
+		);
+		const expectedFiles = [
+			"stop-hook-troubleshooting.md",
+			"config-troubleshooting.md",
+			"gate-troubleshooting.md",
+			"lock-troubleshooting.md",
+			"adapter-troubleshooting.md",
+			"ci-pr-troubleshooting.md",
+		];
+
+		const files = await fs.readdir(refsDir);
+		for (const expected of expectedFiles) {
+			expect(files).toContain(expected);
+			const filePath = path.join(refsDir, expected);
+			const stat = await fs.stat(filePath);
+			expect(stat.isFile()).toBe(true);
+			// Each reference file should have content
+			const content = await fs.readFile(filePath, "utf-8");
+			expect(content.length).toBeGreaterThan(100);
+		}
+		expect(files.length).toBe(6);
+	});
+
+	it("should not install gauntlet-help for non-Claude adapters", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		// other-mock should get flat command files (no skill dir)
+		const otherDir = path.join(TEST_DIR, ".other-mock");
+		const files = await fs.readdir(otherDir);
+
+		// Should NOT have help-related files
+		expect(files).not.toContain("help.md");
+		expect(files).not.toContain("gauntlet-help.md");
 	});
 
 	it("should preserve existing Claude skill files", async () => {

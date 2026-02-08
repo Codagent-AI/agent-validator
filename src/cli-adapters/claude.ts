@@ -159,7 +159,7 @@ function extractOtelMetrics(
 	const summary = formatOtelSummary(usage);
 	if (summary) {
 		onLog?.(`\n${summary}\n`);
-		process.stdout.write(`${summary}\n`);
+		process.stderr.write(`${summary}\n`);
 		getDebugLogger()?.logTelemetry({ adapter: "claude", summary });
 	}
 

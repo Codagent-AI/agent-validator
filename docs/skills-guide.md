@@ -11,6 +11,7 @@ Agent Gauntlet installs **skills** (for Claude Code) and **flat commands** (for 
 | Push PR | `/gauntlet-push-pr` | Commit, push, and create/update a pull request |
 | Fix PR | `/gauntlet-fix-pr` | Address review comments and fix CI failures |
 | Status | `/gauntlet-status` | Show a summary of the most recent gauntlet session |
+| Help | `/gauntlet-help` | Diagnose and explain gauntlet behavior (diagnosis-only) |
 
 ## Installation
 
@@ -28,6 +29,14 @@ For **Claude Code**, skills are installed as directory-based `SKILL.md` files:
   gauntlet-push-pr/SKILL.md
   gauntlet-fix-pr/SKILL.md
   gauntlet-status/SKILL.md
+  gauntlet-help/SKILL.md
+  gauntlet-help/references/
+    stop-hook-troubleshooting.md
+    config-troubleshooting.md
+    gate-troubleshooting.md
+    lock-troubleshooting.md
+    adapter-troubleshooting.md
+    ci-pr-troubleshooting.md
 ```
 
 For **other CLI agents** (Gemini, Codex, etc.), a subset is installed as flat command files:
@@ -39,7 +48,7 @@ For **other CLI agents** (Gemini, Codex, etc.), a subset is installed as flat co
   fix-pr.md
 ```
 
-Non-Claude agents receive only `run`, `push-pr`, and `fix-pr` (not `check` or `status`).
+Non-Claude agents receive only `run`, `push-pr`, and `fix-pr` (not `check`, `status`, or `help`).
 
 ## Usage
 
@@ -77,6 +86,18 @@ Checks CI status and review comments on the current PR, fixes issues, commits, a
 ### /gauntlet-status
 
 Runs a bundled script that parses `gauntlet_logs/` to show a structured summary of the most recent session: which gates ran, what passed/failed, and any outstanding violations.
+
+### /gauntlet-help
+
+Diagnose and explain gauntlet behavior from runtime evidence. This is a **diagnosis-only** skill — it investigates what happened and why, but does not auto-fix issues. It works without source code access, using only config files, logs, and CLI commands.
+
+The skill follows a structured diagnostic workflow:
+1. Resolves `log_dir` from `.gauntlet/config.yml`
+2. Reads passive evidence (logs, execution state, config)
+3. Runs CLI commands only when needed (`agent-gauntlet list`, `health`, `detect`)
+4. Returns a structured response with **Diagnosis**, **Evidence**, **Confidence**, and **Next Steps**
+
+Reference files under `references/` provide detailed troubleshooting guidance organized by domain: stop-hook, config, gates, locks, adapters, and CI/PR.
 
 ## Customization
 
