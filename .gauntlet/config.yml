@@ -15,8 +15,8 @@ cli:
       allow_tool_use: true
       thinking_budget: high
     codex:
-      allow_tool_use: true
-      thinking_budget: high
+      allow_tool_use: false
+      thinking_budget: low
     gemini:
       allow_tool_use: false
       thinking_budget: high
@@ -25,6 +25,8 @@ stop_hook:
   auto_fix_pr: false
 entry_points:
   - path: "."
+    exclude:
+      - evals/results
     reviews:
       - code-quality
   - path: "src"

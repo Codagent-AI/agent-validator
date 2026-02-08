@@ -1,0 +1,24 @@
+fixture: fixtures/review-quality
+
+matrix:
+  adapters:
+    - claude
+  configurations:
+    - name: tools-on-thinking-low
+      allow_tool_use: true
+      thinking_budget: "low"
+    - name: tools-on-thinking-high
+      allow_tool_use: true
+      thinking_budget: "high"
+    - name: tools-off-thinking-low
+      allow_tool_use: false
+      thinking_budget: "low"
+    - name: tools-off-thinking-high
+      allow_tool_use: false
+      thinking_budget: "high"
+
+runs_per_config: 3
+timeout_ms: 300000
+judge:
+  adapter: claude
+  thinking_budget: "high"

@@ -33,7 +33,7 @@ const REVIEW_ADAPTER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 /** Chars-per-token approximation for rough token estimates. */
 const CHARS_PER_TOKEN = 4;
 
-const JSON_SYSTEM_INSTRUCTION = `
+export const JSON_SYSTEM_INSTRUCTION = `
 You are in a read-only mode. You may read files in the repository to gather context.
 Do NOT attempt to modify files or run shell commands that change system state.
 Do NOT access files outside the repository root.

@@ -1,0 +1,109 @@
+diff --git a/src/api/handler.ts b/src/api/handler.ts
+index 2c16327..9ceaac6 100644
+--- a/src/api/handler.ts
++++ b/src/api/handler.ts
+@@ -28,11 +28,10 @@ export async function handleGetUser(req: Request): Promise<Response> {
+ 	const cached = await userCache.get(`user:${userId}`);
+ 	if (cached) return { status: 200, body: cached };
+ 
+-	// Safe: parameterized-style lookup
+-	const user = await lookupUser(userId);
++	const user = await queryDb(`SELECT * FROM users WHERE id = '${userId}'`);
+ 	if (!user) return { status: 404, body: { error: "Not found" } };
+ 
+-	await userCache.set(`user:${userId}`, user);
++	userCache.set(`user:${userId}`, user);
+ 	return { status: 200, body: user };
+ }
+ 
+@@ -55,10 +54,27 @@ export async function handleUpdateProfile(req: Request): Promise<Response> {
+ 	const name = sanitize(body.name ?? "");
+ 	const email = sanitize(body.email ?? "");
+ 
+-	const updated = await updateUser(auth.user.id, { name, email });
++	const updated = await updateUser(auth.user.id, { name, email, age: body.age });
+ 	return { status: 200, body: updated };
+ }
+ 
++export async function handleDeleteUser(req: Request): Promise<Response> {
++	const auth = checkAuth(req.headers.authorization ?? "");
++	if (!auth) return { status: 401, body: { error: "Unauthorized" } };
++
++	const userId = req.query.id;
++	const target = await findUser(userId);
++	const targetEmail = target.email;
++
++	try {
++		await deleteUser(userId);
++		await userCache.delete(`user:${userId}`);
++		return { status: 200, body: { deleted: targetEmail } };
++	} catch (err) {
++		return { status: 200, body: { deleted: targetEmail } };
++	}
++}
++
+ export async function handleRefreshSession(req: Request): Promise<Response> {
+ 	const auth = checkAuth(req.headers.authorization ?? "");
+ 	if (!auth) return { status: 401, body: { error: "Unauthorized" } };
+@@ -75,11 +91,11 @@ export async function handleHealthCheck(): Promise<Response> {
+ 
+ // --- Database stubs ---
+ 
+-async function lookupUser(
+-	id: string,
++async function queryDb(
++	sql: string,
+ ): Promise<Record<string, unknown> | null> {
+-	// Stub: would query database
+-	return { id, name: "Test User", email: "test@example.com" };
++	// Stub: executes raw SQL
++	return { id: "1", name: "Test User", email: "test@example.com" };
+ }
+ 
+ async function searchUsers(
+@@ -89,6 +105,13 @@ async function searchUsers(
+ 	return [{ id: "1", name: query }];
+ }
+ 
++async function findUser(
++	id: string,
++): Promise<Record<string, unknown> | null> {
++	// Stub: returns null if user not found
++	return null;
++}
++
+ async function updateUser(
+ 	id: string,
+ 	data: Record<string, unknown>,
+@@ -97,10 +120,16 @@ async function updateUser(
+ 	return { id, ...data };
+ }
+ 
++async function deleteUser(id: string): Promise<void> {
++	// Stub: would delete from database
++}
++
+ // --- Config ---
+ 
+ export const config = {
+ 	port: 3000,
+ 	host: "localhost",
+ 	maxRequestSize: "10mb",
++	apiKey: "sk-live-a1b2c3d4e5f6g7h8i9j0",
++	dbConnectionString: "postgresql://admin:password123@prod-db.internal:5432/app",
+ };
+diff --git a/src/utils/cache.ts b/src/utils/cache.ts
+index f3e446e..29f5794 100644
+--- a/src/utils/cache.ts
++++ b/src/utils/cache.ts
+@@ -7,7 +7,9 @@ export class Cache<T = unknown> {
+ 	private store = new Map<string, CacheEntry<T>>();
+ 	private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+ 
+-	constructor(private defaultTtlMs: number = 60_000) {}
++	constructor(private defaultTtlMs: number = 60_000) {
++		this.startAutoCleanup();
++	}
+ 
+ 	async get(key: string): Promise<T | null> {
+ 		const entry = this.store.get(key);

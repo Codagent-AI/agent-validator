@@ -1,0 +1,8 @@
+{
+	"name": "eval-fixture-app",
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"start": "node dist/api/handler.js"
+	}
+}
