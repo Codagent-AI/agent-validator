@@ -57,10 +57,10 @@ Non-Claude agents receive only `run`, `push-pr`, and `fix-pr` (not `check`, `sta
 The primary skill. Runs the full gauntlet (checks + reviews) and iterates on failures.
 
 **Workflow:**
-1. Archives previous logs (`agent-gauntlet clean`)
+1. Archives previous logs (`agent-gauntlet clean` with configurable rotation depth)
 2. Runs `agent-gauntlet run`
 3. If failures: reads log/JSON output, fixes issues, re-runs
-4. Repeats until all gates pass, warnings only remain, or retry limit (3) is reached
+4. Repeats until all gates pass, warnings only remain, or retry limit is reached (logs auto-archived)
 5. Provides a session summary
 
 **Trust level:** The run skill includes a configurable trust level (default: `medium`) that controls how aggressively the agent acts on AI reviewer feedback. Edit the `<!-- trust_level: medium -->` comment in the SKILL.md to change it:

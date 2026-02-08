@@ -8,7 +8,6 @@ import {
 	deleteExecutionState,
 	getCurrentBranch,
 	getExecutionStateFilename,
-	gitObjectExists,
 	isCommitInBranch,
 	readExecutionState,
 } from "../utils/execution-state.js";
@@ -54,12 +53,6 @@ export async function shouldAutoClean(
 	try {
 		const isMerged = await isCommitInBranch(state.commit, baseBranch);
 		if (isMerged) {
-			if (state.working_tree_ref) {
-				const refValid = await gitObjectExists(state.working_tree_ref);
-				if (refValid) {
-					return { clean: true, reason: "commit merged", resetState: false };
-				}
-			}
 			return { clean: true, reason: "commit merged", resetState: true };
 		}
 	} catch {
@@ -75,8 +68,9 @@ export async function shouldAutoClean(
 export async function performAutoClean(
 	logDir: string,
 	result: AutoCleanResult,
+	maxPreviousLogs = 3,
 ): Promise<void> {
-	await cleanLogs(logDir);
+	await cleanLogs(logDir, maxPreviousLogs);
 
 	// Delete execution state if context changed (branch changed or commit merged)
 	if (result.resetState) {
@@ -189,49 +183,76 @@ async function hasCurrentLogs(logDir: string): Promise<boolean> {
 	}
 }
 
-export async function cleanLogs(logDir: string): Promise<void> {
-	const previousDir = path.join(logDir, "previous");
+/** Get current log files (excludes previous dirs and persistent files). */
+function getCurrentLogFiles(files: string[]): string[] {
+	const persistentFiles = getPersistentFiles();
+	return files.filter(
+		(file) => !file.startsWith("previous") && !persistentFiles.has(file),
+	);
+}
 
+/** Delete current logs without archiving (maxPreviousLogs === 0). */
+async function deleteCurrentLogs(logDir: string): Promise<void> {
+	const files = await fs.readdir(logDir);
+	await Promise.all(
+		getCurrentLogFiles(files).map((file) =>
+			fs.rm(path.join(logDir, file), { recursive: true, force: true }),
+		),
+	);
+}
+
+/** Rotate existing previous/ directories to make room for a new archive. */
+async function rotatePreviousDirs(
+	logDir: string,
+	maxPreviousLogs: number,
+): Promise<void> {
+	const oldestSuffix = maxPreviousLogs - 1;
+	const oldestDir =
+		oldestSuffix === 0 ? "previous" : `previous.${oldestSuffix}`;
+	const oldestPath = path.join(logDir, oldestDir);
+	if (await exists(oldestPath)) {
+		await fs.rm(oldestPath, { recursive: true, force: true });
+	}
+
+	for (let i = oldestSuffix - 1; i >= 0; i--) {
+		const fromName = i === 0 ? "previous" : `previous.${i}`;
+		const toName = `previous.${i + 1}`;
+		const fromPath = path.join(logDir, fromName);
+		const toPath = path.join(logDir, toName);
+		if (await exists(fromPath)) {
+			await fs.rename(fromPath, toPath);
+		}
+	}
+}
+
+export async function cleanLogs(
+	logDir: string,
+	maxPreviousLogs = 3,
+): Promise<void> {
 	try {
-		// Guard: Return early if log directory doesn't exist
-		if (!(await exists(logDir))) {
+		if (!(await exists(logDir))) return;
+		if (!(await hasCurrentLogs(logDir))) return;
+
+		if (maxPreviousLogs === 0) {
+			await deleteCurrentLogs(logDir);
 			return;
 		}
 
-		// Guard: Return early if no current logs to archive
-		if (!(await hasCurrentLogs(logDir))) {
-			return;
-		}
+		await rotatePreviousDirs(logDir, maxPreviousLogs);
 
-		// 1. Delete all files in previous/
-		if (await exists(previousDir)) {
-			const previousFiles = await fs.readdir(previousDir);
-			await Promise.all(
-				previousFiles.map((file) =>
-					fs.rm(path.join(previousDir, file), { recursive: true, force: true }),
-				),
-			);
-		} else {
-			await fs.mkdir(previousDir, { recursive: true });
-		}
+		const previousDir = path.join(logDir, "previous");
+		await fs.mkdir(previousDir, { recursive: true });
 
-		// 2. Move log/json files from logDir root into previous/
-		// EXCLUDE persistent files: .execution_state, .debug.log, .debug.log.1, lock file
 		const files = await fs.readdir(logDir);
-		const persistentFiles = getPersistentFiles();
-
 		await Promise.all(
-			files
-				.filter((file) => file !== "previous" && !persistentFiles.has(file))
-				.map((file) =>
-					fs.rename(path.join(logDir, file), path.join(previousDir, file)),
-				),
+			getCurrentLogFiles(files).map((file) =>
+				fs.rename(path.join(logDir, file), path.join(previousDir, file)),
+			),
 		);
 
-		// 3. Delete legacy .session_ref if it exists (migration cleanup)
+		// Delete legacy .session_ref if it exists (migration cleanup)
 		try {
-			const sessionRefPath = path.join(logDir, SESSION_REF_FILENAME);
-			await fs.rm(sessionRefPath, { force: true });
+			await fs.rm(path.join(logDir, SESSION_REF_FILENAME), { force: true });
 		} catch {
 			// Ignore errors
 		}

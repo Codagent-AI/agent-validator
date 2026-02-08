@@ -153,6 +153,7 @@ export const gauntletConfigSchema = z.object({
 	log_dir: z.string().min(1).default("gauntlet_logs"),
 	allow_parallel: z.boolean().default(true),
 	max_retries: z.number().default(3),
+	max_previous_logs: z.number().int().min(0).default(3),
 	rerun_new_issue_threshold: z
 		.enum(["critical", "high", "medium", "low"])
 		.default("medium"),
