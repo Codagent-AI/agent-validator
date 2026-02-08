@@ -212,7 +212,7 @@ const statusMessages: Record<GauntletStatus, string> = {
 	no_changes: "No changes detected.",
 	failed: "Gates failed — issues must be fixed.",
 	retry_limit_exceeded:
-		"Retry limit exceeded — run `agent-gauntlet clean` to archive and continue.",
+		"Retry limit exceeded — logs have been automatically archived.",
 	lock_conflict: "Another gauntlet run is already in progress.",
 	error: "Unexpected error occurred.",
 	no_config: "No .gauntlet/config.yml found.",
@@ -561,10 +561,13 @@ export async function executeRun(
 				status = "failed";
 			}
 
-			// Clean logs only on full success (not passed_with_warnings)
+			// Clean logs on success or retry limit exceeded
 			if (status === "passed") {
 				await debugLogger?.logClean("auto", "all_passed");
-				await cleanLogs(config.project.log_dir);
+				await cleanLogs(config.project.log_dir, config.project.max_previous_logs);
+			} else if (status === "retry_limit_exceeded") {
+				await debugLogger?.logClean("auto", "retry_limit_exceeded");
+				await cleanLogs(config.project.log_dir, config.project.max_previous_logs);
 			}
 
 			consoleLogHandle?.restore();

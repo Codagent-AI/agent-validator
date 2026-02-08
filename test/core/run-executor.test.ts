@@ -256,3 +256,60 @@ describe("run-executor checkInterval option", () => {
 		});
 	});
 });
+
+describe("run-executor auto-clean on retry_limit_exceeded", () => {
+	it("should auto-clean logs when status is retry_limit_exceeded", () => {
+		const sourceFile = readFileSync(
+			join(process.cwd(), "src/core/run-executor.ts"),
+			"utf-8",
+		);
+
+		// The auto-clean block should include retry_limit_exceeded
+		// Find the section after status determination that calls cleanLogs
+		expect(sourceFile).toMatch(
+			/status\s*===\s*"retry_limit_exceeded"[\s\S]*?cleanLogs/,
+		);
+	});
+
+	it("should not delete execution state on retry_limit_exceeded", () => {
+		const sourceFile = readFileSync(
+			join(process.cwd(), "src/core/run-executor.ts"),
+			"utf-8",
+		);
+
+		// The retry_limit_exceeded path should NOT call deleteExecutionState
+		// Find the auto-clean block and verify it only calls cleanLogs
+		const retryLimitBlock = sourceFile.match(
+			/retry_limit_exceeded[\s\S]*?cleanLogs\([^)]+\)/,
+		);
+		expect(retryLimitBlock).not.toBeNull();
+		// The same block should not reference deleteExecutionState
+		if (retryLimitBlock) {
+			expect(retryLimitBlock[0]).not.toContain("deleteExecutionState");
+		}
+	});
+
+	it("status message for retry_limit_exceeded should not mention manual clean", () => {
+		const sourceFile = readFileSync(
+			join(process.cwd(), "src/core/run-executor.ts"),
+			"utf-8",
+		);
+
+		// The status message should say logs are automatically archived
+		expect(sourceFile).not.toMatch(
+			/retry_limit_exceeded[\s\S]*?agent-gauntlet clean/,
+		);
+	});
+
+	it("should pass max_previous_logs to cleanLogs on passed status", () => {
+		const sourceFile = readFileSync(
+			join(process.cwd(), "src/core/run-executor.ts"),
+			"utf-8",
+		);
+
+		// The "passed" auto-clean should pass max_previous_logs
+		expect(sourceFile).toMatch(
+			/status\s*===\s*"passed"[\s\S]*?cleanLogs\([^,]+,\s*config\.project\.max_previous_logs\)/,
+		);
+	});
+});
