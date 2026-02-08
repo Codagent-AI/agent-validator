@@ -1,60 +1,74 @@
 # Development
 
-## Install dependencies
+## Feature Implementation Workflow
 
-```bash
-bun install
+- Uses superpowers skills for brainstorming, planning, and implementation
+- Uses [worktrunk](https://worktrunk.dev) for worktree management
+- Uses AgentGauntlet to validate changes
+- Uses OpenSpec to preserve spec history
+
+### 1. Research
+
+Determine feasibility, viability, and high level approach.
+
+Use Paul Caplan's research skill:
+```
+/research
 ```
 
-## Build the CLI binary
+### 2. Brainstorm
 
-```bash
-bun run build
+Flesh out the details using the superpowers brainstorming skill:
+```
+/brainstorm
 ```
 
-## Parallel Workflow
+Produces `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
-Uses [worktrunk](https://worktrunk.dev) (`wt`) to manage git worktrees for parallel development.
+### 3. Spec
 
-**Branch strategy (trunk-based):**
-- `main` — trunk branch in the main checkout (`~/paul/agent-gauntlet/`). All PRs merge here.
-- Feature branches — created as worktrees off `main`. Used for implementation and testing.
+Write up a "change proposal" to capture the changes to the specification.
 
-**Creating a feature worktree:**
-
-```bash
-wt switch -b main -c feat-name
+Use a modified version of OpenSpec that writes a proposal and spec but does not create a design doc or tasks doc - both are redundant with superpowers:
+```
+/openspec:proposal
 ```
 
-This creates `~/paul/agent-gauntlet.feat-name/`, runs `bun install`, and switches into it.
+Produces `openspec/changes/<change-name>/proposal.md` and updated spec files
 
-**Launching an agent in a worktree:**
+### 4. Plan
 
-```bash
-wt switch -b main -x claude -c feat-name
+Write the plan:
+```
+/plan
 ```
 
-**Switching between worktrees:**
+Produces `docs/plans/YYYY-MM-DD-<name>.plan.md`
 
-```bash
-wt switch main           # back to main checkout
-wt switch feat-name      # back to feature
-wt switch -              # toggle previous
-```
+### 5. Implement
 
-**Merging a feature back:**
+**Preferred Execution Mode**: Fresh context window in an isolated worktree, with subagent-driven execution. Best of both worlds.
 
-```bash
-wt merge
-```
+**Steps:**
 
-Commits uncommitted changes, squashes all commits, runs `bun src/index.ts check`, merges to `main`, and removes the worktree.
+1. Create a worktree and launch an agent:
+   ```bash
+   wt switch -c feat-name -b main -x claude
+   ```
 
-**Listing worktrees:**
+2. In the worktree agent session, tell it to use subagent-driven-development:
+   ```
+   /subagent-driven-development execute docs/plans/YYYY-MM-DD-<name>.plan.md
+   ```
 
-```bash
-wt list
-```
+3. The agent will run all tasks autonomously with automated spec + quality reviews. It only pauses if a subagent has a question.
+
+4. When complete, create a pull request against main branch. Use Paul Caplan's /push-pr skill:
+   ```
+   /push-pr
+   ```
+
+**Note:** `docs/plans/` and `docs/design/` are gitignored — plan and design docs are scratch artifacts, not permanent documentation.
 
 ## Release Workflow
 
