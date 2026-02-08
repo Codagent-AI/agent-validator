@@ -29,6 +29,7 @@ function makeConfig(
 			log_dir: "gauntlet_logs",
 			allow_parallel: true,
 			max_retries: 3,
+			max_previous_logs: 3,
 			rerun_new_issue_threshold: "high",
 			cli: { default_preference: ["claude"] },
 			entry_points: [],

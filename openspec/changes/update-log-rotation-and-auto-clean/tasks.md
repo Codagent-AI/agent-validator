@@ -38,13 +38,13 @@ No hotspots modified. All affected files score above 8.5:
 
 ## 3. Docs and Skills
 
-- [ ] 3.1 Update `gauntlet-run/SKILL.md`: remove manual clean on retry limit exceeded
-- [ ] 3.2 Update `gauntlet-status/SKILL.md`: document `previous.N/` directories
-- [ ] 3.3 Update `gauntlet-help/SKILL.md`: add `previous.N/` to evidence sources, add `max_previous_logs` to config reference
-- [ ] 3.4 Update `docs/config-reference.md`: add `max_previous_logs` field and update example
-- [ ] 3.5 Update `docs/user-guide.md`: update `agent-gauntlet clean` description for rotation
-- [ ] 3.6 Update `docs/stop-hook-guide.md`: remove "requires clean" from retry limit references
-- [ ] 3.7 Update `docs/skills-guide.md`: update gauntlet-run description
+- [x] 3.1 Update `gauntlet-run/SKILL.md`: remove manual clean on retry limit exceeded
+- [x] 3.2 Update `gauntlet-status/SKILL.md`: document `previous.N/` directories
+- [x] 3.3 Update `gauntlet-help/SKILL.md`: add `previous.N/` to evidence sources, add `max_previous_logs` to config reference
+- [x] 3.4 Update `docs/config-reference.md`: add `max_previous_logs` field and update example
+- [x] 3.5 Update `docs/user-guide.md`: update `agent-gauntlet clean` description for rotation
+- [x] 3.6 Update `docs/stop-hook-guide.md`: remove "requires clean" from retry limit references
+- [x] 3.7 Update `docs/skills-guide.md`: update gauntlet-run description
 
 ## 4. Validation
 
