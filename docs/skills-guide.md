@@ -1,0 +1,121 @@
+# Skills Guide
+
+Agent Gauntlet installs **skills** (for Claude Code) and **flat commands** (for other CLI agents) that let you invoke gauntlet workflows directly from your AI agent session.
+
+## Available Skills
+
+| Skill | Invocation | Description |
+|-------|-----------|-------------|
+| Run | `/gauntlet-run` | Run the full verification suite (checks + reviews) |
+| Check | `/gauntlet-check` | Run checks only (no AI reviews) |
+| Push PR | `/gauntlet-push-pr` | Commit, push, and create/update a pull request |
+| Fix PR | `/gauntlet-fix-pr` | Address review comments and fix CI failures |
+| Status | `/gauntlet-status` | Show a summary of the most recent gauntlet session |
+| Help | `/gauntlet-help` | Diagnose and explain gauntlet behavior (diagnosis-only) |
+
+## Installation
+
+Skills are installed during `agent-gauntlet init`. You can choose:
+
+- **Project level** (default with `--yes`): Installs into the repo (e.g., `.claude/skills/`)
+- **User level**: Installs into your home directory (e.g., `~/.claude/skills/`)
+
+For **Claude Code**, skills are installed as directory-based `SKILL.md` files:
+
+```text
+.claude/skills/
+  gauntlet-run/SKILL.md
+  gauntlet-check/SKILL.md
+  gauntlet-push-pr/SKILL.md
+  gauntlet-fix-pr/SKILL.md
+  gauntlet-status/SKILL.md
+  gauntlet-help/SKILL.md
+  gauntlet-help/references/
+    stop-hook-troubleshooting.md
+    config-troubleshooting.md
+    gate-troubleshooting.md
+    lock-troubleshooting.md
+    adapter-troubleshooting.md
+    ci-pr-troubleshooting.md
+```
+
+For **other CLI agents** (Gemini, Codex, etc.), a subset is installed as flat command files:
+
+```text
+.gemini/commands/
+  gauntlet.md        # equivalent to /gauntlet-run
+  push-pr.md
+  fix-pr.md
+```
+
+Non-Claude agents receive only `run`, `push-pr`, and `fix-pr` (not `check`, `status`, or `help`).
+
+## Usage
+
+### /gauntlet-run
+
+The primary skill. Runs the full gauntlet (checks + reviews) and iterates on failures.
+
+**Workflow:**
+1. Archives previous logs (`agent-gauntlet clean`)
+2. Runs `agent-gauntlet run`
+3. If failures: reads log/JSON output, fixes issues, re-runs
+4. Repeats until all gates pass, warnings only remain, or retry limit (3) is reached
+5. Provides a session summary
+
+**Trust level:** The run skill includes a configurable trust level (default: `medium`) that controls how aggressively the agent acts on AI reviewer feedback. Edit the `<!-- trust_level: medium -->` comment in the SKILL.md to change it:
+
+| Level | Behavior |
+|-------|----------|
+| `high` | Fix all issues unless you strongly disagree |
+| `medium` | Fix issues you reasonably agree with (default) |
+| `low` | Fix only issues you strongly agree with |
+
+### /gauntlet-check
+
+Same iterative workflow as `/gauntlet-run` but skips AI reviews. Useful for quickly validating that linting, tests, and other deterministic checks pass.
+
+### /gauntlet-push-pr
+
+Commits all changes, pushes to the remote, and creates or updates a pull request. Verifies the PR exists after creation.
+
+### /gauntlet-fix-pr
+
+Checks CI status and review comments on the current PR, fixes issues, commits, and pushes.
+
+### /gauntlet-status
+
+Runs a bundled script that parses `gauntlet_logs/` to show a structured summary of the most recent session: which gates ran, what passed/failed, and any outstanding violations.
+
+### /gauntlet-help
+
+Diagnose and explain gauntlet behavior from runtime evidence. This is a **diagnosis-only** skill — it investigates what happened and why, but does not auto-fix issues. It works without source code access, using only config files, logs, and CLI commands.
+
+The skill follows a structured diagnostic workflow:
+1. Resolves `log_dir` from `.gauntlet/config.yml`
+2. Reads passive evidence (logs, execution state, config)
+3. Runs CLI commands only when needed (`agent-gauntlet list`, `health`, `detect`)
+4. Returns a structured response with **Diagnosis**, **Evidence**, **Confidence**, and **Next Steps**
+
+Reference files under `references/` provide detailed troubleshooting guidance organized by domain: stop-hook, config, gates, locks, adapters, and CI/PR.
+
+## Customization
+
+Skills are plain Markdown files with YAML frontmatter. You can edit them directly:
+
+```yaml
+---
+name: gauntlet-run
+description: Run the full verification gauntlet
+disable-model-invocation: true
+allowed-tools: Bash
+---
+```
+
+- `disable-model-invocation: true` prevents Claude from automatically loading and invoking the skill. The user can still invoke it via `/name`. Use this for workflows with side effects (the default for gauntlet skills).
+- `user-invocable: false` hides the skill from the `/` autocomplete menu entirely.
+- `allowed-tools` restricts which tools the agent can use during execution
+
+## Re-installing Skills
+
+To reinstall skills (e.g., after updating Agent Gauntlet), delete the existing skill files and re-run `agent-gauntlet init`. Existing files are never overwritten.

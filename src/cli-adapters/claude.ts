@@ -159,7 +159,7 @@ function extractOtelMetrics(
 	const summary = formatOtelSummary(usage);
 	if (summary) {
 		onLog?.(`\n${summary}\n`);
-		process.stdout.write(`${summary}\n`);
+		process.stderr.write(`${summary}\n`);
 		getDebugLogger()?.logTelemetry({ adapter: "claude", summary });
 	}
 
@@ -227,6 +227,14 @@ export class ClaudeAdapter implements CLIAdapter {
 
 	getUserCommandDir(): string | null {
 		return path.join(os.homedir(), ".claude", "commands");
+	}
+
+	getProjectSkillDir(): string | null {
+		return ".claude/skills";
+	}
+
+	getUserSkillDir(): string | null {
+		return path.join(os.homedir(), ".claude", "skills");
 	}
 
 	getCommandExtension(): string {

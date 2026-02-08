@@ -128,7 +128,7 @@ function emitCodexSummary(
 	const summary = formatCodexSummary(usage);
 	if (!summary) return;
 	onLog?.(`\n${summary}\n`);
-	process.stdout.write(`${summary}\n`);
+	process.stderr.write(`${summary}\n`);
 	getDebugLogger()?.logTelemetry({ adapter: "codex", summary });
 }
 
@@ -192,6 +192,14 @@ export class CodexAdapter implements CLIAdapter {
 	getUserCommandDir(): string | null {
 		// Codex uses user-level prompts at ~/.codex/prompts/
 		return path.join(os.homedir(), ".codex", "prompts");
+	}
+
+	getProjectSkillDir(): string | null {
+		return null;
+	}
+
+	getUserSkillDir(): string | null {
+		return null;
 	}
 
 	getCommandExtension(): string {

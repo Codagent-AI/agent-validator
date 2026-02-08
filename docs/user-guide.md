@@ -235,29 +235,25 @@ Creates `.gauntlet/` with a minimal starter config and a sample review prompt.
 ```text
 .gauntlet/
   config.yml           # Entry points and settings
-  run_gauntlet.md      # Canonical /gauntlet command for CLI agents
-  push_pr.md           # /push-pr command for creating PRs
-  fix_pr.md            # /fix-pr command for fixing CI failures
   checks/              # Check gate definitions
   reviews/
     code-quality.md    # Sample review prompt
 ```
 
+Optionally installs gauntlet skills for your CLI agents. See the [Skills Guide](skills-guide.md) for details.
+
 #### Interactive prompts
 
-When run interactively, `init` prompts you to set up CLI agent commands:
+When run interactively, `init` prompts you to set up CLI agent skills:
 
-1. **Installation level**: Choose where to install commands (`/gauntlet`, `/push-pr`, `/fix-pr`):
+1. **Installation level**: Choose where to install skills/commands:
    - Don't install commands
-   - Project level (`.claude/commands/`, `.gemini/commands/`)
-   - User level (`~/.claude/commands/`, `~/.gemini/commands/`, `~/.codex/prompts/`)
+   - Project level (`.claude/skills/`, `.gemini/commands/`, etc.)
+   - User level (`~/.claude/skills/`, `~/.gemini/commands/`, etc.)
 
 2. **Agent selection**: Choose which CLI agents to install for (Claude, Gemini, Codex, or all)
 
-Once installed, you can run these commands directly in your CLI agent session:
-- `/gauntlet` - Execute the verification suite
-- `/push-pr` - Commit, push, and create/update a PR
-- `/fix-pr` - Fix CI failures or address review comments
+Once installed, you can invoke skills directly in your CLI agent session (e.g., `/gauntlet-run`, `/gauntlet-check`). See the [Skills Guide](skills-guide.md) for the full list.
 
 #### Options
 

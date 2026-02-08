@@ -254,12 +254,12 @@ function formatGeminiSummary(usage: GeminiTelemetryUsage): string | null {
 	return parts.length > 0 ? `[telemetry] ${parts.join(" ")}` : null;
 }
 
-async function logTelemetryToStdout(telemetryFile: string): Promise<void> {
+async function logTelemetryToStderr(telemetryFile: string): Promise<void> {
 	if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
 	const usage = await parseGeminiTelemetry(telemetryFile);
 	const summary = formatGeminiSummary(usage);
 	if (summary) {
-		process.stdout.write(`${summary}\n`);
+		process.stderr.write(`${summary}\n`);
 		getDebugLogger()?.logTelemetry({ adapter: "gemini", summary });
 	}
 }
@@ -301,6 +301,14 @@ export class GeminiAdapter implements CLIAdapter {
 		return path.join(os.homedir(), ".gemini", "commands");
 	}
 
+	getProjectSkillDir(): string | null {
+		return null;
+	}
+
+	getUserSkillDir(): string | null {
+		return null;
+	}
+
 	getCommandExtension(): string {
 		return ".toml";
 	}
@@ -337,7 +345,7 @@ ${body.trim()}
 		const summary = formatGeminiSummary(usage);
 		if (summary) {
 			onOutput(`\n${summary}\n`);
-			process.stdout.write(`${summary}\n`);
+			process.stderr.write(`${summary}\n`);
 			getDebugLogger()?.logTelemetry({ adapter: "gemini", summary });
 		}
 	}
@@ -489,7 +497,7 @@ ${body.trim()}
 					maxBuffer: MAX_BUFFER_BYTES,
 					env: { ...process.env, ...telemetryEnv },
 				});
-				await logTelemetryToStdout(telemetryFile);
+				await logTelemetryToStderr(telemetryFile);
 				return stdout;
 			} finally {
 				await cleanup();
