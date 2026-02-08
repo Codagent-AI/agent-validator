@@ -568,10 +568,10 @@ async function promptInstallLevel(
 	console.log("Where would you like to install the /gauntlet command?");
 	console.log("  1) Don't install commands");
 	console.log(
-		"  2) Project level (in this repo's .claude/commands, .gemini/commands, etc.)",
+		"  2) Project level (in this repo's .claude/skills, .gemini/commands, etc.)",
 	);
 	console.log(
-		"  3) User level (in ~/.claude/commands, ~/.gemini/commands, etc.)",
+		"  3) User level (in ~/.claude/skills, ~/.gemini/commands, etc.)",
 	);
 	console.log();
 

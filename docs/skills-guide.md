@@ -84,9 +84,9 @@ Skills are plain Markdown files with YAML frontmatter. You can edit them directl
 
 ```yaml
 ---
-name: run
+name: gauntlet-run
 description: Run the full verification gauntlet
-disable-model-invocation: false
+disable-model-invocation: true
 allowed-tools: Bash
 ---
 ```

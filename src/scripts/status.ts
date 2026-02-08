@@ -72,17 +72,17 @@ function parseKeyValue(text: string): Record<string, string> {
 
 function parseTimestamp(line: string): string {
 	const m = line.match(/^\[([^\]]+)\]/);
-	return m ? m[1]! : "";
+	return m?.[1] ?? "";
 }
 
 function parseEventType(line: string): string {
 	const m = line.match(/^\[[^\]]+\]\s+(\S+)/);
-	return m ? m[1]! : "";
+	return m?.[1] ?? "";
 }
 
 function parseEventBody(line: string): string {
 	const m = line.match(/^\[[^\]]+\]\s+\S+\s*(.*)/);
-	return m ? m[1]! : "";
+	return m?.[1] ?? "";
 }
 
 // --- Debug log parsing ---
@@ -126,7 +126,7 @@ function parseDebugLog(content: string, sessionStartTime?: Date): SessionRun[] {
 				const kv = parseKeyValue(body);
 				current.gates.push({
 					timestamp: ts,
-					gateId: gateIdMatch ? gateIdMatch[1]! : "unknown",
+					gateId: gateIdMatch?.[1] ?? "unknown",
 					cli: kv.cli,
 					status: kv.status ?? "unknown",
 					duration: kv.duration ?? "?",
@@ -170,7 +170,9 @@ function parseDebugLog(content: string, sessionStartTime?: Date): SessionRun[] {
  * This marks the start of the current session.
  */
 function getSessionStartTime(logDir: string): Date | undefined {
-	const entries = fs.readdirSync(logDir).filter((f) => !f.startsWith(".") && f !== "previous");
+	const entries = fs
+		.readdirSync(logDir)
+		.filter((f) => !f.startsWith(".") && f !== "previous");
 	let earliest: number | undefined;
 	for (const entry of entries) {
 		const mtime = fs.statSync(path.join(logDir, entry)).mtimeMs;
@@ -185,7 +187,9 @@ function getSessionStartTime(logDir: string): Date | undefined {
 
 function formatFileInventory(logDir: string): string[] {
 	const lines: string[] = [];
-	const entries = fs.readdirSync(logDir).filter((f) => !f.startsWith(".") && f !== "previous");
+	const entries = fs
+		.readdirSync(logDir)
+		.filter((f) => !f.startsWith(".") && f !== "previous");
 	if (entries.length === 0) return lines;
 
 	const checks: string[] = [];
@@ -346,16 +350,15 @@ function getLogDir(cwd: string): string {
 	return "gauntlet_logs";
 }
 
-function main(): void {
-	const cwd = process.cwd();
-	const logDirName = getLogDir(cwd);
-	const activeDir = path.join(cwd, logDirName);
+/**
+ * Resolve the log directory and debug log path.
+ * Returns null if no logs are found (after printing a message).
+ */
+function resolveLogPaths(
+	activeDir: string,
+): { logDir: string; debugLogPath: string } | null {
 	const previousDir = path.join(activeDir, "previous");
-	const debugLogName = ".debug.log";
-
-	// Determine which directory to read from
-	let logDir: string;
-	let debugLogPath: string;
+	const debugLogPath = path.join(activeDir, ".debug.log");
 
 	// Check active directory first for non-debug log files
 	const activeHasLogs =
@@ -365,49 +368,65 @@ function main(): void {
 			.some((f) => !f.startsWith(".") && f !== "previous");
 
 	if (activeHasLogs) {
-		logDir = activeDir;
-		debugLogPath = path.join(activeDir, debugLogName);
-	} else if (fs.existsSync(previousDir)) {
-		// Fall back to previous directory — cleanLogs archives files directly here
-		const prevEntries = fs.readdirSync(previousDir);
-		const hasDirectFiles = prevEntries.some(
-			(f) => f.endsWith(".log") || f.endsWith(".json"),
-		);
+		return { logDir: activeDir, debugLogPath };
+	}
 
-		if (hasDirectFiles) {
-			logDir = previousDir;
-		} else {
-			// Legacy: check for timestamped subdirectories
-			const prevDirs = prevEntries
-				.map((d) => path.join(previousDir, d))
-				.filter((d) => fs.statSync(d).isDirectory())
-				.sort()
-				.reverse();
-
-			if (prevDirs.length === 0) {
-				console.log("No gauntlet logs found.");
-				process.exit(0);
-			}
-
-			logDir = prevDirs[0]!;
-		}
-		// Debug log stays in the main gauntlet_logs dir, not in previous/
-		debugLogPath = path.join(activeDir, debugLogName);
-	} else {
+	if (!fs.existsSync(previousDir)) {
 		console.log("No gauntlet_logs directory found.");
+		return null;
+	}
+
+	// Fall back to previous directory — cleanLogs archives files directly here
+	const logDir = resolvePreviousLogDir(previousDir);
+	if (!logDir) return null;
+
+	// Debug log stays in the main gauntlet_logs dir, not in previous/
+	return { logDir, debugLogPath };
+}
+
+function resolvePreviousLogDir(previousDir: string): string | null {
+	const prevEntries = fs.readdirSync(previousDir);
+	const hasDirectFiles = prevEntries.some(
+		(f) => f.endsWith(".log") || f.endsWith(".json"),
+	);
+
+	if (hasDirectFiles) return previousDir;
+
+	// Legacy: check for timestamped subdirectories
+	const prevDirs = prevEntries
+		.map((d) => path.join(previousDir, d))
+		.filter((d) => fs.statSync(d).isDirectory())
+		.sort()
+		.reverse();
+
+	if (prevDirs.length === 0) {
+		console.log("No gauntlet logs found.");
+		return null;
+	}
+
+	return prevDirs[0] as string;
+}
+
+function main(): void {
+	const cwd = process.cwd();
+	const logDirName = getLogDir(cwd);
+	const activeDir = path.join(cwd, logDirName);
+
+	const paths = resolveLogPaths(activeDir);
+	if (!paths) {
 		process.exit(0);
 	}
 
 	// Parse debug log, filtering to current session based on log file timestamps
 	let sessions: SessionRun[] = [];
-	if (fs.existsSync(debugLogPath)) {
-		const debugContent = fs.readFileSync(debugLogPath, "utf-8");
-		const sessionStart = getSessionStartTime(logDir);
+	if (fs.existsSync(paths.debugLogPath)) {
+		const debugContent = fs.readFileSync(paths.debugLogPath, "utf-8");
+		const sessionStart = getSessionStartTime(paths.logDir);
 		sessions = parseDebugLog(debugContent, sessionStart);
 	}
 
 	// Format and output
-	const output = formatSession(sessions, logDir);
+	const output = formatSession(sessions, paths.logDir);
 	console.log(output);
 }
 
