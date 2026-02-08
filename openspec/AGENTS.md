@@ -7,7 +7,8 @@ Instructions for AI coding assistants using OpenSpec for spec-driven development
 - Search existing work: `openspec spec list --long`, `openspec list` (use `rg` only for full-text search)
 - Decide scope: new capability vs modify existing capability
 - Pick a unique `change-id`: kebab-case, verb-led (`add-`, `update-`, `remove-`, `refactor-`)
-- Scaffold: `proposal.md`, `tasks.md`, `design.md` (only if needed), and delta specs per affected capability
+- Move the superpowers design doc into the change dir: `mv docs/plans/YYYY-MM-DD-<topic>-design.md openspec/changes/<id>/design.md`
+- Scaffold: `proposal.md`, `tasks.md`, and delta specs per affected capability (design.md is already present from brainstorming)
 - Write deltas: use `## ADDED|MODIFIED|REMOVED|RENAMED Requirements`; include at least one `#### Scenario:` per requirement
 - Validate: `openspec validate [change-id] --strict --no-interactive` and fix issues
 - Request approval: Do not start implementation until proposal is approved
@@ -41,20 +42,37 @@ Skip proposal for:
 - Tests for existing behavior
 
 **Workflow**
+
+A superpowers brainstorming design doc (`docs/plans/YYYY-MM-DD-<topic>-design.md`) must exist before running this stage. It is the input to the spec process.
+
 1. Review `openspec/project.md`, `openspec list`, and `openspec list --specs` to understand current context.
-2. Choose a unique verb-led `change-id` and scaffold `proposal.md`, `tasks.md`, optional `design.md`, and spec deltas under `openspec/changes/<id>/`.
-3. Draft spec deltas using `## ADDED|MODIFIED|REMOVED Requirements` with at least one `#### Scenario:` per requirement.
-4. Run `openspec validate <id> --strict --no-interactive` and resolve any issues before sharing the proposal.
+2. Choose a unique verb-led `change-id` and create the change directory: `mkdir -p openspec/changes/<id>/specs/`
+3. Move the design doc into the change dir: `mv docs/plans/YYYY-MM-DD-<topic>-design.md openspec/changes/<id>/design.md`
+4. Read `design.md` and use it as the basis for writing `proposal.md`, `tasks.md`, and spec deltas under `openspec/changes/<id>/`.
+5. Draft spec deltas using `## ADDED|MODIFIED|REMOVED Requirements` with at least one `#### Scenario:` per requirement.
+6. Run `openspec validate <id> --strict --no-interactive` and resolve any issues before sharing the proposal.
+7. After validation passes, use the `gauntlet-run` skill to automatically run the spec reviewer agent. It reviews files in the git diff including the openspec proposal. Adress any issues it reports.
+
+YOU MUST complete all steps above before stopping or proceeding to implementation.
+
+**Source of truth:** After spec review, the openspec change directory (`openspec/changes/<change-name>/`) contains the authoritative documents: `proposal.md`, `design.md`, `tasks.md`, and spec deltas. The design doc was moved here from `docs/plans/` during Stage 1 and may be updated during review.
 
 ### Stage 2: Implementing Changes
-Track these steps as TODOs and complete them one by one.
-1. **Read proposal.md** - Understand what's being built
-2. **Read design.md** (if exists) - Review technical decisions
-3. **Read tasks.md** - Get implementation checklist
-4. **Implement tasks sequentially** - Complete in order
-5. **Confirm completion** - Ensure every item in `tasks.md` is finished before updating statuses
-6. **Update checklist** - After all work is done, set every task to `- [x]` so the list reflects reality
-7. **Approval gate** - Do not start implementation until the proposal is reviewed and approved
+
+Implementation uses the superpowers plugin for planning and execution. After the proposal is reviewed and approved:
+
+1. Create a worktree and launch an agent: `wt switch -c feat-name -b main -x claude`
+2. Tell the agent to write a plan and execute it in one shot:
+   ```
+   Write a plan for <feature> using the spec at openspec/changes/<change-name>/proposal.md,
+   then immediately execute it using subagent-driven-development.
+   ```
+3. The agent will write the plan, execute all tasks via fresh subagents with automated spec + quality reviews, run `/run_gauntlet`, and create a PR via `/push-pr`.
+
+**Superpowers overrides for this project:**
+- After writing a plan with writing-plans, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
+- The openspec proposal is the source of truth for planning — read `openspec/changes/<change-name>/proposal.md`, not the brainstorm design doc.
+- When complete, run `/run_gauntlet` then `/push-pr`. Do not use finishing-a-development-branch.
 
 ### Stage 3: Archiving Changes
 After deployment, create separate PR to:
@@ -133,7 +151,7 @@ openspec/
 │   ├── [change-name]/
 │   │   ├── proposal.md     # Why, what, impact
 │   │   ├── tasks.md        # Implementation checklist
-│   │   ├── design.md       # Technical decisions (optional; see criteria)
+│   │   ├── design.md       # Technical decisions (moved from superpowers brainstorming)
 │   │   └── specs/          # Delta changes
 │   │       └── [capability]/
 │   │           └── spec.md # ADDED/MODIFIED/REMOVED
@@ -156,9 +174,14 @@ New request?
 
 ### Proposal Structure
 
-1. **Create directory:** `changes/[change-id]/` (kebab-case, verb-led, unique)
+1. **Create directory and move design doc:**
+   ```bash
+   mkdir -p openspec/changes/<change-id>/specs/
+   mv docs/plans/YYYY-MM-DD-<topic>-design.md openspec/changes/<change-id>/design.md
+   ```
+   The design doc from superpowers brainstorming is the input for all subsequent files.
 
-2. **Write proposal.md:**
+2. **Write proposal.md** (based on design.md):
 ```markdown
 # Change: [Brief description of change]
 
@@ -274,40 +297,13 @@ There are no automated validation tasks that need to be explicitly run. When wor
   - `cat path/to/file | head -n 5` — verify file structure or format
 - Prefix manual CLI steps with "Manual:" to distinguish from automated checks.
 
-5. **Create design.md for all changes:**
-If a plan document was previoiusly created, include all technical details from the plan in the `design.md`. Also include all of the following, if applicable:
-- Cross-cutting change (multiple services/modules) or a new architectural pattern
-- New external dependency or significant data model changes
-- Security, performance, or migration complexity
-- Ambiguity that benefits from technical decisions before coding
-- **Pre-factoring required** — when the Pre-factoring section in `tasks.md` lists any refactorings (i.e., hotspots will be modified), `design.md` is **required**. Include a `## Pre-factoring` section in the design doc that documents:
-  - Which files are hotspots and their current Code Health scores
-  - The specific code smells identified by CodeScene (e.g., Complex Method, Bumpy Road)
-  - The refactoring strategy for each (extracted from `code_health_review` / `code_health_auto_refactor`)
-  - Why the refactoring is necessary before the main implementation
-
-Minimal `design.md` skeleton:
-```markdown
-## Context
-[Background, constraints, stakeholders]
-
-## Goals / Non-Goals
-- Goals: [...]
-- Non-Goals: [...]
-
-## Decisions
-- Decision: [What and why]
-- Alternatives considered: [Options + rationale]
-
-## Risks / Trade-offs
-- [Risk] → Mitigation
-
-## Migration Plan
-[Steps, rollback]
-
-## Open Questions
-- [...]
-```
+5. **Enrich design.md (already present from brainstorming):**
+   The design doc was moved into the change directory in step 1. Review it and add the following sections if not already present:
+   - **Pre-factoring** — when the Pre-factoring section in `tasks.md` lists any refactorings (i.e., hotspots will be modified), add a `## Pre-factoring` section documenting:
+     - Which files are hotspots and their current Code Health scores
+     - The specific code smells identified by CodeScene (e.g., Complex Method, Bumpy Road)
+     - The refactoring strategy for each (extracted from `code_health_review` / `code_health_auto_refactor`)
+     - Why the refactoring is necessary before the main implementation
 
 ## Spec File Format
 

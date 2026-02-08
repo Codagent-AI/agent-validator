@@ -7,66 +7,51 @@
 - Uses AgentGauntlet to validate changes
 - Uses OpenSpec to preserve spec history
 
+## Create a worktree and launch an agent
+
+```bash
+wt switch -c feat-name -b main -x claude
+```
+
 ### 1. Research
 
-Determine feasibility, viability, and high level approach.
-
-Use Paul Caplan's research skill:
+Use Paul Caplan's research skill to determine feasibility, viability, and high level approach. Evaluate whether the idea is worth building and identify key risks or unknowns before investing in detailed design.
 ```
 /research
 ```
 
 ### 2. Brainstorm
 
-Flesh out the details using the superpowers brainstorming skill:
+Flesh out the details of the feature with a structured design session. The superpowers brainstorming skill explores requirements, edge cases, and implementation approach, producing a design doc that feeds into the spec process.
 ```
 /brainstorm
 ```
 
 Produces `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
-### 3. Spec
+### 3. Spec + Review
 
-Write up a "change proposal" to capture the changes to the specification.
-
-Use a modified version of OpenSpec that writes a proposal and spec but does not create a design doc or tasks doc - both are redundant with superpowers:
+Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal, tasks, and spec deltas. After validation, the gauntlet spec reviewer runs automatically.
 ```
 /openspec:proposal
 ```
 
-Produces `openspec/changes/<change-name>/proposal.md` and updated spec files
+Produces `openspec/changes/<change-name>/` containing `design.md` (moved from docs/plans/), `proposal.md`, `tasks.md`, and spec deltas. The proposal is the source of truth from this point forward.
 
-### 4. Plan
+### 4. Plan + Implement (one-shot)
 
-Write the plan:
+The worktree agent writes a detailed implementation plan and immediately executes it without pausing. Each task is dispatched to a fresh subagent with automated spec compliance and code quality reviews. 
+
 ```
-/plan
+Write a plan for <feature> using the spec at openspec/changes/<change-name>/proposal.md,
+then immediately execute it using subagent-driven-development.
 ```
 
-Produces `docs/plans/YYYY-MM-DD-<name>.plan.md`
-
-### 5. Implement
-
-**Preferred Execution Mode**: Fresh context window in an isolated worktree, with subagent-driven execution. Best of both worlds.
-
-**Steps:**
-
-1. Create a worktree and launch an agent:
-   ```bash
-   wt switch -c feat-name -b main -x claude
-   ```
-
-2. In the worktree agent session, tell it to use subagent-driven-development:
-   ```
-   /subagent-driven-development execute docs/plans/YYYY-MM-DD-<name>.plan.md
-   ```
-
-3. The agent will run all tasks autonomously with automated spec + quality reviews. It only pauses if a subagent has a question.
-
-4. When complete, create a pull request against main branch. Use Paul Caplan's /push-pr skill:
-   ```
-   /push-pr
-   ```
+The agent will:
+1. Write the plan (`docs/plans/YYYY-MM-DD-<name>.plan.md`)
+2. Execute all tasks via fresh subagents with automated spec + quality reviews
+3. Run `gauntlet-run` skill to validate
+4. Run `push-pr` skill to create a pull request against main
 
 **Note:** `docs/plans/` and `docs/design/` are gitignored — plan and design docs are scratch artifacts, not permanent documentation.
 
