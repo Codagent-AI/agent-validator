@@ -39,7 +39,16 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "changeset publish"
+    "release": "changeset publish",
+    "run": "bun src/index.ts run",
+    "check": "bun src/index.ts check",
+    "clean": "bun src/index.ts clean",
+    "review": "bun src/index.ts review",
+    "detect": "bun src/index.ts detect",
+    "list": "bun src/index.ts list",
+    "health": "bun src/index.ts health",
+    "validate": "bun src/index.ts validate",
+    "wait-ci": "bun src/index.ts wait-ci"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.11",

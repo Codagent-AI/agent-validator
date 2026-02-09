@@ -4,7 +4,16 @@ Generate changesets from merged PRs since the last release, version the package,
 
 ## Steps
 
-### 1. Ensure clean main branch
+### 1. Pre-release verification
+
+Run the full test suite and E2E tests before proceeding. If either fails, stop and fix the issues before releasing.
+
+```bash
+bun run test
+bun run test:e2e
+```
+
+### 2. Ensure clean main branch
 
 ```bash
 git checkout main
@@ -16,7 +25,7 @@ TAG_DATE=$(git log -1 --format=%cI "$LAST_TAG" 2>/dev/null || echo "1970-01-01T0
 
 If no tags exist, the fallback date ensures all PRs are included.
 
-### 2. Find merged PRs since that tag
+### 3. Find merged PRs since that tag
 
 ```bash
 gh pr list --state merged --base main --search "merged:>$TAG_DATE" --json number,title,mergedAt,labels --limit 100
@@ -33,7 +42,7 @@ These are changesets/release PRs, not feature PRs.
 
 If no qualifying PRs are found, stop and tell the user there's nothing to release.
 
-### 3. Create changeset files
+### 4. Create changeset files
 
 For each qualifying PR, create a file `.changeset/pr-<number>.md` with this format:
 
@@ -52,14 +61,14 @@ For each qualifying PR, create a file `.changeset/pr-<number>.md` with this form
 
 **Summary:** A single concise sentence derived from the PR title, with the conventional commit prefix stripped (e.g., `feat: add retry logic` → `Add retry logic`).
 
-### 4. Run `bun run version`
+### 5. Run `bun run version`
 
 This invokes `changeset version`, which:
 - Consumes all `.changeset/pr-*.md` files
 - Updates `CHANGELOG.md` with the new entries
 - Bumps the version in `package.json`
 
-### 5. Reformat the changelog
+### 6. Reformat the changelog
 
 After `changeset version` runs, the generated changelog entries are plain text without PR links. Rewrite each entry in the new version's section to match this format:
 
@@ -81,7 +90,7 @@ After (reformatted):
 - [#32](https://github.com/pacaplan/agent-gauntlet/pull/32) Add `rerun_command` field to check gates, allowing reviewers to specify a command for re-running failed checks
 ```
 
-### 6. Create the release PR
+### 7. Create the release PR
 
 ```bash
 # Read new version from package.json
