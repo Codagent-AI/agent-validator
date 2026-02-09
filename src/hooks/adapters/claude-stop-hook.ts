@@ -53,13 +53,7 @@ export class ClaudeStopHookAdapter implements StopHookAdapter {
 	 * Get the block reason for a given result based on status.
 	 */
 	private getBlockReason(result: StopHookResult): string | undefined {
-		const reasonMap: Record<string, string | undefined> = {
-			failed: result.instructions,
-			pr_push_required: result.pushPRReason,
-			ci_failed: result.ciFixReason,
-			ci_pending: result.ciPendingReason,
-		};
-		return reasonMap[result.status];
+		return result.reason;
 	}
 
 	/**
