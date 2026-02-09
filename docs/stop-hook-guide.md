@@ -1,18 +1,20 @@
 # Stop Hook Guide
 
-> **⚠️ EXPERIMENTAL FEATURE WARNING ⚠️**  
+> **EXPERIMENTAL FEATURE WARNING**
 > **The stop hook is currently experimental and is likely to undergo major architectural changes in an upcoming release.** The API, configuration format, and behavior described in this guide may change significantly. Use with caution in production environments and be prepared to update your configuration when breaking changes are introduced.
 
 The stop hook integrates Agent Gauntlet with AI coding assistants, automatically validating that all gates pass before an agent can stop working on a task. It supports both **Claude Code** and **Cursor IDE**.
 
 ## Overview
 
-When an AI agent attempts to stop (e.g., by saying "I'm done"), the stop hook:
-1. Runs `agent-gauntlet run` to check all configured gates
-2. If gates pass, allows the agent to stop
-3. If gates fail, blocks the stop and directs the agent to fix the issues
+The stop hook acts as a **stateless coordinator** — it reads observable state and directs the agent to the appropriate skill. It never runs gates or polls CI itself.
 
-The hook automatically re-runs after each fix attempt, creating a feedback loop until all issues are resolved.
+When an AI agent attempts to stop (e.g., by saying "I'm done"), the stop hook:
+1. Reads the current state (failed logs, execution state, PR/CI status)
+2. If work is needed, blocks the stop and directs the agent to use the appropriate skill (`gauntlet-run`, `gauntlet-push-pr`, or `gauntlet-fix-pr`)
+3. If no work is needed, allows the agent to stop
+
+The agent drives the workflow: it runs `agent-gauntlet run` via the skill, sees output in real time, understands what failed and why, and fixes issues with full conversational context. The stop hook only enforces that this work gets done.
 
 ## Supported IDEs
 
@@ -126,6 +128,7 @@ Override all config levels using environment variables:
 | `GAUNTLET_STOP_HOOK_ENABLED` | `true`, `1`, `false`, `0` | Override whether stop hook is enabled |
 | `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` | Non-negative integer | Override run interval (0 = always run) |
 | `GAUNTLET_AUTO_PUSH_PR` | `true`, `1`, `false`, `0` | Override whether auto PR push check is enabled |
+| `GAUNTLET_AUTO_FIX_PR` | `true`, `1`, `false`, `0` | Override whether auto CI fix check is enabled |
 
 Example:
 ```bash
@@ -140,38 +143,35 @@ GAUNTLET_STOP_HOOK_ENABLED=false claude
 | `stop_hook.enabled` | `true` | Whether stop hook validation runs. Set to `false` to disable entirely. |
 | `stop_hook.run_interval_minutes` | `5` | Minimum minutes between gauntlet runs. Set to `0` to always run. Prevents excessive re-runs during active development. |
 | `stop_hook.auto_push_pr` | `false` | When enabled, blocks the stop if no PR exists or PR is not up to date after gates pass. |
+| `stop_hook.auto_fix_pr` | `false` | When enabled (requires `auto_push_pr`), blocks the stop if CI checks are pending or failing. Directs the agent to use the `gauntlet-fix-pr` skill. |
 
 ## How It Works
 
 ### Decision Flow
 
-1. **No gauntlet project**: If no `.gauntlet/config.yml` exists, the hook allows the stop immediately.
+The stop hook evaluates state fresh on each stop attempt:
 
-2. **Stop hook disabled**: If `enabled: false` is set via environment variable, project config, or global config, the hook allows the stop immediately.
+1. **Fast exits**: If `GAUNTLET_STOP_HOOK_ACTIVE` env var is set, no `.gauntlet/config.yml` exists, the hook is disabled, or adapter-specific skip conditions apply (e.g. Cursor `loop_count`), the hook allows the stop immediately.
 
-3. **Already running**: If another gauntlet is in progress (lock file exists), the hook allows the stop to prevent deadlocks.
+2. **Failed run logs exist?** If `gauntlet_logs/run.N/` contains failing gate logs, the agent is mid-loop or abandoned the loop. The hook blocks with: "use `gauntlet-run` skill."
 
-4. **Interval not elapsed**: If less than `run_interval_minutes` since the last run (and interval > 0), the hook allows the stop without re-running gates.
+3. **Interval check** (only when no failed logs): If `run_interval_minutes` has not elapsed since the last run, the hook allows the stop without requiring validation.
 
-5. **Gates pass**: If `agent-gauntlet run` succeeds, the hook allows the stop (or proceeds to PR check if `auto_push_pr` is enabled).
+4. **Changes since last pass?** Compares the current working tree against `working_tree_ref` from `.execution_state`. If changes exist since the last passing run, the hook blocks with: "use `gauntlet-run` skill."
 
-6. **Gates fail**: The hook blocks the stop and returns instructions to the agent for fixing issues.
+5. **PR status** (if `auto_push_pr` enabled): Checks `gh pr view` to verify a PR exists and is up to date. If not, blocks with: "use `gauntlet-push-pr` skill."
 
-### Termination Conditions
+6. **CI status** (if `auto_fix_pr` enabled): Single read of `gh pr checks` — no polling. If CI is pending or failed, blocks with: "use `gauntlet-fix-pr` skill."
 
-The agent can stop when any of these conditions are met:
+7. **Allow stop**: All checks passed.
 
-- **"Status: Passed"** — All gates passed successfully
-- **"Status: Passed with warnings"** — Some issues were skipped (marked as `status: "skipped"`)
-- **"Status: Retry limit exceeded"** — Too many fix attempts (`max_retries`, default 3); logs are automatically archived
+Steps 2-4 determine "has validation passed for the current state?" Steps 5-6 handle post-validation workflows. Each step is a read operation — file system for logs/execution state, `gh` CLI for PR/CI.
 
-### Retry Limits
+### Edge Cases
 
-The `max_retries` setting (default: `3`) controls how many additional runs the gauntlet allows after the initial run. After the initial run plus `max_retries` re-runs, the gauntlet reports "Retry limit exceeded" and allows the agent to stop. Logs are automatically archived at this point.
-
-### Review Trust Level
-
-When the stop hook blocks due to review failures, it includes a **trust level** directive in the feedback to the agent. This is currently hardcoded to `medium`, meaning: fix issues you reasonably agree with or believe the human wants fixed; skip issues that are purely stylistic, subjective, or that you believe the human would not want changed.
+- **No execution state** (first invocation): Falls through to change detection vs base branch. If changes exist, blocks. If not, allows.
+- **Retry limit exceeded**: The runner auto-archives logs on retry limit. No logs remain, so the stop hook sees a clean state and checks for changes. Since `working_tree_ref` was updated and the agent hasn't made new changes, it allows the stop.
+- **Interval + failed state**: Failed log detection (step 2) happens before the interval check (step 3). If failed logs exist, always block regardless of interval.
 
 ### Auto Push PR
 
@@ -179,8 +179,17 @@ When `stop_hook.auto_push_pr` is enabled, an additional check runs after gates p
 
 1. Uses `gh pr view` to check whether a PR exists for the current branch
 2. Compares the PR's head SHA against the local `HEAD` to verify all commits are pushed
-3. If no PR exists or the PR is out of date, the stop is blocked with instructions to commit, push, and create/update the PR
+3. If no PR exists or the PR is out of date, the stop is blocked with instructions to use the `gauntlet-push-pr` skill
 4. If `gh` CLI is unavailable or any error occurs, the check is skipped gracefully (does not block)
+
+### Auto Fix PR
+
+When `stop_hook.auto_fix_pr` is enabled (requires `auto_push_pr`), CI status is checked after the PR is verified:
+
+1. Runs a single `gh pr checks` read — no polling loop
+2. If CI checks are pending or failing, the stop is blocked with instructions to use the `gauntlet-fix-pr` skill
+3. The skill owns the wait/fix/push loop, not the stop hook
+4. On the next stop attempt, the stop hook checks CI status again
 
 ### Adapter Health and Cooldown
 
@@ -210,24 +219,22 @@ Example output:
 [gauntlet] Gauntlet failed, blocking stop
 ```
 
-### Failed Gate Log Files
+### Stop Hook Response Format
 
 When the stop hook blocks, it returns a JSON response with the following fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `decision` | `"block"` \| `"approve"` | Whether the stop is allowed or blocked |
-| `reason` | string (optional) | Prompt fed back to the agent when blocking |
-| `stopReason` | string | Detailed instructions displayed to the user when blocking |
+| `reason` | string (optional) | Skill invocation instruction fed back to the agent when blocking |
+| `stopReason` | string | Status message displayed to the user when blocking |
 | `systemMessage` | string (optional) | Human-friendly status message always displayed to the user |
-| `status` | string | Machine-readable status code (e.g. `passed`, `failed`, `interval_not_elapsed`) |
+| `status` | string | Machine-readable status code (e.g. `passed`, `failed`, `validation_required`) |
 | `message` | string | Human-friendly explanation of the decision |
 
-The response also includes paths to the specific failed gate log files:
-- **Check failures**: `.log` files containing the check command output
-- **Review failures**: `.json` files containing review violations to address
+The `reason` field contains a concise directive pointing the agent to the appropriate skill (e.g., "use the `gauntlet-run` skill"). The skills themselves contain full workflow logic including trust level, violation handling, and termination conditions.
 
-To manually inspect logs:
+To manually inspect gate logs:
 ```bash
 # List all gate log files
 ls gauntlet_logs/
@@ -270,7 +277,7 @@ Each stop-hook decision is logged with:
 Example entries:
 ```
 [2026-01-26T10:00:00Z] STOP_HOOK decision=allow reason=passed
-[2026-01-26T10:01:00Z] STOP_HOOK decision=block reason=failed
+[2026-01-26T10:01:00Z] STOP_HOOK decision=block reason=validation_required
 [2026-01-26T10:02:00Z] STOP_HOOK decision=allow reason=interval_not_elapsed
 ```
 
@@ -283,6 +290,7 @@ Example entries:
 | `no_applicable_gates` | allow | No gates matched the changes |
 | `no_changes` | allow | No file changes detected |
 | `failed` | block | One or more gates failed |
+| `validation_required` | block | Changes need validation or previous run has unresolved failures |
 | `retry_limit_exceeded` | allow | Too many fix attempts; clean needed |
 | `lock_conflict` | allow | Another gauntlet is running |
 | `error` | allow | Unexpected error occurred |
@@ -291,6 +299,9 @@ Example entries:
 | `interval_not_elapsed` | allow | Run interval not yet passed |
 | `invalid_input` | allow | Invalid input to stop-hook |
 | `pr_push_required` | block | Gates passed but PR needs creation or update |
+| `ci_pending` | block | CI checks still running |
+| `ci_failed` | block | CI checks failed or review changes requested |
+| `ci_passed` | allow | CI checks passed, no blocking reviews |
 | `stop_hook_disabled` | allow | Stop hook disabled via configuration |
 
 ### RUN_START with Diff Statistics
@@ -316,7 +327,7 @@ Fields:
 [2026-01-26T10:00:05Z] GATE_RESULT check:src:lint status=pass duration=1.50s violations=0
 [2026-01-26T10:00:10Z] GATE_RESULT review:src:quality status=fail duration=3.20s violations=2
 [2026-01-26T10:00:10Z] RUN_END status=fail fixed=0 skipped=0 failed=2 iterations=1
-[2026-01-26T10:00:10Z] STOP_HOOK decision=block reason=failed
+[2026-01-26T10:00:10Z] STOP_HOOK decision=block reason=validation_required
 ```
 
 ## Troubleshooting
@@ -335,10 +346,9 @@ Fields:
 **Symptoms**: Agent can't stop even after fixing issues.
 
 **Checks**:
-1. Read the failed gate log files listed in the stop reason
-2. Look for remaining gate failures in the log output
-3. For review violations, ensure all issues have `"status": "fixed"` or `"status": "skipped"` in the JSON files
-4. If stuck, run `agent-gauntlet clean` to archive the session and start fresh
+1. Read the gate log files in `gauntlet_logs/` for remaining failures
+2. For review violations, ensure all issues have `"status": "fixed"` or `"status": "skipped"` in the JSON files
+3. If stuck, run `agent-gauntlet clean` to archive the session and start fresh
 
 ### Gauntlet Timeout
 
