@@ -33,16 +33,18 @@ const TOKEN_TYPES = ["input", "output", "cacheRead", "cacheCreation"] as const;
 
 function parseCostBlock(block: string): number | undefined {
 	const match = block.match(/value:\s*([\d.]+)/);
-	return match ? Number.parseFloat(match[1]!) : undefined;
+	return match?.[1] ? Number.parseFloat(match[1]) : undefined;
 }
 
 function parseTokenBlock(block: string): Partial<OtelUsage> {
 	const result: Partial<OtelUsage> = {};
 	const re = /type:\s*"(\w+)"[\s\S]*?value:\s*(\d+)(?:,|\s*\})/g;
 	for (const match of block.matchAll(re)) {
-		const type = match[1]! as (typeof TOKEN_TYPES)[number];
+		const type = match[1] as (typeof TOKEN_TYPES)[number] | undefined;
+		const value = match[2];
+		if (!type || !value) continue;
 		if (TOKEN_TYPES.includes(type)) {
-			result[type] = Number.parseInt(match[2]!, 10);
+			result[type] = Number.parseInt(value, 10);
 		}
 	}
 	return result;

@@ -219,6 +219,7 @@ export class ConsoleReporter {
 				const sectionLines = violationsSection.split("\n");
 
 				for (let i = 0; i < sectionLines.length; i++) {
+					// biome-ignore lint/style/noNonNullAssertion: index within bounds
 					const line = sectionLines[i]!;
 					// Match numbered violation lines: "1. file:line - issue" (line can be a number or '?')
 					const violationMatch = line.match(
@@ -234,6 +235,7 @@ export class ConsoleReporter {
 
 						// Check next line for "Fix:" suggestion
 						if (i + 1 < sectionLines.length) {
+							// biome-ignore lint/style/noNonNullAssertion: bounds checked above
 							const nextLine = sectionLines[i + 1]!.trim();
 							if (nextLine.startsWith("Fix:")) {
 								const fix = nextLine.substring(4).trim();
@@ -290,6 +292,7 @@ export class ConsoleReporter {
 				const errorIndex = logContent.indexOf("Error:");
 				if (errorIndex !== -1) {
 					const afterError = logContent.substring(errorIndex + 6).trim();
+					// biome-ignore lint/style/noNonNullAssertion: split always has at least one element
 					const firstErrorLine = afterError.split("\n")[0]!.trim();
 					if (
 						firstErrorLine &&

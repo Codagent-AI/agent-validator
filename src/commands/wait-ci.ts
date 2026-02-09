@@ -199,7 +199,7 @@ function sleep(ms: number): Promise<void> {
  */
 function extractRunId(link: string): string | null {
 	const match = link.match(/\/actions\/runs\/(\d+)/);
-	return match ? match[1]! : null;
+	return match?.[1] ?? null;
 }
 
 /**
@@ -275,6 +275,7 @@ async function enrichFailedChecksWithLogs(
 	}> = [];
 
 	for (let i = 0; i < entries.length; i++) {
+		// biome-ignore lint/style/noNonNullAssertion: index within bounds
 		const [, checks] = entries[i]!;
 		const logs = logResults[i];
 		for (const check of checks) {

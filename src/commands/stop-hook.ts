@@ -255,7 +255,7 @@ export function registerStopHookCommand(program: Command): void {
 		.description("Claude Code stop hook - validates gauntlet completion")
 		.action(async () => {
 			// Default to Claude adapter for error handling before detection
-			let adapter: StopHookAdapter = adapters[1]!;
+			let adapter: StopHookAdapter = adapters[1] as StopHookAdapter;
 			let debugLogger: DebugLogger | null = null;
 			let loggerInitialized = false;
 			let markerFilePath: string | null = null;
@@ -420,6 +420,7 @@ export function registerStopHookCommand(program: Command): void {
 				}
 
 				// Detect protocol and select adapter
+				// biome-ignore lint/style/noNonNullAssertion: adapters array always has index 1
 				adapter = adapters.find((a) => a.detect(parsed)) ?? adapters[1]!;
 
 				// Parse input using selected adapter

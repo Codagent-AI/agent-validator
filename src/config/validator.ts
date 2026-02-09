@@ -269,6 +269,7 @@ export async function validateConfig(
 	// 4. Cross-reference validation (entry points referencing gates)
 	if (projectConfig?.entry_points) {
 		for (let i = 0; i < projectConfig.entry_points.length; i++) {
+			// biome-ignore lint/style/noNonNullAssertion: index within bounds
 			const entryPoint = projectConfig.entry_points[i]!;
 			const entryPointPath = `entry_points[${i}]`;
 
@@ -400,7 +401,7 @@ export async function validateConfig(
 			} else {
 				// Validate defaults are valid tools
 				for (let i = 0; i < defaults.length; i++) {
-					const toolName = defaults[i]!;
+					const toolName = defaults[i] as string;
 					if (!getValidCLITools().includes(toolName)) {
 						issues.push({
 							file: configPath,
@@ -420,7 +421,7 @@ export async function validateConfig(
 							reviewSourceFiles[reviewName] ||
 							path.join(reviewsPath, `${reviewName}.md`);
 						for (let i = 0; i < pref.length; i++) {
-							const tool = pref[i]!;
+							const tool = pref[i] as string;
 							if (!allowedTools.has(tool)) {
 								issues.push({
 									file: reviewFile,
@@ -479,7 +480,7 @@ function validateReviewSemantics(
 			});
 		} else {
 			for (let i = 0; i < parsed.cli_preference.length; i++) {
-				const toolName = parsed.cli_preference[i]!;
+				const toolName = parsed.cli_preference[i] as string;
 				if (!getValidCLITools().includes(toolName)) {
 					issues.push({
 						file: filePath,
