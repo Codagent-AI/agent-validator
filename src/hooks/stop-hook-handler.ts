@@ -207,8 +207,8 @@ const STATUS_MESSAGES: Record<string, string> = {
 	ci_pending: "⏳ CI checks still running — waiting for completion.",
 	ci_failed: "✗ CI failed or review changes requested — fix issues and push.",
 	ci_passed: "✓ CI passed — all checks completed and no blocking reviews.",
-	ci_timeout:
-		"⚠ CI wait exhausted — max attempts reached, allowing stop for manual review.",
+	validation_required:
+		"✗ Validation required — changes detected that need validation before stopping.",
 	no_config: "○ Not a gauntlet project — no .gauntlet/config.yml found.",
 	stop_hook_active:
 		"↺ Stop hook cycle detected — allowing stop to prevent infinite loop.",
@@ -550,7 +550,7 @@ async function handleCIWaitWorkflow(
 			`CI wait attempts exhausted (${attempts}/${MAX_CI_WAIT_ATTEMPTS})`,
 		);
 		await cleanCIWaitAttempts(logDir);
-		return { finalStatus: "ci_timeout" };
+		return { finalStatus: "error" };
 	}
 
 	log.info(

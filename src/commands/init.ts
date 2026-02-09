@@ -306,7 +306,6 @@ Actionable recommendations for the user. If confidence is not high, suggest what
 | \`no_applicable_gates\` | No applicable gates matched current changes | Changed files didn't match any configured entry point |
 | \`no_changes\` | No changes detected | No files changed relative to \`base_branch\` |
 | \`ci_passed\` | CI passed — all checks completed and no blocking reviews | GitHub CI checks succeeded and no \`CHANGES_REQUESTED\` reviews |
-| \`ci_timeout\` | CI wait exhausted — max attempts reached | CI polling hit 3 attempts; allows stop for manual review |
 | \`no_config\` | Not a gauntlet project — no \`.gauntlet/config.yml\` found | No gauntlet configuration in this repo |
 | \`stop_hook_active\` | Stop hook cycle detected — allowing stop to prevent infinite loop | Recursion prevention triggered |
 | \`stop_hook_disabled\` | Stop hook is disabled via configuration | \`stop_hook.enabled: false\` in config or \`GAUNTLET_STOP_HOOK_ENABLED=false\` |
@@ -929,7 +928,7 @@ Gates passed but the stop hook detected that a PR needs to be created or updated
 | \`ci_pending\` | CI checks still running | Yes — agent waits |
 | \`ci_failed\` | CI failed or review changes requested | Yes — must fix |
 | \`ci_passed\` | All checks completed, no blocking reviews | No — stop allowed |
-| \`ci_timeout\` | Max wait attempts reached | No — stop allowed for manual review |
+| \`validation_required\` | Changes need validation | Yes — must validate |
 
 ## \`auto_push_pr\` and \`auto_fix_pr\` Configuration
 
@@ -957,7 +956,7 @@ stop_hook:
 ### Attempt Tracking
 - File: \`<log_dir>/.ci-wait-attempts\`
 - Incremented on each CI wait invocation
-- When attempts >= 3: returns \`ci_timeout\` and allows the stop
+- When attempts >= 3: returns an error and allows the stop
 
 ### What \`wait-ci\` Checks
 
@@ -1005,12 +1004,6 @@ The gauntlet detects CI environments using:
 3. Check for \`CHANGES_REQUESTED\` reviews: \`gh api repos/OWNER/REPO/pulls/PR_NUM/reviews\`
 4. Fix the issues, commit, and push
 5. The stop hook will re-check on next invocation
-
-### \`ci_timeout\` — Wait Exhausted
-- The CI wait hit 3 attempts without all checks passing
-- The stop is allowed for manual review
-- Check \`<log_dir>/.ci-wait-attempts\` for the attempt count
-- After fixing issues and pushing, run \`agent-gauntlet clean\` to reset the attempt counter
 
 ### PR-Related Issues
 - **No PR for branch**: \`gh pr view\` returns an error — create a PR first

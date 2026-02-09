@@ -102,6 +102,11 @@ describe("StopHookHandler", () => {
 			const message = getStatusMessage("invalid_input");
 			expect(message).toContain("Invalid hook input");
 		});
+
+		it("should return appropriate message for validation_required status", () => {
+			const message = getStatusMessage("validation_required");
+			expect(message).toContain("changes detected");
+		});
 	});
 
 	describe("getStopReasonInstructions()", () => {
