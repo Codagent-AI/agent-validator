@@ -72,8 +72,17 @@ const MODEL_DETECTORS: Record<EvalAdapterName, () => string | undefined> = {
 		} catch { return undefined; }
 	},
 	gemini: () => {
-		// Gemini CLI uses its default model; no config file specifies it
-		return undefined;
+		try {
+			const raw = execSync(
+				"gemini -p 'Reply with only your model ID, nothing else' --output-format text --sandbox",
+				{ timeout: 30_000 },
+			).toString().trim();
+			// Filter out MCP noise lines — the model ID is the last non-empty line
+			// that looks like a model name (starts with "gemini")
+			const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+			const geminiLine = [...lines].reverse().find((l) => l.startsWith("gemini"));
+			return geminiLine ?? lines[lines.length - 1];
+		} catch { return undefined; }
 	},
 };
 

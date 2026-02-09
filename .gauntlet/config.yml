@@ -19,7 +19,7 @@ cli:
       thinking_budget: low
     gemini:
       allow_tool_use: false
-      thinking_budget: high
+      thinking_budget: low
 stop_hook:
   enabled: false
   auto_push_pr: true
