@@ -37,10 +37,8 @@ mock.module("node:child_process", () => {
 // Import after mocking
 const {
 	registerStopHookCommand,
-	getStopReasonInstructions,
 	outputHookResponse,
 	getStatusMessage,
-	getPushPRInstructions,
 } = await import("../../src/commands/stop-hook.js");
 
 import type { StopHookStatus } from "../../src/commands/stop-hook.js";
@@ -320,144 +318,6 @@ describe("Stop Hook Command", () => {
 
 			const output = JSON.stringify(hookResponse);
 			expect(output.includes("\n")).toBe(false);
-		});
-	});
-
-	describe("Enhanced Stop Reason Instructions", () => {
-		it("should list failed check log paths", () => {
-			const gateResults = [
-				{
-					jobId: "check:root:eslint",
-					status: "fail" as const,
-					logPath: "/path/to/gauntlet_logs/check_root_eslint.1.log",
-				},
-			];
-			const instructions = getStopReasonInstructions(gateResults);
-			expect(instructions).toContain("**Failed gate logs:**");
-			expect(instructions).toContain(
-				"Check: `/path/to/gauntlet_logs/check_root_eslint.1.log`",
-			);
-		});
-
-		it("should list failed review json paths", () => {
-			const gateResults = [
-				{
-					jobId: "review:src:claude-review",
-					status: "fail" as const,
-					subResults: [
-						{
-							nameSuffix: "(claude@1)",
-							status: "fail" as const,
-							logPath:
-								"/path/to/gauntlet_logs/review_src_claude-review_claude@1.1.json",
-						},
-					],
-				},
-			];
-			const instructions = getStopReasonInstructions(gateResults);
-			expect(instructions).toContain("**Failed gate logs:**");
-			expect(instructions).toContain(
-				"Review: `/path/to/gauntlet_logs/review_src_claude-review_claude@1.1.json`",
-			);
-		});
-
-		it("should not include failed gate logs section when no results", () => {
-			const instructions = getStopReasonInstructions(undefined);
-			expect(instructions).not.toContain("**Failed gate logs:**");
-		});
-
-		it("should NOT include instruction to run agent-gauntlet run", () => {
-			const instructions = getStopReasonInstructions(undefined);
-			// The instruction to manually run agent-gauntlet should be removed
-			// because the stop hook auto-re-triggers
-			expect(instructions).not.toContain("Run `agent-gauntlet run` to verify");
-		});
-
-		it("should include urgent fix directive", () => {
-			const instructions = getStopReasonInstructions(undefined);
-			expect(instructions).toContain("GAUNTLET FAILED");
-			expect(instructions).toContain("YOU MUST FIX ISSUES NOW");
-			expect(instructions).toContain("cannot stop until the gauntlet passes");
-			expect(instructions).toContain("stop hook will automatically re-run");
-		});
-
-		it("should include trust level guidance only when review failures exist", () => {
-			// No gate results — no trust level
-			const noResults = getStopReasonInstructions(undefined);
-			expect(noResults).not.toContain("Review trust level: medium");
-
-			// Only check failures — no trust level
-			const checkOnly = getStopReasonInstructions([
-				{
-					jobId: "check:root:eslint",
-					status: "fail" as const,
-					logPath: "/path/to/check.log",
-				},
-			]);
-			expect(checkOnly).not.toContain("Review trust level: medium");
-
-			// Review failures — trust level shown
-			const withReview = getStopReasonInstructions([
-				{
-					jobId: "review:src:claude-review",
-					status: "fail" as const,
-					subResults: [
-						{
-							nameSuffix: "(claude@1)",
-							status: "fail" as const,
-							logPath: "/path/to/review.json",
-						},
-					],
-				},
-			]);
-			expect(withReview).toContain("Review trust level: medium");
-			expect(withReview).toContain("Fix issues you reasonably agree with");
-			expect(withReview).toContain("Skip issues that are purely stylistic");
-		});
-
-		it("should include violation handling instructions only for review failures", () => {
-			// No results — no review instructions
-			const noResults = getStopReasonInstructions(undefined);
-			expect(noResults).not.toContain("For REVIEW violations");
-			expect(noResults).not.toContain("For CHECK failures");
-
-			// Check-only failures — only check instructions
-			const checkOnly = getStopReasonInstructions([
-				{
-					jobId: "check:root:eslint",
-					status: "fail" as const,
-					logPath: "/path/to/check.log",
-				},
-			]);
-			expect(checkOnly).toContain("For CHECK failures");
-			expect(checkOnly).not.toContain("For REVIEW violations");
-
-			// Review failures — includes review instructions
-			const withReview = getStopReasonInstructions([
-				{
-					jobId: "review:src:claude-review",
-					status: "fail" as const,
-					subResults: [
-						{
-							nameSuffix: "(claude@1)",
-							status: "fail" as const,
-							logPath: "/path/to/review.json",
-						},
-					],
-				},
-			]);
-			expect(withReview).toContain("For REVIEW failures");
-			expect(withReview).toContain('"status": "fixed"');
-			expect(withReview).toContain('"status": "skipped"');
-			expect(withReview).toContain("For REVIEW violations");
-		});
-
-		it("should include all termination conditions", () => {
-			const instructions = getStopReasonInstructions(undefined);
-			expect(instructions).toContain("Status: Passed");
-			expect(instructions).toContain("Status: Passed with warnings");
-			expect(instructions).toContain("Status: Retry limit exceeded");
-			expect(instructions).toContain("**Termination conditions:**");
 		});
 	});
 
@@ -787,7 +647,7 @@ describe("Stop Hook Command", () => {
 			expect(response.message).toContain("Invalid hook input");
 		});
 
-		it("should only produce decision=block for failed status", () => {
+		it("should only produce decision=block for blocking statuses", () => {
 			const allStatuses: StopHookStatus[] = [
 				"passed",
 				"no_applicable_gates",
@@ -805,7 +665,7 @@ describe("Stop Hook Command", () => {
 				"ci_pending",
 				"ci_failed",
 				"ci_passed",
-				"ci_timeout",
+				"validation_required",
 				"stop_hook_disabled",
 			];
 
@@ -813,7 +673,7 @@ describe("Stop Hook Command", () => {
 				logs = []; // Clear logs for each test
 				outputHookResponse(status);
 				const response = JSON.parse(logs[0]!);
-				const blockingStatuses = ["failed", "pr_push_required", "ci_pending", "ci_failed"];
+				const blockingStatuses = ["failed", "pr_push_required", "ci_pending", "ci_failed", "validation_required"];
 				if (blockingStatuses.includes(status)) {
 					expect(response.decision).toBe("block");
 				} else {
@@ -937,37 +797,6 @@ describe("Stop Hook Command", () => {
 			}
 		});
 
-		it("should initialize debug logger before adapter skip checks", async () => {
-			// Read source to verify the debug logger is initialized before adapter-specific skip checks
-			const { readFileSync } = await import("node:fs");
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
-				"utf-8",
-			);
-
-			// Find action handler
-			const actionStart = sourceFile.indexOf(".action(async ()");
-
-			// The debug logger should be initialized BEFORE adapter skip checks
-			const debugLoggerInit = sourceFile.indexOf(
-				"new DebugLogger",
-				actionStart,
-			);
-			const adapterSkipCheck = sourceFile.indexOf(
-				"adapter.shouldSkipExecution",
-				actionStart,
-			);
-
-			expect(debugLoggerInit).toBeLessThan(adapterSkipCheck);
-
-			// The adapter skip block should log before exiting
-			const skipBlock = sourceFile.slice(
-				adapterSkipCheck,
-				sourceFile.indexOf("return;", adapterSkipCheck) + 10,
-			);
-			expect(skipBlock).toContain("logStopHookEarlyExit");
-		});
-
 		it("should not initialize debug logger when child process detected", async () => {
 			// This test verifies the code path - debug logger init happens AFTER the child process check
 			// So when GAUNTLET_STOP_HOOK_ACTIVE is set, no debug logging should occur
@@ -1046,139 +875,6 @@ describe("Stop Hook Command", () => {
 		});
 	});
 
-	describe("simplified architecture (stop-hook delegates to executor)", () => {
-		it("should check config BEFORE stdin parsing (avoid 5s timeout)", async () => {
-			// Read source file to verify order of operations
-			const { readFileSync } = await import("node:fs");
-
-			// TODO wow really Claude? remove all of these assertions about the source code of the class
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
-				"utf-8",
-			);
-
-			// Find positions in the action handler
-			const actionStart = sourceFile.indexOf(".action(async ()");
-			const quickConfigCheck = sourceFile.indexOf(
-				"quickConfigCheck",
-				actionStart,
-			);
-			const stdinInAction = sourceFile.indexOf("readStdin", actionStart);
-
-			// Config check should appear BEFORE stdin read
-			expect(quickConfigCheck).toBeLessThan(stdinInAction);
-		});
-
-		it("should check env var BEFORE stdin parsing (fast exit)", async () => {
-			// Read source file to verify order of operations
-			const { readFileSync } = await import("node:fs");
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
-				"utf-8",
-			);
-
-			// Find positions of env var check and stdin parsing
-			const envVarCheckPos = sourceFile.indexOf(
-				"GAUNTLET_STOP_HOOK_ACTIVE_ENV",
-			);
-			const stdinParsePos = sourceFile.indexOf("readStdin");
-
-			// The env var check should appear FIRST in the action handler
-			const actionStart = sourceFile.indexOf(".action(async ()");
-			const envVarInAction = sourceFile.indexOf(
-				"process.env[GAUNTLET_STOP_HOOK_ACTIVE_ENV]",
-				actionStart,
-			);
-			const stdinInAction = sourceFile.indexOf("readStdin", actionStart);
-
-			expect(envVarInAction).toBeLessThan(stdinInAction);
-		});
-
-		it("should pass checkInterval: true to executeRun via handler", async () => {
-			// Read source file to verify handler passes checkInterval: true to executeRun
-			const { readFileSync } = await import("node:fs");
-			const handlerFile = readFileSync(
-				path.join(originalCwd, "src/hooks/stop-hook-handler.ts"),
-				"utf-8",
-			);
-
-			expect(handlerFile).toContain("checkInterval: true");
-		});
-
-		it("should NOT have lock pre-check in stop-hook (delegated to executor)", async () => {
-			// Read source file to verify lock pre-check is removed
-			const { readFileSync } = await import("node:fs");
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
-				"utf-8",
-			);
-
-			// Should not have getLockFilename import (removed)
-			expect(sourceFile).not.toContain("getLockFilename");
-		});
-
-		it("should NOT have interval checking logic in stop-hook (delegated to executor)", async () => {
-			// Read source file to verify shouldRunBasedOnInterval is removed
-			const { readFileSync } = await import("node:fs");
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
-				"utf-8",
-			);
-
-			// Should not have shouldRunBasedOnInterval function
-			expect(sourceFile).not.toContain("shouldRunBasedOnInterval");
-		});
-
-		it("should use gateResults from RunResult for failure instructions in handler", async () => {
-			// Read source file to verify handler uses result.gateResults
-			const { readFileSync } = await import("node:fs");
-			const handlerFile = readFileSync(
-				path.join(originalCwd, "src/hooks/stop-hook-handler.ts"),
-				"utf-8",
-			);
-
-			// Should use result.gateResults in the handler
-			expect(handlerFile).toContain("result.gateResults");
-		});
-
-		it("should have pre-checks before calling handler.execute", async () => {
-			// Read source file to count pre-checks
-			const { readFileSync } = await import("node:fs");
-			const sourceFile = readFileSync(
-				path.join(originalCwd, "src/commands/stop-hook.ts"),
-				"utf-8",
-			);
-
-			// Find action handler
-			const actionStart = sourceFile.indexOf(".action(async ()");
-			const handlerExecuteCall = sourceFile.indexOf(
-				"handler.execute",
-				actionStart,
-			);
-			const actionSection = sourceFile.slice(actionStart, handlerExecuteCall);
-
-			// Pre-checks use outputResult() or createEarlyExitResult() in the new architecture
-			// Count outputResult calls (early returns) and createEarlyExitResult calls
-			const earlyReturns = (actionSection.match(/outputResult\(/g) || [])
-				.length;
-			const earlyExitResults = (
-				actionSection.match(/createEarlyExitResult\(/g) || []
-			).length;
-
-			// Should have early exit paths before handler.execute:
-			// 1. self-timeout handler (outputResult in setTimeout callback)
-			// 2. env var check (before stdin - fast exit for child processes)
-			// 3. quick config check at process.cwd() (before stdin - avoid timeout for non-gauntlet)
-			// 4. marker file check - fresh marker (before stdin - fast exit for nested stop-hooks)
-			// 5. marker file check - stat/rm error fallback (treat as active)
-			// 6. invalid_input (after stdin parse failure)
-			// 7. adapter skip (e.g., Cursor loop_count)
-			// 8. no_config at ctx.cwd (when cwd differs from process.cwd())
-			expect(earlyReturns).toBeGreaterThan(0);
-			expect(earlyExitResults).toBeGreaterThan(0);
-		});
-	});
-
 	describe("pr_push_required status", () => {
 		it("isBlockingStatus returns true for pr_push_required", () => {
 			expect(isBlockingStatus("pr_push_required")).toBe(true);
@@ -1209,35 +905,6 @@ describe("Stop Hook Command", () => {
 		});
 	});
 
-	describe("getPushPRInstructions", () => {
-		it("includes PR creation instructions", () => {
-			const instructions = getPushPRInstructions();
-			expect(instructions).toContain("GAUNTLET PASSED");
-			expect(instructions).toContain("pull request");
-		});
-
-		it("includes instruction to try stopping again", () => {
-			const instructions = getPushPRInstructions();
-			expect(instructions).toContain("try to stop again");
-		});
-
-		it("includes skipped issues guidance when passed_with_warnings", () => {
-			const instructions = getPushPRInstructions({ hasWarnings: true });
-			expect(instructions).toContain("skipped issues");
-			expect(instructions).toContain("PR description");
-		});
-
-		it("does not include skipped issues guidance for clean pass", () => {
-			const instructions = getPushPRInstructions({ hasWarnings: false });
-			expect(instructions).not.toContain("skipped issues");
-		});
-
-		it("does not include skipped issues guidance by default", () => {
-			const instructions = getPushPRInstructions();
-			expect(instructions).not.toContain("skipped issues");
-		});
-	});
-
 	describe("CI status handling", () => {
 		describe("isBlockingStatus with CI statuses", () => {
 			it("returns true for ci_pending", () => {
@@ -1251,19 +918,11 @@ describe("Stop Hook Command", () => {
 			it("returns false for ci_passed", () => {
 				expect(isBlockingStatus("ci_passed")).toBe(false);
 			});
-
-			it("returns false for ci_timeout", () => {
-				expect(isBlockingStatus("ci_timeout")).toBe(false);
-			});
 		});
 
 		describe("isSuccessStatus with CI statuses", () => {
 			it("returns true for ci_passed", () => {
 				expect(isSuccessStatus("ci_passed")).toBe(true);
-			});
-
-			it("returns false for ci_timeout", () => {
-				expect(isSuccessStatus("ci_timeout")).toBe(false);
 			});
 
 			it("returns false for ci_pending", () => {
@@ -1290,11 +949,26 @@ describe("Stop Hook Command", () => {
 				const message = getStatusMessage("ci_passed");
 				expect(message).toContain("CI passed");
 			});
+		});
+	});
 
-			it("returns appropriate message for ci_timeout", () => {
-				const message = getStatusMessage("ci_timeout");
-				expect(message).toContain("CI wait exhausted");
-			});
+	describe("validation_required status", () => {
+		it("isBlockingStatus returns true for validation_required", () => {
+			expect(isBlockingStatus("validation_required")).toBe(true);
+		});
+
+		it("getStatusMessage returns appropriate message for validation_required", () => {
+			const message = getStatusMessage("validation_required");
+			expect(message).toContain("changes detected");
+		});
+
+		it("outputHookResponse outputs block decision for validation_required", () => {
+			outputHookResponse("validation_required", { reason: "Use gauntlet-run skill" });
+			expect(logs.length).toBe(1);
+			const response = JSON.parse(logs[0]!);
+			expect(response.decision).toBe("block");
+			expect(response.status).toBe("validation_required");
+			expect(response.reason).toBe("Use gauntlet-run skill");
 		});
 	});
 });

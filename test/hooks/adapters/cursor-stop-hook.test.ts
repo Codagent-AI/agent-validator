@@ -118,7 +118,7 @@ describe("CursorStopHookAdapter", () => {
 				status: "failed",
 				shouldBlock: true,
 				message: "✗ Gauntlet failed",
-				instructions: "Fix the issues",
+				reason: "Fix the issues",
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Fix the issues");
@@ -129,27 +129,27 @@ describe("CursorStopHookAdapter", () => {
 				status: "pr_push_required",
 				shouldBlock: true,
 				message: "✓ Gauntlet passed — PR needed",
-				pushPRReason: "Create a PR",
+				reason: "Create a PR",
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Create a PR");
 		});
 
-		it("should output followup_message for ci_failed status with ciFixReason", () => {
+		it("should output followup_message for ci_failed status", () => {
 			const result = createResult({
 				status: "ci_failed",
 				shouldBlock: true,
-				ciFixReason: "Fix the CI failures",
+				reason: "Fix the CI failures",
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Fix the CI failures");
 		});
 
-		it("should output followup_message for ci_pending status with ciPendingReason", () => {
+		it("should output followup_message for ci_pending status", () => {
 			const result = createResult({
 				status: "ci_pending",
 				shouldBlock: true,
-				ciPendingReason: "Wait for CI to complete",
+				reason: "Wait for CI to complete",
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Wait for CI to complete");
@@ -165,17 +165,17 @@ describe("CursorStopHookAdapter", () => {
 			expect(output.followup_message).toBeUndefined();
 		});
 
-		it("should output systemMessage for ci_timeout status", () => {
+		it("should output followup_message for validation_required status", () => {
 			const result = createResult({
-				status: "ci_timeout",
-				message: "⚠ CI wait exhausted",
+				status: "validation_required",
+				shouldBlock: true,
+				reason: "Use gauntlet-run skill",
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.systemMessage).toBe("⚠ CI wait exhausted");
-			expect(output.followup_message).toBeUndefined();
+			expect(output.followup_message).toBe("Use gauntlet-run skill");
 		});
 
-		it("should use message as fallback when instructions not provided", () => {
+		it("should use message as fallback when reason not provided", () => {
 			const result = createResult({
 				status: "failed",
 				shouldBlock: true,
@@ -189,7 +189,7 @@ describe("CursorStopHookAdapter", () => {
 			const result = createResult({
 				status: "failed",
 				shouldBlock: true,
-				instructions: "Fix the issues",
+				reason: "Fix the issues",
 			});
 			const output = adapter.formatOutput(result);
 			expect(output.includes("\n")).toBe(false);

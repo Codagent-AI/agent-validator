@@ -202,9 +202,6 @@ async function verifyLogs(tempDir: string): Promise<Assertion[]> {
 		return [
 			{ label: "Debug log exists", passed: false },
 			{ label: "Stop hook ran", passed: false },
-			{ label: "Validation suite ran", passed: false },
-			{ label: "Errors detected", passed: false },
-			{ label: "Second iteration ran", passed: false },
 			{ label: "Eventually passed", passed: false },
 		];
 	}
@@ -217,36 +214,16 @@ async function verifyLogs(tempDir: string): Promise<Assertion[]> {
 	const stopHookRan = lines.some((l) => l.includes("COMMAND stop-hook"));
 	assertions.push({ label: "Stop hook ran", passed: stopHookRan });
 
-	// Assertion 2: Validation suite ran
-	const runStartLines = lines.filter((l) => l.includes("RUN_START"));
-	assertions.push({
-		label: "Validation suite ran",
-		passed: runStartLines.length > 0,
-	});
-
-	// Assertion 3: Errors detected
-	const gateFailLines = lines.filter(
-		(l) => l.includes("GATE_RESULT") && l.includes("status=fail"),
-	);
-	assertions.push({
-		label: "Errors detected",
-		passed: gateFailLines.length > 0,
-	});
-
-	// Assertion 4: Second iteration ran
-	// Check for 2+ RUN_START lines OR iterations=2+ in RUN_END
-	const runEndLines = lines.filter((l) => l.includes("RUN_END"));
-	const hasMultipleRunStarts = runStartLines.length >= 2;
-	const hasMultipleIterations = runEndLines.some((l) => {
-		const match = l.match(/iterations=(\d+)/);
-		return match ? Number.parseInt(match[1], 10) >= 2 : false;
-	});
-	assertions.push({
-		label: "Second iteration ran",
-		passed: hasMultipleRunStarts || hasMultipleIterations,
-	});
-
-	// Assertion 5: Eventually passed (decision=allow after a decision=block)
+	// Assertion 2: Eventually passed
+	// In the coordinator model, the stop hook blocks with validation_required
+	// (decision=block) and then later allows (decision=allow) after the agent
+	// uses the gauntlet-run skill to fix issues and the subsequent stop hook
+	// reads passing state.
+	//
+	// TODO: The E2E test needs to be redesigned for the coordinator architecture.
+	// The stop hook now blocks with "use gauntlet-run skill" but `claude -p`
+	// won't know about skills. For now, we check for any decision=block followed
+	// by decision=allow, which validates the state-reading flow works.
 	const stopHookLines = lines.filter((l) => l.includes("STOP_HOOK decision="));
 	const blockIndex = stopHookLines.findIndex((l) =>
 		l.includes("decision=block"),

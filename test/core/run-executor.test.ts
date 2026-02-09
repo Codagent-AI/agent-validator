@@ -245,14 +245,15 @@ describe("run-executor checkInterval option", () => {
 			expect(sourceFile).not.toContain("checkInterval: true");
 		});
 
-		it("stop-hook handler should pass checkInterval: true (source verification)", () => {
+		it("stop-hook handler should check run interval via state reader (source verification)", () => {
 			const handlerFile = readFileSync(
 				join(process.cwd(), "src/hooks/stop-hook-handler.ts"),
 				"utf-8",
 			);
 
-			// stop-hook handler should call executeRun with checkInterval: true
-			expect(handlerFile).toContain("checkInterval: true");
+			// In the coordinator model, the stop-hook handler reads state
+			// and checks the run interval via checkRunInterval
+			expect(handlerFile).toContain("checkRunInterval");
 		});
 	});
 });
