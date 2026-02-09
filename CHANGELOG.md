@@ -1,5 +1,41 @@
 # agent-gauntlet
 
+## 0.10.0
+
+### Minor Changes
+
+- [#32](https://github.com/pacaplan/agent-gauntlet/pull/32) Add `rerun_command` field to check gates, allowing reviewers to specify a command for re-running failed checks
+
+- [#33](https://github.com/pacaplan/agent-gauntlet/pull/33) Add OpenTelemetry telemetry for Claude and Gemini CLI adapters with span-based tracing of adapter runs
+
+- [#35](https://github.com/pacaplan/agent-gauntlet/pull/35) Refactor built-in reviews from hardcoded logic to YAML configuration files with pure markdown prompt templates
+
+- [#36](https://github.com/pacaplan/agent-gauntlet/pull/36) Add adapter telemetry instrumentation with debug log persistence for post-run diagnostics
+
+- [#37](https://github.com/pacaplan/agent-gauntlet/pull/37) Add per-adapter configuration for tool use permissions and thinking budget allocation
+
+- [#38](https://github.com/pacaplan/agent-gauntlet/pull/38) Add `gauntlet-check` and `gauntlet-status` skills for querying gauntlet run state from within adapters
+
+- [#40](https://github.com/pacaplan/agent-gauntlet/pull/40) Add eval framework for measuring adapter performance across structured test scenarios
+
+- [#41](https://github.com/pacaplan/agent-gauntlet/pull/41) Add help skill providing contextual usage guidance for gauntlet commands and configuration
+
+- [#43](https://github.com/pacaplan/agent-gauntlet/pull/43) Add configurable N-deep log rotation with automatic cleanup when the retry limit is reached
+
+### Patch Changes
+
+- [#31](https://github.com/pacaplan/agent-gauntlet/pull/31) Fix auto-clean triggering on stale state and resolve post-gauntlet PR creation and CI workflow bugs
+
+- [#34](https://github.com/pacaplan/agent-gauntlet/pull/34) Add per-reviewer GATE_RESULT logging and track execution state changes for debugging review pipelines
+
+- [#39](https://github.com/pacaplan/agent-gauntlet/pull/39) Fix TypeScript compilation errors across adapter and reviewer modules
+
+- [#42](https://github.com/pacaplan/agent-gauntlet/pull/42) Remove redundant comment on `buildHelpSkillBundle` function
+
+- [#44](https://github.com/pacaplan/agent-gauntlet/pull/44) Add superpowers skill bundle for enhanced development workflows
+
+- [#45](https://github.com/pacaplan/agent-gauntlet/pull/45) Add Gemini adapter to the eval test suite
+
 ## 0.9.0
 
 ### Minor Changes
