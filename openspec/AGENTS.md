@@ -47,7 +47,7 @@ A superpowers brainstorming design doc (`docs/plans/YYYY-MM-DD-<topic>-design.md
 
 1. Review `openspec/project.md`, `openspec list`, and `openspec list --specs` to understand current context.
 2. Choose a unique verb-led `change-id` and create the change directory: `mkdir -p openspec/changes/<id>/specs/`
-3. Move the design doc into the change dir: `mv docs/plans/YYYY-MM-DD-<topic>-design.md openspec/changes/<id>/design.md`
+3. Move the design doc into the change dir: `mv docs/plans/YYYY-MM-DD-<topic>-design.md openspec/changes/<id>/design.md`. YOU MUST use `mv`, do not copy it, because we want the one in openspec to be the single source of truth.
 4. Read `design.md` and use it as the basis for writing `proposal.md`, `tasks.md`, and spec deltas under `openspec/changes/<id>/`.
 5. Draft spec deltas using `## ADDED|MODIFIED|REMOVED Requirements` with at least one `#### Scenario:` per requirement.
 6. Run `openspec validate <id> --strict --no-interactive` and resolve any issues before sharing the proposal.

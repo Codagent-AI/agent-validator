@@ -7,7 +7,7 @@
 - Uses AgentGauntlet to validate changes
 - Uses OpenSpec to preserve spec history
 
-## Create a worktree and launch an agent
+### 0. Create a worktree and launch an agent
 
 ```bash
 wt switch -c feat-name -b main -x claude

@@ -50,6 +50,7 @@ entry_points:
       - "**/tasks.md" # Prevent triggering review of entire spec when marking tasks as done 
     checks:
       - openspec-validate
+      - no-orphaned-design-docs
     reviews:
       - change-review
   - path: "openspec/changes/*/tasks.md"
