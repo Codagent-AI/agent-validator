@@ -12,9 +12,7 @@ import type {
 import {
 	getDebugLogConfig,
 	getLogDir,
-	getPushPRInstructions,
 	getStatusMessage,
-	getStopReasonInstructions,
 	StopHookHandler,
 } from "../hooks/stop-hook-handler.js";
 import {
@@ -228,8 +226,7 @@ export function outputHookResponse(
 		status,
 		shouldBlock,
 		message,
-		instructions: options?.reason,
-		pushPRReason: status === "pr_push_required" ? options?.reason : undefined,
+		reason: options?.reason,
 		intervalMinutes: options?.intervalMinutes,
 	};
 
@@ -237,17 +234,11 @@ export function outputHookResponse(
 }
 
 // Export for testing
-export { getStopReasonInstructions, getStatusMessage, getPushPRInstructions };
+export { getStatusMessage };
 export type {
 	GauntletStatus as StopHookStatus,
 	StopHookResult as HookResponse,
 };
-
-// Re-export PRStatusResult from handler for backward compatibility
-export type { PRStatusResult } from "../hooks/stop-hook-handler.js";
-
-// Re-export checkPRStatus for testing
-export { checkPRStatus } from "../hooks/stop-hook-handler.js";
 
 export function registerStopHookCommand(program: Command): void {
 	program
