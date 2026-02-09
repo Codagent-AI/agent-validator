@@ -34,3 +34,7 @@ gauntlet_logs
 # Finder (MacOS) folder config
 .DS_Store
 bin/
+
+# scratch docs (plans, design docs)
+docs/plans/
+docs/design/

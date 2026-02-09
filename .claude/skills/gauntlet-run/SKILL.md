@@ -1,7 +1,7 @@
 ---
 name: gauntlet-run
 description: Run the full verification gauntlet
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: Bash
 ---
 <!--
