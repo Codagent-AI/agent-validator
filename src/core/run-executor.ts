@@ -224,7 +224,8 @@ const statusMessages: Record<GauntletStatus, string> = {
 	ci_pending: "CI checks still running.",
 	ci_failed: "CI checks failed or review changes requested.",
 	ci_passed: "CI checks passed, no blocking reviews.",
-	validation_required: "Changes need validation or previous run has unresolved failures.",
+	validation_required:
+		"Changes need validation or previous run has unresolved failures.",
 };
 
 function getStatusMessage(status: GauntletStatus): string {

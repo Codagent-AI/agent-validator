@@ -15,11 +15,11 @@ import type {
 	StopHookResult,
 } from "./adapters/types.js";
 import {
-	hasFailedRunLogs,
-	hasChangesSinceLastRun,
-	hasChangesVsBaseBranch,
 	checkRunInterval,
 	getLastRunStatus,
+	hasChangesSinceLastRun,
+	hasChangesVsBaseBranch,
+	hasFailedRunLogs,
 } from "./stop-hook-state.js";
 
 const execFileAsync = promisify(execFile);
@@ -261,9 +261,10 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
  * Check CI status for the current branch's PR via a single `gh pr checks` read.
  * No polling loop, no cross-invocation state. Returns status immediately.
  */
-export async function checkCIStatus(
-	cwd: string,
-): Promise<{ status: "passed" | "pending" | "failed" | "error"; error?: string }> {
+export async function checkCIStatus(cwd: string): Promise<{
+	status: "passed" | "pending" | "failed" | "error";
+	error?: string;
+}> {
 	try {
 		const { stdout } = await execFileAsync(
 			"gh",
@@ -353,15 +354,25 @@ export class StopHookHandler {
 		const hasLogs = await hasFailedRunLogs(logDir);
 		if (hasLogs) {
 			log.info("Failed run logs found — blocking with validation_required");
-			return this.block("validation_required", SKILL_INSTRUCTIONS.validation_required);
+			return this.block(
+				"validation_required",
+				SKILL_INSTRUCTIONS.validation_required,
+			);
 		}
 
 		// Step 3: Check run interval (only when no failed logs)
 		if (config && config.run_interval_minutes > 0) {
-			const intervalElapsed = await checkRunInterval(logDir, config.run_interval_minutes);
+			const intervalElapsed = await checkRunInterval(
+				logDir,
+				config.run_interval_minutes,
+			);
 			if (!intervalElapsed) {
-				log.info(`Run interval (${config.run_interval_minutes} min) not elapsed — allowing stop`);
-				return this.allow("interval_not_elapsed", { intervalMinutes: config.run_interval_minutes });
+				log.info(
+					`Run interval (${config.run_interval_minutes} min) not elapsed — allowing stop`,
+				);
+				return this.allow("interval_not_elapsed", {
+					intervalMinutes: config.run_interval_minutes,
+				});
 			}
 		}
 
@@ -374,7 +385,10 @@ export class StopHookHandler {
 			const hasChanges = await hasChangesVsBaseBranch(ctx.cwd, baseBranch);
 			if (hasChanges) {
 				log.info("Changes detected vs base branch (no prior state) — blocking");
-				return this.block("validation_required", SKILL_INSTRUCTIONS.validation_required);
+				return this.block(
+					"validation_required",
+					SKILL_INSTRUCTIONS.validation_required,
+				);
 			}
 			log.info("No changes vs base branch — allowing stop");
 			return this.allow("passed");
@@ -382,7 +396,10 @@ export class StopHookHandler {
 
 		if (changesResult) {
 			log.info("Changes detected since last passing run — blocking");
-			return this.block("validation_required", SKILL_INSTRUCTIONS.validation_required);
+			return this.block(
+				"validation_required",
+				SKILL_INSTRUCTIONS.validation_required,
+			);
 		}
 
 		// Step 5: Check PR status (if auto_push_pr enabled)
@@ -433,7 +450,10 @@ export class StopHookHandler {
 	}
 
 	/** Create an allowing result */
-	private allow(status: GauntletStatus, context?: { intervalMinutes?: number }): StopHookResult {
+	private allow(
+		status: GauntletStatus,
+		context?: { intervalMinutes?: number },
+	): StopHookResult {
 		this.debugLogger?.logStopHook("allow", status);
 		return {
 			status,
