@@ -34,6 +34,7 @@
   "scripts": {
     "build": "bun build --compile --minify --sourcemap ./src/index.ts --outfile bin/agent-gauntlet",
     "test": "bun test",
+    "test:e2e": "bun test/integration/stop-hook-e2e.ts",
     "lint": "biome check src",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "changeset": "changeset",

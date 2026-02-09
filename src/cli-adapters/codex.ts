@@ -48,7 +48,7 @@ function accumulateTurnUsage(
 	usage.apiRequests = (usage.apiRequests || 0) + 1;
 	for (const [jsonKey, usageKey] of TURN_USAGE_MAP) {
 		if (u[jsonKey] !== undefined) {
-			usage[usageKey] = (usage[usageKey] || 0) + u[jsonKey]!;
+			usage[usageKey] = (usage[usageKey] || 0) + (u[jsonKey] ?? 0);
 		}
 	}
 }

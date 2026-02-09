@@ -1,5 +1,8 @@
 # Stop Hook Guide
 
+> **⚠️ EXPERIMENTAL FEATURE WARNING ⚠️**  
+> **The stop hook is currently experimental and is likely to undergo major architectural changes in an upcoming release.** The API, configuration format, and behavior described in this guide may change significantly. Use with caution in production environments and be prepared to update your configuration when breaking changes are introduced.
+
 The stop hook integrates Agent Gauntlet with AI coding assistants, automatically validating that all gates pass before an agent can stop working on a task. It supports both **Claude Code** and **Cursor IDE**.
 
 ## Overview

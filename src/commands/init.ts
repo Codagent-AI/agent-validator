@@ -8,6 +8,21 @@ import { exists } from "./shared.js";
 
 const MAX_PROMPT_ATTEMPTS = 10;
 
+function makeQuestion(rl: readline.Interface) {
+	return (prompt: string): Promise<string> =>
+		new Promise((resolve) =>
+			rl.question(prompt, (a) => resolve(a?.trim() ?? "")),
+		);
+}
+
+// Recommended adapter config: https://github.com/pacaplan/agent-gauntlet/blob/main/docs/eval-results.md
+type AdapterCfg = { allow_tool_use: boolean; thinking_budget: string };
+const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
+	claude: { allow_tool_use: false, thinking_budget: "high" },
+	codex: { allow_tool_use: false, thinking_budget: "low" },
+	gemini: { allow_tool_use: false, thinking_budget: "low" },
+};
+
 // --- Skill content templates ---
 // These are used for both skills (Claude) and flat commands (other agents).
 // The frontmatter fields (name, disable-model-invocation) are only meaningful
@@ -1207,13 +1222,7 @@ async function promptForConfig(
 		output: process.stdout,
 	});
 
-	const question = (prompt: string): Promise<string> => {
-		return new Promise((resolve) => {
-			rl.question(prompt, (answer) => {
-				resolve(answer?.trim() ?? "");
-			});
-		});
-	};
+	const question = makeQuestion(rl);
 
 	try {
 		// CLI Selection
@@ -1321,22 +1330,27 @@ function parseSelections(
 	return [...new Set(chosen)];
 }
 
+function buildAdapterSettings(adapters: CLIAdapter[]): string {
+	const items = adapters.filter((a) => ADAPTER_CONFIG[a.name]);
+	if (items.length === 0) return "";
+	const lines = items.map((a) => {
+		const c = ADAPTER_CONFIG[a.name];
+		return `    ${a.name}:\n      allow_tool_use: ${c?.allow_tool_use}\n      thinking_budget: ${c?.thinking_budget}`;
+	});
+	return `\n  # Recommended settings (see docs/eval-results.md)\n  adapters:\n${lines.join("\n")}\n`;
+}
+
 function generateConfigYml(config: InitConfig): string {
 	const cliList = config.selectedAdapters
 		.map((a) => `    - ${a.name}`)
 		.join("\n");
-
+	const adapterSettings = buildAdapterSettings(config.selectedAdapters);
 	let entryPoints = "";
-
-	// If we have checks, we need a source directory entry point
 	if (config.lintCmd !== null || config.testCmd !== null) {
-		entryPoints += `  - path: "${config.sourceDir}"
-    checks:\n`;
+		entryPoints += `  - path: "${config.sourceDir}"\n    checks:\n`;
 		if (config.lintCmd !== null) entryPoints += `      - lint\n`;
 		if (config.testCmd !== null) entryPoints += `      - unit-tests\n`;
 	}
-
-	// Always include root entry point for reviews
 	entryPoints += `  - path: "."
     reviews:
       - code-quality`;
@@ -1350,7 +1364,7 @@ log_dir: gauntlet_logs
 cli:
   default_preference:
 ${cliList}
-
+${adapterSettings}
 entry_points:
 ${entryPoints}
 `;
@@ -1486,13 +1500,7 @@ async function promptAndInstallCommands(
 		output: process.stdout,
 	});
 
-	const question = (prompt: string): Promise<string> => {
-		return new Promise((resolve) => {
-			rl.question(prompt, (answer) => {
-				resolve(answer?.trim() ?? "");
-			});
-		});
-	};
+	const question = makeQuestion(rl);
 
 	try {
 		console.log();
@@ -1784,13 +1792,7 @@ async function promptAndInstallStopHook(projectRoot: string): Promise<void> {
 		output: process.stdout,
 	});
 
-	const question = (prompt: string): Promise<string> => {
-		return new Promise((resolve) => {
-			rl.question(prompt, (answer) => {
-				resolve(answer?.trim() ?? "");
-			});
-		});
-	};
+	const question = makeQuestion(rl);
 
 	try {
 		console.log();

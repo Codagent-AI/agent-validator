@@ -51,9 +51,15 @@ When you run `agent-gauntlet`, it detects which entry points have changed files 
 agent-gauntlet run
 ```
 
+- **Run gates from your agent and auto-fix detected issues**
+
+```
+/gauntlet-run
+```
+
 ## Agent Skills
 
-Agent Gauntlet can install skills (for Claude Code) and flat commands (for other CLI agents) that let you invoke gauntlet workflows directly from your AI agent session. For example, `/gauntlet-run` runs the full verification suite and iterates on failures. See the [Skills Guide](skills-guide.md) for the full list of skills and configuration options.
+Agent Gauntlet can install skills (for Claude Code) and flat commands (for other CLI agents) that let you invoke gauntlet workflows directly from your AI agent session. For example, `/gauntlet-help` provides guidance and troubleshooting on how to use the tool. See the [Skills Guide](skills-guide.md) for the full list of skills and configuration options.
 
 ## Configuration Layout
 
