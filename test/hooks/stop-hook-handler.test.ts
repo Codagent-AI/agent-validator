@@ -447,6 +447,13 @@ describe("StopHookHandler", () => {
 		});
 	});
 
+	describe("checkCIStatus()", () => {
+		it("should be importable from stop-hook-handler", async () => {
+			const { checkCIStatus } = await import("../../src/hooks/stop-hook-handler.js");
+			expect(typeof checkCIStatus).toBe("function");
+		});
+	});
+
 	describe("CI status messages", () => {
 		it("should return appropriate message for ci_pending status", () => {
 			const message = getStatusMessage("ci_pending");

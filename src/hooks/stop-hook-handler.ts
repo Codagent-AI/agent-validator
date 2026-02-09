@@ -496,6 +496,47 @@ async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
 }
 
 /**
+ * Check CI status for the current branch's PR via a single `gh pr checks` read.
+ * No polling loop, no cross-invocation state. Returns status immediately.
+ */
+export async function checkCIStatus(
+	cwd: string,
+): Promise<{ status: "passed" | "pending" | "failed" | "error"; error?: string }> {
+	try {
+		const { stdout } = await execFileAsync(
+			"gh",
+			["pr", "checks", "--json", "name,state"],
+			{ cwd },
+		);
+
+		const checks = JSON.parse(stdout.trim()) as Array<{
+			name: string;
+			state: string;
+		}>;
+
+		if (checks.length === 0) {
+			// No checks configured — treat as passed
+			return { status: "passed" };
+		}
+
+		const hasFailed = checks.some(
+			(c) => c.state === "FAILURE" || c.state === "ERROR",
+		);
+		if (hasFailed) return { status: "failed" };
+
+		const hasPending = checks.some(
+			(c) => c.state === "PENDING" || c.state === "EXPECTED",
+		);
+		if (hasPending) return { status: "pending" };
+
+		return { status: "passed" };
+	} catch (e: unknown) {
+		const errMsg = (e as { message?: string }).message ?? "unknown";
+		return { status: "error", error: errMsg };
+	}
+}
+
+/**
  * Check if the gauntlet status indicates a passing state that should trigger PR check.
  */
 function isPassingStatus(status: GauntletStatus): boolean {
