@@ -1,4 +1,4 @@
-import type { GauntletStatus, RunResult } from "../../types/gauntlet-status.js";
+import type { GauntletStatus } from "../../types/gauntlet-status.js";
 
 /**
  * Protocol-agnostic context passed from adapter to handler.
@@ -26,20 +26,12 @@ export interface StopHookResult {
 	status: GauntletStatus;
 	/** Whether the stop should be blocked */
 	shouldBlock: boolean;
-	/** Fix instructions when blocking due to failed gates */
-	instructions?: string;
-	/** PR push instructions when blocking due to pr_push_required */
-	pushPRReason?: string;
-	/** CI fix instructions when blocking due to ci_failed */
-	ciFixReason?: string;
-	/** CI pending instructions when blocking due to ci_pending */
-	ciPendingReason?: string;
+	/** Skill instruction when blocking (used for all blocking statuses) */
+	reason?: string;
 	/** Human-friendly status message */
 	message: string;
 	/** Interval minutes (when status is interval_not_elapsed) */
 	intervalMinutes?: number;
-	/** Individual gate results for detailed failure information */
-	gateResults?: RunResult["gateResults"];
 }
 
 /**

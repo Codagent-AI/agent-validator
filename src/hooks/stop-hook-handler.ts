@@ -3,24 +3,24 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import YAML from "yaml";
-import type { WaitCIResult } from "../commands/wait-ci.js";
 import { loadGlobalConfig } from "../config/global.js";
 import type { StopHookConfig } from "../config/stop-hook-config.js";
 import { resolveStopHookConfig } from "../config/stop-hook-config.js";
-import { executeRun } from "../core/run-executor.js";
 import { getCategoryLogger } from "../output/app-logger.js";
-import {
-	type GauntletStatus,
-	isBlockingStatus,
-	type RunResult,
-} from "../types/gauntlet-status.js";
+import type { GauntletStatus } from "../types/gauntlet-status.js";
 import type { DebugLogger } from "../utils/debug-log.js";
-import { writeExecutionState } from "../utils/execution-state.js";
 import type {
 	PRStatusResult,
 	StopHookContext,
 	StopHookResult,
 } from "./adapters/types.js";
+import {
+	hasFailedRunLogs,
+	hasChangesSinceLastRun,
+	hasChangesVsBaseBranch,
+	checkRunInterval,
+	getLastRunStatus,
+} from "./stop-hook-state.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -34,22 +34,30 @@ interface MinimalConfig {
 		auto_push_pr?: boolean;
 		auto_fix_pr?: boolean;
 	};
+	base_branch?: string;
 }
-
-/**
- * Marker file for tracking CI wait attempts.
- */
-const CI_WAIT_ATTEMPTS_FILE = ".ci-wait-attempts";
-
-/**
- * Maximum number of CI wait attempts before giving up.
- */
-const MAX_CI_WAIT_ATTEMPTS = 3;
 
 /**
  * Default log directory when config doesn't specify one.
  */
 const DEFAULT_LOG_DIR = "gauntlet_logs";
+
+/**
+ * Skill instructions returned as the `reason` field when blocking stop.
+ * These are concise directives — the skills contain full workflow logic.
+ */
+const SKILL_INSTRUCTIONS = {
+	validation_required:
+		"Changes detected, you must use the `gauntlet-run` skill to validate them now.",
+	pr_push_required:
+		"Gauntlet passed. You must use the `gauntlet-push-pr` skill to create or update your pull request.",
+	pr_push_required_with_warnings:
+		"Gauntlet passed with warnings (some issues were skipped). You must use the `gauntlet-push-pr` skill to create or update your pull request. Include a summary of skipped issues in the PR description.",
+	ci_pending:
+		"PR is up to date. You must use the `gauntlet-fix-pr` skill to wait for CI and fix any failures.",
+	ci_failed:
+		"PR is up to date. You must use the `gauntlet-fix-pr` skill to wait for CI and fix any failures.",
+} as const;
 
 /**
  * Read and parse the project config file.
@@ -67,124 +75,11 @@ async function readProjectConfig(
 	}
 }
 
-interface FailedGateLog {
-	/** Log file paths for failed check gates */
-	checkLogs: string[];
-	/** JSON file paths for failed review gates */
-	reviewJsons: string[];
-}
-
 /**
  * Get a logger for stop-hook operations.
  */
 function getStopHookLogger() {
 	return getCategoryLogger("stop-hook");
-}
-
-/**
- * Extract failed gate log paths from gate results.
- */
-function getFailedGateLogs(
-	gateResults?: RunResult["gateResults"],
-): FailedGateLog {
-	const checkLogs: string[] = [];
-	const reviewJsons: string[] = [];
-
-	if (!gateResults) return { checkLogs, reviewJsons };
-
-	for (const gate of gateResults) {
-		if (gate.status === "pass") continue;
-
-		const isReview = gate.jobId.startsWith("review:");
-
-		if (gate.subResults) {
-			for (const sub of gate.subResults) {
-				if (sub.status === "pass" || !sub.logPath) continue;
-				if (isReview) {
-					reviewJsons.push(sub.logPath);
-				} else {
-					checkLogs.push(sub.logPath);
-				}
-			}
-		} else if (isReview) {
-			// Review gate without subResults — check logPaths then logPath
-			const paths = gate.logPaths ?? (gate.logPath ? [gate.logPath] : []);
-			for (const p of paths) {
-				if (p.endsWith(".json")) {
-					reviewJsons.push(p);
-				} else {
-					checkLogs.push(p);
-				}
-			}
-		} else {
-			// Check gate
-			const logPath = gate.logPath ?? gate.logPaths?.[0];
-			if (logPath) {
-				checkLogs.push(logPath);
-			}
-		}
-	}
-
-	return { checkLogs, reviewJsons };
-}
-
-/**
- * Get the enhanced stop reason instructions for the agent.
- * Includes trust level guidance (when reviews fail), violation handling,
- * termination conditions, and paths to failed gate log files.
- */
-export function getStopReasonInstructions(
-	gateResults?: RunResult["gateResults"],
-): string {
-	const { checkLogs, reviewJsons } = getFailedGateLogs(gateResults);
-	const hasReviewFailures = reviewJsons.length > 0;
-
-	const trustLevelSection = hasReviewFailures
-		? `\n**Review trust level: medium** — Fix issues you reasonably agree with or believe the human wants fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed.\n`
-		: "";
-
-	let failedLogsSection = "";
-	if (checkLogs.length > 0 || reviewJsons.length > 0) {
-		failedLogsSection = "\n\n**Failed gate logs:**";
-		for (const logPath of checkLogs) {
-			failedLogsSection += `\n- Check: \`${logPath}\``;
-		}
-		for (const jsonPath of reviewJsons) {
-			failedLogsSection += `\n- Review: \`${jsonPath}\``;
-		}
-	}
-
-	const hasCheckFailures = checkLogs.length > 0;
-
-	// Build failure instructions conditionally based on what types of failures exist
-	const failureSteps: string[] = [];
-	if (hasCheckFailures) {
-		failureSteps.push(
-			"For CHECK failures: Read the `.log` file path listed below.",
-		);
-	}
-	if (hasReviewFailures) {
-		failureSteps.push(
-			"For REVIEW failures: Read the `.json` file path listed below.",
-		);
-		failureSteps.push(
-			'For REVIEW violations: Update the `"status"` and `"result"` fields in the JSON file:\n   - Set `"status": "fixed"` with a brief description in `"result"` for issues you fix.\n   - Set `"status": "skipped"` with a brief reason in `"result"` for issues you skip.',
-		);
-	}
-
-	const addressSection =
-		failureSteps.length > 0
-			? `\n**To address failures:**\n${failureSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n`
-			: "";
-
-	return `**GAUNTLET FAILED — YOU MUST FIX ISSUES NOW**
-
-You cannot stop until the gauntlet passes or a termination condition is met. The stop hook will automatically re-run to verify your fixes.
-${trustLevelSection}${addressSection}
-**Termination conditions:**
-- "Status: Passed" — All gates passed
-- "Status: Passed with warnings" — Remaining issues were skipped
-- "Status: Retry limit exceeded" — Run \`agent-gauntlet clean\` to archive the session and stop. This is the only case requiring manual clean; it signals unresolvable issues that need human review.${failedLogsSection}`;
 }
 
 /**
@@ -239,139 +134,6 @@ export function getStatusMessage(
 
 	// Use static lookup for all other statuses
 	return STATUS_MESSAGES[status] ?? `Unknown status: ${status}`;
-}
-
-/**
- * Generate push-PR instructions for the agent.
- */
-export function getPushPRInstructions(options?: {
-	hasWarnings?: boolean;
-}): string {
-	const warningGuidance = options?.hasWarnings
-		? "\n\n**Note:** Some issues were skipped during the gauntlet. Include a summary of skipped issues in the PR description so reviewers are aware."
-		: "";
-
-	return `**GAUNTLET PASSED — CREATE OR UPDATE YOUR PULL REQUEST**
-
-All local quality gates have passed. Before you can stop, you need to commit your changes, push to remote, and create or update a pull request for the current branch.
-
-After the PR is created or updated, try to stop again. The stop hook will verify the PR exists and is up to date.${warningGuidance}`;
-}
-
-/** Format a single failed check with optional log output */
-function formatFailedCheck(c: WaitCIResult["failed_checks"][0]): string[] {
-	const lines: string[] = [`- ${c.name}: ${c.details_url}`];
-	if (!c.log_output) return lines;
-
-	// Use dynamic fence to avoid markdown injection if logs contain backticks
-	const fence = c.log_output.includes("```") ? "````" : "```";
-	lines.push(fence, c.log_output, fence);
-	return lines;
-}
-
-/** Format a review comment with location info */
-function formatReviewComment(r: WaitCIResult["review_comments"][0]): string {
-	const location = r.path ? ` (${r.path}${r.line ? `:${r.line}` : ""})` : "";
-	return `- ${r.author}: ${r.body}${location}`;
-}
-
-/**
- * Generate CI fix instructions for the agent.
- */
-export function getCIFixInstructions(ciResult: WaitCIResult): string {
-	const sections: string[] = [];
-
-	if (ciResult.failed_checks.length > 0) {
-		const checkLines = ciResult.failed_checks.flatMap(formatFailedCheck);
-		sections.push(`**Failed checks:**\n${checkLines.join("\n")}`);
-	}
-
-	// review_comments already contains only blocking reviews (from wait-ci.ts)
-	const blockingReviews = ciResult.review_comments.filter((r) =>
-		r.body?.trim(),
-	);
-	if (blockingReviews.length > 0) {
-		const reviewLines = blockingReviews.map(formatReviewComment);
-		sections.push(
-			`**Review comments requiring changes:**\n${reviewLines.join("\n")}`,
-		);
-	}
-
-	const detailsSection =
-		sections.length > 0 ? `\n\n${sections.join("\n\n")}` : "";
-
-	return `**CI FAILED OR REVIEW CHANGES REQUESTED — FIX AND PUSH**${detailsSection}
-
-Fix the issues above, commit, and push your changes. After pushing, try to stop again.`;
-}
-
-/**
- * Generate CI pending instructions for the agent.
- */
-export function getCIPendingInstructions(
-	attemptNumber: number,
-	maxAttempts: number,
-): string {
-	return `**CI CHECKS STILL RUNNING — WAITING (attempt ${attemptNumber} of ${maxAttempts})**
-
-CI checks are still in progress. Wait approximately 30 seconds, then try to stop again.`;
-}
-
-/**
- * Read CI wait attempts from marker file.
- */
-export async function readCIWaitAttempts(logDir: string): Promise<number> {
-	try {
-		const markerPath = path.join(logDir, CI_WAIT_ATTEMPTS_FILE);
-		const content = await fs.readFile(markerPath, "utf-8");
-		const data = JSON.parse(content);
-		return typeof data.count === "number" ? data.count : 0;
-	} catch {
-		return 0;
-	}
-}
-
-/**
- * Write CI wait attempts to marker file.
- */
-export async function writeCIWaitAttempts(
-	logDir: string,
-	count: number,
-): Promise<void> {
-	const markerPath = path.join(logDir, CI_WAIT_ATTEMPTS_FILE);
-	await fs.writeFile(markerPath, JSON.stringify({ count }), "utf-8");
-}
-
-/**
- * Clean up CI wait attempts marker file.
- */
-export async function cleanCIWaitAttempts(logDir: string): Promise<void> {
-	try {
-		const markerPath = path.join(logDir, CI_WAIT_ATTEMPTS_FILE);
-		await fs.rm(markerPath, { force: true });
-	} catch {
-		// Ignore errors - file may not exist
-	}
-}
-
-/**
- * Default timeout for CI wait (just under 5-minute stop hook budget).
- */
-const DEFAULT_CI_WAIT_TIMEOUT = 270;
-
-/**
- * Default poll interval for CI checks.
- */
-const DEFAULT_CI_POLL_INTERVAL = 15;
-
-/**
- * Run the wait-ci logic and return the result.
- * Calls waitForCI directly instead of spawning a subprocess.
- */
-export async function runWaitCI(cwd: string): Promise<WaitCIResult> {
-	// Import and call waitForCI directly to avoid subprocess spawning issues
-	const { waitForCI } = await import("../commands/wait-ci.js");
-	return waitForCI(DEFAULT_CI_WAIT_TIMEOUT, DEFAULT_CI_POLL_INTERVAL, cwd);
 }
 
 /**
@@ -537,174 +299,12 @@ export async function checkCIStatus(
 }
 
 /**
- * Check if the gauntlet status indicates a passing state that should trigger PR check.
- */
-function isPassingStatus(status: GauntletStatus): boolean {
-	return status === "passed" || status === "passed_with_warnings";
-}
-
-/**
- * Check if the gauntlet status indicates "nothing to do locally" — gates were not
- * re-run but there's no failure. These statuses should still trigger PR/CI checks
- * when auto_push_pr is enabled, since the previous run may have passed.
- */
-function isIdleStatus(status: GauntletStatus): boolean {
-	return status === "interval_not_elapsed" || status === "no_changes";
-}
-
-/**
- * Refresh execution state (non-fatal on error).
- */
-async function refreshExecutionState(logDir?: string): Promise<void> {
-	if (!logDir) return;
-	try {
-		await writeExecutionState(logDir);
-	} catch {
-		// Non-fatal; stale state won't block the next run
-	}
-}
-
-/**
- * Result from post-gauntlet checks (PR and CI).
- */
-interface PostGauntletResult {
-	finalStatus: GauntletStatus;
-	pushPRReason?: string;
-	ciFixReason?: string;
-	ciPendingReason?: string;
-}
-
-/**
- * Handle CI wait workflow after PR is confirmed up-to-date.
- */
-async function handleCIWaitWorkflow(
-	projectCwd: string,
-	logDir: string,
-	gauntletStatus: GauntletStatus,
-): Promise<PostGauntletResult> {
-	const log = getStopHookLogger();
-	const attempts = await readCIWaitAttempts(logDir);
-
-	// Check if we've exceeded max attempts
-	if (attempts >= MAX_CI_WAIT_ATTEMPTS) {
-		log.info(
-			`CI wait attempts exhausted (${attempts}/${MAX_CI_WAIT_ATTEMPTS})`,
-		);
-		await cleanCIWaitAttempts(logDir);
-		return { finalStatus: "error" };
-	}
-
-	log.info(
-		`Running wait-ci (attempt ${attempts + 1}/${MAX_CI_WAIT_ATTEMPTS})...`,
-	);
-	const ciResult = await runWaitCI(projectCwd);
-
-	switch (ciResult.ci_status) {
-		case "passed":
-			await cleanCIWaitAttempts(logDir);
-			return { finalStatus: "ci_passed" };
-
-		case "failed":
-			await cleanCIWaitAttempts(logDir);
-			await refreshExecutionState(logDir);
-			return {
-				finalStatus: "ci_failed",
-				ciFixReason: getCIFixInstructions(ciResult),
-			};
-
-		case "pending":
-			await writeCIWaitAttempts(logDir, attempts + 1);
-			await refreshExecutionState(logDir);
-			return {
-				finalStatus: "ci_pending",
-				ciPendingReason: getCIPendingInstructions(
-					attempts + 1,
-					MAX_CI_WAIT_ATTEMPTS,
-				),
-			};
-
-		default:
-			log.warn(`wait-ci error: ${ciResult.error_message}`);
-			await cleanCIWaitAttempts(logDir);
-			return { finalStatus: gauntletStatus };
-	}
-}
-
-/**
- * Check PR status after gauntlet passes and determine if the stop should be blocked.
- * Also handles CI wait workflow when auto_fix_pr is enabled.
- */
-async function postGauntletPRCheck(
-	projectCwd: string,
-	gauntletStatus: GauntletStatus,
-	options?: { logDir?: string },
-): Promise<PostGauntletResult> {
-	const idle = isIdleStatus(gauntletStatus);
-	if (!isPassingStatus(gauntletStatus) && !idle) {
-		return { finalStatus: gauntletStatus };
-	}
-
-	const config = await getResolvedStopHookConfig(projectCwd);
-	if (!config?.auto_push_pr) {
-		return { finalStatus: gauntletStatus };
-	}
-
-	const prStatus = await checkPRStatus(projectCwd);
-	if (prStatus.error) {
-		getStopHookLogger().warn(`PR status check failed: ${prStatus.error}`);
-		return { finalStatus: gauntletStatus };
-	}
-
-	const prReady = prStatus.prExists && prStatus.upToDate;
-
-	// PR missing or outdated: block fresh passes, allow idle statuses
-	if (!prReady) {
-		return idle
-			? { finalStatus: gauntletStatus }
-			: handlePRMissing(gauntletStatus, options?.logDir);
-	}
-
-	// PR exists and is up to date — enter CI wait if configured
-	return handleCIWaitIfEnabled(
-		config,
-		projectCwd,
-		gauntletStatus,
-		options?.logDir,
-	);
-}
-
-async function handlePRMissing(
-	gauntletStatus: GauntletStatus,
-	logDir?: string,
-): Promise<PostGauntletResult> {
-	await refreshExecutionState(logDir);
-	return {
-		finalStatus: "pr_push_required",
-		pushPRReason: getPushPRInstructions({
-			hasWarnings: gauntletStatus === "passed_with_warnings",
-		}),
-	};
-}
-
-async function handleCIWaitIfEnabled(
-	config: StopHookConfig,
-	projectCwd: string,
-	gauntletStatus: GauntletStatus,
-	logDir?: string,
-): Promise<PostGauntletResult> {
-	if (!config.auto_fix_pr) {
-		return { finalStatus: gauntletStatus };
-	}
-	if (!logDir) {
-		getStopHookLogger().warn("No logDir provided for CI wait workflow");
-		return { finalStatus: gauntletStatus };
-	}
-	return handleCIWaitWorkflow(projectCwd, logDir, gauntletStatus);
-}
-
-/**
- * Core stop hook handler that executes the gauntlet and determines the result.
+ * Core stop hook handler that reads state and determines whether to block stop.
  * Protocol-agnostic: works with any adapter that provides a StopHookContext.
+ *
+ * This handler is stateless — it only READS state (logs, execution state,
+ * PR status, CI status) and returns skill instructions. It never executes
+ * gates, polls CI, or tracks attempts.
  */
 export class StopHookHandler {
 	private debugLogger?: DebugLogger;
@@ -722,58 +322,124 @@ export class StopHookHandler {
 	}
 
 	/**
-	 * Set the log directory (needed for execution state refresh).
+	 * Set the log directory (needed for state reads).
 	 */
 	setLogDir(logDir: string): void {
 		this.logDir = logDir;
 	}
 
 	/**
-	 * Execute the gauntlet and return a protocol-agnostic result.
+	 * Read state and determine whether to block the stop.
+	 * Returns a skill instruction when blocking, or allows the stop.
 	 */
 	async execute(ctx: StopHookContext): Promise<StopHookResult> {
 		const log = getStopHookLogger();
+		const logDir = this.logDir;
 
-		log.info("Running gauntlet gates...");
-		const result = await executeRun({
-			cwd: ctx.cwd,
-			checkInterval: true,
-		});
+		if (!logDir) {
+			log.warn("No logDir set — allowing stop");
+			return this.allow("passed");
+		}
 
-		log.info(`Gauntlet completed with status: ${result.status}`);
+		// Load stop hook config
+		const config = await getResolvedStopHookConfig(ctx.cwd);
 
-		// Post-gauntlet PR check: when gates pass and auto_push_pr is enabled,
-		// verify a PR exists and is up to date before allowing stop.
-		// Also handles CI wait workflow when auto_fix_pr is enabled.
-		const { finalStatus, pushPRReason, ciFixReason, ciPendingReason } =
-			await postGauntletPRCheck(ctx.cwd, result.status, {
-				logDir: this.logDir,
-			});
+		// Step 1: Check if stop hook is disabled
+		if (config && !config.enabled) {
+			return this.allow("stop_hook_disabled");
+		}
 
-		await this.debugLogger?.logStopHook(
-			isBlockingStatus(finalStatus) ? "block" : "allow",
-			finalStatus,
-		);
+		// Step 2: Check for failed run logs
+		const hasLogs = await hasFailedRunLogs(logDir);
+		if (hasLogs) {
+			log.info("Failed run logs found — blocking with validation_required");
+			return this.block("validation_required", SKILL_INSTRUCTIONS.validation_required);
+		}
 
-		const shouldBlock = isBlockingStatus(finalStatus);
-		const message = getStatusMessage(finalStatus, {
-			intervalMinutes: result.intervalMinutes,
-			errorMessage: result.errorMessage,
-		});
+		// Step 3: Check run interval (only when no failed logs)
+		if (config && config.run_interval_minutes > 0) {
+			const intervalElapsed = await checkRunInterval(logDir, config.run_interval_minutes);
+			if (!intervalElapsed) {
+				log.info(`Run interval (${config.run_interval_minutes} min) not elapsed — allowing stop`);
+				return this.allow("interval_not_elapsed", { intervalMinutes: config.run_interval_minutes });
+			}
+		}
 
+		// Step 4: Check for changes since last passing run
+		const changesResult = await hasChangesSinceLastRun(logDir);
+		if (changesResult === null) {
+			// No execution state — check vs base branch
+			const projectConfig = await readProjectConfig(ctx.cwd);
+			const baseBranch = projectConfig?.base_branch ?? "origin/main";
+			const hasChanges = await hasChangesVsBaseBranch(ctx.cwd, baseBranch);
+			if (hasChanges) {
+				log.info("Changes detected vs base branch (no prior state) — blocking");
+				return this.block("validation_required", SKILL_INSTRUCTIONS.validation_required);
+			}
+			log.info("No changes vs base branch — allowing stop");
+			return this.allow("passed");
+		}
+
+		if (changesResult) {
+			log.info("Changes detected since last passing run — blocking");
+			return this.block("validation_required", SKILL_INSTRUCTIONS.validation_required);
+		}
+
+		// Step 5: Check PR status (if auto_push_pr enabled)
+		if (config?.auto_push_pr) {
+			const prStatus = await checkPRStatus(ctx.cwd);
+			if (prStatus.error) {
+				log.warn(`PR status check failed: ${prStatus.error} — allowing stop`);
+			} else if (!prStatus.prExists || !prStatus.upToDate) {
+				log.info("PR missing or outdated — blocking with pr_push_required");
+				const lastStatus = await getLastRunStatus(logDir);
+				const instruction =
+					lastStatus === "passed_with_warnings"
+						? SKILL_INSTRUCTIONS.pr_push_required_with_warnings
+						: SKILL_INSTRUCTIONS.pr_push_required;
+				return this.block("pr_push_required", instruction);
+			} else if (config.auto_fix_pr) {
+				// Step 6: Check CI status (if auto_fix_pr enabled, single read)
+				const ciResult = await checkCIStatus(ctx.cwd);
+				if (ciResult.status === "error") {
+					log.warn(`CI status check failed: ${ciResult.error} — allowing stop`);
+				} else if (ciResult.status === "pending") {
+					log.info("CI pending — blocking");
+					return this.block("ci_pending", SKILL_INSTRUCTIONS.ci_pending);
+				} else if (ciResult.status === "failed") {
+					log.info("CI failed — blocking");
+					return this.block("ci_failed", SKILL_INSTRUCTIONS.ci_failed);
+				}
+				// CI passed
+				log.info("CI passed — allowing stop");
+				return this.allow("ci_passed");
+			}
+		}
+
+		// Step 7: Allow stop
+		log.info("All checks passed — allowing stop");
+		return this.allow("passed");
+	}
+
+	/** Create a blocking result */
+	private block(status: GauntletStatus, reason: string): StopHookResult {
+		this.debugLogger?.logStopHook("block", status);
 		return {
-			status: finalStatus,
-			shouldBlock,
-			instructions:
-				finalStatus === "failed"
-					? getStopReasonInstructions(result.gateResults)
-					: undefined,
-			pushPRReason,
-			ciFixReason,
-			ciPendingReason,
-			message,
-			intervalMinutes: result.intervalMinutes,
-			gateResults: result.gateResults,
+			status,
+			shouldBlock: true,
+			reason,
+			message: getStatusMessage(status),
+		};
+	}
+
+	/** Create an allowing result */
+	private allow(status: GauntletStatus, context?: { intervalMinutes?: number }): StopHookResult {
+		this.debugLogger?.logStopHook("allow", status);
+		return {
+			status,
+			shouldBlock: false,
+			message: getStatusMessage(status, context),
+			intervalMinutes: context?.intervalMinutes,
 		};
 	}
 }
@@ -781,9 +447,3 @@ export class StopHookHandler {
 // Re-export types and functions for backward compatibility
 export type { PRStatusResult };
 export { checkPRStatus, shouldCheckPR };
-
-// Export CI helpers for testing
-export { MAX_CI_WAIT_ATTEMPTS };
-
-// Export status helpers for testing
-export { isIdleStatus, isPassingStatus };
