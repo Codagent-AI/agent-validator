@@ -16,6 +16,8 @@ bun src/scripts/status.ts 2>&1
 
 The script parses the `.debug.log` for session-level data (run count, gate results, pass/fail status) and lists all log files with their paths and sizes.
 
+Previous sessions are available in `previous/`, `previous.1/`, etc. within the log directory. Use these to compare across sessions.
+
 ## Step 2: Read failed gate details
 
 For each gate marked **FAIL** in the Gate Results table, read the corresponding log files to extract failure details:

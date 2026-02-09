@@ -7,13 +7,12 @@ import {
 	initDebugLogger,
 	mergeDebugLogConfig,
 } from "../utils/debug-log.js";
-import { deleteExecutionState } from "../utils/execution-state.js";
 import { acquireLock, cleanLogs, releaseLock } from "./shared.js";
 
 export function registerCleanCommand(program: Command): void {
 	program
 		.command("clean")
-		.description("Archive logs and reset execution state")
+		.description("Archive logs")
 		.action(async () => {
 			let config: Awaited<ReturnType<typeof loadConfig>> | undefined;
 			let lockAcquired = false;
@@ -37,8 +36,10 @@ export function registerCleanCommand(program: Command): void {
 				await debugLogger?.logCommand("clean", []);
 				await debugLogger?.logClean("manual", "user_request");
 
-				await cleanLogs(config.project.log_dir);
-				await deleteExecutionState(config.project.log_dir);
+				await cleanLogs(
+					config.project.log_dir,
+					config.project.max_previous_logs,
+				);
 				await releaseLock(config.project.log_dir);
 				console.log(chalk.green("Logs archived successfully."));
 			} catch (error: unknown) {

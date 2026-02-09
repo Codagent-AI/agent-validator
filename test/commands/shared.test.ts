@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -10,6 +10,7 @@ import {
 	releaseLock,
 	shouldAutoClean,
 } from "../../src/commands/shared.js";
+import * as executionState from "../../src/utils/execution-state.js";
 import {
 	getCurrentBranch,
 	getExecutionStateFilename,
@@ -194,6 +195,92 @@ describe("cleanLogs", () => {
 	});
 });
 
+describe("cleanLogs rotation", () => {
+	beforeEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	it("rotates with maxPreviousLogs=3: evicts oldest, shifts, creates new previous/", async () => {
+		// Setup: previous/, previous.1/, previous.2/ all exist
+		await fs.mkdir(path.join(TEST_DIR, "previous"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous", "run-a.log"), "a");
+		await fs.mkdir(path.join(TEST_DIR, "previous.1"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous.1", "run-b.log"), "b");
+		await fs.mkdir(path.join(TEST_DIR, "previous.2"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous.2", "run-c.log"), "c");
+		// Current logs
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "current");
+
+		await cleanLogs(TEST_DIR, 3);
+
+		// previous.2/ should have what was in previous.1/
+		const prev2 = await fs.readdir(path.join(TEST_DIR, "previous.2"));
+		expect(prev2).toEqual(["run-b.log"]);
+		// previous.1/ should have what was in previous/
+		const prev1 = await fs.readdir(path.join(TEST_DIR, "previous.1"));
+		expect(prev1).toEqual(["run-a.log"]);
+		// previous/ should have current logs
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+		// Root should have no log files
+		const root = await fs.readdir(TEST_DIR);
+		expect(root.filter((f) => f.endsWith(".log") && !f.startsWith("."))).toEqual([]);
+	});
+
+	it("maxPreviousLogs=0: deletes current logs, no archiving", async () => {
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "content");
+
+		await cleanLogs(TEST_DIR, 0);
+
+		const files = await fs.readdir(TEST_DIR);
+		expect(files.filter((f) => f.endsWith(".log"))).toEqual([]);
+		// No previous/ directory created
+		expect(files).not.toContain("previous");
+	});
+
+	it("maxPreviousLogs=1: single previous/ directory (pre-existing behavior)", async () => {
+		await fs.mkdir(path.join(TEST_DIR, "previous"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous", "old.log"), "old");
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "new");
+
+		await cleanLogs(TEST_DIR, 1);
+
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+	});
+
+	it("skips missing intermediate directories without error", async () => {
+		// previous/ exists but previous.1/ does NOT
+		await fs.mkdir(path.join(TEST_DIR, "previous"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, "previous", "run-a.log"), "a");
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "current");
+
+		await cleanLogs(TEST_DIR, 3);
+
+		// previous.1/ should have what was in previous/
+		const prev1 = await fs.readdir(path.join(TEST_DIR, "previous.1"));
+		expect(prev1).toEqual(["run-a.log"]);
+		// previous/ should have current logs
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+	});
+
+	it("backward compatible: cleanLogs without maxPreviousLogs defaults to 3", async () => {
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "content");
+
+		// Call without the second argument — should default to 3
+		await cleanLogs(TEST_DIR);
+
+		const prev = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prev).toEqual(["check.1.log"]);
+	});
+});
+
 describe("getLockFilename", () => {
 	it("returns the correct lock filename", () => {
 		expect(getLockFilename()).toBe(".gauntlet-run.lock");
@@ -243,6 +330,31 @@ describe("shouldAutoClean", () => {
 	// Note: Testing "commit merged" scenario requires a real git repository
 	// with specific commit history, which is harder to set up in unit tests.
 	// Integration tests would be more appropriate for that scenario.
+
+	it("returns resetState: true when commit is merged (unconditional)", async () => {
+		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
+		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
+
+		const state = {
+			last_run_completed_at: new Date().toISOString(),
+			branch: "test-branch",
+			commit: mergedCommit,
+			working_tree_ref: mergedCommit, // A valid ref — old code would set resetState: false
+		};
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify(state),
+		);
+
+		const result = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(result.clean).toBe(true);
+		expect(result.reason).toBe("commit merged");
+		expect(result.resetState).toBe(true); // MUST be true, regardless of working_tree_ref validity
+
+		branchSpy.mockRestore();
+		mergedSpy.mockRestore();
+	});
 });
 
 describe("auto-clean during rerun mode", () => {
@@ -403,5 +515,20 @@ describe("auto-clean workflow integration", () => {
 
 		// Step 2: hasExistingLogs returns true (rerun mode preserved)
 		expect(await hasExistingLogs(TEST_DIR)).toBe(true);
+	});
+});
+
+describe("performAutoClean with maxPreviousLogs", () => {
+	it("performAutoClean accepts maxPreviousLogs parameter", () => {
+		const { readFileSync } = require("node:fs");
+		const { join } = require("node:path");
+		const sourceFile = readFileSync(
+			join(process.cwd(), "src/commands/shared.ts"),
+			"utf-8",
+		);
+
+		// performAutoClean should accept maxPreviousLogs and pass it to cleanLogs
+		expect(sourceFile).toMatch(/performAutoClean[\s\S]*?maxPreviousLogs/);
+		expect(sourceFile).toMatch(/cleanLogs\(logDir,\s*maxPreviousLogs\)/);
 	});
 });
