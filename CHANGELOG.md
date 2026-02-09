@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 0.10.1
+
+### Patch Changes
+
+- [#47](https://github.com/pacaplan/agent-gauntlet/pull/47) Add stop-hook E2E integration test exercising the full lifecycle, generate adapter config during `gauntlet init` based on eval results, and update README documentation
+
 ## 0.10.0
 
 ### Minor Changes
