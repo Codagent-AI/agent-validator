@@ -15,7 +15,7 @@ wt switch -c feat-name -b main -x claude
 
 ### 1. Research
 
-Use Paul Caplan's research skill to determine feasibility, viability, and high level approach. Evaluate whether the idea is worth building and identify key risks or unknowns before investing in detailed design.
+Use Paul Caplan's research skill to determine feasibility, viability, and high-level approach. Evaluate whether the idea is worth building and identify key risks or unknowns before investing in detailed design.
 ```
 /research
 ```

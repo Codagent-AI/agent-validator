@@ -51,7 +51,7 @@ A superpowers brainstorming design doc (`docs/plans/YYYY-MM-DD-<topic>-design.md
 4. Read `design.md` and use it as the basis for writing `proposal.md`, `tasks.md`, and spec deltas under `openspec/changes/<id>/`.
 5. Draft spec deltas using `## ADDED|MODIFIED|REMOVED Requirements` with at least one `#### Scenario:` per requirement.
 6. Run `openspec validate <id> --strict --no-interactive` and resolve any issues before sharing the proposal.
-7. After validation passes, use the `gauntlet-run` skill to automatically run the spec reviewer agent. It reviews files in the git diff including the openspec proposal. Adress any issues it reports.
+7. After validation passes, use the `gauntlet-run` skill to automatically run the spec reviewer agent. It reviews files in the git diff including the openspec proposal. Address any issues it reports.
 
 YOU MUST complete all steps above before stopping or proceeding to implementation.
 
@@ -63,7 +63,7 @@ Implementation uses the superpowers plugin for planning and execution. After the
 
 1. Create a worktree and launch an agent: `wt switch -c feat-name -b main -x claude`
 2. Tell the agent to write a plan and execute it in one shot:
-   ```
+   ```text
    Write a plan for <feature> using the spec at openspec/changes/<change-name>/proposal.md,
    then immediately execute it using subagent-driven-development.
    ```
