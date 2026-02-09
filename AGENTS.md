@@ -24,5 +24,7 @@ The user configures which paths in their repo should trigger which validations â
 - Write clean, DRY code.
 - Prefer functional patterns where appropriate.
 
-## Verification
-- NEVER manually run verification for your changes, a stop hook will trigger the gauntlet validation feedback loop.
+## Agent-triggered workflows
+- After completing an openspec proposal, use the `gauntlet-run` skill to verify correctness.
+- After writing a plan with writing-plans, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
+- When implementation is complete, run the `gauntlet-run` skill to verify correctness. Then the `push-pr` skill. Do not use finishing-a-development-branch.

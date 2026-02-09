@@ -1,60 +1,59 @@
 # Development
 
-## Install dependencies
+## Feature Implementation Workflow
+
+- Uses superpowers skills for brainstorming, planning, and implementation
+- Uses [worktrunk](https://worktrunk.dev) for worktree management
+- Uses AgentGauntlet to validate changes
+- Uses OpenSpec to preserve spec history
+
+## Create a worktree and launch an agent
 
 ```bash
-bun install
+wt switch -c feat-name -b main -x claude
 ```
 
-## Build the CLI binary
+### 1. Research
 
-```bash
-bun run build
+Use Paul Caplan's research skill to determine feasibility, viability, and high-level approach. Evaluate whether the idea is worth building and identify key risks or unknowns before investing in detailed design.
+```
+/research
 ```
 
-## Parallel Workflow
+### 2. Brainstorm
 
-Uses [worktrunk](https://worktrunk.dev) (`wt`) to manage git worktrees for parallel development.
-
-**Branch strategy (trunk-based):**
-- `main` — trunk branch in the main checkout (`~/paul/agent-gauntlet/`). All PRs merge here.
-- Feature branches — created as worktrees off `main`. Used for implementation and testing.
-
-**Creating a feature worktree:**
-
-```bash
-wt switch -b main -c feat-name
+Flesh out the details of the feature with a structured design session. The superpowers brainstorming skill explores requirements, edge cases, and implementation approach, producing a design doc that feeds into the spec process.
+```
+/brainstorm
 ```
 
-This creates `~/paul/agent-gauntlet.feat-name/`, runs `bun install`, and switches into it.
+Produces `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
-**Launching an agent in a worktree:**
+### 3. Spec + Review
 
-```bash
-wt switch -b main -x claude -c feat-name
+Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal, tasks, and spec deltas. After validation, the gauntlet spec reviewer runs automatically.
+```
+/openspec:proposal
 ```
 
-**Switching between worktrees:**
+Produces `openspec/changes/<change-name>/` containing `design.md` (moved from docs/plans/), `proposal.md`, `tasks.md`, and spec deltas. The proposal is the source of truth from this point forward.
 
-```bash
-wt switch main           # back to main checkout
-wt switch feat-name      # back to feature
-wt switch -              # toggle previous
+### 4. Plan + Implement (one-shot)
+
+The worktree agent writes a detailed implementation plan and immediately executes it without pausing. Each task is dispatched to a fresh subagent with automated spec compliance and code quality reviews. 
+
+```
+Write a plan for <feature> using the spec at openspec/changes/<change-name>/proposal.md,
+then immediately execute it using subagent-driven-development.
 ```
 
-**Merging a feature back:**
+The agent will:
+1. Write the plan (`docs/plans/YYYY-MM-DD-<name>.plan.md`)
+2. Execute all tasks via fresh subagents with automated spec + quality reviews
+3. Run `gauntlet-run` skill to validate
+4. Run `push-pr` skill to create a pull request against main
 
-```bash
-wt merge
-```
-
-Commits uncommitted changes, squashes all commits, runs `bun src/index.ts check`, merges to `main`, and removes the worktree.
-
-**Listing worktrees:**
-
-```bash
-wt list
-```
+**Note:** `docs/plans/` and `docs/design/` are gitignored — plan and design docs are scratch artifacts, not permanent documentation.
 
 ## Release Workflow
 

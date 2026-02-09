@@ -29,6 +29,8 @@ This document lists the configuration files Agent Gauntlet loads and all support
   If `true`, gates with `parallel: true` run concurrently, while `parallel: false` gates run sequentially. If `false`, all gates run sequentially regardless of per-gate settings.
 - **max_retries**: number (default: `3`)
   Maximum number of retry attempts before declaring "Retry limit exceeded". After the initial run, the system allows up to this many additional runs to fix issues.
+- **max_previous_logs**: number (default: `3`)
+  Maximum number of archived session directories to keep during log rotation. When logs are cleaned (manually or automatically), the current session is archived into `previous/`, and existing archives shift: `previous/` becomes `previous.1/`, `previous.1/` becomes `previous.2/`, etc. The oldest archive beyond this count is deleted. Set to `0` to disable archiving entirely (logs are deleted on clean). Set to `1` for single-generation archiving (pre-existing behavior).
 - **rerun_new_issue_threshold**: enum (default: `"medium"`)
   Priority threshold for filtering new violations during reruns. Valid values: `"critical"`, `"high"`, `"medium"`, `"low"`. During verification mode (when logs exist), new violations with priority below this threshold are filtered out, allowing you to focus on fixing original issues first. For example, with the default `"medium"` threshold, new `"low"` priority issues won't block the rerun.
 - **debug_log**: object (optional)
@@ -74,6 +76,7 @@ This document lists the configuration files Agent Gauntlet loads and all support
 base_branch: origin/main
 log_dir: gauntlet_logs
 allow_parallel: true
+max_previous_logs: 3
 cli:
   default_preference:
     - gemini

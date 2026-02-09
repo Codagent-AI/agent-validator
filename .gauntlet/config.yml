@@ -21,8 +21,9 @@ cli:
       allow_tool_use: false
       thinking_budget: low
 stop_hook:
-  auto_push_pr: false
-  auto_fix_pr: false
+  enabled: false
+  auto_push_pr: true
+  auto_fix_pr: true
 entry_points:
   - path: "."
     exclude:

@@ -27,7 +27,7 @@ Follow this order for every diagnostic question:
 
 | Source | What It Confirms |
 |--------|-----------------|
-| `.gauntlet/config.yml` | `log_dir`, `base_branch`, `entry_points`, `cli.default_preference`, `stop_hook` settings, `max_retries`, `rerun_new_issue_threshold` |
+| `.gauntlet/config.yml` | `log_dir`, `base_branch`, `entry_points`, `cli.default_preference`, `stop_hook` settings, `max_retries`, `max_previous_logs`, `rerun_new_issue_threshold` |
 | `<log_dir>/.debug.log` | Timestamped event history: commands executed, gate results, state transitions, errors |
 | `<log_dir>/.execution_state` | Last successful run timestamp, branch/commit at that time, working tree stash ref, unhealthy adapter cooldowns |
 | `<log_dir>/console.*.log` | Human-readable output from each run iteration |
@@ -36,6 +36,7 @@ Follow this order for every diagnostic question:
 | `<log_dir>/.gauntlet-run.lock` | Lock file (contains PID) — present only during active execution |
 | `<log_dir>/.stop-hook-active` | Marker file (contains PID) — present only during active stop-hook execution |
 | `<log_dir>/.ci-wait-attempts` | CI wait attempt counter |
+| `<log_dir>/previous/`, `<log_dir>/previous.N/` | Archived logs from previous sessions (N-deep rotation controlled by `max_previous_logs` config) |
 
 ## CLI Command Quick-Reference
 
@@ -47,7 +48,7 @@ Use these only when passive evidence is insufficient:
 | `agent-gauntlet health` | Check adapter availability and health status |
 | `agent-gauntlet detect` | See which files changed and which gates would apply |
 | `agent-gauntlet validate` | Validate config.yml syntax and schema |
-| `agent-gauntlet clean` | Archive current logs and reset state (destructive — confirm with user first) |
+| `agent-gauntlet clean` | Archive current logs (rotates into `previous/`, `previous.1/`, etc.) — confirm with user first |
 
 ## Routing Logic
 
