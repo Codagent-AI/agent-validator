@@ -63,9 +63,9 @@ const SKILL_INSTRUCTIONS = {
 	pr_push_required_with_warnings:
 		"Gauntlet passed with warnings (some issues were skipped). You must use the `gauntlet-push-pr` skill to create or update your pull request. Include a summary of skipped issues in the PR description.",
 	ci_pending:
-		"PR is up to date. You must use the `gauntlet-fix-pr` skill to wait for CI and fix any failures.",
+		"PR is up to date but CI checks are still running. You must use the `gauntlet-fix-pr` skill to poll CI status until checks complete, then fix any failures.",
 	ci_failed:
-		"PR is up to date. You must use the `gauntlet-fix-pr` skill to wait for CI and fix any failures.",
+		"PR is up to date but CI checks have failed. You must use the `gauntlet-fix-pr` skill to check which CI checks failed, fix the issues, and push.",
 } as const;
 
 /**
