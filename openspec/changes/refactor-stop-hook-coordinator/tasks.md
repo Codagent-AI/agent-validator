@@ -1,6 +1,6 @@
 ## 0. Pre-factoring
 
-Modified files are healthy and do not require pre-factoring. `src/hooks/stop-hook-handler.ts` scores 9.09 (healthy). `src/commands/stop-hook.ts` scores 8.03 (slightly below threshold but this file is being heavily rewritten). No pre-factoring needed.
+Pre-factoring not needed. `src/hooks/stop-hook-handler.ts` scored 9.09 pre-change (post-rewrite: 8.41 due to CC in `execute()`; addressed by extracting `checkForChanges()` and `checkPRAndCI()` methods). `src/commands/stop-hook.ts` scores 8.03 (simplified by this change).
 
 ## 1. Add `validation_required` Status and Remove `ci_timeout`
 

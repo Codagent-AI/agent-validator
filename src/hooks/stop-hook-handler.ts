@@ -342,15 +342,12 @@ export class StopHookHandler {
 			return this.allow("passed");
 		}
 
-		// Load stop hook config
 		const config = await getResolvedStopHookConfig(ctx.cwd);
 
-		// Step 1: Check if stop hook is disabled
 		if (config && !config.enabled) {
 			return this.allow("stop_hook_disabled");
 		}
 
-		// Step 2: Check for failed run logs
 		const hasLogs = await hasFailedRunLogs(logDir);
 		if (hasLogs) {
 			log.info("Failed run logs found — blocking with validation_required");
@@ -360,7 +357,6 @@ export class StopHookHandler {
 			);
 		}
 
-		// Step 3: Check run interval (only when no failed logs)
 		if (config && config.run_interval_minutes > 0) {
 			const intervalElapsed = await checkRunInterval(
 				logDir,
@@ -376,13 +372,32 @@ export class StopHookHandler {
 			}
 		}
 
-		// Step 4: Check for changes since last passing run
+		const changesResult = await this.checkForChanges(logDir, ctx.cwd, log);
+		if (changesResult) return changesResult;
+
+		if (config) {
+			const prCiResult = await this.checkPRAndCI(ctx.cwd, config, logDir, log);
+			if (prCiResult) return prCiResult;
+		}
+
+		log.info("All checks passed — allowing stop");
+		return this.allow("passed");
+	}
+
+	/**
+	 * Check for changes since last passing run or vs base branch.
+	 * Returns a StopHookResult if action is needed, null to continue.
+	 */
+	private async checkForChanges(
+		logDir: string,
+		cwd: string,
+		log: ReturnType<typeof getStopHookLogger>,
+	): Promise<StopHookResult | null> {
 		const changesResult = await hasChangesSinceLastRun(logDir);
 		if (changesResult === null) {
-			// No execution state — check vs base branch
-			const projectConfig = await readProjectConfig(ctx.cwd);
+			const projectConfig = await readProjectConfig(cwd);
 			const baseBranch = projectConfig?.base_branch ?? "origin/main";
-			const hasChanges = await hasChangesVsBaseBranch(ctx.cwd, baseBranch);
+			const hasChanges = await hasChangesVsBaseBranch(cwd, baseBranch);
 			if (hasChanges) {
 				log.info("Changes detected vs base branch (no prior state) — blocking");
 				return this.block(
@@ -393,7 +408,6 @@ export class StopHookHandler {
 			log.info("No changes vs base branch — allowing stop");
 			return this.allow("passed");
 		}
-
 		if (changesResult) {
 			log.info("Changes detected since last passing run — blocking");
 			return this.block(
@@ -401,46 +415,60 @@ export class StopHookHandler {
 				SKILL_INSTRUCTIONS.validation_required,
 			);
 		}
+		return null;
+	}
 
-		// Step 5: Check PR status (if auto_push_pr enabled)
-		if (config?.auto_push_pr) {
-			const prStatus = await checkPRStatus(ctx.cwd);
-			if (prStatus.error) {
-				log.warn(`PR status check failed: ${prStatus.error} — allowing stop`);
-			} else if (!prStatus.prExists || !prStatus.upToDate) {
-				log.info("PR missing or outdated — blocking with pr_push_required");
-				const lastStatus = await getLastRunStatus(logDir);
-				const instruction =
-					lastStatus === "passed_with_warnings"
-						? SKILL_INSTRUCTIONS.pr_push_required_with_warnings
-						: SKILL_INSTRUCTIONS.pr_push_required;
-				return this.block("pr_push_required", instruction);
-			} else if (config.auto_fix_pr) {
-				// Step 6: Check CI status (if auto_fix_pr enabled, single read)
-				const ciResult = await checkCIStatus(ctx.cwd);
-				if (ciResult.status === "error") {
-					log.warn(`CI status check failed: ${ciResult.error} — allowing stop`);
-				} else if (ciResult.status === "pending") {
-					log.info("CI pending — blocking");
-					return this.block("ci_pending", SKILL_INSTRUCTIONS.ci_pending);
-				} else if (ciResult.status === "failed") {
-					log.info("CI failed — blocking");
-					return this.block("ci_failed", SKILL_INSTRUCTIONS.ci_failed);
-				}
-				// CI passed
-				log.info("CI passed — allowing stop");
-				return this.allow("ci_passed");
-			}
+	/**
+	 * Check PR existence/push status and CI status.
+	 * Returns a StopHookResult if action is needed, null to continue.
+	 */
+	private async checkPRAndCI(
+		cwd: string,
+		config: StopHookConfig,
+		logDir: string,
+		log: ReturnType<typeof getStopHookLogger>,
+	): Promise<StopHookResult | null> {
+		if (!config.auto_push_pr) return null;
+
+		const prStatus = await checkPRStatus(cwd);
+		if (prStatus.error) {
+			log.warn(`PR status check failed: ${prStatus.error} — allowing stop`);
+			return null;
 		}
+		if (!prStatus.prExists || !prStatus.upToDate) {
+			log.info("PR missing or outdated — blocking with pr_push_required");
+			const lastStatus = await getLastRunStatus(logDir);
+			const instruction =
+				lastStatus === "passed_with_warnings"
+					? SKILL_INSTRUCTIONS.pr_push_required_with_warnings
+					: SKILL_INSTRUCTIONS.pr_push_required;
+			return this.block("pr_push_required", instruction);
+		}
+		if (!config.auto_fix_pr) return null;
 
-		// Step 7: Allow stop
-		log.info("All checks passed — allowing stop");
-		return this.allow("passed");
+		const ciResult = await checkCIStatus(cwd);
+		if (ciResult.status === "error") {
+			log.warn(`CI status check failed: ${ciResult.error} — allowing stop`);
+			return null;
+		}
+		if (ciResult.status === "pending") {
+			log.info("CI pending — blocking");
+			return this.block("ci_pending", SKILL_INSTRUCTIONS.ci_pending);
+		}
+		if (ciResult.status === "failed") {
+			log.info("CI failed — blocking");
+			return this.block("ci_failed", SKILL_INSTRUCTIONS.ci_failed);
+		}
+		log.info("CI passed — allowing stop");
+		return this.allow("ci_passed");
 	}
 
 	/** Create a blocking result */
-	private block(status: GauntletStatus, reason: string): StopHookResult {
-		this.debugLogger?.logStopHook("block", status);
+	private async block(
+		status: GauntletStatus,
+		reason: string,
+	): Promise<StopHookResult> {
+		await this.debugLogger?.logStopHook("block", status);
 		return {
 			status,
 			shouldBlock: true,
@@ -450,11 +478,11 @@ export class StopHookHandler {
 	}
 
 	/** Create an allowing result */
-	private allow(
+	private async allow(
 		status: GauntletStatus,
 		context?: { intervalMinutes?: number },
-	): StopHookResult {
-		this.debugLogger?.logStopHook("allow", status);
+	): Promise<StopHookResult> {
+		await this.debugLogger?.logStopHook("allow", status);
 		return {
 			status,
 			shouldBlock: false,
