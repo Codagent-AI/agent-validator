@@ -11,14 +11,14 @@
  */
 
 import { readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const SKIP_DIRS = new Set(["node_modules", ".git"]);
 const IGNORABLE_ERRORS = new Set(["EACCES", "ENOENT"]);
 const DESIGN_DOC_PATTERN = /(?:^|-)design\.md$/;
 
 function shouldSkipDir(dir: string): boolean {
-	const dirName = dir.split("/").pop() ?? "";
+	const dirName = basename(dir);
 	if (SKIP_DIRS.has(dirName)) return true;
 	return dir.replace(/^\.\//, "").startsWith("openspec/changes");
 }
@@ -73,7 +73,7 @@ function main() {
 		console.error(
 			"1. If this design doc was already moved to openspec/changes, DELETE this file:",
 		);
-		console.error(`   rm ${orphanedDocs[0]}`);
+		console.error("   rm <design-doc>");
 		console.error("");
 		console.error(
 			"2. If this design doc has NOT been moved yet, MOVE it to the openspec change directory:",
