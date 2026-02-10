@@ -55,47 +55,47 @@ describe("stop-hook-state", () => {
 	});
 
 	describe("checkRunInterval()", () => {
+		async function seedExecutionState(
+			logDir: string,
+			ageMs: number,
+		): Promise<void> {
+			const timestamp = new Date(Date.now() - ageMs);
+			await fs.writeFile(
+				path.join(logDir, ".execution_state"),
+				JSON.stringify({
+					last_run_completed_at: timestamp.toISOString(),
+					branch: "main",
+					commit: "abc123",
+				}),
+			);
+		}
+
 		it("returns true (should run) when no execution state exists", async () => {
 			expect(await checkRunInterval(testLogDir, 5)).toBe(true);
 		});
 
-		it("returns true when interval has elapsed", async () => {
-			const oldTime = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
-			await fs.writeFile(
-				path.join(testLogDir, ".execution_state"),
-				JSON.stringify({
-					last_run_completed_at: oldTime.toISOString(),
-					branch: "main",
-					commit: "abc123",
-				}),
-			);
-			expect(await checkRunInterval(testLogDir, 5)).toBe(true);
-		});
-
-		it("returns false when interval has not elapsed", async () => {
-			const recentTime = new Date(); // just now
-			await fs.writeFile(
-				path.join(testLogDir, ".execution_state"),
-				JSON.stringify({
-					last_run_completed_at: recentTime.toISOString(),
-					branch: "main",
-					commit: "abc123",
-				}),
-			);
-			expect(await checkRunInterval(testLogDir, 5)).toBe(false);
-		});
-
-		it("returns true when interval is 0 (always run)", async () => {
-			const recentTime = new Date();
-			await fs.writeFile(
-				path.join(testLogDir, ".execution_state"),
-				JSON.stringify({
-					last_run_completed_at: recentTime.toISOString(),
-					branch: "main",
-					commit: "abc123",
-				}),
-			);
-			expect(await checkRunInterval(testLogDir, 0)).toBe(true);
+		it.each([
+			{
+				label: "returns true when interval has elapsed",
+				ageMs: 10 * 60 * 1000,
+				intervalMin: 5,
+				expected: true,
+			},
+			{
+				label: "returns false when interval has not elapsed",
+				ageMs: 0,
+				intervalMin: 5,
+				expected: false,
+			},
+			{
+				label: "returns true when interval is 0 (always run)",
+				ageMs: 0,
+				intervalMin: 0,
+				expected: true,
+			},
+		])("$label", async ({ ageMs, intervalMin, expected }) => {
+			await seedExecutionState(testLogDir, ageMs);
+			expect(await checkRunInterval(testLogDir, intervalMin)).toBe(expected);
 		});
 
 		it("returns true for corrupted state file", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ClaudeStopHookAdapter } from "../../../src/hooks/adapters/claude-stop-hook.js";
-import type { GauntletStatus } from "../../../src/types/gauntlet-status.js";
 import type { StopHookResult } from "../../../src/hooks/adapters/types.js";
+import type { GauntletStatus } from "../../../src/types/gauntlet-status.js";
 
 /**
  * Factory for creating test StopHookResult objects with sensible defaults.
@@ -94,58 +94,31 @@ describe("ClaudeStopHookAdapter", () => {
 			expect(output.message).toBe("✓ Gauntlet passed");
 		});
 
-		it("should output block decision for failed status", () => {
-			const result = createResult({
-				status: "failed",
-				shouldBlock: true,
-				message: "✗ Gauntlet failed",
-				reason: "Fix the issues",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.decision).toBe("block");
-			expect(output.status).toBe("failed");
-			expect(output.reason).toBe("Fix the issues");
-			expect(output.stopReason).toBe("Fix the issues");
-		});
-
-		it("should output block decision for pr_push_required status", () => {
-			const result = createResult({
-				status: "pr_push_required",
-				shouldBlock: true,
-				message: "✓ Gauntlet passed — PR needed",
+		it.each([
+			{ status: "failed" as GauntletStatus, reason: "Fix the issues" },
+			{
+				status: "pr_push_required" as GauntletStatus,
 				reason: "Create a PR",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.decision).toBe("block");
-			expect(output.status).toBe("pr_push_required");
-			expect(output.reason).toBe("Create a PR");
-			expect(output.stopReason).toBe("Create a PR");
-		});
-
-		it("should output block decision for ci_failed status", () => {
-			const result = createResult({
-				status: "ci_failed",
-				shouldBlock: true,
-				reason: "Fix the CI failures",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.decision).toBe("block");
-			expect(output.status).toBe("ci_failed");
-			expect(output.reason).toBe("Fix the CI failures");
-			expect(output.stopReason).toBe("Fix the CI failures");
-		});
-
-		it("should output block decision for ci_pending status", () => {
-			const result = createResult({
-				status: "ci_pending",
-				shouldBlock: true,
+			},
+			{ status: "ci_failed" as GauntletStatus, reason: "Fix the CI failures" },
+			{
+				status: "ci_pending" as GauntletStatus,
 				reason: "Wait for CI to complete",
+			},
+		])("should output block decision for $status status", ({
+			status,
+			reason,
+		}) => {
+			const result = createResult({
+				status,
+				shouldBlock: true,
+				reason,
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.decision).toBe("block");
-			expect(output.status).toBe("ci_pending");
-			expect(output.reason).toBe("Wait for CI to complete");
-			expect(output.stopReason).toBe("Wait for CI to complete");
+			expect(output.status).toBe(status);
+			expect(output.reason).toBe(reason);
+			expect(output.stopReason).toBe(reason);
 		});
 
 		it("should output approve decision for ci_passed status", () => {
