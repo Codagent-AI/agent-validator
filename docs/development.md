@@ -43,8 +43,7 @@ Produces `openspec/changes/<change-name>/` containing `design.md` (moved from do
 The worktree agent writes a detailed implementation plan and immediately executes it without pausing. Each task is dispatched to a fresh subagent with automated spec compliance and code quality reviews. 
 
 ```
-Write a plan for <feature> using the spec at openspec/changes/<change-name>/proposal.md,
-then immediately execute it using subagent-driven-development.
+/superpowers:write-plan Read all files in openspec/changes/<change>, then make a plan, then immediately execute it using the subagent-driven-development skill.
 ```
 
 The agent will:
