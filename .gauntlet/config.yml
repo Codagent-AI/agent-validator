@@ -28,28 +28,25 @@ entry_points:
   - path: "."
     exclude:
       - evals/results
-    reviews:
-      - code-quality
-  - path: "src"
     checks:
       - build
       - lint
       - typecheck
       - test
       - security-code
+      - security-deps
       - schema-validate
       - code-health
-  - path: "package.json"
-    checks:
-      - build
-      - test
-      - security-deps
+    reviews:
+      - code-quality
+
   - path: "openspec/changes"
     exclude:
       - "openspec/changes/archive"
       - "**/tasks.md" # Prevent triggering review of entire spec when marking tasks as done 
     checks:
       - openspec-validate
+      - no-orphaned-design-docs
     reviews:
       - change-review
   - path: "openspec/changes/*/tasks.md"

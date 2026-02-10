@@ -1,0 +1,5 @@
+command: bun .gauntlet/scripts/check-no-orphaned-design-docs.ts
+working_directory: .
+parallel: true
+run_in_ci: true
+run_locally: true

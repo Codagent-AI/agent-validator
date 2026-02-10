@@ -17,8 +17,8 @@ export type GauntletStatus =
 	| "ci_pending" // CI checks still running
 	| "ci_failed" // CI checks failed or review changes requested
 	| "ci_passed" // CI checks passed, no blocking reviews
-	| "ci_timeout" // CI wait attempts exhausted
 	// Stop-hook pre-checks (before running executor)
+	| "validation_required" // Changes need validation or previous run has unresolved failures
 	| "no_config" // No .gauntlet/config.yml found
 	| "stop_hook_active" // Infinite loop prevention
 	| "interval_not_elapsed" // Run interval hasn't passed
@@ -59,6 +59,7 @@ export interface RunResult {
 export function isBlockingStatus(status: GauntletStatus): boolean {
 	return (
 		status === "failed" ||
+		status === "validation_required" ||
 		status === "pr_push_required" ||
 		status === "ci_pending" ||
 		status === "ci_failed"

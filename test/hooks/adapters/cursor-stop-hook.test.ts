@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { CursorStopHookAdapter } from "../../../src/hooks/adapters/cursor-stop-hook.js";
-import type { GauntletStatus } from "../../../src/types/gauntlet-status.js";
 import type { StopHookResult } from "../../../src/hooks/adapters/types.js";
+import type { GauntletStatus } from "../../../src/types/gauntlet-status.js";
 
 /**
  * Factory for creating test StopHookResult objects with sensible defaults.
@@ -118,7 +118,7 @@ describe("CursorStopHookAdapter", () => {
 				status: "failed",
 				shouldBlock: true,
 				message: "✗ Gauntlet failed",
-				instructions: "Fix the issues",
+				reason: "Fix the issues",
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Fix the issues");
@@ -129,30 +129,42 @@ describe("CursorStopHookAdapter", () => {
 				status: "pr_push_required",
 				shouldBlock: true,
 				message: "✓ Gauntlet passed — PR needed",
-				pushPRReason: "Create a PR",
+				reason: "Create a PR",
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe("Create a PR");
 		});
 
-		it("should output followup_message for ci_failed status with ciFixReason", () => {
+		it.each([
+			{ status: "ci_failed" as GauntletStatus, reason: "Fix the CI failures" },
+			{
+				status: "ci_pending" as GauntletStatus,
+				reason: "Wait for CI to complete",
+			},
+			{
+				status: "validation_required" as GauntletStatus,
+				reason: "Use gauntlet-run skill",
+			},
+			{
+				status: "failed" as GauntletStatus,
+				reason: undefined,
+				message: "✗ Gauntlet failed",
+				expectedFollowup: "✗ Gauntlet failed",
+			},
+		])("should output followup_message for $status status", ({
+			status,
+			reason,
+			message,
+			expectedFollowup,
+		}) => {
 			const result = createResult({
-				status: "ci_failed",
+				status,
 				shouldBlock: true,
-				ciFixReason: "Fix the CI failures",
+				...(reason ? { reason } : {}),
+				...(message ? { message } : {}),
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.followup_message).toBe("Fix the CI failures");
-		});
-
-		it("should output followup_message for ci_pending status with ciPendingReason", () => {
-			const result = createResult({
-				status: "ci_pending",
-				shouldBlock: true,
-				ciPendingReason: "Wait for CI to complete",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.followup_message).toBe("Wait for CI to complete");
+			expect(output.followup_message).toBe(expectedFollowup ?? reason);
 		});
 
 		it("should output systemMessage for ci_passed status", () => {
@@ -165,31 +177,11 @@ describe("CursorStopHookAdapter", () => {
 			expect(output.followup_message).toBeUndefined();
 		});
 
-		it("should output systemMessage for ci_timeout status", () => {
-			const result = createResult({
-				status: "ci_timeout",
-				message: "⚠ CI wait exhausted",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.systemMessage).toBe("⚠ CI wait exhausted");
-			expect(output.followup_message).toBeUndefined();
-		});
-
-		it("should use message as fallback when instructions not provided", () => {
-			const result = createResult({
-				status: "failed",
-				shouldBlock: true,
-				message: "✗ Gauntlet failed",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.followup_message).toBe("✗ Gauntlet failed");
-		});
-
 		it("should output single-line JSON", () => {
 			const result = createResult({
 				status: "failed",
 				shouldBlock: true,
-				instructions: "Fix the issues",
+				reason: "Fix the issues",
 			});
 			const output = adapter.formatOutput(result);
 			expect(output.includes("\n")).toBe(false);

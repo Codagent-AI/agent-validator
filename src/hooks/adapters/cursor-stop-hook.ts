@@ -75,13 +75,7 @@ export class CursorStopHookAdapter implements StopHookAdapter {
 	 * Get the block message for a given result based on status.
 	 */
 	private getBlockMessage(result: StopHookResult): string {
-		const messageMap: Record<string, string | undefined> = {
-			failed: result.instructions,
-			pr_push_required: result.pushPRReason,
-			ci_failed: result.ciFixReason,
-			ci_pending: result.ciPendingReason,
-		};
-		return messageMap[result.status] || result.message;
+		return result.reason || result.message;
 	}
 
 	/**
