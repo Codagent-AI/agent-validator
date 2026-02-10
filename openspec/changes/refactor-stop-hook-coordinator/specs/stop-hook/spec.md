@@ -75,18 +75,18 @@ The stop-hook command SHALL be a stateless coordinator that reads observable sta
 
 When the stop-hook blocks the agent, the `reason` message SHALL be a concise instruction to invoke the appropriate skill, not detailed failure logs or fix procedures.
 
-#### Scenario: Block for validation required
+#### Scenario: Block when validation is required
 - **GIVEN** the stop hook detects changes that need validation (failed logs exist or working tree changed)
 - **WHEN** the stop-hook outputs a blocking response
 - **THEN** the `reason` SHALL instruct the agent to use the `gauntlet-run` skill
 - **AND** the `reason` SHALL NOT include log file paths, trust level guidance, or violation handling procedures
 
-#### Scenario: Block for PR required
+#### Scenario: Block when a PR is required
 - **GIVEN** the stop hook detects that a PR needs to be created or updated
 - **WHEN** the stop-hook outputs a blocking response
 - **THEN** the `reason` SHALL instruct the agent to use the `gauntlet-push-pr` skill
 
-#### Scenario: Block for CI fix required
+#### Scenario: Block when a CI fix is required
 - **GIVEN** the stop hook detects CI failures or pending checks
 - **WHEN** the stop-hook outputs a blocking response
 - **THEN** the `reason` SHALL instruct the agent to use the `gauntlet-fix-pr` skill
@@ -282,7 +282,7 @@ When blocking with `ci_pending` status, the `reason` prompt SHALL instruct the a
 
 Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_pending`, `ci_failed`, `ci_passed`) and the new `validation_required` status in their output formatting.
 
-#### Scenario: Cursor adapter handles validation_required
+#### Scenario: Cursor adapter handles the `validation_required` status
 - **GIVEN** the handler returns status `validation_required` with a skill instruction
 - **AND** the protocol is Cursor
 - **WHEN** `formatOutput(result)` is called
@@ -306,7 +306,7 @@ Both Claude Code and Cursor adapters MUST handle the CI workflow statuses (`ci_p
 - **WHEN** `formatOutput(result)` is called
 - **THEN** the response SHALL be an empty object `{}`
 
-#### Scenario: Claude Code adapter handles validation_required
+#### Scenario: Claude Code adapter handles the `validation_required` status
 - **GIVEN** the handler returns status `validation_required` with a skill instruction
 - **AND** the protocol is Claude Code
 - **WHEN** `formatOutput(result)` is called
@@ -380,7 +380,7 @@ The stop hook SHALL read observable state from the filesystem and git to determi
 
 ### Requirement: Unified Status Type
 **Reason**: The stop hook no longer receives `RunResult` from `executeRun()`, so the tight coupling between executor status and hook status is removed. The `GauntletStatus` type still exists but the stop hook produces its own statuses from state observation.
-**Migration**: `GauntletStatus` is extended with `validation_required`. The stop hook still uses `isBlockingStatus()` for decision making.
+**Migration**: `GauntletStatus` is extended with `validation_required`. The stop hook still uses `isBlockingStatus()` for decision-making.
 
 ### Requirement: StopHookResult CI Fields
 **Reason**: The `ciFixReason` and `ciPendingReason` fields are no longer needed because the stop hook returns simple skill instructions instead of detailed CI failure formatting.

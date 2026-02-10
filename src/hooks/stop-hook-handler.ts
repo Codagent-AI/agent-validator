@@ -357,31 +357,44 @@ export class StopHookHandler {
 			);
 		}
 
-		if (config && config.run_interval_minutes > 0) {
-			const intervalElapsed = await checkRunInterval(
-				logDir,
-				config.run_interval_minutes,
-			);
-			if (!intervalElapsed) {
-				log.info(
-					`Run interval (${config.run_interval_minutes} min) not elapsed — allowing stop`,
-				);
-				return this.allow("interval_not_elapsed", {
-					intervalMinutes: config.run_interval_minutes,
-				});
-			}
-		}
+		const intervalResult = await this.checkInterval(config, logDir, log);
+		if (intervalResult) return intervalResult;
 
 		const changesResult = await this.checkForChanges(logDir, ctx.cwd, log);
 		if (changesResult) return changesResult;
 
-		if (config) {
-			const prCiResult = await this.checkPRAndCI(ctx.cwd, config, logDir, log);
-			if (prCiResult) return prCiResult;
-		}
+		const prCiResult = config
+			? await this.checkPRAndCI(ctx.cwd, config, logDir, log)
+			: null;
+		if (prCiResult) return prCiResult;
 
 		log.info("All checks passed — allowing stop");
 		return this.allow("passed");
+	}
+
+	/**
+	 * Check if the run interval has elapsed.
+	 * Returns a StopHookResult to allow stop if interval hasn't elapsed, null to continue.
+	 */
+	private async checkInterval(
+		config: StopHookConfig | null,
+		logDir: string,
+		log: ReturnType<typeof getStopHookLogger>,
+	): Promise<StopHookResult | null> {
+		if (!config || config.run_interval_minutes <= 0) return null;
+		const intervalElapsed = await checkRunInterval(
+			logDir,
+			config.run_interval_minutes,
+		);
+		if (!intervalElapsed) {
+			log.info(
+				`Run interval (${config.run_interval_minutes} min) not elapsed — allowing stop`,
+			);
+			return this.allow("interval_not_elapsed", {
+				intervalMinutes: config.run_interval_minutes,
+			});
+		}
+		return null;
 	}
 
 	/**
@@ -396,7 +409,11 @@ export class StopHookHandler {
 		const changesResult = await hasChangesSinceLastRun(logDir);
 		if (changesResult === null) {
 			const projectConfig = await readProjectConfig(cwd);
-			const baseBranch = projectConfig?.base_branch ?? "origin/main";
+			const rawBranch = projectConfig?.base_branch;
+			const baseBranch =
+				typeof rawBranch === "string" && rawBranch.length > 0
+					? rawBranch
+					: "origin/main";
 			const hasChanges = await hasChangesVsBaseBranch(cwd, baseBranch);
 			if (hasChanges) {
 				log.info("Changes detected vs base branch (no prior state) — blocking");

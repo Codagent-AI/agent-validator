@@ -1,17 +1,25 @@
 #!/usr/bin/env bun
 /**
- * Stop Hook E2E Integration Test
+ * Stop Hook E2E Integration Test (Coordinator Model)
  *
- * Exercises the full stop-hook lifecycle:
- * 1. Claude creates a file with intentional lint errors (var, console.log)
- * 2. Stop hook fires, detects check failures, blocks Claude
- * 3. Claude fixes errors, stop hook re-runs, passes
- * 4. Script verifies the flow via gauntlet_logs/.debug.log
+ * Tests the stop hook's state-reading coordinator behavior:
+ *
+ * Phase 1: Block with pre-seeded failed logs
+ * 1. Create temp project with gauntlet config + failed gate logs
+ * 2. Claude runs a task and tries to stop
+ * 3. Stop hook finds failed logs, blocks with validation_required
+ *
+ * Phase 2: Allow with clean state
+ * 4. Remove failed logs (simulating agent fixing issues)
+ * 5. Claude runs again and tries to stop
+ * 6. Stop hook finds no failed logs and no changes, allows stop
+ *
+ * Verified via gauntlet_logs/.debug.log
  */
 
 import fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 
 const GAUNTLET_ROOT = path.resolve(import.meta.dir, "../..");
 const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -51,20 +59,12 @@ entry_points:
   - path: "src"
     checks:
       - no-var
-      - no-console-log
 `,
 	);
 
-	// Note: working directory is the entry point path (src/), so grep searches "."
 	await fs.writeFile(
 		path.join(tempDir, ".gauntlet", "checks", "no-var.yml"),
 		`command: "! grep -rn '\\\\bvar\\\\b' . --include='*.ts'"
-timeout: 30
-`,
-	);
-	await fs.writeFile(
-		path.join(tempDir, ".gauntlet", "checks", "no-console-log.yml"),
-		`command: "! grep -rn 'console\\\\.log' . --include='*.ts'"
 timeout: 30
 `,
 	);
@@ -117,6 +117,36 @@ async function initGitRepo(dir: string): Promise<void> {
 	}
 }
 
+/**
+ * Seed the log directory with a failed gate log file.
+ * This simulates a prior failed gauntlet run that hasn't been archived.
+ */
+async function seedFailedLogs(tempDir: string): Promise<void> {
+	const logDir = path.join(tempDir, "gauntlet_logs");
+	await fs.mkdir(logDir, { recursive: true });
+	await fs.writeFile(
+		path.join(logDir, "check_src_no-var.1.log"),
+		"src/helpers.ts:3:  var result = first + ' ' + last;\nFailed: found var usage",
+	);
+}
+
+/**
+ * Remove failed gate logs (simulating the agent fixing issues via gauntlet-run).
+ */
+async function clearFailedLogs(tempDir: string): Promise<void> {
+	const logDir = path.join(tempDir, "gauntlet_logs");
+	const entries = await fs.readdir(logDir);
+	for (const entry of entries) {
+		if (
+			(entry.endsWith(".log") || entry.endsWith(".json")) &&
+			!entry.startsWith(".") &&
+			!entry.startsWith("console.")
+		) {
+			await fs.rm(path.join(logDir, entry));
+		}
+	}
+}
+
 async function setupProject(): Promise<string> {
 	const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-e2e-"));
 
@@ -134,23 +164,16 @@ async function setupProject(): Promise<string> {
 
 // ─── Run Claude ──────────────────────────────────────────────
 
-async function runClaude(tempDir: string): Promise<void> {
-	const prompt = `Create a file at src/helpers.ts with the following exported functions:
-
-1. formatName(first: string, last: string): string — concatenates first and last name
-   with a space. Log the result with console.log before returning. Use var for
-   local variable declarations.
-
-2. sum(numbers: number[]): number — returns the sum using reduce. Use var for the
-   accumulator variable.
-
-Important: You MUST use 'var' for all variable declarations and include console.log
-calls exactly as described. Do not use const or let. Do not remove console.log.`;
-
+async function runClaude(
+	tempDir: string,
+	prompt: string,
+	label: string,
+): Promise<void> {
 	const env = { ...process.env };
 	delete env.GAUNTLET_STOP_HOOK_ACTIVE;
 	delete env.GAUNTLET_STOP_HOOK_ENABLED;
 
+	console.log(`\n--- ${label} ---`);
 	const proc = Bun.spawn(["claude", "-p", prompt], {
 		cwd: tempDir,
 		stdout: "pipe",
@@ -169,15 +192,13 @@ calls exactly as described. Do not use const or let. Do not remove console.log.`
 		const stderr = await new Response(proc.stderr).text();
 
 		if (stdout.trim()) {
-			console.log("\n--- Claude stdout ---");
 			console.log(stdout.slice(0, 2000));
 		}
 		if (stderr.trim()) {
-			console.log("\n--- Claude stderr ---");
-			console.log(stderr.slice(0, 2000));
+			console.log("stderr:", stderr.slice(0, 1000));
 		}
 
-		console.log(`\nClaude exited with code ${exitCode}`);
+		console.log(`Exit code: ${exitCode}`);
 	} finally {
 		clearTimeout(timeout);
 	}
@@ -202,7 +223,8 @@ async function verifyLogs(tempDir: string): Promise<Assertion[]> {
 		return [
 			{ label: "Debug log exists", passed: false },
 			{ label: "Stop hook ran", passed: false },
-			{ label: "Eventually passed", passed: false },
+			{ label: "Blocked with validation_required", passed: false },
+			{ label: "Allowed after cleanup", passed: false },
 		];
 	}
 
@@ -210,30 +232,32 @@ async function verifyLogs(tempDir: string): Promise<Assertion[]> {
 
 	const lines = logContent.split("\n").filter((l) => l.trim());
 
-	// Assertion 1: Stop hook ran
+	// Assertion 1: Stop hook ran at least once
 	const stopHookRan = lines.some((l) => l.includes("COMMAND stop-hook"));
 	assertions.push({ label: "Stop hook ran", passed: stopHookRan });
 
-	// Assertion 2: Eventually passed
-	// In the coordinator model, the stop hook blocks with validation_required
-	// (decision=block) and then later allows (decision=allow) after the agent
-	// uses the gauntlet-run skill to fix issues and the subsequent stop hook
-	// reads passing state.
-	//
-	// TODO: The E2E test needs to be redesigned for the coordinator architecture.
-	// The stop hook now blocks with "use gauntlet-run skill" but `claude -p`
-	// won't know about skills. For now, we check for any decision=block followed
-	// by decision=allow, which validates the state-reading flow works.
+	// Assertion 2: Stop hook blocked with validation_required (failed logs detected)
 	const stopHookLines = lines.filter((l) => l.includes("STOP_HOOK decision="));
+	const blockedWithValidation = stopHookLines.some(
+		(l) => l.includes("decision=block") && l.includes("validation_required"),
+	);
+	assertions.push({
+		label: "Blocked with validation_required",
+		passed: blockedWithValidation,
+	});
+
+	// Assertion 3: Stop hook later allowed (after failed logs were cleaned)
 	const blockIndex = stopHookLines.findIndex((l) =>
 		l.includes("decision=block"),
 	);
-	const allowIndex = stopHookLines.findIndex((l) =>
-		l.includes("decision=allow"),
+	const allowIndex = stopHookLines.findIndex(
+		(l, i) => i > blockIndex && l.includes("decision=allow"),
 	);
-	const eventuallyPassed =
-		blockIndex !== -1 && allowIndex !== -1 && allowIndex > blockIndex;
-	assertions.push({ label: "Eventually passed", passed: eventuallyPassed });
+	const allowedAfterCleanup = blockIndex !== -1 && allowIndex !== -1;
+	assertions.push({
+		label: "Allowed after cleanup",
+		passed: allowedAfterCleanup,
+	});
 
 	return assertions;
 }
@@ -241,7 +265,7 @@ async function verifyLogs(tempDir: string): Promise<Assertion[]> {
 // ─── Main ────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-	console.log("=== Stop Hook E2E Integration Test ===\n");
+	console.log("=== Stop Hook E2E Integration Test (Coordinator Model) ===\n");
 
 	await preflight();
 	console.log("[OK] claude CLI found on PATH");
@@ -249,9 +273,27 @@ async function main(): Promise<void> {
 	let tempDir: string | undefined;
 	try {
 		tempDir = await setupProject();
-		console.log(`[OK] Temp project created at ${tempDir}\n`);
+		console.log(`[OK] Temp project created at ${tempDir}`);
 
-		await runClaude(tempDir);
+		// Phase 1: Seed failed logs so the stop hook blocks
+		await seedFailedLogs(tempDir);
+		console.log("[OK] Seeded failed gate logs");
+
+		await runClaude(
+			tempDir,
+			"Create a file at src/helpers.ts with an exported function formatName(first: string, last: string): string that concatenates first and last name with a space.",
+			"Phase 1: Claude run with failed logs (expect block)",
+		);
+
+		// Phase 2: Clear failed logs so the stop hook allows
+		await clearFailedLogs(tempDir);
+		console.log("\n[OK] Cleared failed gate logs");
+
+		await runClaude(
+			tempDir,
+			"Read src/helpers.ts and tell me what functions it exports.",
+			"Phase 2: Claude run with clean state (expect allow)",
+		);
 
 		console.log("\n=== Assertions ===\n");
 		const assertions = await verifyLogs(tempDir);

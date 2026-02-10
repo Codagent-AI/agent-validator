@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
-	hasFailedRunLogs,
 	checkRunInterval,
+	hasFailedRunLogs,
 } from "../../src/hooks/stop-hook-state.js";
 
 describe("stop-hook-state", () => {
-	const testLogDir = path.join(process.cwd(), `test-state-${Date.now()}`);
+	let testLogDir: string;
 
 	beforeEach(async () => {
-		await fs.mkdir(testLogDir, { recursive: true });
+		testLogDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-state-"));
 	});
 
 	afterEach(async () => {
@@ -37,22 +38,13 @@ describe("stop-hook-state", () => {
 		});
 
 		it("ignores dot-files like .execution_state and .debug.log", async () => {
-			await fs.writeFile(
-				path.join(testLogDir, ".execution_state"),
-				"{}",
-			);
-			await fs.writeFile(
-				path.join(testLogDir, ".debug.log"),
-				"log",
-			);
+			await fs.writeFile(path.join(testLogDir, ".execution_state"), "{}");
+			await fs.writeFile(path.join(testLogDir, ".debug.log"), "log");
 			expect(await hasFailedRunLogs(testLogDir)).toBe(false);
 		});
 
 		it("ignores console.* files", async () => {
-			await fs.writeFile(
-				path.join(testLogDir, "console.1.log"),
-				"output",
-			);
+			await fs.writeFile(path.join(testLogDir, "console.1.log"), "output");
 			expect(await hasFailedRunLogs(testLogDir)).toBe(false);
 		});
 
@@ -107,10 +99,7 @@ describe("stop-hook-state", () => {
 		});
 
 		it("returns true for corrupted state file", async () => {
-			await fs.writeFile(
-				path.join(testLogDir, ".execution_state"),
-				"not json",
-			);
+			await fs.writeFile(path.join(testLogDir, ".execution_state"), "not json");
 			expect(await checkRunInterval(testLogDir, 5)).toBe(true);
 		});
 	});

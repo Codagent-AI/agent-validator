@@ -43,8 +43,13 @@ export async function hasChangesSinceLastRun(
 		return null; // No execution state — caller should use fallback
 	}
 
-	const currentRef = await createWorkingTreeRef();
-	return currentRef !== state.working_tree_ref;
+	try {
+		const currentRef = await createWorkingTreeRef();
+		return currentRef !== state.working_tree_ref;
+	} catch {
+		// If git fails, assume changes exist so the caller can block safely
+		return true;
+	}
 }
 
 /**
@@ -102,5 +107,6 @@ export async function hasChangesVsBaseBranch(
 export async function getLastRunStatus(logDir: string): Promise<string | null> {
 	const state = await readExecutionState(logDir);
 	if (!state) return null;
-	return "passed";
+	// ExecutionState has no status field yet — return null until schema is extended
+	return null;
 }
