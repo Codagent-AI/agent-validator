@@ -24,8 +24,6 @@ if (!result.success) {
 const shebang = "#!/usr/bin/env node\n";
 
 for (const entry of entrypoints) {
-	const basename = path.basename(entry, ".ts");
-	// src/index.ts -> dist/index.js, src/scripts/status.ts -> dist/scripts/status.js
 	const relPath = path.relative("./src", entry).replace(/\.ts$/, ".js");
 	const outPath = path.join("./dist", relPath);
 
