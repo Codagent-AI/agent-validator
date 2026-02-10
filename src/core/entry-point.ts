@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Glob } from "bun";
+import picomatch from "picomatch";
 import type { EntryPointConfig } from "../config/types.js";
 
 export interface ExpandedEntryPoint {
@@ -113,13 +113,13 @@ export class EntryPointExpander {
 			return files;
 		}
 
-		// Pre-compile globs
-		const globs: Glob[] = [];
+		// Pre-compile matchers
+		const matchers: picomatch.Matcher[] = [];
 		const prefixes: string[] = [];
 
 		for (const pattern of patterns) {
 			if (pattern.match(/[*?[{]/)) {
-				globs.push(new Glob(pattern));
+				matchers.push(picomatch(pattern));
 			} else {
 				prefixes.push(pattern);
 			}
@@ -129,7 +129,7 @@ export class EntryPointExpander {
 			// If matches ANY pattern, exclude it
 			const isExcluded =
 				prefixes.some((p) => file === p || file.startsWith(`${p}/`)) ||
-				globs.some((g) => g.match(file));
+				matchers.some((m) => m(file));
 
 			return !isExcluded;
 		});
@@ -184,7 +184,7 @@ export class EntryPointExpander {
 	}
 
 	private hasMatchingFiles(pattern: string, changedFiles: string[]): boolean {
-		const glob = new Glob(pattern);
-		return changedFiles.some((file) => glob.match(file));
+		const matcher = picomatch(pattern);
+		return changedFiles.some((file) => matcher(file));
 	}
 }

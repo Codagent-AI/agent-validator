@@ -69,7 +69,7 @@ timeout: 30
 `,
 	);
 
-	const hookCommand = `bun ${GAUNTLET_ROOT}/src/index.ts stop-hook`;
+	const hookCommand = `node ${GAUNTLET_ROOT}/dist/index.js stop-hook`;
 	await fs.writeFile(
 		path.join(tempDir, ".claude", "settings.local.json"),
 		JSON.stringify(

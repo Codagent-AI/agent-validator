@@ -2,20 +2,12 @@
 
 ## Requirements
 
-- **Bun** (Required runtime, v1.0.0+)
+- **Node.js** (v18.0.0+)
 - **git** (change detection and diffs)
 - For reviews: one or more supported AI CLIs installed (`gemini`, `codex`, `claude`, `github-copilot`, `cursor`). For the full list of tools and how they are used, see [CLI Invocation Details](cli-invocation-details.md)
 
 ## Installation
 
-You can install `agent-gauntlet` globally using `npm` or `bun` (Bun must be installed on the system in both cases):
-
-**Using Bun (Recommended):**
-```bash
-bun add -g agent-gauntlet
-```
-
-**Using npm:**
 ```bash
 npm install -g agent-gauntlet
 ```
