@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 0.11.0
+
+### Minor Changes
+
+- [#50](https://github.com/pacaplan/agent-gauntlet/pull/50) Remove Bun runtime requirement for end users — ship compiled JS to npm so `npm install -g agent-gauntlet` works with just Node.js (>=18), replacing Bun's Glob with picomatch and adding a Bun.build()-based build pipeline
+
 ## 0.10.1
 
 ### Patch Changes
