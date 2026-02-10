@@ -131,20 +131,24 @@ async function seedFailedLogs(tempDir: string): Promise<void> {
 }
 
 /**
+ * Check if a filename is a gate log (not a dot-file or console log).
+ */
+function isGateLog(filename: string): boolean {
+	return (
+		(filename.endsWith(".log") || filename.endsWith(".json")) &&
+		!filename.startsWith(".") &&
+		!filename.startsWith("console.")
+	);
+}
+
+/**
  * Remove failed gate logs (simulating the agent fixing issues via gauntlet-run).
  */
 async function clearFailedLogs(tempDir: string): Promise<void> {
 	const logDir = path.join(tempDir, "gauntlet_logs");
 	const entries = await fs.readdir(logDir);
-	for (const entry of entries) {
-		if (
-			(entry.endsWith(".log") || entry.endsWith(".json")) &&
-			!entry.startsWith(".") &&
-			!entry.startsWith("console.")
-		) {
-			await fs.rm(path.join(logDir, entry));
-		}
-	}
+	const gateLogs = entries.filter(isGateLog);
+	await Promise.all(gateLogs.map((f) => fs.rm(path.join(logDir, f))));
 }
 
 async function setupProject(): Promise<string> {

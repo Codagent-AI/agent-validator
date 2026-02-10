@@ -38,6 +38,15 @@ interface MinimalConfig {
 }
 
 /**
+ * Internal context passed to private handler methods.
+ */
+interface HandlerCtx {
+	logDir: string;
+	cwd: string;
+	log: ReturnType<typeof getStopHookLogger>;
+}
+
+/**
  * Default log directory when config doesn't specify one.
  */
 const DEFAULT_LOG_DIR = "gauntlet_logs";
@@ -334,41 +343,44 @@ export class StopHookHandler {
 	 * Returns a skill instruction when blocking, or allows the stop.
 	 */
 	async execute(ctx: StopHookContext): Promise<StopHookResult> {
-		const log = getStopHookLogger();
 		const logDir = this.logDir;
 
 		if (!logDir) {
-			log.warn("No logDir set — allowing stop");
 			return this.allow("passed");
 		}
 
-		const config = await getResolvedStopHookConfig(ctx.cwd);
+		const hctx: HandlerCtx = {
+			logDir,
+			cwd: ctx.cwd,
+			log: getStopHookLogger(),
+		};
 
-		if (config && !config.enabled) {
+		const config = await getResolvedStopHookConfig(hctx.cwd);
+
+		if (config?.enabled === false) {
 			return this.allow("stop_hook_disabled");
 		}
 
-		const hasLogs = await hasFailedRunLogs(logDir);
-		if (hasLogs) {
-			log.info("Failed run logs found — blocking with validation_required");
+		if (await hasFailedRunLogs(logDir)) {
+			hctx.log.info(
+				"Failed run logs found — blocking with validation_required",
+			);
 			return this.block(
 				"validation_required",
 				SKILL_INSTRUCTIONS.validation_required,
 			);
 		}
 
-		const intervalResult = await this.checkInterval(config, logDir, log);
+		const intervalResult = await this.checkInterval(hctx, config);
 		if (intervalResult) return intervalResult;
 
-		const changesResult = await this.checkForChanges(logDir, ctx.cwd, log);
+		const changesResult = await this.checkForChanges(hctx);
 		if (changesResult) return changesResult;
 
-		const prCiResult = config
-			? await this.checkPRAndCI(ctx.cwd, config, logDir, log)
-			: null;
+		const prCiResult = await this.checkPRAndCI(hctx, config);
 		if (prCiResult) return prCiResult;
 
-		log.info("All checks passed — allowing stop");
+		hctx.log.info("All checks passed — allowing stop");
 		return this.allow("passed");
 	}
 
@@ -377,17 +389,16 @@ export class StopHookHandler {
 	 * Returns a StopHookResult to allow stop if interval hasn't elapsed, null to continue.
 	 */
 	private async checkInterval(
+		hctx: HandlerCtx,
 		config: StopHookConfig | null,
-		logDir: string,
-		log: ReturnType<typeof getStopHookLogger>,
 	): Promise<StopHookResult | null> {
 		if (!config || config.run_interval_minutes <= 0) return null;
 		const intervalElapsed = await checkRunInterval(
-			logDir,
+			hctx.logDir,
 			config.run_interval_minutes,
 		);
 		if (!intervalElapsed) {
-			log.info(
+			hctx.log.info(
 				`Run interval (${config.run_interval_minutes} min) not elapsed — allowing stop`,
 			);
 			return this.allow("interval_not_elapsed", {
@@ -402,31 +413,31 @@ export class StopHookHandler {
 	 * Returns a StopHookResult if action is needed, null to continue.
 	 */
 	private async checkForChanges(
-		logDir: string,
-		cwd: string,
-		log: ReturnType<typeof getStopHookLogger>,
+		hctx: HandlerCtx,
 	): Promise<StopHookResult | null> {
-		const changesResult = await hasChangesSinceLastRun(logDir);
+		const changesResult = await hasChangesSinceLastRun(hctx.logDir);
 		if (changesResult === null) {
-			const projectConfig = await readProjectConfig(cwd);
+			const projectConfig = await readProjectConfig(hctx.cwd);
 			const rawBranch = projectConfig?.base_branch;
 			const baseBranch =
 				typeof rawBranch === "string" && rawBranch.length > 0
 					? rawBranch
 					: "origin/main";
-			const hasChanges = await hasChangesVsBaseBranch(cwd, baseBranch);
+			const hasChanges = await hasChangesVsBaseBranch(hctx.cwd, baseBranch);
 			if (hasChanges) {
-				log.info("Changes detected vs base branch (no prior state) — blocking");
+				hctx.log.info(
+					"Changes detected vs base branch (no prior state) — blocking",
+				);
 				return this.block(
 					"validation_required",
 					SKILL_INSTRUCTIONS.validation_required,
 				);
 			}
-			log.info("No changes vs base branch — allowing stop");
+			hctx.log.info("No changes vs base branch — allowing stop");
 			return this.allow("passed");
 		}
 		if (changesResult) {
-			log.info("Changes detected since last passing run — blocking");
+			hctx.log.info("Changes detected since last passing run — blocking");
 			return this.block(
 				"validation_required",
 				SKILL_INSTRUCTIONS.validation_required,
@@ -440,43 +451,60 @@ export class StopHookHandler {
 	 * Returns a StopHookResult if action is needed, null to continue.
 	 */
 	private async checkPRAndCI(
-		cwd: string,
-		config: StopHookConfig,
-		logDir: string,
-		log: ReturnType<typeof getStopHookLogger>,
+		hctx: HandlerCtx,
+		config: StopHookConfig | null,
 	): Promise<StopHookResult | null> {
-		if (!config.auto_push_pr) return null;
+		if (!config?.auto_push_pr) return null;
 
-		const prStatus = await checkPRStatus(cwd);
+		const prStatus = await checkPRStatus(hctx.cwd);
 		if (prStatus.error) {
-			log.warn(`PR status check failed: ${prStatus.error} — allowing stop`);
+			hctx.log.warn(
+				`PR status check failed: ${prStatus.error} — allowing stop`,
+			);
 			return null;
 		}
 		if (!prStatus.prExists || !prStatus.upToDate) {
-			log.info("PR missing or outdated — blocking with pr_push_required");
-			const lastStatus = await getLastRunStatus(logDir);
-			const instruction =
-				lastStatus === "passed_with_warnings"
-					? SKILL_INSTRUCTIONS.pr_push_required_with_warnings
-					: SKILL_INSTRUCTIONS.pr_push_required;
-			return this.block("pr_push_required", instruction);
+			hctx.log.info("PR missing or outdated — blocking with pr_push_required");
+			return this.blockForPR(hctx);
 		}
-		if (!config.auto_fix_pr) return null;
+		if (!config?.auto_fix_pr) return null;
 
-		const ciResult = await checkCIStatus(cwd);
+		return this.checkCI(hctx);
+	}
+
+	/**
+	 * Block with PR push required, selecting the appropriate instruction
+	 * based on whether the last run had warnings.
+	 */
+	private async blockForPR(hctx: HandlerCtx): Promise<StopHookResult> {
+		const lastStatus = await getLastRunStatus(hctx.logDir);
+		const instruction =
+			lastStatus === "passed_with_warnings"
+				? SKILL_INSTRUCTIONS.pr_push_required_with_warnings
+				: SKILL_INSTRUCTIONS.pr_push_required;
+		return this.block("pr_push_required", instruction);
+	}
+
+	/**
+	 * Check CI status and return block/allow result.
+	 */
+	private async checkCI(hctx: HandlerCtx): Promise<StopHookResult | null> {
+		const ciResult = await checkCIStatus(hctx.cwd);
 		if (ciResult.status === "error") {
-			log.warn(`CI status check failed: ${ciResult.error} — allowing stop`);
+			hctx.log.warn(
+				`CI status check failed: ${ciResult.error} — allowing stop`,
+			);
 			return null;
 		}
 		if (ciResult.status === "pending") {
-			log.info("CI pending — blocking");
+			hctx.log.info("CI pending — blocking");
 			return this.block("ci_pending", SKILL_INSTRUCTIONS.ci_pending);
 		}
 		if (ciResult.status === "failed") {
-			log.info("CI failed — blocking");
+			hctx.log.info("CI failed — blocking");
 			return this.block("ci_failed", SKILL_INSTRUCTIONS.ci_failed);
 		}
-		log.info("CI passed — allowing stop");
+		hctx.log.info("CI passed — allowing stop");
 		return this.allow("ci_passed");
 	}
 
