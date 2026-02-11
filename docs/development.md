@@ -33,7 +33,7 @@ Produces `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
 Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal, tasks, and spec deltas. After validation, the gauntlet spec reviewer runs automatically.
 ```
-/openspec:proposal
+/openspec:proposal write proposal and then invoke `gauntlet-run` skill.
 ```
 
 Produces `openspec/changes/<change-name>/` containing `design.md` (moved from docs/plans/), `proposal.md`, `tasks.md`, and spec deltas. The proposal is the source of truth from this point forward.
