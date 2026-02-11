@@ -65,15 +65,14 @@ Agent Gauntlet loads configuration from your repository:
 ```text
 .gauntlet/
   config.yml          # entry_points starts as [] after init
-  checks/
-    *.yml             # populated by /gauntlet-setup or manually
+  checks/             # populated by /gauntlet-setup or manually
   reviews/
-    code-quality.yml  # created by init
+    code-quality      # created by init
 ```
 
 - **Project config**: `.gauntlet/config.yml`
-- **Check definitions**: `.gauntlet/checks/*.yml`
-- **Review definitions**: `.gauntlet/reviews/*.yml` (filename is the review name)
+- **Check definitions**: `.gauntlet/checks/`
+- **Review definitions**: `.gauntlet/reviews/`
 
 ## Example Configuration
 
@@ -136,7 +135,7 @@ In this example:
 
 ### Check definition example
 
-Checks are shell commands defined in `.gauntlet/checks/*.yml`:
+Checks are shell commands defined in `.gauntlet/checks/`:
 
 ```yaml
 # .gauntlet/checks/lint.yml
@@ -153,7 +152,7 @@ The check name (`lint`) is referenced in `config.yml`. When Gauntlet runs this c
 
 ### Review definition example
 
-Reviews are prompts defined in `.gauntlet/reviews/*.md`:
+Reviews are prompts defined in `.gauntlet/reviews/`:
 
 ```markdown
 # .gauntlet/reviews/code-quality.md
@@ -200,7 +199,7 @@ This creates:
 - `.gauntlet/ci.yml` — CI-specific configuration (services, runtimes, setup steps)
 - `.github/workflows/gauntlet.yml` — GitHub Actions workflow file
 
-Your local check definitions (`.gauntlet/checks/*.yml`) are automatically used in CI. The `ci.yml` file lets you configure additional CI-specific settings like database services or runtime versions.
+Your local check definitions (`.gauntlet/checks/`) are automatically used in CI. The `ci.yml` file lets you configure additional CI-specific settings like database services or runtime versions.
 
 ## Stop Hook (Claude Code & Cursor Integration)
 
