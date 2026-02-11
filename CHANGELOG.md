@@ -1,5 +1,15 @@
 # agent-gauntlet
 
+## 0.12.0
+
+### Minor Changes
+
+- [#52](https://github.com/pacaplan/agent-gauntlet/pull/52) Simplify `gauntlet init` to a lightweight scaffolding step and introduce a `/gauntlet-setup` skill that guides users through full project configuration interactively
+
+### Patch Changes
+
+- [#53](https://github.com/pacaplan/agent-gauntlet/pull/53) Skip automatic branch cleanup after commit-merged when uncommitted changes exist, preventing accidental loss of in-progress work
+
 ## 0.11.0
 
 ### Minor Changes
