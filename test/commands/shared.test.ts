@@ -331,7 +331,7 @@ describe("shouldAutoClean", () => {
 	// with specific commit history, which is harder to set up in unit tests.
 	// Integration tests would be more appropriate for that scenario.
 
-	it("returns resetState: true when commit is merged (unconditional)", async () => {
+	it("returns resetState: true when commit is merged and tree is clean", async () => {
 		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
 		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
@@ -340,7 +340,7 @@ describe("shouldAutoClean", () => {
 			last_run_completed_at: new Date().toISOString(),
 			branch: "test-branch",
 			commit: mergedCommit,
-			working_tree_ref: mergedCommit, // A valid ref — old code would set resetState: false
+			working_tree_ref: mergedCommit, // Same as commit = clean tree
 		};
 		await fs.writeFile(
 			path.join(TEST_DIR, getExecutionStateFilename()),
@@ -350,7 +350,56 @@ describe("shouldAutoClean", () => {
 		const result = await shouldAutoClean(TEST_DIR, "origin/main");
 		expect(result.clean).toBe(true);
 		expect(result.reason).toBe("commit merged");
-		expect(result.resetState).toBe(true); // MUST be true, regardless of working_tree_ref validity
+		expect(result.resetState).toBe(true);
+
+		branchSpy.mockRestore();
+		mergedSpy.mockRestore();
+	});
+
+	it("returns clean: false when commit is merged but uncommitted changes exist", async () => {
+		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+		const stashRef = "abcdef1234567890abcdef1234567890abcdef12";
+		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
+		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
+
+		const state = {
+			last_run_completed_at: new Date().toISOString(),
+			branch: "test-branch",
+			commit: mergedCommit,
+			working_tree_ref: stashRef, // Differs from commit = uncommitted changes
+		};
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify(state),
+		);
+
+		const result = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(result.clean).toBe(false);
+
+		branchSpy.mockRestore();
+		mergedSpy.mockRestore();
+	});
+
+	it("returns resetState: true when commit is merged and working_tree_ref is absent", async () => {
+		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
+		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
+
+		const state = {
+			last_run_completed_at: new Date().toISOString(),
+			branch: "test-branch",
+			commit: mergedCommit,
+			// no working_tree_ref — legacy state file
+		};
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify(state),
+		);
+
+		const result = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(result.clean).toBe(true);
+		expect(result.reason).toBe("commit merged");
+		expect(result.resetState).toBe(true);
 
 		branchSpy.mockRestore();
 		mergedSpy.mockRestore();
