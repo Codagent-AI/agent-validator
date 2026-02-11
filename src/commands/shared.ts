@@ -49,14 +49,20 @@ export async function shouldAutoClean(
 		return { clean: false };
 	}
 
-	// Check if commit was merged into base branch
-	try {
-		const isMerged = await isCommitInBranch(state.commit, baseBranch);
-		if (isMerged) {
-			return { clean: true, reason: "commit merged", resetState: true };
+	// Check if commit was merged into base branch.
+	// Skip this check when working_tree_ref differs from commit, which indicates
+	// uncommitted changes were captured. In that case, the execution state still
+	// holds meaningful context (the working tree snapshot) and cleaning would
+	// destroy the retry counter and narrowed diff capability.
+	if (!state.working_tree_ref || state.working_tree_ref === state.commit) {
+		try {
+			const isMerged = await isCommitInBranch(state.commit, baseBranch);
+			if (isMerged) {
+				return { clean: true, reason: "commit merged", resetState: true };
+			}
+		} catch {
+			// If we can't check merge status, don't auto-clean
 		}
-	} catch {
-		// If we can't check merge status, don't auto-clean
 	}
 
 	return { clean: false };
