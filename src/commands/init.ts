@@ -144,12 +144,24 @@ const GAUNTLET_STATUS_SKILL_CONTENT = readSkillTemplate("status.md");
 const HELP_SKILL_BUNDLE = {
 	content: readSkillTemplate("help-skill.md"),
 	references: {
-		"stop-hook-troubleshooting.md": readSkillTemplate("help-ref-stop-hook-troubleshooting.md"),
-		"config-troubleshooting.md": readSkillTemplate("help-ref-config-troubleshooting.md"),
-		"gate-troubleshooting.md": readSkillTemplate("help-ref-gate-troubleshooting.md"),
-		"lock-troubleshooting.md": readSkillTemplate("help-ref-lock-troubleshooting.md"),
-		"adapter-troubleshooting.md": readSkillTemplate("help-ref-adapter-troubleshooting.md"),
-		"ci-pr-troubleshooting.md": readSkillTemplate("help-ref-ci-pr-troubleshooting.md"),
+		"stop-hook-troubleshooting.md": readSkillTemplate(
+			"help-ref-stop-hook-troubleshooting.md",
+		),
+		"config-troubleshooting.md": readSkillTemplate(
+			"help-ref-config-troubleshooting.md",
+		),
+		"gate-troubleshooting.md": readSkillTemplate(
+			"help-ref-gate-troubleshooting.md",
+		),
+		"lock-troubleshooting.md": readSkillTemplate(
+			"help-ref-lock-troubleshooting.md",
+		),
+		"adapter-troubleshooting.md": readSkillTemplate(
+			"help-ref-adapter-troubleshooting.md",
+		),
+		"ci-pr-troubleshooting.md": readSkillTemplate(
+			"help-ref-ci-pr-troubleshooting.md",
+		),
 	},
 };
 
