@@ -92,7 +92,7 @@ When `entry_points` is already populated, the `/gauntlet-setup` skill SHALL offe
 #### Scenario: Reconfigure backs up existing
 - **GIVEN** the user selects "reconfigure" on an existing configuration
 - **WHEN** the agent starts fresh setup
-- **THEN** existing check files and custom review files SHALL be renamed with a `.bak` suffix before being replaced (overwriting any previous `.bak` files)
+- **THEN** existing check files (`.gauntlet/checks/*.yml`) and custom review files (`.gauntlet/reviews/*.md` — reviews with user-authored prompts, not built-in `.yml` references) SHALL be renamed with a `.bak` suffix before being replaced (overwriting any previous `.bak` files)
 
 ### Requirement: Setup Skill Custom Additions
 

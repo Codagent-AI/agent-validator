@@ -185,6 +185,8 @@ The gauntlet-help skill is for diagnosing runtime behavior. The setup skill is f
 
 This change removes `promptForConfig`, `generateConfigYml`, `promptAndInstallStopHook`, `isInteractive`, `parseSelections`, `buildAdapterSettings`, and simplifies `registerInitCommand`. This effectively serves as the refactoring — the problematic functions are deleted rather than refactored. The remaining `buildHelpSkillBundle` (621 lines) is out of scope.
 
+**Known new smell**: `installCursorStopHook` mirrors `installStopHook`, introducing a Code Duplication warning. The two functions handle structurally different JSON formats (Claude: nested `hooks.Stop[].hooks[].command` with `type`/`timeout`; Cursor: flat `hooks.stop[].command` with `loop_limit` and top-level `version`), so a shared abstraction would add more complexity than it removes. Accepted as tech debt.
+
 ## Testing
 
 - Update `test/commands/init.test.ts`:

@@ -51,9 +51,8 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 }));
 
 // Import after mocking
-const { registerInitCommand, installStopHook } = await import(
-	"../../src/commands/init.js"
-);
+const { registerInitCommand, installStopHook, installCursorStopHook } =
+	await import("../../src/commands/init.js");
 
 describe("Init Command", () => {
 	let program: Command;
@@ -125,10 +124,6 @@ describe("Init Command", () => {
 		expect(configContent).toContain("mock-cli-1"); // Should be present
 		expect(configContent).not.toContain("mock-cli-2"); // Should not be present (unavailable)
 
-		// Verify config references code-quality review (file-based, not built-in: prefix)
-		expect(configContent).toContain("code-quality");
-		expect(configContent).not.toContain("built-in:code-quality");
-
 		// Verify YAML review file was created
 		const reviewFiles = await fs.readdir(reviewsDir);
 		expect(reviewFiles).toContain("code-quality.yml");
@@ -137,7 +132,13 @@ describe("Init Command", () => {
 			"utf-8",
 		);
 		expect(reviewContent).toContain("builtin: code-quality");
-		expect(reviewContent).toContain("num_reviews: 2");
+		expect(reviewContent).toContain("num_reviews: 1");
+
+		// Verify entry_points configuration
+		expect(configContent).toContain("entry_points: []");
+		expect(configContent).toContain(
+			"# entry_points configured by /gauntlet-setup",
+		);
 	});
 
 	it("should not create directory if .gauntlet already exists", async () => {
@@ -149,6 +150,52 @@ describe("Init Command", () => {
 
 		const output = logs.join("\n");
 		expect(output).toContain(".gauntlet directory already exists");
+	});
+
+	it("should create config with empty entry_points", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const configContent = await fs.readFile(
+			path.join(TEST_DIR, ".gauntlet", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("entry_points: []");
+		expect(configContent).toContain(
+			"# entry_points configured by /gauntlet-setup",
+		);
+	});
+
+	it("should create reviews/code-quality.yml with num_reviews: 1", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const reviewContent = await fs.readFile(
+			path.join(TEST_DIR, ".gauntlet", "reviews", "code-quality.yml"),
+			"utf-8",
+		);
+		expect(reviewContent).toContain("num_reviews: 1");
+		expect(reviewContent).toContain("builtin: code-quality");
+	});
+
+	it("should print next-step message", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const output = logs.join("\n");
+		expect(output).toContain("/gauntlet-setup");
+	});
+
+	it("should not prompt for base branch, lint, or test commands", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const output = logs.join("\n");
+		expect(output).not.toContain("base branch");
+		expect(output).not.toContain("lint command");
+		expect(output).not.toContain("test command");
+	});
+
+	it("should auto-detect base branch with fallback to origin/main", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const configContent = await fs.readFile(
+			path.join(TEST_DIR, ".gauntlet", "config.yml"),
+			"utf-8",
+		);
+		// Should have some base_branch set (either auto-detected or fallback)
+		expect(configContent).toMatch(/base_branch: origin\//);
 	});
 });
 
@@ -331,6 +378,113 @@ describe("Stop Hook Installation", () => {
 				"gauntlet will run automatically when agent stops",
 			);
 		});
+	});
+});
+
+describe("Cursor Stop Hook Installation", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(async () => {
+		console.log = originalConsoleLog;
+		process.chdir(originalCwd);
+		await fs
+			.rm(path.join(TEST_DIR, ".cursor"), { recursive: true, force: true })
+			.catch(() => {});
+	});
+
+	it("should create .cursor/ directory if it doesn't exist", async () => {
+		await installCursorStopHook(TEST_DIR);
+		const cursorDir = path.join(TEST_DIR, ".cursor");
+		const stat = await fs.stat(cursorDir);
+		expect(stat.isDirectory()).toBe(true);
+	});
+
+	it("should create hooks.json with correct format", async () => {
+		await installCursorStopHook(TEST_DIR);
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		const config = JSON.parse(content);
+		expect(config.version).toBe(1);
+		expect(Array.isArray(config.hooks.stop)).toBe(true);
+		expect(config.hooks.stop.length).toBe(1);
+		expect(config.hooks.stop[0].command).toBe("agent-gauntlet stop-hook");
+		expect(config.hooks.stop[0].loop_limit).toBe(10);
+	});
+
+	it("should merge with existing hooks.json", async () => {
+		await fs.mkdir(path.join(TEST_DIR, ".cursor"), { recursive: true });
+		await fs.writeFile(
+			path.join(TEST_DIR, ".cursor", "hooks.json"),
+			JSON.stringify({
+				version: 1,
+				hooks: {
+					start: [{ command: "echo hello" }],
+				},
+			}),
+		);
+
+		await installCursorStopHook(TEST_DIR);
+
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		const config = JSON.parse(content);
+		// Should preserve existing hooks
+		expect(config.hooks.start).toBeDefined();
+		expect(config.hooks.start[0].command).toBe("echo hello");
+		// Should add stop hooks
+		expect(config.hooks.stop).toBeDefined();
+		expect(config.hooks.stop[0].command).toBe("agent-gauntlet stop-hook");
+	});
+
+	it("should skip if already installed", async () => {
+		await fs.mkdir(path.join(TEST_DIR, ".cursor"), { recursive: true });
+		await fs.writeFile(
+			path.join(TEST_DIR, ".cursor", "hooks.json"),
+			JSON.stringify({
+				version: 1,
+				hooks: {
+					stop: [{ command: "agent-gauntlet stop-hook", loop_limit: 10 }],
+				},
+			}),
+		);
+
+		await installCursorStopHook(TEST_DIR);
+
+		const output = logs.join("\n");
+		expect(output).toContain("already installed");
+		// Should not duplicate
+		const content = await fs.readFile(
+			path.join(TEST_DIR, ".cursor", "hooks.json"),
+			"utf-8",
+		);
+		const config = JSON.parse(content);
+		expect(config.hooks.stop.length).toBe(1);
+	});
+
+	it("should output properly formatted JSON", async () => {
+		await installCursorStopHook(TEST_DIR);
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		expect(content.includes("\n")).toBe(true);
+		expect(content.includes('  "version"')).toBe(true);
 	});
 });
 
@@ -530,7 +684,7 @@ describe("Skills Installation for Claude", () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const skillsDir = path.join(TEST_DIR, ".claude-mock", "skills");
-		const actions = ["run", "check", "push-pr", "fix-pr", "status", "help"];
+		const actions = ["run", "check", "push-pr", "fix-pr", "status", "help", "setup"];
 
 		for (const action of actions) {
 			const skillPath = path.join(skillsDir, `gauntlet-${action}`, "SKILL.md");
@@ -680,5 +834,76 @@ describe("Skills Installation for Claude", () => {
 			"utf-8",
 		);
 		expect(content).toBe("# My custom run skill");
+	});
+
+	it("should install gauntlet-setup SKILL.md for Claude", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const setupSkillPath = path.join(
+			TEST_DIR,
+			".claude-mock",
+			"skills",
+			"gauntlet-setup",
+			"SKILL.md",
+		);
+		const stat = await fs.stat(setupSkillPath);
+		expect(stat.isFile()).toBe(true);
+
+		const content = await fs.readFile(setupSkillPath, "utf-8");
+		expect(content).toContain("name: gauntlet-setup");
+		expect(content).toContain("Scan project");
+	});
+
+	it("should install check-catalog.md reference for gauntlet-setup", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const catalogPath = path.join(
+			TEST_DIR,
+			".claude-mock",
+			"skills",
+			"gauntlet-setup",
+			"references",
+			"check-catalog.md",
+		);
+		const stat = await fs.stat(catalogPath);
+		expect(stat.isFile()).toBe(true);
+
+		const content = await fs.readFile(catalogPath, "utf-8");
+		expect(content.length).toBeGreaterThan(100);
+		// Should have check categories
+		expect(content).toContain("build");
+		expect(content).toContain("lint");
+		expect(content).toContain("test");
+	});
+
+	it("should not install gauntlet-setup for non-Claude adapters", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const otherDir = path.join(TEST_DIR, ".other-mock");
+		const files = await fs.readdir(otherDir);
+		expect(files).not.toContain("setup.md");
+		expect(files).not.toContain("gauntlet-setup.md");
+	});
+
+	it("should preserve existing gauntlet-setup skill files", async () => {
+		const existingDir = path.join(
+			TEST_DIR,
+			".claude-mock",
+			"skills",
+			"gauntlet-setup",
+		);
+		await fs.mkdir(existingDir, { recursive: true });
+		await fs.writeFile(
+			path.join(existingDir, "SKILL.md"),
+			"# My custom setup skill",
+		);
+
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const content = await fs.readFile(
+			path.join(existingDir, "SKILL.md"),
+			"utf-8",
+		);
+		expect(content).toBe("# My custom setup skill");
 	});
 });

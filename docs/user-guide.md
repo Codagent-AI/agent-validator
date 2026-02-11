@@ -98,26 +98,35 @@ This creates:
 
 ```text
 .gauntlet/
-  config.yml
+  config.yml              # entry_points: [] (empty)
   reviews/
-    code-quality.md
+    code-quality.yml      # built-in code-quality review
 ```
 
-### 2) Add check gates (optional)
+It also auto-installs stop hooks for Claude Code and Cursor (if selected) and installs the `/gauntlet-setup` skill.
 
-Create YAML files under `.gauntlet/checks/`, e.g. `.gauntlet/checks/lint.yml`:
+### 2) Configure checks and reviews
+
+Run the `/gauntlet-setup` skill in your AI agent session:
+
+```
+/gauntlet-setup
+```
+
+The setup skill scans your project, discovers available tooling (linters, test runners, type checkers, etc.), and configures checks and entry points in `.gauntlet/config.yml`. See the [Skills Guide](skills-guide.md) for details.
+
+### 3) Add additional gates (optional)
+
+You can manually add check or review gates at any time, or re-run `/gauntlet-setup` to add more.
+
+**Check gate example** (`.gauntlet/checks/lint.yml`):
 
 ```yaml
-name: lint
-command: bun test
+command: npx eslint .
 working_directory: .
 ```
 
-### 3) Add review gates (optional)
-
-Create Markdown files under `.gauntlet/reviews/`. The **filename without `.md`** is the gate name.
-
-Example: `.gauntlet/reviews/architecture.md`
+**Review gate example** (`.gauntlet/reviews/architecture.md`):
 
 ```markdown
 ---
@@ -137,7 +146,7 @@ Review the diff for architectural issues. End your response with PASS if all is 
 
 ### 4) Wire gates to entry points
 
-Edit `.gauntlet/config.yml` and add `entry_points` that reference your check/review names.
+Edit `.gauntlet/config.yml` and add `entry_points` that reference your check/review names (or let `/gauntlet-setup` handle this).
 
 ## Commands
 
@@ -230,30 +239,26 @@ Checks availability of supported review CLIs (`gemini`, `codex`, `claude`, `gith
 
 ### `agent-gauntlet init`
 
-Creates `.gauntlet/` with a minimal starter config and a sample review prompt.
+Creates `.gauntlet/` with a minimal starter config and a sample review definition.
 
 ```text
 .gauntlet/
-  config.yml           # Entry points and settings
-  checks/              # Check gate definitions
+  config.yml              # Entry points and settings (entry_points starts empty)
+  checks/                 # Check gate definitions (populated by /gauntlet-setup)
   reviews/
-    code-quality.md    # Sample review prompt
+    code-quality.yml      # Built-in code-quality review (num_reviews: 1)
 ```
 
-Optionally installs gauntlet skills for your CLI agents. See the [Skills Guide](skills-guide.md) for details.
+The `init` command handles mechanical setup only:
 
-#### Interactive prompts
+1. **Detects available CLIs** and prompts you to select which ones to use
+2. **Auto-detects base branch** from the git remote (falls back to `origin/main`)
+3. **Creates the `.gauntlet/` directory** with a config skeleton (`entry_points: []`) and the built-in code-quality review
+4. **Installs skills/commands** for your selected CLI agents (see [Skills Guide](skills-guide.md))
+5. **Auto-installs stop hooks** for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) if they are among the selected CLIs -- no prompt required
+6. **Prints next step**: "Run `/gauntlet-setup` to configure your checks and reviews"
 
-When run interactively, `init` prompts you to set up CLI agent skills:
-
-1. **Installation level**: Choose where to install skills/commands:
-   - Don't install commands
-   - Project level (`.claude/skills/`, `.gemini/commands/`, etc.)
-   - User level (`~/.claude/skills/`, `~/.gemini/commands/`, etc.)
-
-2. **Agent selection**: Choose which CLI agents to install for (Claude, Gemini, Codex, or all)
-
-Once installed, you can invoke skills directly in your CLI agent session (e.g., `/gauntlet-run`, `/gauntlet-check`). See the [Skills Guide](skills-guide.md) for the full list.
+After `init`, run `/gauntlet-setup` in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
 
 #### Options
 

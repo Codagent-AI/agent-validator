@@ -20,10 +20,15 @@ Initialize configuration in your project root:
 agent-gauntlet init
 ```
 
-This creates the `.gauntlet/` directory with:
-- Configuration files for checks, reviews, and entry points (see [Configuration Layout](#configuration-layout))
+This creates the `.gauntlet/` directory with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout)). It prompts you to select which CLIs to use, auto-detects the base branch, installs skills for your AI agents, and auto-installs stop hooks for Claude Code and Cursor.
 
-Optionally, the interactive setup can also install gauntlet skills for your AI agents (Claude, Gemini, etc.). See the [Skills Guide](skills-guide.md) for details.
+After init, configure your checks and reviews by running the setup skill in your AI agent session:
+
+```
+/gauntlet-setup
+```
+
+The setup skill scans your project, discovers available tooling (linters, test runners, type checkers, etc.), and configures checks and entry points in `.gauntlet/config.yml`. See the [Skills Guide](skills-guide.md) for details.
 
 ## Configuration Concepts
 
@@ -59,20 +64,33 @@ Agent Gauntlet loads configuration from your repository:
 
 ```text
 .gauntlet/
-  config.yml
+  config.yml          # entry_points starts as [] after init
   checks/
-    *.yml
+    *.yml             # populated by /gauntlet-setup or manually
   reviews/
-    *.md
+    *.md | *.yml      # code-quality.yml created by init
 ```
 
 - **Project config**: `.gauntlet/config.yml`
 - **Check definitions**: `.gauntlet/checks/*.yml`
-- **Review definitions**: `.gauntlet/reviews/*.md` (filename is the review name)
+- **Review definitions**: `.gauntlet/reviews/*.md` or `.gauntlet/reviews/*.yml` (filename is the review name)
 
 ## Example Configuration
 
-Here's a real-world configuration from the Agent Gauntlet project itself:
+After running `agent-gauntlet init`, your `config.yml` starts with empty entry points:
+
+```yaml
+base_branch: origin/main
+log_dir: gauntlet_logs
+cli:
+  default_preference:
+    - claude
+    - gemini
+# entry_points configured by /gauntlet-setup
+entry_points: []
+```
+
+After running `/gauntlet-setup`, a real-world configuration might look like this:
 
 ### config.yml
 
@@ -184,11 +202,13 @@ This creates:
 
 Your local check definitions (`.gauntlet/checks/*.yml`) are automatically used in CI. The `ci.yml` file lets you configure additional CI-specific settings like database services or runtime versions.
 
-## Stop Hook (Claude Code Integration)
+## Stop Hook (Claude Code & Cursor Integration)
 
 The stop hook automatically runs the gauntlet when an AI agent tries to stop working, ensuring all gates pass before completion.
 
-**Quick setup for Claude Code:**
+**Automatic setup:** Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) when they are among the selected CLIs. No manual configuration is needed.
+
+**Manual setup for Claude Code** (if not using `init`):
 
 Add this to your Claude Code settings (`.claude/settings.json` or via `claude settings`):
 

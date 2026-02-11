@@ -6,6 +6,7 @@ Agent Gauntlet installs **skills** (for Claude Code) and **flat commands** (for 
 
 | Skill | Invocation | Description |
 |-------|-----------|-------------|
+| Setup | `/gauntlet-setup` | Scan project and configure checks and reviews |
 | Run | `/gauntlet-run` | Run the full verification suite (checks + reviews) |
 | Check | `/gauntlet-check` | Run checks only (no AI reviews) |
 | Push PR | `/gauntlet-push-pr` | Commit, push, and create/update a pull request |
@@ -24,6 +25,9 @@ For **Claude Code**, skills are installed as directory-based `SKILL.md` files:
 
 ```text
 .claude/skills/
+  gauntlet-setup/SKILL.md
+  gauntlet-setup/references/
+    check-catalog.md
   gauntlet-run/SKILL.md
   gauntlet-check/SKILL.md
   gauntlet-push-pr/SKILL.md
@@ -51,6 +55,20 @@ For **other CLI agents** (Gemini, Codex, etc.), a subset is installed as flat co
 Non-Claude agents receive only `run`, `push-pr`, and `fix-pr` (not `check`, `status`, or `help`).
 
 ## Usage
+
+### /gauntlet-setup
+
+Scans the project and configures checks and reviews. This is a multi-file skill (`SKILL.md` + `references/check-catalog.md`).
+
+**Workflow:**
+1. Reads `.gauntlet/config.yml` to check current state
+2. If `entry_points` is empty (fresh setup): scans the project for tooling signals across 6 categories (build, lint, typecheck, test, security-deps, security-code)
+3. If `entry_points` is populated (existing setup): offers options to add checks, add custom gates, or reconfigure
+4. Presents discovered checks and asks for confirmation
+5. Creates check YAML files and updates `entry_points` in `config.yml`
+6. Validates the configuration with `agent-gauntlet validate`
+
+Run this skill after `agent-gauntlet init` to complete your setup.
 
 ### /gauntlet-run
 
