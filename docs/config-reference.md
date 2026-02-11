@@ -59,10 +59,12 @@ This document lists the configuration files Agent Gauntlet loads and all support
     Minimum minutes between gauntlet runs. Set to `0` to always run the gauntlet on every stop attempt.
   - **auto_push_pr**: boolean (optional; default `false`)
     When enabled, the stop hook checks whether a PR exists and is up to date after gates pass. If no PR exists or the PR HEAD doesn't match the local HEAD, the hook blocks with `pr_push_required` and provides instructions for creating/updating a PR.
+
+  Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`). No manual setup is required.
 - **auto_fix_pr**: boolean (optional; default `false`)
   When enabled (and `auto_push_pr` is also enabled), the stop hook waits for CI checks after a PR is created. If checks fail or blocking reviews are present, it blocks with fix instructions; if checks pass, it approves.
-- **entry_points**: array (required)  
-  Declares which parts of the repo are “scopes” for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs.
+- **entry_points**: array (required)
+  Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-gauntlet init`, this starts as `[]` (empty) and is populated by the `/gauntlet-setup` skill.
   - **path**: string (required)  
     The scope path for the entry point. Supports fixed paths like `apps/api` and a trailing wildcard form like `packages/*` which expands to one job per changed subdirectory.
   - **checks**: string[] (optional; names of gates from `.gauntlet/checks/*.yml`)  
@@ -230,7 +232,7 @@ cli_preference:
   - codex
   - claude
   - github-copilot
-num_reviews: 2
+num_reviews: 1
 timeout: 120
 ---
 
