@@ -68,12 +68,12 @@ Agent Gauntlet loads configuration from your repository:
   checks/
     *.yml             # populated by /gauntlet-setup or manually
   reviews/
-    *.md | *.yml      # code-quality.yml created by init
+    code-quality.yml  # created by init
 ```
 
 - **Project config**: `.gauntlet/config.yml`
 - **Check definitions**: `.gauntlet/checks/*.yml`
-- **Review definitions**: `.gauntlet/reviews/*.md` or `.gauntlet/reviews/*.yml` (filename is the review name)
+- **Review definitions**: `.gauntlet/reviews/*.yml` (filename is the review name)
 
 ## Example Configuration
 

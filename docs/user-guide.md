@@ -109,7 +109,7 @@ It also auto-installs stop hooks for Claude Code and Cursor (if selected) and in
 
 Run the `/gauntlet-setup` skill in your AI agent session:
 
-```
+```text
 /gauntlet-setup
 ```
 

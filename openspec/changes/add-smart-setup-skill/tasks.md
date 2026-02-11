@@ -49,25 +49,6 @@ Note: The `/gauntlet-setup` skill behavior (existing config options, add-check f
 - [ ] 3.3 Update `docs/quick-start.md` — Update the init steps to reflect the simplified flow and add the `/gauntlet-setup` step.
 - [ ] 3.4 Update `docs/skills-guide.md` — Add `/gauntlet-setup` to the list of available skills.
 
-## 4. Manual Verification
+## 4. Validation
 
-- [ ] 4.1 Verify no interactive prompts remain for base branch, lint command, or test command: `grep -n "promptForConfig\|lintCmd\|testCmd\|baseBranchInput\|sourceDirInput" src/commands/init.ts` — expect zero matches.
-- [ ] 4.2 Verify no stop hook prompt remains: `grep -n "promptAndInstallStopHook\|Install Claude Code stop hook" src/commands/init.ts` — expect zero matches.
-- [ ] 4.3 Verify `/gauntlet-setup` missing config guard: Run `/gauntlet-setup` in a project without `.gauntlet/config.yml`. Confirm the agent informs the user to run `agent-gauntlet init` first and does not proceed with scanning or writing files.
-- [ ] 4.4 Verify `/gauntlet-setup` fresh setup flow: Run `/gauntlet-setup` in a project with `entry_points: []`. Confirm the agent scans the project, presents a table of discovered checks, and asks for confirmation. Expected artifacts: `.gauntlet/checks/<name>.yml` files for confirmed checks, updated `entry_points` in config.yml including `code-quality` review.
-- [ ] 4.5 Verify `/gauntlet-setup` existing config flow: Run `/gauntlet-setup` in a project with populated `entry_points`. Confirm the agent shows current config summary and offers three options (add checks, add custom, reconfigure). Expected: existing entry_points displayed correctly, options presented.
-- [ ] 4.6 Verify `/gauntlet-setup` reconfigure flow: Select "reconfigure" on a project with existing checks and custom reviews. Confirm existing `.gauntlet/checks/*.yml` files and custom `.gauntlet/reviews/*.md` files are renamed with `.bak` suffix before replacement. Expected: `<name>.yml.bak` and `<name>.md.bak` files alongside new files.
-- [ ] 4.7 Verify `/gauntlet-setup` add-check filtering: Run "add checks" on a project that already has some checks configured. Confirm already-configured checks are excluded from scan results. Expected: only unconfigured tools appear in the results table.
-- [ ] 4.8 Verify `/gauntlet-setup` validation recovery: Intentionally create an invalid check file, then run setup. Confirm the agent detects the `validate` failure, applies one corrective attempt, reruns validate, and either succeeds or stops and asks for guidance. Expected: at most two validate runs before resolution or user prompt.
-- [ ] 4.9 Verify `/gauntlet-setup` no-tools-discovered flow: Run `/gauntlet-setup` in a minimal project with no recognizable tooling signals (no package.json, Makefile, etc.). Confirm the agent reports no tools detected and offers the custom addition flow. Expected: no check table shown, agent transitions to custom check/review prompts.
-- [ ] 4.10 Verify custom check/review addition flow: Run `/gauntlet-setup`, choose "add custom", add a custom check and a custom review. Expected: `.gauntlet/checks/<name>.yml` created for the check, `.gauntlet/reviews/<name>.md` (or `.yml` for built-in) created for the review, both referenced in `entry_points`.
-- [ ] 4.11 Verify "add something else" loop: After adding a custom item, confirm the agent asks if user wants to add more. Select yes, add another item, then select no. Expected: agent proceeds to validation after the user declines to add more.
-- [ ] 4.12 Verify "decline all discovered checks" flow: Run `/gauntlet-setup` fresh, decline all discovered checks. Confirm the agent offers the custom addition flow and that `code-quality` review is still included in `entry_points` regardless.
-
-## 5. Validation
-
-If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.
-
-- [ ] 5.1 Run the full test suite: `bun test` — all tests must pass.
-- [ ] 5.2 Run the linter: `bun run lint` — no errors.
-- [ ] 5.3 Run `openspec validate` — change must pass validation.
+The gauntlet suite will run all automated checks (tests, linting, openspec validation).
