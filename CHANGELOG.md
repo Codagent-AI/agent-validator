@@ -1,5 +1,15 @@
 # agent-gauntlet
 
+## 0.13.0
+
+### Minor Changes
+
+- [#55](https://github.com/pacaplan/agent-gauntlet/pull/55) Improve `gauntlet init` command UX with better defaults, streamlined prompts, and a more intuitive setup flow
+
+### Patch Changes
+
+- [#56](https://github.com/pacaplan/agent-gauntlet/pull/56) Add time-window based loop detection for the stop hook, preventing repeated stop-hook triggers within a configurable time window
+
 ## 0.12.0
 
 ### Minor Changes
