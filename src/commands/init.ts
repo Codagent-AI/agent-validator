@@ -167,6 +167,10 @@ const SETUP_SKILL_CONTENT = readSkillTemplate("setup-skill.md");
 
 const CHECK_CATALOG_REFERENCE = readSkillTemplate("check-catalog.md");
 
+const PROJECT_STRUCTURE_REFERENCE = readSkillTemplate(
+	"setup-ref-project-structure.md",
+);
+
 /**
  * Skill definitions used by installCommands.
  * Each entry maps a skill action name to its content and metadata.
@@ -186,7 +190,10 @@ const SKILL_DEFINITIONS = [
 	{
 		action: "setup",
 		content: SETUP_SKILL_CONTENT,
-		references: { "check-catalog.md": CHECK_CATALOG_REFERENCE },
+		references: {
+			"check-catalog.md": CHECK_CATALOG_REFERENCE,
+			"project-structure.md": PROJECT_STRUCTURE_REFERENCE,
+		},
 		skillsOnly: true,
 	},
 ] as const;

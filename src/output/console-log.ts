@@ -4,7 +4,7 @@ import path from "node:path";
 import { inspect } from "node:util";
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Required for ANSI escape code stripping
-const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
+const ANSI_REGEX = /\x1b(?:\[[0-9;?]*[A-Za-z]|[78])/g;
 
 function stripAnsi(text: string): string {
 	return text.replace(ANSI_REGEX, "");
