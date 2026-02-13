@@ -67,7 +67,7 @@ allowed-tools: Bash
 		steps.push(
 			`3. If it fails:
    - Identify the failed gates from the console output.
-   - For CHECK failures: Read the \`.log\` file path provided in the output.
+   - For CHECK failures: Read the \`.log\` file path provided in the output. If the log contains a \`--- Fix Instructions ---\` section, follow those instructions to fix the issue. If it contains a \`--- Fix Skill: <name> ---\` section, invoke that skill.
    - For REVIEW failures: Read the \`.json\` file path provided in the "Review: <path>" output.
 4. Address the violations:
    - For REVIEW violations: You MUST update the \`"status"\` and \`"result"\` fields in the provided \`.json\` file for EACH violation.
@@ -88,7 +88,7 @@ allowed-tools: Bash
 	} else {
 		steps.push(
 			`3. If any checks fail:
-   - Read the \`.log\` file path provided in the output for each failed check.
+   - Read the \`.log\` file path provided in the output for each failed check. If the log contains a \`--- Fix Instructions ---\` section, follow those instructions. If it contains a \`--- Fix Skill: <name> ---\` section, invoke that skill.
    - Fix the issues found.
 4. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries.
 5. Repeat steps 3-4 until all checks pass or you've made 3 attempts.
