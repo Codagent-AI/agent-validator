@@ -21,13 +21,13 @@ export type DebugLogConfig = z.infer<typeof debugLogConfigSchema>;
 const globalConfigSchema = z.object({
 	stop_hook: z
 		.object({
-			enabled: z.boolean().default(true),
+			enabled: z.boolean().default(false),
 			run_interval_minutes: z.number().default(5),
 			auto_push_pr: z.boolean().default(false),
 			auto_fix_pr: z.boolean().default(false),
 		})
 		.default({
-			enabled: true,
+			enabled: false,
 			run_interval_minutes: 5,
 			auto_push_pr: false,
 			auto_fix_pr: false,
@@ -39,7 +39,7 @@ export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
 	stop_hook: {
-		enabled: true,
+		enabled: false,
 		run_interval_minutes: 5,
 		auto_push_pr: false,
 		auto_fix_pr: false,

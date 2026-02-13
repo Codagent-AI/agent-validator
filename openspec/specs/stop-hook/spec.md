@@ -257,13 +257,13 @@ The system MUST support a global configuration file at `~/.config/agent-gauntlet
 - **GIVEN** the file `~/.config/agent-gauntlet/config.yml` exists
 - **AND** it contains only `stop_hook.run_interval_minutes: 15` (no `enabled` field)
 - **WHEN** the stop-hook command reads configuration
-- **THEN** the system SHALL default `enabled` to `true`
+- **THEN** the system SHALL default `enabled` to `false`
 - **AND** the system SHALL use 15 minutes as the run interval
 
 #### Scenario: Global config missing
 - **GIVEN** the file `~/.config/agent-gauntlet/config.yml` does not exist
 - **WHEN** the stop-hook command reads configuration
-- **THEN** the system SHALL use defaults: `enabled: true`, `run_interval_minutes: 10`
+- **THEN** the system SHALL use defaults: `enabled: false`, `run_interval_minutes: 5`
 
 #### Scenario: Global config invalid
 - **GIVEN** the global config file contains invalid YAML

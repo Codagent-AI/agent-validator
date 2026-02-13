@@ -545,6 +545,8 @@ describe("auto-clean workflow integration", () => {
 	it("full auto-clean workflow: logs exist + same branch → no clean, rerun mode", async () => {
 		// Write a mock execution state with the current branch but a dummy commit
 		// that cannot be found in origin/main (avoids "commit merged" false positive).
+		// Set working_tree_ref to differ from commit so the merge-base check is
+		// skipped entirely — this avoids shallow-clone issues in CI.
 		const currentBranch = await getCurrentBranch();
 		await fs.writeFile(
 			path.join(TEST_DIR, getExecutionStateFilename()),
@@ -552,6 +554,7 @@ describe("auto-clean workflow integration", () => {
 				last_run_completed_at: new Date().toISOString(),
 				branch: currentBranch,
 				commit: "0000000000000000000000000000000000000000",
+				working_tree_ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			}),
 		);
 

@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import type { Command } from "commander";
@@ -15,14 +14,13 @@ function readSkillTemplate(filename: string): string {
 	return readFileSync(templatePath, "utf-8");
 }
 
-const MAX_PROMPT_ATTEMPTS = 10;
-
-function makeQuestion(rl: readline.Interface) {
-	return (prompt: string): Promise<string> =>
-		new Promise((resolve) =>
-			rl.question(prompt, (a) => resolve(a?.trim() ?? "")),
-		);
-}
+const CLI_PREFERENCE_ORDER = [
+	"codex",
+	"claude",
+	"cursor",
+	"github-copilot",
+	"gemini",
+];
 
 // Recommended adapter config: https://github.com/pacaplan/agent-gauntlet/blob/main/docs/eval-results.md
 type AdapterCfg = { allow_tool_use: boolean; thinking_budget: string };
@@ -203,7 +201,7 @@ export function registerInitCommand(program: Command): void {
 	program
 		.command("init")
 		.description("Initialize .gauntlet configuration")
-		.option("-y, --yes", "Skip prompts and use defaults (all available CLIs)")
+		.option("-y, --yes", "Skip prompts and use defaults")
 		.action(async (options: InitOptions) => {
 			const projectRoot = process.cwd();
 			const targetDir = path.join(projectRoot, ".gauntlet");
@@ -218,106 +216,188 @@ export function registerInitCommand(program: Command): void {
 			const availableAdapters = await detectAvailableCLIs();
 
 			if (availableAdapters.length === 0) {
-				console.log();
-				console.log(
-					chalk.red("Error: No CLI agents found. Install at least one:"),
-				);
-				console.log(
-					"  - Claude: https://docs.anthropic.com/en/docs/claude-code",
-				);
-				console.log("  - Gemini: https://github.com/google-gemini/gemini-cli");
-				console.log("  - Codex: https://github.com/openai/codex");
-				console.log();
+				printNoCLIsMessage();
 				return;
 			}
 
-			// 2. Auto-detect base branch
-			const baseBranch = await detectBaseBranch();
+			// 2. Scaffold .gauntlet directory, config, reviews, skills
+			await scaffoldProject({
+				projectRoot,
+				targetDir,
+				availableAdapters,
+				skipPrompts: options.yes ?? false,
+			});
 
-			// 3. Create base directory structure
-			await fs.mkdir(targetDir);
-			await fs.mkdir(path.join(targetDir, "checks"));
-			await fs.mkdir(path.join(targetDir, "reviews"));
-
-			// 4. Build the commands list from skill definitions
-			const commands: SkillCommand[] = SKILL_DEFINITIONS.map((skill) => ({
-				action: skill.action,
-				content: skill.content,
-				...("references" in skill ? { references: skill.references } : {}),
-				...("skillsOnly" in skill ? { skillsOnly: skill.skillsOnly } : {}),
-			}));
-
-			// 5. Handle command installation and track which CLIs were selected
-			let installedNames: string[];
-			if (options.yes) {
-				installedNames = availableAdapters.map((a) => a.name);
-				const adaptersToInstall = availableAdapters.filter(
-					(a) =>
-						a.getProjectCommandDir() !== null ||
-						a.getProjectSkillDir() !== null,
-				);
-				if (adaptersToInstall.length > 0) {
-					await installCommands({
-						level: "project",
-						agentNames: adaptersToInstall.map((a) => a.name),
-						projectRoot,
-						commands,
-					});
-				}
-			} else {
-				installedNames = await promptAndInstallCommands({
-					projectRoot,
-					commands,
-					availableAdapters,
-				});
+			// 3. Auto-install stop hooks for detected CLIs
+			if (availableAdapters.some((a) => a.name === "claude")) {
+				await installStopHook(projectRoot);
+			}
+			if (availableAdapters.some((a) => a.name === "cursor")) {
+				await installCursorStopHook(projectRoot);
 			}
 
-			// 6. Generate config.yml — list all available CLIs in default_preference
-			const cliList = availableAdapters
-				.map((a) => `    - ${a.name}`)
-				.join("\n");
-			const adapterSettings = buildAdapterSettingsBlock(availableAdapters);
-			const configContent = `base_branch: ${baseBranch}
-log_dir: gauntlet_logs
+			// 4. Add log directory to .gitignore
+			await addToGitignore(projectRoot, "gauntlet_logs");
 
-# Run gates in parallel when possible (default: true)
-# allow_parallel: true
+			// 5. Next-step message
+			console.log();
+			console.log(
+				chalk.bold("Run /gauntlet-setup to configure your checks and reviews"),
+			);
+		});
+}
 
+function printNoCLIsMessage(): void {
+	console.log();
+	console.log(chalk.red("Error: No CLI agents found. Install at least one:"));
+	console.log("  - Claude: https://docs.anthropic.com/en/docs/claude-code");
+	console.log("  - Gemini: https://github.com/google-gemini/gemini-cli");
+	console.log("  - Codex: https://github.com/openai/codex");
+	console.log();
+}
+
+interface ScaffoldOptions {
+	projectRoot: string;
+	targetDir: string;
+	availableAdapters: CLIAdapter[];
+	skipPrompts: boolean;
+}
+
+async function scaffoldProject(options: ScaffoldOptions): Promise<void> {
+	const { projectRoot, targetDir, availableAdapters, skipPrompts } = options;
+
+	// Create base directory structure
+	await fs.mkdir(targetDir);
+	await fs.mkdir(path.join(targetDir, "checks"));
+	await fs.mkdir(path.join(targetDir, "reviews"));
+
+	// Build and install skills
+	const commands: SkillCommand[] = SKILL_DEFINITIONS.map((skill) => ({
+		action: skill.action,
+		content: skill.content,
+		...("references" in skill ? { references: skill.references } : {}),
+		...("skillsOnly" in skill ? { skillsOnly: skill.skillsOnly } : {}),
+	}));
+
+	if (skipPrompts) {
+		await installCommands({
+			level: "project",
+			agentNames: ["claude"],
+			projectRoot,
+			commands,
+		});
+	} else {
+		await promptAndInstallCommands({ projectRoot, commands });
+	}
+
+	// Generate config.yml
+	await writeConfigYml(targetDir, availableAdapters);
+
+	// Default code review
+	await fs.writeFile(
+		path.join(targetDir, "reviews", "code-quality.yml"),
+		"builtin: code-quality\nnum_reviews: 1\n",
+	);
+	console.log(chalk.green("Created .gauntlet/reviews/code-quality.yml"));
+
+	// Copy status script bundle
+	await copyStatusScript(targetDir);
+}
+
+async function writeConfigYml(
+	targetDir: string,
+	adapters: CLIAdapter[],
+): Promise<void> {
+	const baseBranch = await detectBaseBranch();
+	const sortedAdapters = [...adapters].sort(
+		(a, b) =>
+			CLI_PREFERENCE_ORDER.indexOf(a.name) -
+			CLI_PREFERENCE_ORDER.indexOf(b.name),
+	);
+	const cliList = sortedAdapters.map((a) => `    - ${a.name}`).join("\n");
+	const adapterSettings = buildAdapterSettingsBlock(adapters);
+
+	const content = `# Ordered list of CLI agents to try for reviews
 cli:
   default_preference:
 ${cliList}
 ${adapterSettings}
 # entry_points configured by /gauntlet-setup
 entry_points: []
+
+# -------------------------------------------------------------------
+# All settings below are optional. Uncomment and change as needed.
+# -------------------------------------------------------------------
+
+# Git ref for detecting local changes via git diff (default: origin/main)
+# base_branch: ${baseBranch}
+
+# Directory for per-job logs (default: gauntlet_logs)
+# log_dir: gauntlet_logs
+
+# Run gates in parallel when possible (default: true)
+# allow_parallel: true
+
+# Maximum retry attempts before declaring "Retry limit exceeded" (default: 3)
+# max_retries: 3
+
+# Archived session directories to keep during log rotation (default: 3, 0 = disable)
+# max_previous_logs: 3
+
+# Priority threshold for filtering new violations during reruns (default: medium)
+# Options: critical, high, medium, low
+# rerun_new_issue_threshold: medium
+
+# Stop hook — auto-run gauntlet when the agent stops
+# Precedence: env vars > project config > global config (~/.config/agent-gauntlet/config.yml)
+# Env overrides: GAUNTLET_STOP_HOOK_ENABLED, GAUNTLET_STOP_HOOK_INTERVAL_MINUTES,
+#                GAUNTLET_AUTO_PUSH_PR, GAUNTLET_AUTO_FIX_PR
+# stop_hook:
+#   enabled: false
+#   run_interval_minutes: 5       # Minimum minutes between runs (0 = always run)
+#   auto_push_pr: false           # Check/create PR after gates pass
+#   auto_fix_pr: false            # Wait for CI checks after PR (requires auto_push_pr)
+
+# Debug log — persistent debug logging to .debug.log
+# debug_log:
+#   enabled: false
+#   max_size_mb: 10               # Max size before rotation to .debug.log.1
+
+# Structured logging via LogTape
+# logging:
+#   level: debug                  # Options: debug, info, warning, error
+#   console:
+#     enabled: true
+#     format: pretty              # Options: pretty, json
+#   file:
+#     enabled: true
+#     format: text                # Options: text, json
 `;
-			await fs.writeFile(path.join(targetDir, "config.yml"), configContent);
-			console.log(chalk.green("Created .gauntlet/config.yml"));
+	await fs.writeFile(path.join(targetDir, "config.yml"), content);
+	console.log(chalk.green("Created .gauntlet/config.yml"));
+}
 
-			// 7. Default code review (num_reviews: 1)
-			const reviewYamlContent = `builtin: code-quality\nnum_reviews: 1\n`;
-			await fs.writeFile(
-				path.join(targetDir, "reviews", "code-quality.yml"),
-				reviewYamlContent,
-			);
-			console.log(chalk.green("Created .gauntlet/reviews/code-quality.yml"));
+/**
+ * Append an entry to .gitignore if it isn't already present.
+ */
+async function addToGitignore(
+	projectRoot: string,
+	entry: string,
+): Promise<void> {
+	const gitignorePath = path.join(projectRoot, ".gitignore");
 
-			// 8. Copy status script bundle
-			await copyStatusScript(targetDir);
+	let content = "";
+	if (await exists(gitignorePath)) {
+		content = await fs.readFile(gitignorePath, "utf-8");
+		const lines = content.split("\n").map((l) => l.trim());
+		if (lines.includes(entry)) {
+			return;
+		}
+	}
 
-			// 9. Auto-install stop hooks for selected CLIs
-			if (installedNames.includes("claude")) {
-				await installStopHook(projectRoot);
-			}
-			if (installedNames.includes("cursor")) {
-				await installCursorStopHook(projectRoot);
-			}
-
-			// 10. Next-step message
-			console.log();
-			console.log(
-				chalk.bold("Run /gauntlet-setup to configure your checks and reviews"),
-			);
-		});
+	const suffix = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
+	await fs.appendFile(gitignorePath, `${suffix}${entry}\n`);
+	console.log(chalk.green(`Added ${entry} to .gitignore`));
 }
 
 async function detectBaseBranch(): Promise<string> {
@@ -347,7 +427,11 @@ function buildAdapterSettingsBlock(adapters: CLIAdapter[]): string {
 }
 
 async function detectAvailableCLIs(): Promise<CLIAdapter[]> {
-	const allAdapters = getAllAdapters();
+	const allAdapters = [...getAllAdapters()].sort(
+		(a, b) =>
+			CLI_PREFERENCE_ORDER.indexOf(a.name) -
+			CLI_PREFERENCE_ORDER.indexOf(b.name),
+	);
 	const available: CLIAdapter[] = [];
 
 	for (const adapter of allAdapters) {
@@ -360,31 +444,6 @@ async function detectAvailableCLIs(): Promise<CLIAdapter[]> {
 		}
 	}
 	return available;
-}
-
-/**
- * Parse numeric selections into adapter list. Returns null if any selection is invalid.
- * Used by both CLI selection (returns adapters) and agent selection (caller maps to names).
- */
-function parseSelections(
-	selections: string[],
-	adapters: CLIAdapter[],
-): CLIAdapter[] | null {
-	const chosen: CLIAdapter[] = [];
-	for (const sel of selections) {
-		const num = parseInt(sel, 10);
-		if (Number.isNaN(num) || num < 1 || num > adapters.length + 1) {
-			console.log(chalk.yellow(`Invalid selection: ${sel}`));
-			return null;
-		}
-		if (num === adapters.length + 1) {
-			chosen.push(...adapters);
-		} else {
-			const adapter = adapters[num - 1];
-			if (adapter) chosen.push(adapter);
-		}
-	}
-	return [...new Set(chosen)];
 }
 
 /**
@@ -427,157 +486,19 @@ async function copyStatusScript(targetDir: string): Promise<void> {
 interface PromptAndInstallOptions {
 	projectRoot: string;
 	commands: SkillCommand[];
-	availableAdapters: CLIAdapter[];
-}
-
-/**
- * Prompt the user to select an install level (none, project, user).
- */
-async function promptInstallLevel(
-	questionFn: (prompt: string) => Promise<string>,
-): Promise<InstallLevel> {
-	console.log("Where would you like to install the /gauntlet command?");
-	console.log("  1) Don't install commands");
-	console.log(
-		"  2) Project level (in this repo's .claude/skills, .gemini/commands, etc.)",
-	);
-	console.log(
-		"  3) User level (in ~/.claude/skills, ~/.gemini/commands, etc.)",
-	);
-	console.log();
-
-	let answer = await questionFn("Select option [1-3]: ");
-	let attempts = 0;
-
-	while (true) {
-		attempts++;
-		if (attempts > MAX_PROMPT_ATTEMPTS)
-			throw new Error("Too many invalid attempts");
-
-		if (answer === "1") return "none";
-		if (answer === "2") return "project";
-		if (answer === "3") return "user";
-
-		console.log(chalk.yellow("Please enter 1, 2, or 3"));
-		answer = await questionFn("Select option [1-3]: ");
-	}
-}
-
-/**
- * Prompt the user to select which agents to install commands for.
- * Returns the selected agent names (deduplicated).
- */
-async function promptAgentSelection(
-	questionFn: (prompt: string) => Promise<string>,
-	installableAdapters: CLIAdapter[],
-): Promise<string[]> {
-	console.log();
-	console.log("Which CLI agents would you like to install the command for?");
-	installableAdapters.forEach((adapter, i) => {
-		console.log(`  ${i + 1}) ${adapter.name}`);
-	});
-	console.log(`  ${installableAdapters.length + 1}) All of the above`);
-	console.log();
-
-	const promptText = `Select options (comma-separated, e.g., 1,2 or ${installableAdapters.length + 1} for all): `;
-	let answer = await questionFn(promptText);
-	let attempts = 0;
-
-	while (true) {
-		attempts++;
-		if (attempts > MAX_PROMPT_ATTEMPTS)
-			throw new Error("Too many invalid attempts");
-
-		const selections = answer
-			.split(",")
-			.map((s) => s.trim())
-			.filter((s) => s);
-
-		if (selections.length === 0) {
-			console.log(chalk.yellow("Please select at least one option"));
-			answer = await questionFn(promptText);
-			continue;
-		}
-
-		const chosen = parseSelections(selections, installableAdapters);
-		if (chosen) return chosen.map((a) => a.name);
-
-		answer = await questionFn(promptText);
-	}
 }
 
 async function promptAndInstallCommands(
 	options: PromptAndInstallOptions,
-): Promise<string[]> {
-	const { projectRoot, commands, availableAdapters } = options;
-	if (availableAdapters.length === 0) return [];
+): Promise<void> {
+	const { projectRoot, commands } = options;
 
-	const rl = readline.createInterface({
-		input: process.stdin,
-		output: process.stdout,
+	await installCommands({
+		level: "project",
+		agentNames: ["claude"],
+		projectRoot,
+		commands,
 	});
-
-	const question = makeQuestion(rl);
-
-	try {
-		console.log();
-		console.log(chalk.bold("CLI Agent Command Setup"));
-		console.log(
-			chalk.dim(
-				"The gauntlet command can be installed for CLI agents so you can run /gauntlet directly.",
-			),
-		);
-		console.log();
-
-		const installLevel = await promptInstallLevel(question);
-
-		if (installLevel === "none") {
-			console.log(chalk.dim("\nSkipping command installation."));
-			rl.close();
-			return [];
-		}
-
-		const installableAdapters =
-			installLevel === "project"
-				? availableAdapters.filter(
-						(a) =>
-							a.getProjectCommandDir() !== null ||
-							a.getProjectSkillDir() !== null,
-					)
-				: availableAdapters.filter(
-						(a) =>
-							a.getUserCommandDir() !== null || a.getUserSkillDir() !== null,
-					);
-
-		if (installableAdapters.length === 0) {
-			console.log(
-				chalk.yellow(
-					`No available agents support ${installLevel}-level commands.`,
-				),
-			);
-			rl.close();
-			return [];
-		}
-
-		const selectedAgents = await promptAgentSelection(
-			question,
-			installableAdapters,
-		);
-
-		rl.close();
-
-		await installCommands({
-			level: installLevel,
-			agentNames: selectedAgents,
-			projectRoot,
-			commands,
-		});
-
-		return selectedAgents;
-	} catch (error: unknown) {
-		rl.close();
-		throw error;
-	}
 }
 
 /**
