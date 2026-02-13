@@ -53,7 +53,7 @@ This document lists the configuration files Agent Gauntlet loads and all support
     - **format**: `"text"` | `"json"` (default: `"text"`)
 - **stop_hook**: object (optional)
   Configuration for the stop hook behavior. These settings can be overridden by environment variables (see [Environment Variable Overrides](#environment-variable-overrides)).
-  - **enabled**: boolean (optional; default from global config, typically `true`)
+  - **enabled**: boolean (optional; default from global config, typically `false`)
     Whether the stop hook gauntlet is enabled for this project. Set to `false` to disable stop hook validation entirely.
   - **run_interval_minutes**: number (optional; default from global config, typically `5`)
     Minimum minutes between gauntlet runs. Set to `0` to always run the gauntlet on every stop attempt.

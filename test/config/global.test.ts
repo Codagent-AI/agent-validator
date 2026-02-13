@@ -26,7 +26,7 @@ describe("Global Configuration", () => {
 			// Test the DEFAULT_GLOBAL_CONFIG constant directly to verify defaults
 			// This avoids interference from user's actual global config file
 			expect(DEFAULT_GLOBAL_CONFIG.stop_hook).toBeDefined();
-			expect(DEFAULT_GLOBAL_CONFIG.stop_hook.enabled).toBe(true);
+			expect(DEFAULT_GLOBAL_CONFIG.stop_hook.enabled).toBe(false);
 			expect(DEFAULT_GLOBAL_CONFIG.stop_hook.run_interval_minutes).toBe(5);
 		});
 	});

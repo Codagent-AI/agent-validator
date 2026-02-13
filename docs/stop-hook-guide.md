@@ -105,7 +105,7 @@ User-level settings are stored in `~/.config/agent-gauntlet/config.yml`:
 
 ```yaml
 stop_hook:
-  enabled: true               # Whether stop hook is active (default: true)
+  enabled: false              # Whether stop hook is active (default: false)
   run_interval_minutes: 5     # Minimum time between gauntlet runs
 ```
 
@@ -115,7 +115,7 @@ Override global settings per-project in `.gauntlet/config.yml`:
 
 ```yaml
 stop_hook:
-  enabled: true               # Override global enabled setting
+  enabled: true               # Override global default (false) to enable for this project
   run_interval_minutes: 5     # Override global interval
 ```
 
@@ -140,7 +140,7 @@ GAUNTLET_STOP_HOOK_ENABLED=false claude
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `stop_hook.enabled` | `true` | Whether stop hook validation runs. Set to `false` to disable entirely. |
+| `stop_hook.enabled` | `false` | Whether stop hook validation runs. Set to `true` to enable. |
 | `stop_hook.run_interval_minutes` | `5` | Minimum minutes between gauntlet runs. Set to `0` to always run. Prevents excessive re-runs during active development. |
 | `stop_hook.auto_push_pr` | `false` | When enabled, blocks the stop if no PR exists or PR is not up to date after gates pass. |
 | `stop_hook.auto_fix_pr` | `false` | When enabled (requires `auto_push_pr`), blocks the stop if CI checks are pending or failing. Directs the agent to use the `gauntlet-fix-pr` skill. |

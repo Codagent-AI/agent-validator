@@ -258,7 +258,7 @@ describe("stop-hook-config", () => {
 
 		it("uses global config when no project config or env vars", () => {
 			const result = resolveStopHookConfig(undefined, DEFAULT_GLOBAL_CONFIG);
-			expect(result.enabled).toBe(true);
+			expect(result.enabled).toBe(false);
 			expect(result.run_interval_minutes).toBe(5);
 			expect(result.auto_push_pr).toBe(false);
 			expect(result.auto_fix_pr).toBe(false);
@@ -309,13 +309,13 @@ describe("stop-hook-config", () => {
 			expect(result.enabled).toBe(false); // from project config, since env is invalid
 		});
 
-		it("backwards compatibility: missing enabled defaults to true", () => {
+		it("backwards compatibility: missing enabled defaults to false", () => {
 			const projectConfig = { run_interval_minutes: 5 }; // no enabled field
 			const result = resolveStopHookConfig(
 				projectConfig,
 				DEFAULT_GLOBAL_CONFIG,
 			);
-			expect(result.enabled).toBe(true); // default from global
+			expect(result.enabled).toBe(false); // default from global
 			expect(result.run_interval_minutes).toBe(5); // from project
 		});
 
