@@ -407,13 +407,16 @@ async function addToGitignore(
 	console.log(chalk.green(`Added ${entry} to .gitignore`));
 }
 
-function gitSilent(cmd: string, opts?: { timeout?: number }): string | null {
-	const { execSync } = require("node:child_process");
+function gitSilent(args: string[], opts?: { timeout?: number }): string | null {
+	const { execFileSync } = require("node:child_process");
 	try {
-		return execSync(`${cmd} 2>/dev/null`, {
-			encoding: "utf-8",
-			timeout: opts?.timeout,
-		}).trim();
+		return (
+			execFileSync("git", args, {
+				encoding: "utf-8",
+				timeout: opts?.timeout,
+				stdio: ["pipe", "pipe", "ignore"],
+			}) as string
+		).trim();
 	} catch {
 		return null;
 	}
@@ -421,18 +424,18 @@ function gitSilent(cmd: string, opts?: { timeout?: number }): string | null {
 
 async function detectBaseBranch(): Promise<string> {
 	// Fetch the remote's default branch from the server and cache it locally
-	gitSilent("git remote set-head origin --auto", { timeout: 5000 });
+	gitSilent(["remote", "set-head", "origin", "--auto"], { timeout: 5000 });
 
 	// Read the (possibly just-updated) cached remote HEAD
-	const ref = gitSilent("git symbolic-ref refs/remotes/origin/HEAD");
+	const ref = gitSilent(["symbolic-ref", "refs/remotes/origin/HEAD"]);
 	if (ref) {
 		return ref.replace("refs/remotes/", "");
 	}
 
 	// Check which common default branches actually exist locally
-	for (const branch of ["origin/main", "origin/master"]) {
-		if (gitSilent(`git rev-parse --verify ${branch}`) !== null) {
-			return branch;
+	for (const candidate of ["origin/main", "origin/master"]) {
+		if (gitSilent(["rev-parse", "--verify", candidate]) !== null) {
+			return candidate;
 		}
 	}
 

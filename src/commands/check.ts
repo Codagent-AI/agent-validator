@@ -270,14 +270,14 @@ export function registerCheckCommand(program: Command): void {
 					isRerun,
 				);
 
-				const success = await runner.run(jobs);
+				const outcome = await runner.run(jobs);
 
-				// Log run end
+				// Log run end with actual statistics from runner
 				await debugLogger?.logRunEnd(
-					success ? "pass" : "fail",
-					0,
-					0,
-					0,
+					outcome.allPassed ? "pass" : "fail",
+					outcome.stats.fixed,
+					outcome.stats.skipped,
+					outcome.stats.failed,
 					logger.getRunNumber(),
 				);
 
@@ -285,13 +285,13 @@ export function registerCheckCommand(program: Command): void {
 				// This now captures working_tree_ref which is used for rerun diff scoping
 				await writeExecutionState(config.project.log_dir);
 
-				if (success) {
+				if (outcome.allPassed) {
 					await debugLogger?.logClean("auto", "all_passed");
 					await cleanLogs(config.project.log_dir);
 				}
 				await releaseLock(config.project.log_dir);
 				restoreConsole?.restore();
-				process.exit(success ? 0 : 1);
+				process.exit(outcome.allPassed ? 0 : 1);
 			} catch (error: unknown) {
 				// Write execution state even on error (if lock was acquired)
 				if (config && lockAcquired) {
