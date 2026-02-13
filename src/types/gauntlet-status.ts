@@ -21,6 +21,7 @@ export type GauntletStatus =
 	| "validation_required" // Changes need validation or previous run has unresolved failures
 	| "no_config" // No .gauntlet/config.yml found
 	| "stop_hook_active" // Infinite loop prevention
+	| "loop_detected" // Rapid-fire block loop detected
 	| "interval_not_elapsed" // Run interval hasn't passed
 	| "invalid_input" // Failed to parse hook JSON input
 	| "stop_hook_disabled"; // Stop hook disabled via configuration

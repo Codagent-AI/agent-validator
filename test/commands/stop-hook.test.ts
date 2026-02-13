@@ -660,6 +660,7 @@ describe("Stop Hook Command", () => {
 				"failed",
 				"no_config",
 				"stop_hook_active",
+				"loop_detected",
 				"invalid_input",
 				"pr_push_required",
 				"ci_pending",
@@ -742,6 +743,7 @@ describe("Stop Hook Command", () => {
 				"lock_conflict",
 				"no_config",
 				"stop_hook_active",
+				"loop_detected",
 				"error",
 				"invalid_input",
 			];
@@ -969,6 +971,27 @@ describe("Stop Hook Command", () => {
 			expect(response.decision).toBe("block");
 			expect(response.status).toBe("validation_required");
 			expect(response.reason).toBe("Use gauntlet-run skill");
+		});
+	});
+
+	describe("loop_detected status", () => {
+		it("isBlockingStatus returns false for loop_detected", () => {
+			expect(isBlockingStatus("loop_detected")).toBe(false);
+		});
+
+		it("getStatusMessage returns appropriate message for loop_detected", () => {
+			const message = getStatusMessage("loop_detected");
+			expect(message).toContain("Loop detected");
+			expect(message).toContain("3 times within 60s");
+		});
+
+		it("outputHookResponse outputs approve decision for loop_detected", () => {
+			outputHookResponse("loop_detected");
+			expect(logs.length).toBe(1);
+			const response = JSON.parse(logs[0]!);
+			expect(response.decision).toBe("approve");
+			expect(response.status).toBe("loop_detected");
+			expect(response.message).toContain("Loop detected");
 		});
 	});
 });

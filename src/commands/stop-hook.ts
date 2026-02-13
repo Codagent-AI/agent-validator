@@ -16,6 +16,11 @@ import {
 	StopHookHandler,
 } from "../hooks/stop-hook-handler.js";
 import {
+	LOOP_THRESHOLD,
+	recordBlockTimestamp,
+	resetBlockTimestamps,
+} from "../hooks/stop-hook-state.js";
+import {
 	getCategoryLogger,
 	initLogger,
 	resetLogger,
@@ -195,6 +200,43 @@ function createEarlyExitResult(
 		message: getStatusMessage(status, options),
 		intervalMinutes: options?.intervalMinutes,
 	};
+}
+
+/**
+ * Apply loop detection to a blocking result.
+ * Records the block timestamp and checks if the threshold is reached.
+ * Returns the original result if not looping, or an allow result if loop detected.
+ */
+async function applyLoopDetection(
+	result: StopHookResult,
+	logDir: string,
+	log: ReturnType<typeof getStopHookLogger>,
+	debugLogger: DebugLogger | null,
+): Promise<StopHookResult> {
+	if (!result.shouldBlock) {
+		resetBlockTimestamps(logDir).catch(() => {});
+		return result;
+	}
+	try {
+		const timestamps = await recordBlockTimestamp(logDir);
+		if (timestamps.length >= LOOP_THRESHOLD) {
+			log.info(
+				`Loop detected: ${timestamps.length} blocks within window — overriding to allow`,
+			);
+			await debugLogger?.logStopHook("allow", "loop_detected");
+			return {
+				status: "loop_detected",
+				shouldBlock: false,
+				message: getStatusMessage("loop_detected"),
+			};
+		}
+	} catch (loopErr: unknown) {
+		const errMsg = (loopErr as { message?: string }).message ?? "unknown";
+		log.warn(
+			`Loop detection error: ${errMsg} — proceeding with original result`,
+		);
+	}
+	return result;
 }
 
 /**
@@ -508,6 +550,9 @@ export function registerStopHookCommand(program: Command): void {
 						markerFilePath = null;
 					}
 				}
+
+				// Loop detection: track rapid-fire blocks and override if looping
+				result = await applyLoopDetection(result, logDir, log, debugLogger);
 
 				// Output result using adapter format
 				outputResult(adapter, result);

@@ -116,6 +116,8 @@ const STATUS_MESSAGES: Record<string, string> = {
 	no_config: "○ Not a gauntlet project — no .gauntlet/config.yml found.",
 	stop_hook_active:
 		"↺ Stop hook cycle detected — allowing stop to prevent infinite loop.",
+	loop_detected:
+		"↺ Loop detected — stop hook blocked 3 times within 60s. Allowing stop to prevent infinite loop.",
 	stop_hook_disabled: "○ Stop hook is disabled via configuration.",
 	invalid_input: "⚠ Invalid hook input — could not parse JSON, allowing stop.",
 };
