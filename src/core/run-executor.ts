@@ -217,6 +217,7 @@ const statusMessages: Record<GauntletStatus, string> = {
 	error: "Unexpected error occurred.",
 	no_config: "No .gauntlet/config.yml found.",
 	stop_hook_active: "Stop hook already active.",
+	loop_detected: "Loop detected — rapid blocks overridden.",
 	interval_not_elapsed: "Run interval not elapsed.",
 	invalid_input: "Invalid input.",
 	stop_hook_disabled: "Stop hook is disabled via configuration.",

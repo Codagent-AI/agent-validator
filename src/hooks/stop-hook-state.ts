@@ -1,8 +1,56 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import {
 	createWorkingTreeRef,
 	readExecutionState,
 } from "../utils/execution-state.js";
+
+/** Window in milliseconds to detect rapid-fire blocks */
+export const LOOP_WINDOW_MS = 60_000;
+
+/** Number of blocks within the window to trigger loop detection */
+export const LOOP_THRESHOLD = 3;
+
+/** Filename for storing block timestamps */
+const BLOCK_TIMESTAMPS_FILE = ".block-timestamps";
+
+/** Lock file for atomic timestamp updates */
+const BLOCK_TIMESTAMPS_LOCK = ".block-timestamps.lock";
+
+/** Max time to wait for lock acquisition (ms) */
+const LOCK_TIMEOUT_MS = 2000;
+
+/** Retry interval when waiting for lock (ms) */
+const LOCK_RETRY_MS = 50;
+
+/**
+ * Acquire a file-based lock using exclusive create (wx flag).
+ * Returns a release function. Throws if lock cannot be acquired within timeout.
+ */
+async function acquireTimestampLock(
+	logDir: string,
+): Promise<() => Promise<void>> {
+	const lockPath = path.join(logDir, BLOCK_TIMESTAMPS_LOCK);
+	const deadline = Date.now() + LOCK_TIMEOUT_MS;
+
+	while (Date.now() < deadline) {
+		try {
+			const handle = await fs.open(lockPath, "wx");
+			await handle.close();
+			return async () => {
+				await fs.rm(lockPath, { force: true }).catch(() => {});
+			};
+		} catch (err: unknown) {
+			const code = (err as { code?: string }).code;
+			if (code !== "EEXIST") throw err;
+			// Lock held by another process — wait and retry
+			await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
+		}
+	}
+	// Timeout: another process may legitimately hold the lock — throw
+	// so the caller can proceed with the original result safely.
+	throw new Error("Could not acquire block-timestamps lock within timeout");
+}
 
 /**
  * Check if the log directory contains gate result files (indicating a
@@ -109,4 +157,54 @@ export async function getLastRunStatus(logDir: string): Promise<string | null> {
 	if (!state) return null;
 	// ExecutionState has no status field yet — return null until schema is extended
 	return null;
+}
+
+/**
+ * Read block timestamps from the timestamps file.
+ * Returns an empty array if the file is missing or corrupt.
+ */
+export async function readBlockTimestamps(logDir: string): Promise<number[]> {
+	try {
+		const filePath = path.join(logDir, BLOCK_TIMESTAMPS_FILE);
+		const content = await fs.readFile(filePath, "utf-8");
+		const parsed = JSON.parse(content);
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter((ts): ts is number => typeof ts === "number");
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Record a block timestamp: read existing timestamps, filter to the
+ * detection window, append the current time, and write back.
+ * Uses a file-based lock for atomicity under concurrent invocations.
+ * Returns the updated (filtered + appended) array.
+ */
+export async function recordBlockTimestamp(logDir: string): Promise<number[]> {
+	const release = await acquireTimestampLock(logDir);
+	try {
+		const now = Date.now();
+		const existing = await readBlockTimestamps(logDir);
+		const recent = existing.filter((ts) => now - ts < LOOP_WINDOW_MS);
+		recent.push(now);
+		const filePath = path.join(logDir, BLOCK_TIMESTAMPS_FILE);
+		await fs.writeFile(filePath, JSON.stringify(recent), "utf-8");
+		return recent;
+	} finally {
+		await release();
+	}
+}
+
+/**
+ * Reset (delete) the block timestamps file.
+ * Called when a non-blocking result occurs, indicating the loop is resolved.
+ */
+export async function resetBlockTimestamps(logDir: string): Promise<void> {
+	try {
+		const filePath = path.join(logDir, BLOCK_TIMESTAMPS_FILE);
+		await fs.rm(filePath, { force: true });
+	} catch {
+		// Best-effort cleanup — ignore errors
+	}
 }

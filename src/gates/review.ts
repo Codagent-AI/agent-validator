@@ -693,6 +693,7 @@ export class ReviewGateExecutor {
 			const totalEstTokens = promptEstTokens + diffEstTokens;
 			const inputSizeMsg = `[input-stats] prompt_chars=${promptChars} diff_chars=${diffChars} total_chars=${totalInputChars} prompt_est_tokens=${promptEstTokens} diff_est_tokens=${diffEstTokens} total_est_tokens=${totalEstTokens}`;
 			await adapterLogger(`${inputSizeMsg}\n`);
+			await adapterLogger(`[diff]\n${diff}\n`);
 
 			const adapterCfg = adapterConfigs?.[toolName];
 			const output = await adapter.execute({
