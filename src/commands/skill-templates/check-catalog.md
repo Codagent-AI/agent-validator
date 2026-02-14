@@ -346,11 +346,60 @@ entry_points:
       - docs-review
 ```
 
+### Wildcard Entry Points (Monorepos)
+
+Use a single-level wildcard (`*`) to expand one entry point into one job per changed subdirectory. This is ideal for monorepos where each package has the same toolchain:
+
+```yaml
+entry_points:
+  # Root: project-wide checks
+  - path: "."
+    checks:
+      - security-deps
+    reviews:
+      - code-quality
+
+  # Per-package: expands to one job per changed package
+  - path: "packages/*"
+    checks:
+      - build
+      - lint
+      - typecheck
+      - test
+```
+
+Check commands run with the working directory set to the matched package (e.g., `packages/api`), so a single `test.yml` works for all packages sharing the same test runner.
+
+### Split Project Entry Points
+
+For projects with distinct parts (e.g., frontend + backend) that may use different toolchains:
+
+```yaml
+entry_points:
+  - path: "frontend"
+    checks:
+      - build
+      - lint-frontend
+      - test-frontend
+    reviews:
+      - code-quality
+
+  - path: "backend"
+    checks:
+      - build-backend
+      - lint-backend
+      - test-backend
+    reviews:
+      - code-quality
+```
+
+When parts share the same command for a category (e.g., both run `npm test`), use one shared check file — the working directory is set per entry point at runtime. When they use different commands, create separate check files with a suffix (e.g., `test-frontend.yml`, `test-backend.yml`).
+
 ### Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `path` | string | Yes | Directory path to monitor. Relative to project root. |
+| `path` | string | Yes | Directory path to monitor. Relative to project root. Supports single-level wildcards (e.g., `packages/*`). |
 | `checks` | string[] | No | List of check names matching `.gauntlet/checks/<name>.yml` files. |
 | `reviews` | string[] | No | List of review names matching `.gauntlet/reviews/<name>.yml` or `.md` files. |
 | `exclude` | string[] | No | Glob patterns for files to exclude from change detection within this path. |

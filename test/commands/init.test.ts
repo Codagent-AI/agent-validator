@@ -849,26 +849,32 @@ describe("Skills Installation for Claude", () => {
 		expect(content).toContain("Scan project");
 	});
 
-	it("should install check-catalog.md reference for gauntlet-setup", async () => {
+	it("should install reference files for gauntlet-setup", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const catalogPath = path.join(
+		const refsDir = path.join(
 			TEST_DIR,
 			".claude-mock",
 			"skills",
 			"gauntlet-setup",
 			"references",
-			"check-catalog.md",
 		);
-		const stat = await fs.stat(catalogPath);
-		expect(stat.isFile()).toBe(true);
 
-		const content = await fs.readFile(catalogPath, "utf-8");
-		expect(content.length).toBeGreaterThan(100);
-		// Should have check categories
-		expect(content).toContain("build");
-		expect(content).toContain("lint");
-		expect(content).toContain("test");
+		const catalog = await fs.readFile(
+			path.join(refsDir, "check-catalog.md"),
+			"utf-8",
+		);
+		expect(catalog.length).toBeGreaterThan(100);
+		expect(catalog).toContain("build");
+		expect(catalog).toContain("lint");
+
+		const structure = await fs.readFile(
+			path.join(refsDir, "project-structure.md"),
+			"utf-8",
+		);
+		expect(structure.length).toBeGreaterThan(100);
+		expect(structure).toContain("Monorepo");
+		expect(structure).toContain("wildcard");
 	});
 
 	it("should not install gauntlet-setup for non-Claude adapters", async () => {
