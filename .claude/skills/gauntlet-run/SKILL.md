@@ -24,7 +24,7 @@ Execute the autonomous verification suite.
 2. Run `bun src/index.ts run`
 3. If it fails:
    - Identify the failed gates from the console output.
-   - For CHECK failures: Read the `.log` file path provided in the output.
+   - For CHECK failures: Read the `.log` file path provided in the output. If the log contains a `--- Fix Instructions ---` section, follow those instructions to fix the issue. If it contains a `--- Fix Skill: <name> ---` section, invoke that skill.
    - For REVIEW failures: Read the `.json` file path provided in the "Review: <path>" output.
 4. Address the violations:
    - For REVIEW violations: You MUST update the `"status"` and `"result"` fields in the provided `.json` file for EACH violation.

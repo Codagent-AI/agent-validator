@@ -67,7 +67,7 @@ allowed-tools: Bash
 		steps.push(
 			`3. If it fails:
    - Identify the failed gates from the console output.
-   - For CHECK failures: Read the \`.log\` file path provided in the output.
+   - For CHECK failures: Read the \`.log\` file path provided in the output. If the log contains a \`--- Fix Instructions ---\` section, follow those instructions to fix the issue. If it contains a \`--- Fix Skill: <name> ---\` section, invoke that skill.
    - For REVIEW failures: Read the \`.json\` file path provided in the "Review: <path>" output.
 4. Address the violations:
    - For REVIEW violations: You MUST update the \`"status"\` and \`"result"\` fields in the provided \`.json\` file for EACH violation.
@@ -88,7 +88,7 @@ allowed-tools: Bash
 	} else {
 		steps.push(
 			`3. If any checks fail:
-   - Read the \`.log\` file path provided in the output for each failed check.
+   - Read the \`.log\` file path provided in the output for each failed check. If the log contains a \`--- Fix Instructions ---\` section, follow those instructions. If it contains a \`--- Fix Skill: <name> ---\` section, invoke that skill.
    - Fix the issues found.
 4. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries.
 5. Repeat steps 3-4 until all checks pass or you've made 3 attempts.
@@ -407,19 +407,38 @@ async function addToGitignore(
 	console.log(chalk.green(`Added ${entry} to .gitignore`));
 }
 
-async function detectBaseBranch(): Promise<string> {
+function gitSilent(args: string[], opts?: { timeout?: number }): string | null {
+	const { execFileSync } = require("node:child_process");
 	try {
-		const { execSync } = await import("node:child_process");
-		const ref = execSync(
-			"git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null",
-			{ encoding: "utf-8" },
+		return (
+			execFileSync("git", args, {
+				encoding: "utf-8",
+				timeout: opts?.timeout,
+				stdio: ["pipe", "pipe", "ignore"],
+			}) as string
 		).trim();
-		if (ref) {
-			return ref.replace("refs/remotes/", "");
-		}
 	} catch {
-		// Fall back to origin/main
+		return null;
 	}
+}
+
+async function detectBaseBranch(): Promise<string> {
+	// Fetch the remote's default branch from the server and cache it locally
+	gitSilent(["remote", "set-head", "origin", "--auto"], { timeout: 5000 });
+
+	// Read the (possibly just-updated) cached remote HEAD
+	const ref = gitSilent(["symbolic-ref", "refs/remotes/origin/HEAD"]);
+	if (ref) {
+		return ref.replace("refs/remotes/", "");
+	}
+
+	// Check which common default branches actually exist locally
+	for (const candidate of ["origin/main", "origin/master"]) {
+		if (gitSilent(["rev-parse", "--verify", candidate]) !== null) {
+			return candidate;
+		}
+	}
+
 	return "origin/main";
 }
 
