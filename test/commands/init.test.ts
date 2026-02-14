@@ -66,7 +66,7 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 }));
 
 // Import after mocking
-const { registerInitCommand, installStopHook, installCursorStopHook, mergeHookConfig } =
+const { registerInitCommand, installStopHook, installCursorStopHook, mergeHookConfig, installStartHook, installCursorStartHook } =
 	await import("../../src/commands/init.js");
 
 describe("Init Command", () => {
@@ -531,6 +531,239 @@ describe("Cursor Stop Hook Installation", () => {
 		const content = await fs.readFile(hooksPath, "utf-8");
 		expect(content.includes("\n")).toBe(true);
 		expect(content.includes('  "version"')).toBe(true);
+	});
+});
+
+describe("Claude Start Hook Installation", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(() =>
+		cleanupTestEnv(originalConsoleLog, originalCwd, [
+			path.join(TEST_DIR, ".claude"),
+		]),
+	);
+
+	it("should create SessionStart hook in new settings file", async () => {
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		expect(Array.isArray(settings.hooks.SessionStart)).toBe(true);
+		expect(settings.hooks.SessionStart.length).toBeGreaterThan(0);
+
+		const entry = settings.hooks.SessionStart[0];
+		const innerHook = entry.hooks[0];
+		expect(innerHook.command).toBe("agent-gauntlet start-hook");
+		expect(innerHook.type).toBe("command");
+	});
+
+	it("should set start hook as synchronous", async () => {
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		const innerHook = settings.hooks.SessionStart[0].hooks[0];
+		expect(innerHook.async).toBe(false);
+	});
+
+	it("should set matcher for session start events", async () => {
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		const matcher = settings.hooks.SessionStart[0].matcher;
+		expect(matcher).toContain("startup");
+		expect(matcher).toContain("resume");
+		expect(matcher).toContain("clear");
+		expect(matcher).toContain("compact");
+	});
+
+	it("should merge into existing settings without overwriting", async () => {
+		// Pre-create settings with Stop hook
+		await fs.mkdir(path.join(TEST_DIR, ".claude"), { recursive: true });
+		await fs.writeFile(
+			path.join(TEST_DIR, ".claude", "settings.local.json"),
+			JSON.stringify({
+				hooks: {
+					Stop: [
+						{
+							hooks: [
+								{
+									type: "command",
+									command: "agent-gauntlet stop-hook",
+									timeout: 300,
+								},
+							],
+						},
+					],
+				},
+			}),
+		);
+
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		// Both Stop and SessionStart should exist
+		expect(settings.hooks.Stop).toBeDefined();
+		expect(settings.hooks.SessionStart).toBeDefined();
+	});
+
+	it("should deduplicate on repeated runs", async () => {
+		await installStartHook(TEST_DIR);
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		expect(settings.hooks.SessionStart.length).toBe(1);
+	});
+
+	it("should show confirmation message", async () => {
+		await installStartHook(TEST_DIR);
+
+		const output = logs.join("\n");
+		expect(output).toContain("Start hook installed");
+	});
+});
+
+describe("Cursor Start Hook Installation", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(() =>
+		cleanupTestEnv(originalConsoleLog, originalCwd, [
+			path.join(TEST_DIR, ".cursor"),
+		]),
+	);
+
+	it("should create beforeSubmitPrompt hook in new hooks file", async () => {
+		await installCursorStartHook(TEST_DIR);
+
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		const config = JSON.parse(content);
+
+		expect(Array.isArray(config.hooks.beforeSubmitPrompt)).toBe(true);
+		expect(config.hooks.beforeSubmitPrompt.length).toBe(1);
+		expect(config.hooks.beforeSubmitPrompt[0].command).toBe(
+			"agent-gauntlet start-hook --adapter cursor",
+		);
+	});
+
+	it("should deduplicate on repeated runs", async () => {
+		await installCursorStartHook(TEST_DIR);
+		await installCursorStartHook(TEST_DIR);
+
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		const config = JSON.parse(content);
+
+		expect(config.hooks.beforeSubmitPrompt.length).toBe(1);
+	});
+
+	it("should merge into existing hooks file without overwriting", async () => {
+		// Pre-create with stop hook
+		await fs.mkdir(path.join(TEST_DIR, ".cursor"), { recursive: true });
+		await fs.writeFile(
+			path.join(TEST_DIR, ".cursor", "hooks.json"),
+			JSON.stringify({
+				version: 1,
+				hooks: {
+					stop: [
+						{
+							command: "agent-gauntlet stop-hook",
+							loop_limit: 10,
+						},
+					],
+				},
+			}),
+		);
+
+		await installCursorStartHook(TEST_DIR);
+
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		const config = JSON.parse(content);
+
+		// Both stop and beforeSubmitPrompt should exist
+		expect(config.hooks.stop).toBeDefined();
+		expect(config.hooks.stop[0].command).toBe("agent-gauntlet stop-hook");
+		expect(config.hooks.beforeSubmitPrompt).toBeDefined();
+		expect(config.hooks.beforeSubmitPrompt[0].command).toBe(
+			"agent-gauntlet start-hook --adapter cursor",
+		);
+	});
+
+	it("should show confirmation message", async () => {
+		await installCursorStartHook(TEST_DIR);
+
+		const output = logs.join("\n");
+		expect(output).toContain("Cursor start hook installed");
 	});
 });
 

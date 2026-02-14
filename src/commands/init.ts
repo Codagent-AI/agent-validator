@@ -237,12 +237,14 @@ export function registerInitCommand(program: Command): void {
 				skipPrompts: options.yes ?? false,
 			});
 
-			// 3. Auto-install stop hooks for detected CLIs
+			// 3. Auto-install hooks for detected CLIs
 			if (availableAdapters.some((a) => a.name === "claude")) {
 				await installStopHook(projectRoot);
+				await installStartHook(projectRoot);
 			}
 			if (availableAdapters.some((a) => a.name === "cursor")) {
 				await installCursorStopHook(projectRoot);
+				await installCursorStartHook(projectRoot);
 			}
 
 			// 4. Add log directory to .gitignore
@@ -791,6 +793,40 @@ export async function mergeHookConfig(opts: {
 }
 
 /**
+ * The start hook configuration for Claude Code.
+ */
+const START_HOOK_CONFIG = {
+	hooks: {
+		SessionStart: [
+			{
+				matcher: "startup|resume|clear|compact",
+				hooks: [
+					{
+						type: "command",
+						command: "agent-gauntlet start-hook",
+						async: false,
+					},
+				],
+			},
+		],
+	},
+};
+
+/**
+ * The start hook configuration for Cursor.
+ */
+const CURSOR_START_HOOK_CONFIG = {
+	version: 1,
+	hooks: {
+		beforeSubmitPrompt: [
+			{
+				command: "agent-gauntlet start-hook --adapter cursor",
+			},
+		],
+	},
+};
+
+/**
  * The stop hook configuration for Claude Code.
  */
 const STOP_HOOK_CONFIG = {
@@ -874,5 +910,59 @@ export async function installCursorStopHook(
 		);
 	} else {
 		console.log(chalk.dim("Cursor stop hook already installed"));
+	}
+}
+
+/**
+ * Install the start hook configuration to .claude/settings.local.json.
+ */
+export async function installStartHook(projectRoot: string): Promise<void> {
+	const settingsPath = path.join(projectRoot, ".claude", "settings.local.json");
+	const hookEntry = START_HOOK_CONFIG.hooks.SessionStart[0];
+
+	const added = await mergeHookConfig({
+		filePath: settingsPath,
+		hookKey: "SessionStart",
+		hookEntry,
+		deduplicateCmd: "agent-gauntlet start-hook",
+		wrapInHooksArray: false,
+	});
+
+	if (added) {
+		console.log(
+			chalk.green(
+				"Start hook installed - agent will be primed with gauntlet instructions at session start",
+			),
+		);
+	} else {
+		console.log(chalk.dim("Start hook already installed"));
+	}
+}
+
+/**
+ * Install the start hook configuration to .cursor/hooks.json.
+ */
+export async function installCursorStartHook(
+	projectRoot: string,
+): Promise<void> {
+	const hooksPath = path.join(projectRoot, ".cursor", "hooks.json");
+
+	const added = await mergeHookConfig({
+		filePath: hooksPath,
+		hookKey: "beforeSubmitPrompt",
+		hookEntry: CURSOR_START_HOOK_CONFIG.hooks.beforeSubmitPrompt[0],
+		deduplicateCmd: "agent-gauntlet start-hook --adapter cursor",
+		wrapInHooksArray: false,
+		baseConfig: { version: CURSOR_START_HOOK_CONFIG.version },
+	});
+
+	if (added) {
+		console.log(
+			chalk.green(
+				"Cursor start hook installed - agent will be primed with gauntlet instructions at session start",
+			),
+		);
+	} else {
+		console.log(chalk.dim("Cursor start hook already installed"));
 	}
 }
