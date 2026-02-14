@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 0.13.1
+
+### Patch Changes
+
+- [#58](https://github.com/pacaplan/agent-gauntlet/pull/58) Detect the default git branch dynamically instead of hard-coding `origin/main`, enabling correct behavior in repos that use `master` or other default branch names
+
 ## 0.13.0
 
 ### Minor Changes
