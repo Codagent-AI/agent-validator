@@ -6,8 +6,8 @@ import type {
 import { CheckGateExecutor } from "../gates/check.js";
 import type { GateResult } from "../gates/result.js";
 import { ReviewGateExecutor } from "../gates/review.js";
-import type { ConsoleReporter } from "../output/console.js";
 import type { Logger } from "../output/logger.js";
+import type { Reporter } from "../output/reporter.js";
 import type { DebugLogger } from "../utils/debug-log.js";
 import type { PreviousViolation } from "../utils/log-parser.js";
 import { sanitizeJobId } from "../utils/sanitizer.js";

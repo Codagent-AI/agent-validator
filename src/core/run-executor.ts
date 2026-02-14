@@ -16,11 +16,11 @@ import {
 	isLoggerConfigured,
 	resetLogger,
 } from "../output/app-logger.js";
-import { ConsoleReporter } from "../output/console.js";
 import {
 	type ConsoleLogHandle,
 	startConsoleLog,
 } from "../output/console-log.js";
+import { LiveRenderer } from "../output/live-renderer.js";
 import { Logger } from "../output/logger.js";
 import type { GauntletStatus, RunResult } from "../types/gauntlet-status.js";
 import {

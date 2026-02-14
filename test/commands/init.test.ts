@@ -879,7 +879,7 @@ describe("Skills Installation for Claude", () => {
 
 		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
 
-		for (const action of ["run", "check", "push-pr", "fix-pr", "status"]) {
+		for (const action of ["check", "push-pr", "fix-pr", "status"]) {
 			const content = await fs.readFile(
 				path.join(skillsBase, `gauntlet-${action}`, "SKILL.md"),
 				"utf-8",
@@ -887,6 +887,26 @@ describe("Skills Installation for Claude", () => {
 			expect(content).toContain(`name: gauntlet-${action}`);
 			expect(content).toContain("disable-model-invocation: true");
 		}
+
+		// "run" should have disable-model-invocation: false (auto-invocation enabled)
+		const runContent = await fs.readFile(
+			path.join(skillsBase, "gauntlet-run", "SKILL.md"),
+			"utf-8",
+		);
+		expect(runContent).toContain("name: gauntlet-run");
+		expect(runContent).toContain("disable-model-invocation: false");
+	});
+
+	it("should include actionable description in gauntlet-run frontmatter", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
+		const runContent = await fs.readFile(
+			path.join(skillsBase, "gauntlet-run", "SKILL.md"),
+			"utf-8",
+		);
+		expect(runContent).toContain("final step after completing a coding task");
+		expect(runContent).toContain("before committing, pushing, or creating PRs");
 	});
 
 	it("should not install commands for non-Claude adapters", async () => {

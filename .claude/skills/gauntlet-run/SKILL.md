@@ -1,6 +1,9 @@
 ---
 name: gauntlet-run
-description: Run the full verification gauntlet
+description: >-
+  Run the full verification gauntlet. Use this as the final step after
+  completing a coding task — verifies quality, runs checks, and ensures all
+  gates pass. Must be run before committing, pushing, or creating PRs.
 disable-model-invocation: false
 allowed-tools: Bash
 ---

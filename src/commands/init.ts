@@ -43,17 +43,19 @@ function buildGauntletSkillContent(mode: "run" | "check"): string {
 	const isRun = mode === "run";
 	const name = isRun ? "run" : "check";
 	const description = isRun
-		? "Run the full verification gauntlet"
+		? "Run the full verification gauntlet. Use this as the final step after completing a coding task — verifies quality, runs checks, and ensures all gates pass. Must be run before committing, pushing, or creating PRs."
 		: "Run checks only (no reviews)";
 	const command = isRun ? "agent-gauntlet run" : "agent-gauntlet check";
 	const heading = isRun
 		? "Execute the autonomous verification suite."
 		: "Run the gauntlet checks only \u2014 no AI reviews.";
+	const disableModelInvocation = isRun ? "false" : "true";
 
 	const frontmatter = `---
 name: gauntlet-${name}
-description: ${description}
-disable-model-invocation: true
+description: >-
+  ${description}
+disable-model-invocation: ${disableModelInvocation}
 allowed-tools: Bash
 ---`;
 
