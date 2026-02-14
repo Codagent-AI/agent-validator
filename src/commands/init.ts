@@ -869,7 +869,7 @@ export async function installStopHook(projectRoot: string): Promise<void> {
 	const added = await mergeHookConfig({
 		filePath: settingsPath,
 		hookKey: "Stop",
-		hookEntry: STOP_HOOK_CONFIG.hooks.Stop[0].hooks[0],
+		hookEntry: STOP_HOOK_CONFIG.hooks.Stop[0]!.hooks[0]!,
 		deduplicateCmd: "agent-gauntlet stop-hook",
 		wrapInHooksArray: true,
 	});
@@ -896,7 +896,7 @@ export async function installCursorStopHook(
 	const added = await mergeHookConfig({
 		filePath: hooksPath,
 		hookKey: "stop",
-		hookEntry: CURSOR_STOP_HOOK_CONFIG.hooks.stop[0],
+		hookEntry: CURSOR_STOP_HOOK_CONFIG.hooks.stop[0]!,
 		deduplicateCmd: "agent-gauntlet stop-hook",
 		wrapInHooksArray: false,
 		baseConfig: { version: CURSOR_STOP_HOOK_CONFIG.version },
@@ -918,7 +918,7 @@ export async function installCursorStopHook(
  */
 export async function installStartHook(projectRoot: string): Promise<void> {
 	const settingsPath = path.join(projectRoot, ".claude", "settings.local.json");
-	const hookEntry = START_HOOK_CONFIG.hooks.SessionStart[0];
+	const hookEntry = START_HOOK_CONFIG.hooks.SessionStart[0]!;
 
 	const added = await mergeHookConfig({
 		filePath: settingsPath,
@@ -950,7 +950,7 @@ export async function installCursorStartHook(
 	const added = await mergeHookConfig({
 		filePath: hooksPath,
 		hookKey: "beforeSubmitPrompt",
-		hookEntry: CURSOR_START_HOOK_CONFIG.hooks.beforeSubmitPrompt[0],
+		hookEntry: CURSOR_START_HOOK_CONFIG.hooks.beforeSubmitPrompt[0]!,
 		deduplicateCmd: "agent-gauntlet start-hook --adapter cursor",
 		wrapInHooksArray: false,
 		baseConfig: { version: CURSOR_START_HOOK_CONFIG.version },
