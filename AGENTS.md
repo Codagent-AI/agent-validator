@@ -31,6 +31,7 @@ The user configures which paths in their repo should trigger which validations â
 
 ## Superpowers overrides for this project
 - The openspec change directory is the source of truth for planning. When using `writing-plan` skill, read all files in `openspec/changes/<change-name>/` (proposal.md, design.md, and spec deltas), not the brainstorm design doc in docs/plans/.
+- If design.md contains a `## Pre-factoring` section with hotspot refactorings, the plan's first task should be those refactorings â€” complete them before starting implementation work.
 
 ## Subagent-driven development: gauntlet as quality gate
 When running subagent-driven-development, do NOT dispatch the code quality reviewer subagent from superpowers. Instead, after the spec compliance reviewer passes, dispatch a subagent that runs `agent-gauntlet run` and reports the results. Use its output as the quality gate:
