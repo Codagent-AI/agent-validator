@@ -28,3 +28,8 @@ The user configures which paths in their repo should trigger which validations â
 - After completing an openspec proposal, use the `gauntlet-run` skill to verify correctness.
 - After writing a plan with writing-plans, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
 - When implementation is complete, run the `gauntlet-run` skill to verify correctness. Then the `push-pr` skill. Do not use finishing-a-development-branch.
+
+## Subagent-driven development: gauntlet as quality gate
+When running subagent-driven-development, do NOT dispatch the code quality reviewer subagent from superpowers. Instead, after the spec compliance reviewer passes, dispatch a subagent that runs `agent-gauntlet run` and reports the results. Use its output as the quality gate:
+- If gauntlet passes: mark the quality review as passed and proceed to the next task.
+- If gauntlet fails: relay the specific failures to the implementer subagent for fixing, then re-run gauntlet after fixes are committed.
