@@ -66,7 +66,7 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 }));
 
 // Import after mocking
-const { registerInitCommand, installStopHook, installCursorStopHook } =
+const { registerInitCommand, installStopHook, installCursorStopHook, mergeHookConfig } =
 	await import("../../src/commands/init.js");
 
 describe("Init Command", () => {
@@ -531,6 +531,160 @@ describe("Cursor Stop Hook Installation", () => {
 		const content = await fs.readFile(hooksPath, "utf-8");
 		expect(content.includes("\n")).toBe(true);
 		expect(content.includes('  "version"')).toBe(true);
+	});
+});
+
+describe("mergeHookConfig helper", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(() =>
+		cleanupTestEnv(originalConsoleLog, originalCwd, [
+			path.join(TEST_DIR, ".merge-test"),
+		]),
+	);
+
+	it("should create new file with hook config when file doesn't exist", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		const filePath = path.join(dir, "settings.json");
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.hooks.Stop).toBeDefined();
+		expect(Array.isArray(content.hooks.Stop)).toBe(true);
+		expect(content.hooks.Stop[0].hooks[0].command).toBe("my-cmd");
+	});
+
+	it("should merge into existing file without overwriting other keys", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		await fs.mkdir(dir, { recursive: true });
+		const filePath = path.join(dir, "settings.json");
+
+		// Write existing config with other keys
+		await fs.writeFile(
+			filePath,
+			JSON.stringify({
+				someKey: "preserved",
+				hooks: { PreToolUse: [{ command: "echo hi" }] },
+			}),
+		);
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.someKey).toBe("preserved");
+		expect(content.hooks.PreToolUse).toBeDefined();
+		expect(content.hooks.Stop).toBeDefined();
+	});
+
+	it("should deduplicate on repeated calls", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		const filePath = path.join(dir, "settings.json");
+
+		// First call
+		await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		// Second call — should detect duplicate
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		expect(added).toBe(false);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.hooks.Stop.length).toBe(1);
+	});
+
+	it("should work with flat hook entries (Cursor format, no wrapInHooksArray)", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		const filePath = path.join(dir, "hooks.json");
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "stop",
+			hookEntry: { command: "my-cmd", loop_limit: 10 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: false,
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.hooks.stop).toBeDefined();
+		expect(Array.isArray(content.hooks.stop)).toBe(true);
+		// Flat format: entry is directly in the array, not wrapped
+		expect(content.hooks.stop[0].command).toBe("my-cmd");
+		expect(content.hooks.stop[0].hooks).toBeUndefined();
+	});
+
+	it("should preserve existing version in Cursor format", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		await fs.mkdir(dir, { recursive: true });
+		const filePath = path.join(dir, "hooks.json");
+
+		// Write existing config with version already set
+		await fs.writeFile(
+			filePath,
+			JSON.stringify({
+				version: 2,
+				hooks: {},
+			}),
+		);
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "stop",
+			hookEntry: { command: "my-cmd", loop_limit: 10 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: false,
+			baseConfig: { version: 1 },
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		// Should preserve existing version (2), not overwrite with baseConfig (1)
+		expect(content.version).toBe(2);
+		expect(content.hooks.stop[0].command).toBe("my-cmd");
 	});
 });
 

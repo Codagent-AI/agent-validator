@@ -719,6 +719,76 @@ async function installCommands(options: InstallCommandsOptions): Promise<void> {
 }
 
 /**
+ * Shared helper: read/create a JSON config file, merge a hook entry under the
+ * given hookKey, deduplicate, and write back. Returns true if the entry was
+ * added, false if it was already present.
+ */
+export async function mergeHookConfig(opts: {
+	filePath: string;
+	hookKey: string;
+	hookEntry: Record<string, unknown>;
+	deduplicateCmd: string;
+	wrapInHooksArray: boolean;
+	baseConfig?: Record<string, unknown>;
+}): Promise<boolean> {
+	const {
+		filePath,
+		hookKey,
+		hookEntry,
+		deduplicateCmd,
+		wrapInHooksArray,
+		baseConfig,
+	} = opts;
+
+	// Ensure parent directory exists
+	await fs.mkdir(path.dirname(filePath), { recursive: true });
+
+	let existing: Record<string, unknown> = {};
+	if (await exists(filePath)) {
+		try {
+			existing = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		} catch {
+			existing = {};
+		}
+	}
+
+	const existingHooks =
+		(existing.hooks as Record<string, unknown>) || {};
+	const existingEntries = Array.isArray(existingHooks[hookKey])
+		? (existingHooks[hookKey] as Record<string, unknown>[])
+		: [];
+
+	// Deduplicate: check both flat format (hook.command) and nested format (hook.hooks[].command)
+	const alreadyExists = existingEntries.some((hook: Record<string, unknown>) => {
+		if (hook.command === deduplicateCmd) return true;
+		const nested = hook.hooks as { command?: string }[] | undefined;
+		if (Array.isArray(nested) && nested.some((h) => h.command === deduplicateCmd)) return true;
+		return false;
+	});
+
+	if (alreadyExists) {
+		return false;
+	}
+
+	// Wrap entry if needed (Claude Code format wraps in { hooks: [...] })
+	const entryToAdd = wrapInHooksArray ? { hooks: [hookEntry] } : hookEntry;
+
+	const newEntries = [...existingEntries, entryToAdd];
+
+	const merged: Record<string, unknown> = {
+		...(baseConfig ?? {}),
+		...existing,
+		hooks: {
+			...existingHooks,
+			[hookKey]: newEntries,
+		},
+	};
+
+	await fs.writeFile(filePath, `${JSON.stringify(merged, null, 2)}\n`);
+	return true;
+}
+
+/**
  * The stop hook configuration for Claude Code.
  */
 const STOP_HOOK_CONFIG = {
@@ -756,65 +826,25 @@ const CURSOR_STOP_HOOK_CONFIG = {
  * Install the stop hook configuration to .claude/settings.local.json.
  */
 export async function installStopHook(projectRoot: string): Promise<void> {
-	const claudeDir = path.join(projectRoot, ".claude");
-	const settingsPath = path.join(claudeDir, "settings.local.json");
+	const settingsPath = path.join(projectRoot, ".claude", "settings.local.json");
 
-	// Ensure .claude directory exists
-	await fs.mkdir(claudeDir, { recursive: true });
+	const added = await mergeHookConfig({
+		filePath: settingsPath,
+		hookKey: "Stop",
+		hookEntry: STOP_HOOK_CONFIG.hooks.Stop[0].hooks[0],
+		deduplicateCmd: "agent-gauntlet stop-hook",
+		wrapInHooksArray: true,
+	});
 
-	let existingSettings: Record<string, unknown> = {};
-
-	// Check if settings.local.json already exists
-	if (await exists(settingsPath)) {
-		try {
-			const content = await fs.readFile(settingsPath, "utf-8");
-			existingSettings = JSON.parse(content);
-		} catch {
-			// If parsing fails, start fresh
-			existingSettings = {};
-		}
-	}
-
-	// Merge hooks configuration
-	const existingHooks =
-		(existingSettings.hooks as Record<string, unknown>) || {};
-	const existingStopHooks = Array.isArray(existingHooks.Stop)
-		? existingHooks.Stop
-		: [];
-
-	// Check if stop hook already exists to avoid duplicates
-	const hookExists = existingStopHooks.some((hook: unknown) =>
-		(hook as { hooks?: { command?: string }[] })?.hooks?.some?.(
-			(h) => h?.command === "agent-gauntlet stop-hook",
-		),
-	);
-	if (hookExists) {
+	if (added) {
+		console.log(
+			chalk.green(
+				"Stop hook installed - gauntlet will run automatically when agent stops",
+			),
+		);
+	} else {
 		console.log(chalk.dim("Stop hook already installed"));
-		return;
 	}
-
-	// Add our stop hook to the existing Stop hooks
-	const newStopHooks = [...existingStopHooks, ...STOP_HOOK_CONFIG.hooks.Stop];
-
-	const mergedSettings = {
-		...existingSettings,
-		hooks: {
-			...existingHooks,
-			Stop: newStopHooks,
-		},
-	};
-
-	// Write with pretty formatting
-	await fs.writeFile(
-		settingsPath,
-		`${JSON.stringify(mergedSettings, null, 2)}\n`,
-	);
-
-	console.log(
-		chalk.green(
-			"Stop hook installed - gauntlet will run automatically when agent stops",
-		),
-	);
 }
 
 /**
@@ -823,63 +853,24 @@ export async function installStopHook(projectRoot: string): Promise<void> {
 export async function installCursorStopHook(
 	projectRoot: string,
 ): Promise<void> {
-	const cursorDir = path.join(projectRoot, ".cursor");
-	const hooksPath = path.join(cursorDir, "hooks.json");
+	const hooksPath = path.join(projectRoot, ".cursor", "hooks.json");
 
-	// Ensure .cursor directory exists
-	await fs.mkdir(cursorDir, { recursive: true });
+	const added = await mergeHookConfig({
+		filePath: hooksPath,
+		hookKey: "stop",
+		hookEntry: CURSOR_STOP_HOOK_CONFIG.hooks.stop[0],
+		deduplicateCmd: "agent-gauntlet stop-hook",
+		wrapInHooksArray: false,
+		baseConfig: { version: CURSOR_STOP_HOOK_CONFIG.version },
+	});
 
-	let existingConfig: Record<string, unknown> = {};
-
-	// Check if hooks.json already exists
-	if (await exists(hooksPath)) {
-		try {
-			const content = await fs.readFile(hooksPath, "utf-8");
-			existingConfig = JSON.parse(content);
-		} catch {
-			// If parsing fails, start fresh
-			existingConfig = {};
-		}
-	}
-
-	// Merge hooks configuration
-	const existingHooks = (existingConfig.hooks as Record<string, unknown>) || {};
-	const existingStopHooks = Array.isArray(existingHooks.stop)
-		? existingHooks.stop
-		: [];
-
-	// Check if stop hook already exists to avoid duplicates
-	const hookExists = existingStopHooks.some(
-		(hook: unknown) =>
-			(hook as { command?: string })?.command === "agent-gauntlet stop-hook",
-	);
-	if (hookExists) {
+	if (added) {
+		console.log(
+			chalk.green(
+				"Cursor stop hook installed - gauntlet will run automatically when agent stops",
+			),
+		);
+	} else {
 		console.log(chalk.dim("Cursor stop hook already installed"));
-		return;
 	}
-
-	// Add our stop hook to the existing stop hooks
-	const newStopHooks = [
-		...existingStopHooks,
-		...CURSOR_STOP_HOOK_CONFIG.hooks.stop,
-	];
-
-	const mergedConfig = {
-		...existingConfig,
-		version:
-			(existingConfig.version as number) ?? CURSOR_STOP_HOOK_CONFIG.version,
-		hooks: {
-			...existingHooks,
-			stop: newStopHooks,
-		},
-	};
-
-	// Write with pretty formatting
-	await fs.writeFile(hooksPath, `${JSON.stringify(mergedConfig, null, 2)}\n`);
-
-	console.log(
-		chalk.green(
-			"Cursor stop hook installed - gauntlet will run automatically when agent stops",
-		),
-	);
 }
