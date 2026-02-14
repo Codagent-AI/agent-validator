@@ -26,8 +26,11 @@ The user configures which paths in their repo should trigger which validations â
 
 ## Agent-triggered workflows
 - After completing an openspec proposal, use the `gauntlet-run` skill to verify correctness.
-- After writing a plan with writing-plans, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
+- After writing a plan with `writing-plans` skill, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
 - When implementation is complete, run the `gauntlet-run` skill to verify correctness. Then the `push-pr` skill. Do not use finishing-a-development-branch.
+
+## Superpowers overrides for this project
+- The openspec change directory is the source of truth for planning. When using `writing-plan` skill, read all files in `openspec/changes/<change-name>/` (proposal.md, design.md, and spec deltas), not the brainstorm design doc in docs/plans/.
 
 ## Subagent-driven development: gauntlet as quality gate
 When running subagent-driven-development, do NOT dispatch the code quality reviewer subagent from superpowers. Instead, after the spec compliance reviewer passes, dispatch a subagent that runs `agent-gauntlet run` and reports the results. Use its output as the quality gate:

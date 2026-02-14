@@ -31,18 +31,20 @@ Produces `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
 ### 3. Spec + Review
 
-Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal, tasks, and spec deltas. After validation, the gauntlet spec reviewer runs automatically.
+Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal and spec deltas. After validation, the gauntlet spec reviewer runs automatically.
 ```
-/openspec:proposal write proposal and then invoke `gauntlet-run` skill.
+/clear
+/openspec:proposal write proposal for docs/plans/<file>.md and then invoke `gauntlet-run` skill
 ```
 
-Produces `openspec/changes/<change-name>/` containing `design.md` (moved from docs/plans/), `proposal.md`, `tasks.md`, and spec deltas. The proposal is the source of truth from this point forward.
+Produces `openspec/changes/<change-name>/` containing `design.md` (moved from docs/plans/), `proposal.md`, and spec deltas. The proposal is the source of truth from this point forward.
 
 ### 4. Plan + Implement (one-shot)
 
 The worktree agent writes a detailed implementation plan and immediately executes it without pausing. Each task is dispatched to a fresh subagent with automated spec compliance and code quality reviews. 
 
 ```
+/clear
 /superpowers:write-plan Read all files in openspec/changes/<change>, then make a plan, then immediately execute it using the subagent-driven-development skill.
 ```
 

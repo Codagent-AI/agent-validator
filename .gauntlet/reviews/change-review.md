@@ -26,21 +26,11 @@ The specification lives at `openspec/changes/*/spec.md`
 *   **Testability:** Is every requirement verifiable?
 *   **Architecture:** Does the spec respect existing patterns (Gates, Runners, etc)?
 
-### 3. Task Plan Review (The "Plan")
-The task plan lives at `openspec/changes/*/tasks.md`
-*   **Pre-factoring Section:** Does `tasks.md` begin with a `## 0. Pre-factoring` section? It MUST always be present — either listing CodeScene hotspot refactorings or stating "No hotspots modified."
-*   **Pre-factoring Design:** If pre-factoring tasks are listed, does `design.md` exist and contain a `## Pre-factoring` section documenting the hotspot scores, code smells, and refactoring strategy?
-*   **Completeness:** Do the tasks map 1:1 to the Spec requirements?
-*   **Actionability:** Are the tasks broken down enough to be safe and clear?
-*   **Validation:** Do the validation steps cover the critical user paths?
-*   **Test Coverage:** Is there a sufficient breadth and clarity of test cases?
-*   **Documentation updates:** Is there a task for updating documentation if any of the following apply?
-    *   The change adds or modifies CLI commands/options (`docs/user-guide.md#commands`)
-    *   The change adds or modifies config fields (`docs/config-reference.md`)
-    *   The change affects workflows, entry points, or gate behavior (`docs/user-guide.md`)
+### 3. Pre-factoring Review
+*   **Pre-factoring Section:** Does `design.md` contain a `## Pre-factoring` section? It MUST always be present — either listing CodeScene hotspot refactorings or stating "No hotspots modified."
 
 ### 4. OpenSpec Standards Compliance
 Reference: `openspec/AGENTS.md`
 *   **Format:** Do spec deltas use correct headers (`## ADDED|MODIFIED|REMOVED Requirements`, `#### Scenario:`)?
 *   **Wording:** Do requirements use SHALL/MUST for normative statements?
-*   **Structure:** Is the change directory properly scaffolded (`proposal.md`, `tasks.md`, `specs/` deltas)?
+*   **Structure:** Is the change directory properly scaffolded (`proposal.md`, `specs/` deltas)?
