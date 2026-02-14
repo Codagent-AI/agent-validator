@@ -2,7 +2,7 @@
   "name": "agent-gauntlet",
   "version": "0.13.1",
   "description": "A CLI tool for testing AI coding agents",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "author": "Paul Caplan",
   "repository": {
     "type": "git",
