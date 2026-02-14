@@ -103,7 +103,7 @@ This creates:
     code-quality.yml      # built-in code-quality review
 ```
 
-It also auto-installs stop hooks for Claude Code and Cursor (if selected) and installs the `/gauntlet-setup` skill.
+It also auto-installs start and stop hooks for Claude Code and Cursor (if selected) and installs the `/gauntlet-setup` skill.
 
 ### 2) Configure checks and reviews
 
@@ -255,7 +255,7 @@ The `init` command handles mechanical setup only:
 2. **Auto-detects base branch** from the git remote (falls back to `origin/main`)
 3. **Creates the `.gauntlet/` directory** with a config skeleton (`entry_points: []`) and the built-in code-quality review
 4. **Installs skills/commands** for your selected CLI agents (see [Skills Guide](skills-guide.md))
-5. **Auto-installs stop hooks** for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) if they are among the selected CLIs -- no prompt required
+5. **Auto-installs start and stop hooks** for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) if they are among the selected CLIs -- no prompt required
 6. **Prints next step**: "Run `/gauntlet-setup` to configure your checks and reviews"
 
 After `init`, run `/gauntlet-setup` in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
@@ -318,6 +318,42 @@ Requires the GitHub CLI (`gh`) to be installed and authenticated.
 ### `agent-gauntlet help`
 
 Shows help information, including an overview of Agent Gauntlet and all available commands. This is the default command when no command is provided.
+
+### `agent-gauntlet start-hook`
+
+Session start hook that primes AI agents with gauntlet verification instructions at the beginning of a session.
+
+#### Purpose
+
+The start hook automatically injects context into agent sessions to remind them to run `/gauntlet-run` before completing coding tasks. This ensures agents are aware of quality gates from the start of each session.
+
+#### Usage
+
+```bash
+agent-gauntlet start-hook [--adapter <adapter>]
+```
+
+#### Options
+
+- `--adapter <adapter>` (default: `claude`): Output format for the specific CLI adapter
+  - `claude`: Outputs JSON in Claude Code's `SessionStart` hook format
+  - `cursor`: Outputs plain text for Cursor IDE
+
+#### Behavior
+
+- Checks for `.gauntlet/config.yml` in the current directory
+- If no valid config exists, performs a silent no-op (no output, clean exit)
+- If config exists, outputs verification instructions in the appropriate format for the target CLI
+- Instructions remind agents to run `/gauntlet-run` before reporting tasks as complete
+
+#### Installation
+
+Start hooks are automatically installed during `agent-gauntlet init` for Claude Code and Cursor when they are among the selected CLIs. No manual configuration is required.
+
+#### Integration
+
+- **Claude Code**: Configured in `.claude/settings.local.json` as a `SessionStart` hook
+- **Cursor**: Configured in `.cursor/hooks.json` as a session start hook
 
 ## Change detection
 
