@@ -56,18 +56,16 @@ The user SHALL receive confirmation of start hook installation via a console log
 
 ### Requirement: Hook Configuration Content
 
-This modifies the existing "Hook Configuration Content" requirement in the base `init-hook-install` spec to include start hook entries alongside stop hook entries.
-
-The generated hook configuration MUST follow the Claude Code hook format. The configuration SHALL include both stop hook and start hook entries.
+The generated hook configuration SHALL include both stop hook and start hook entries, following the Claude Code hook format.
 
 #### Scenario: Hook configuration structure
-- **GIVEN** the user accepts hook installation
+- **GIVEN** `agent-gauntlet init` runs and Claude Code is detected
 - **WHEN** `.claude/settings.local.json` is created
 - **THEN** it SHALL contain a `hooks.Stop` array with a command hook for `agent-gauntlet stop-hook`
 - **AND** it SHALL contain a `hooks.SessionStart` array with a command hook for `agent-gauntlet start-hook`
 - **AND** the stop hook timeout SHALL be 300 seconds
 
 #### Scenario: Configuration JSON format
-- **GIVEN** the user accepts hook installation
+- **GIVEN** `agent-gauntlet init` runs and a CLI is detected
 - **WHEN** the configuration is written
 - **THEN** the JSON SHALL be properly formatted (indented for readability)

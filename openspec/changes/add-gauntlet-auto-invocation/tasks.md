@@ -17,6 +17,7 @@ Targeted refactoring (scoped to what this change touches):
 - [ ] 1.2 Update `.claude/skills/gauntlet-run/SKILL.md` frontmatter to match the new template (description + `disable-model-invocation: false`)
 - [ ] 1.3 Create `src/commands/start-hook.ts` with `registerStartHookCommand()`:
   - Check for `.gauntlet/config.yml` presence (fast exit if absent)
+  - Parse/validate config YAML: treat empty or malformed YAML as non-gauntlet (silent no-op exit 0)
   - Accept `--adapter` flag (`claude` or `cursor`, default `claude`)
   - Output context injection in the appropriate format (JSON for Claude, plain text for Cursor)
   - Exit 0
@@ -39,6 +40,7 @@ Targeted refactoring (scoped to what this change touches):
 - [ ] 2.4b Test: start-hook with unrecognized `--adapter` value (e.g., `--adapter vscode`) defaults to Claude Code JSON format
 - [ ] 2.5 Test: context message includes invocation conditions (run after coding tasks)
 - [ ] 2.6 Test: context message includes exclusion conditions (skip for read-only tasks)
+- [ ] 2.6b Test: context message includes uncertainty guidance (when unsure, run it — false positives less costly than false negatives)
 - [ ] 2.7 Test: `installStartHook` creates `SessionStart` hook in new settings file
 - [ ] 2.8 Test: `installStartHook` merges into existing settings without overwriting
 - [ ] 2.9 Test: `installStartHook` deduplicates on repeated runs

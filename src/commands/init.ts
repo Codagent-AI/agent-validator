@@ -723,6 +723,21 @@ async function installCommands(options: InstallCommandsOptions): Promise<void> {
 }
 
 /**
+ * Check whether a command string already exists in a hook entries array.
+ * Handles both flat format (hook.command) and nested format (hook.hooks[].command).
+ */
+function hookHasCommand(
+	entries: Record<string, unknown>[],
+	cmd: string,
+): boolean {
+	return entries.some((hook) => {
+		if (hook.command === cmd) return true;
+		const nested = hook.hooks as { command?: string }[] | undefined;
+		return Array.isArray(nested) && nested.some((h) => h.command === cmd);
+	});
+}
+
+/**
  * Shared helper: read/create a JSON config file, merge a hook entry under the
  * given hookKey, deduplicate, and write back. Returns true if the entry was
  * added, false if it was already present.
@@ -756,21 +771,12 @@ export async function mergeHookConfig(opts: {
 		}
 	}
 
-	const existingHooks =
-		(existing.hooks as Record<string, unknown>) || {};
+	const existingHooks = (existing.hooks as Record<string, unknown>) || {};
 	const existingEntries = Array.isArray(existingHooks[hookKey])
 		? (existingHooks[hookKey] as Record<string, unknown>[])
 		: [];
 
-	// Deduplicate: check both flat format (hook.command) and nested format (hook.hooks[].command)
-	const alreadyExists = existingEntries.some((hook: Record<string, unknown>) => {
-		if (hook.command === deduplicateCmd) return true;
-		const nested = hook.hooks as { command?: string }[] | undefined;
-		if (Array.isArray(nested) && nested.some((h) => h.command === deduplicateCmd)) return true;
-		return false;
-	});
-
-	if (alreadyExists) {
+	if (hookHasCommand(existingEntries, deduplicateCmd)) {
 		return false;
 	}
 
@@ -795,174 +801,111 @@ export async function mergeHookConfig(opts: {
 /**
  * The start hook configuration for Claude Code.
  */
-const START_HOOK_CONFIG = {
-	hooks: {
-		SessionStart: [
-			{
-				matcher: "startup|resume|clear|compact",
-				hooks: [
-					{
-						type: "command",
-						command: "agent-gauntlet start-hook",
-						async: false,
-					},
-				],
-			},
-		],
-	},
-};
+const START_HOOK_ENTRY = {
+	matcher: "startup|resume|clear|compact",
+	hooks: [
+		{
+			type: "command",
+			command: "agent-gauntlet start-hook",
+			async: false,
+		},
+	],
+} as const;
 
 /**
  * The start hook configuration for Cursor.
  */
-const CURSOR_START_HOOK_CONFIG = {
-	version: 1,
-	hooks: {
-		beforeSubmitPrompt: [
-			{
-				command: "agent-gauntlet start-hook --adapter cursor",
-			},
-		],
-	},
-};
+const CURSOR_START_HOOK_ENTRY = {
+	command: "agent-gauntlet start-hook --adapter cursor",
+} as const;
 
 /**
  * The stop hook configuration for Claude Code.
  */
-const STOP_HOOK_CONFIG = {
-	hooks: {
-		Stop: [
-			{
-				hooks: [
-					{
-						type: "command",
-						command: "agent-gauntlet stop-hook",
-						timeout: 300,
-					},
-				],
-			},
-		],
-	},
-};
+const STOP_HOOK_ENTRY = {
+	type: "command",
+	command: "agent-gauntlet stop-hook",
+	timeout: 300,
+} as const;
 
 /**
  * The stop hook configuration for Cursor.
  */
-const CURSOR_STOP_HOOK_CONFIG = {
-	version: 1,
-	hooks: {
-		stop: [
-			{
-				command: "agent-gauntlet stop-hook",
-				loop_limit: 10,
-			},
-		],
-	},
-};
+const CURSOR_STOP_HOOK_ENTRY = {
+	command: "agent-gauntlet stop-hook",
+	loop_limit: 10,
+} as const;
 
 /**
- * Install the stop hook configuration to .claude/settings.local.json.
+ * Install a hook and log the result.
  */
-export async function installStopHook(projectRoot: string): Promise<void> {
-	const settingsPath = path.join(projectRoot, ".claude", "settings.local.json");
-
-	const added = await mergeHookConfig({
-		filePath: settingsPath,
-		hookKey: "Stop",
-		hookEntry: STOP_HOOK_CONFIG.hooks.Stop[0]!.hooks[0]!,
-		deduplicateCmd: "agent-gauntlet stop-hook",
-		wrapInHooksArray: true,
-	});
-
-	if (added) {
-		console.log(
-			chalk.green(
-				"Stop hook installed - gauntlet will run automatically when agent stops",
-			),
-		);
-	} else {
-		console.log(chalk.dim("Stop hook already installed"));
-	}
+async function installHookWithLog(
+	config: Parameters<typeof mergeHookConfig>[0],
+	installedMsg: string,
+	existsMsg: string,
+): Promise<void> {
+	const added = await mergeHookConfig(config);
+	console.log(added ? chalk.green(installedMsg) : chalk.dim(existsMsg));
 }
 
-/**
- * Install the stop hook configuration to .cursor/hooks.json.
- */
+export async function installStopHook(projectRoot: string): Promise<void> {
+	await installHookWithLog(
+		{
+			filePath: path.join(projectRoot, ".claude", "settings.local.json"),
+			hookKey: "Stop",
+			hookEntry: STOP_HOOK_ENTRY,
+			deduplicateCmd: "agent-gauntlet stop-hook",
+			wrapInHooksArray: true,
+		},
+		"Stop hook installed - gauntlet will run automatically when agent stops",
+		"Stop hook already installed",
+	);
+}
+
 export async function installCursorStopHook(
 	projectRoot: string,
 ): Promise<void> {
-	const hooksPath = path.join(projectRoot, ".cursor", "hooks.json");
-
-	const added = await mergeHookConfig({
-		filePath: hooksPath,
-		hookKey: "stop",
-		hookEntry: CURSOR_STOP_HOOK_CONFIG.hooks.stop[0]!,
-		deduplicateCmd: "agent-gauntlet stop-hook",
-		wrapInHooksArray: false,
-		baseConfig: { version: CURSOR_STOP_HOOK_CONFIG.version },
-	});
-
-	if (added) {
-		console.log(
-			chalk.green(
-				"Cursor stop hook installed - gauntlet will run automatically when agent stops",
-			),
-		);
-	} else {
-		console.log(chalk.dim("Cursor stop hook already installed"));
-	}
+	await installHookWithLog(
+		{
+			filePath: path.join(projectRoot, ".cursor", "hooks.json"),
+			hookKey: "stop",
+			hookEntry: CURSOR_STOP_HOOK_ENTRY,
+			deduplicateCmd: "agent-gauntlet stop-hook",
+			wrapInHooksArray: false,
+			baseConfig: { version: 1 },
+		},
+		"Cursor stop hook installed - gauntlet will run automatically when agent stops",
+		"Cursor stop hook already installed",
+	);
 }
 
-/**
- * Install the start hook configuration to .claude/settings.local.json.
- */
 export async function installStartHook(projectRoot: string): Promise<void> {
-	const settingsPath = path.join(projectRoot, ".claude", "settings.local.json");
-	const hookEntry = START_HOOK_CONFIG.hooks.SessionStart[0]!;
-
-	const added = await mergeHookConfig({
-		filePath: settingsPath,
-		hookKey: "SessionStart",
-		hookEntry,
-		deduplicateCmd: "agent-gauntlet start-hook",
-		wrapInHooksArray: false,
-	});
-
-	if (added) {
-		console.log(
-			chalk.green(
-				"Start hook installed - agent will be primed with gauntlet instructions at session start",
-			),
-		);
-	} else {
-		console.log(chalk.dim("Start hook already installed"));
-	}
+	await installHookWithLog(
+		{
+			filePath: path.join(projectRoot, ".claude", "settings.local.json"),
+			hookKey: "SessionStart",
+			hookEntry: START_HOOK_ENTRY,
+			deduplicateCmd: "agent-gauntlet start-hook",
+			wrapInHooksArray: false,
+		},
+		"Start hook installed - agent will be primed with gauntlet instructions at session start",
+		"Start hook already installed",
+	);
 }
 
-/**
- * Install the start hook configuration to .cursor/hooks.json.
- */
 export async function installCursorStartHook(
 	projectRoot: string,
 ): Promise<void> {
-	const hooksPath = path.join(projectRoot, ".cursor", "hooks.json");
-
-	const added = await mergeHookConfig({
-		filePath: hooksPath,
-		hookKey: "beforeSubmitPrompt",
-		hookEntry: CURSOR_START_HOOK_CONFIG.hooks.beforeSubmitPrompt[0]!,
-		deduplicateCmd: "agent-gauntlet start-hook --adapter cursor",
-		wrapInHooksArray: false,
-		baseConfig: { version: CURSOR_START_HOOK_CONFIG.version },
-	});
-
-	if (added) {
-		console.log(
-			chalk.green(
-				"Cursor start hook installed - agent will be primed with gauntlet instructions at session start",
-			),
-		);
-	} else {
-		console.log(chalk.dim("Cursor start hook already installed"));
-	}
+	await installHookWithLog(
+		{
+			filePath: path.join(projectRoot, ".cursor", "hooks.json"),
+			hookKey: "beforeSubmitPrompt",
+			hookEntry: CURSOR_START_HOOK_ENTRY,
+			deduplicateCmd: "agent-gauntlet start-hook --adapter cursor",
+			wrapInHooksArray: false,
+			baseConfig: { version: 1 },
+		},
+		"Cursor start hook installed - agent will be primed with gauntlet instructions at session start",
+		"Cursor start hook already installed",
+	);
 }
