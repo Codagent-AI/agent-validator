@@ -359,6 +359,154 @@ async function scaffoldGauntletDir(
 }
 
 /**
+ * Write a skill's SKILL.md and optional reference files into a directory.
+ */
+async function writeSkillFiles(
+	actionDir: string,
+	content: string,
+	references: Record<string, string> | undefined,
+): Promise<void> {
+	await fs.mkdir(actionDir, { recursive: true });
+	await fs.writeFile(path.join(actionDir, "SKILL.md"), content);
+	if (references) {
+		const refsDir = path.join(actionDir, "references");
+		await fs.mkdir(refsDir, { recursive: true });
+		for (const [fileName, fileContent] of Object.entries(references)) {
+			await fs.writeFile(path.join(refsDir, fileName), fileContent);
+		}
+	}
+}
+
+/**
+ * Install or update skills using checksum-based comparison.
+ */
+async function installSkillsWithChecksums(
+	projectRoot: string,
+	skipPrompts: boolean,
+): Promise<void> {
+	const skillsDir = path.join(projectRoot, ".claude", "skills");
+	for (const skill of SKILL_DEFINITIONS) {
+		const actionDir = path.join(skillsDir, `gauntlet-${skill.action}`);
+		const skillPath = path.join(actionDir, "SKILL.md");
+		const references =
+			"references" in skill
+				? (skill.references as Record<string, string>)
+				: undefined;
+
+		if (!(await exists(actionDir))) {
+			await writeSkillFiles(actionDir, skill.content, references);
+			console.log(
+				chalk.green(`Created ${path.relative(projectRoot, skillPath)}`),
+			);
+			continue;
+		}
+
+		const expectedChecksum = computeExpectedSkillChecksum(
+			skill.content,
+			references,
+		);
+		const actualChecksum = await computeSkillChecksum(actionDir);
+		if (expectedChecksum === actualChecksum) continue;
+
+		const shouldOverwrite = await promptFileOverwrite(
+			`gauntlet-${skill.action}`,
+			skipPrompts,
+		);
+		if (!shouldOverwrite) continue;
+
+		// Clean and rewrite to remove stale files
+		await fs.rm(actionDir, { recursive: true, force: true });
+		await writeSkillFiles(actionDir, skill.content, references);
+		console.log(
+			chalk.green(`Updated ${path.relative(projectRoot, skillPath)}`),
+		);
+	}
+}
+
+/**
+ * Install or update hooks for a single adapter + kind using checksum-based comparison.
+ */
+async function installHookWithChecksums(
+	projectRoot: string,
+	variant: "claude" | "cursor",
+	kind: "stop" | "start",
+	skipPrompts: boolean,
+): Promise<void> {
+	const spec = buildHookSpec(projectRoot, variant, kind);
+
+	let existingConfig: Record<string, unknown> = {};
+	if (await exists(spec.config.filePath)) {
+		try {
+			existingConfig = JSON.parse(
+				await fs.readFile(spec.config.filePath, "utf-8"),
+			);
+		} catch {
+			existingConfig = {};
+		}
+	}
+
+	const existingHooks = (existingConfig.hooks as Record<string, unknown>) || {};
+	const existingEntries = Array.isArray(existingHooks[spec.config.hookKey])
+		? (existingHooks[spec.config.hookKey] as Record<string, unknown>[])
+		: [];
+
+	const gauntletEntries = existingEntries.filter((e) => isGauntletHookEntry(e));
+
+	// No existing gauntlet entries — install normally
+	if (gauntletEntries.length === 0) {
+		await installHookWithLog(spec.config, spec.installedMsg, spec.existsMsg);
+		return;
+	}
+
+	// Build expected entries for comparison
+	const expectedEntry = spec.config.wrapInHooksArray
+		? { hooks: [spec.config.hookEntry] }
+		: spec.config.hookEntry;
+	const expectedChecksum = computeExpectedHookChecksum([
+		expectedEntry as Record<string, unknown>,
+	]);
+	const actualChecksum = computeHookChecksum(existingEntries);
+
+	if (expectedChecksum === actualChecksum) {
+		console.log(chalk.dim(spec.existsMsg));
+		return;
+	}
+
+	const shouldOverwrite = await promptHookOverwrite(
+		spec.config.filePath,
+		skipPrompts,
+	);
+	if (!shouldOverwrite) {
+		console.log(chalk.dim(spec.existsMsg));
+		return;
+	}
+
+	// Remove old gauntlet entries, then re-add
+	const nonGauntletEntries = existingEntries.filter(
+		(e) => !isGauntletHookEntry(e),
+	);
+	const entryToAdd = spec.config.wrapInHooksArray
+		? { hooks: [spec.config.hookEntry] }
+		: spec.config.hookEntry;
+	const newEntries = [...nonGauntletEntries, entryToAdd];
+
+	const merged: Record<string, unknown> = {
+		...(spec.config.baseConfig ?? {}),
+		...existingConfig,
+		hooks: {
+			...existingHooks,
+			[spec.config.hookKey]: newEntries,
+		},
+	};
+	await fs.mkdir(path.dirname(spec.config.filePath), { recursive: true });
+	await fs.writeFile(
+		spec.config.filePath,
+		`${JSON.stringify(merged, null, 2)}\n`,
+	);
+	console.log(chalk.green(spec.installedMsg));
+}
+
+/**
  * Phase 5: Install external files (skills + hooks).
  * Always runs, even if .gauntlet/ already existed.
  */
@@ -367,155 +515,13 @@ async function installExternalFiles(
 	devAdapters: CLIAdapter[],
 	skipPrompts: boolean,
 ): Promise<void> {
-	// Install skills to .claude/skills/
-	const skillsDir = path.join(projectRoot, ".claude", "skills");
-	for (const skill of SKILL_DEFINITIONS) {
-		const actionDir = path.join(skillsDir, `gauntlet-${skill.action}`);
-		const skillPath = path.join(actionDir, "SKILL.md");
+	await installSkillsWithChecksums(projectRoot, skipPrompts);
 
-		const references =
-			"references" in skill
-				? (skill.references as Record<string, string>)
-				: undefined;
-
-		if (!(await exists(actionDir))) {
-			// Directory doesn't exist — create and install silently
-			await fs.mkdir(actionDir, { recursive: true });
-			await fs.writeFile(skillPath, skill.content);
-			const relPath = path.relative(projectRoot, skillPath);
-			console.log(chalk.green(`Created ${relPath}`));
-
-			// Install reference files
-			if (references) {
-				const refsDir = path.join(actionDir, "references");
-				await fs.mkdir(refsDir, { recursive: true });
-				for (const [fileName, fileContent] of Object.entries(references)) {
-					await fs.writeFile(path.join(refsDir, fileName), fileContent);
-				}
-			}
-		} else {
-			// Directory exists — check checksums
-			const expectedChecksum = computeExpectedSkillChecksum(
-				skill.content,
-				references,
-			);
-			const actualChecksum = await computeSkillChecksum(actionDir);
-
-			if (expectedChecksum === actualChecksum) {
-				// Checksums match — skip silently
-				continue;
-			}
-
-			// Checksums differ — prompt for overwrite
-			const shouldOverwrite = await promptFileOverwrite(
-				`gauntlet-${skill.action}`,
-				skipPrompts,
-			);
-			if (!shouldOverwrite) continue;
-
-			// Overwrite skill file
-			await fs.writeFile(skillPath, skill.content);
-			const relPath = path.relative(projectRoot, skillPath);
-			console.log(chalk.green(`Updated ${relPath}`));
-
-			// Update reference files
-			if (references) {
-				const refsDir = path.join(actionDir, "references");
-				await fs.mkdir(refsDir, { recursive: true });
-				for (const [fileName, fileContent] of Object.entries(references)) {
-					await fs.writeFile(path.join(refsDir, fileName), fileContent);
-				}
-			}
-		}
-	}
-
-	// Install hooks for dev CLIs with hook support
 	for (const adapter of devAdapters) {
 		if (!adapter.supportsHooks()) continue;
-
 		const variant = adapter.name as "claude" | "cursor";
 		for (const kind of ["stop", "start"] as const) {
-			const spec = buildHookSpec(projectRoot, variant, kind);
-
-			// Read existing hook entries to check checksums
-			let existingConfig: Record<string, unknown> = {};
-			if (await exists(spec.config.filePath)) {
-				try {
-					existingConfig = JSON.parse(
-						await fs.readFile(spec.config.filePath, "utf-8"),
-					);
-				} catch {
-					existingConfig = {};
-				}
-			}
-
-			const existingHooks =
-				(existingConfig.hooks as Record<string, unknown>) || {};
-			const existingEntries = Array.isArray(existingHooks[spec.config.hookKey])
-				? (existingHooks[spec.config.hookKey] as Record<string, unknown>[])
-				: [];
-
-			if (existingEntries.length > 0) {
-				// Check if gauntlet entries already exist and match
-				const gauntletEntries = existingEntries.filter((e) =>
-					isGauntletHookEntry(e),
-				);
-				if (gauntletEntries.length > 0) {
-					// Build expected entries for comparison
-					const expectedEntry = spec.config.wrapInHooksArray
-						? { hooks: [spec.config.hookEntry] }
-						: spec.config.hookEntry;
-					const expectedChecksum = computeExpectedHookChecksum([
-						expectedEntry as Record<string, unknown>,
-					]);
-					const actualChecksum = computeHookChecksum(existingEntries);
-
-					if (expectedChecksum === actualChecksum) {
-						console.log(chalk.dim(spec.existsMsg));
-						continue;
-					}
-
-					// Checksums differ — prompt for overwrite
-					const shouldOverwrite = await promptHookOverwrite(
-						spec.config.filePath,
-						skipPrompts,
-					);
-					if (!shouldOverwrite) {
-						console.log(chalk.dim(spec.existsMsg));
-						continue;
-					}
-
-					// Remove old gauntlet entries, then re-add
-					const nonGauntletEntries = existingEntries.filter(
-						(e) => !isGauntletHookEntry(e),
-					);
-					const entryToAdd = spec.config.wrapInHooksArray
-						? { hooks: [spec.config.hookEntry] }
-						: spec.config.hookEntry;
-					const newEntries = [...nonGauntletEntries, entryToAdd];
-
-					const merged: Record<string, unknown> = {
-						...(spec.config.baseConfig ?? {}),
-						...existingConfig,
-						hooks: {
-							...existingHooks,
-							[spec.config.hookKey]: newEntries,
-						},
-					};
-					await fs.mkdir(path.dirname(spec.config.filePath), {
-						recursive: true,
-					});
-					await fs.writeFile(
-						spec.config.filePath,
-						`${JSON.stringify(merged, null, 2)}\n`,
-					);
-					console.log(chalk.green(spec.installedMsg));
-					continue;
-				}
-			}
-
-			// No existing gauntlet entries — install normally
-			await installHookWithLog(spec.config, spec.installedMsg, spec.existsMsg);
+			await installHookWithChecksums(projectRoot, variant, kind, skipPrompts);
 		}
 	}
 }
