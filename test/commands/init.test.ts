@@ -15,6 +15,21 @@ import { Command } from "commander";
 const TEST_DIR = path.join(process.cwd(), `test-init-${Date.now()}`);
 
 /**
+ * Read and parse the hook config file for a given adapter variant.
+ */
+async function readHookConfig(
+	testDir: string,
+	variant: "claude" | "cursor",
+): Promise<Record<string, unknown>> {
+	const filePath =
+		variant === "claude"
+			? path.join(testDir, ".claude", "settings.local.json")
+			: path.join(testDir, ".cursor", "hooks.json");
+	const content = await fs.readFile(filePath, "utf-8");
+	return JSON.parse(content) as Record<string, unknown>;
+}
+
+/**
  * Shared cleanup: restore console.log, cwd, and remove test artifacts.
  */
 async function cleanupTestEnv(
@@ -583,17 +598,11 @@ describe("Claude Start Hook Installation", () => {
 
 	it("should set start hook as synchronous", async () => {
 		await installStartHook(TEST_DIR);
-
-		const settingsPath = path.join(
-			TEST_DIR,
-			".claude",
-			"settings.local.json",
-		);
-		const content = await fs.readFile(settingsPath, "utf-8");
-		const settings = JSON.parse(content);
-
-		const innerHook = settings.hooks.SessionStart[0].hooks[0];
-		expect(innerHook.async).toBe(false);
+		const settings = await readHookConfig(TEST_DIR, "claude");
+		const hooks = settings.hooks as Record<string, unknown[]>;
+		const entry = hooks.SessionStart[0] as Record<string, unknown>;
+		const innerHooks = entry.hooks as Record<string, unknown>[];
+		expect(innerHooks[0].async).toBe(false);
 	});
 
 	it("should set matcher for session start events", async () => {
@@ -654,16 +663,9 @@ describe("Claude Start Hook Installation", () => {
 	it("should deduplicate on repeated runs", async () => {
 		await installStartHook(TEST_DIR);
 		await installStartHook(TEST_DIR);
-
-		const settingsPath = path.join(
-			TEST_DIR,
-			".claude",
-			"settings.local.json",
-		);
-		const content = await fs.readFile(settingsPath, "utf-8");
-		const settings = JSON.parse(content);
-
-		expect(settings.hooks.SessionStart.length).toBe(1);
+		const settings = await readHookConfig(TEST_DIR, "claude");
+		const hooks = settings.hooks as Record<string, unknown[]>;
+		expect(hooks.SessionStart.length).toBe(1);
 	});
 
 	it("should show confirmation message", async () => {
@@ -718,12 +720,9 @@ describe("Cursor Start Hook Installation", () => {
 	it("should deduplicate on repeated runs", async () => {
 		await installCursorStartHook(TEST_DIR);
 		await installCursorStartHook(TEST_DIR);
-
-		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
-		const content = await fs.readFile(hooksPath, "utf-8");
-		const config = JSON.parse(content);
-
-		expect(config.hooks.sessionStart.length).toBe(1);
+		const config = await readHookConfig(TEST_DIR, "cursor");
+		const hooks = config.hooks as Record<string, unknown[]>;
+		expect(hooks.sessionStart.length).toBe(1);
 	});
 
 	it("should merge into existing hooks file without overwriting", async () => {

@@ -3,10 +3,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import YAML from "yaml";
 import { loadGlobalConfig } from "../config/global.js";
-import {
-	getDebugLogConfig,
-	getLogDir,
-} from "../hooks/stop-hook-handler.js";
+import { getDebugLogConfig, getLogDir } from "../hooks/stop-hook-handler.js";
 import { DebugLogger, mergeDebugLogConfig } from "../utils/debug-log.js";
 
 const START_HOOK_MESSAGE = `<IMPORTANT>

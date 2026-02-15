@@ -848,64 +848,101 @@ async function installHookWithLog(
 	console.log(added ? chalk.green(installedMsg) : chalk.dim(existsMsg));
 }
 
-export async function installStopHook(projectRoot: string): Promise<void> {
-	await installHookWithLog(
-		{
-			filePath: path.join(projectRoot, ".claude", "settings.local.json"),
+interface HookInstallSpec {
+	config: Parameters<typeof mergeHookConfig>[0];
+	installedMsg: string;
+	existsMsg: string;
+}
+
+function buildHookSpec(
+	projectRoot: string,
+	variant: "claude" | "cursor",
+	kind: "stop" | "start",
+): HookInstallSpec {
+	const isCursor = variant === "cursor";
+	const isStop = kind === "stop";
+	const hookConfigs = {
+		"claude-stop": {
+			dir: ".claude",
+			file: "settings.local.json",
 			hookKey: "Stop",
-			hookEntry: STOP_HOOK_ENTRY,
-			deduplicateCmd: "agent-gauntlet stop-hook",
-			wrapInHooksArray: true,
+			entry: STOP_HOOK_ENTRY as Record<string, unknown>,
+			cmd: "agent-gauntlet stop-hook",
+			wrap: true,
 		},
-		"Stop hook installed - gauntlet will run automatically when agent stops",
-		"Stop hook already installed",
-	);
+		"cursor-stop": {
+			dir: ".cursor",
+			file: "hooks.json",
+			hookKey: "stop",
+			entry: CURSOR_STOP_HOOK_ENTRY as Record<string, unknown>,
+			cmd: "agent-gauntlet stop-hook",
+			wrap: false,
+		},
+		"claude-start": {
+			dir: ".claude",
+			file: "settings.local.json",
+			hookKey: "SessionStart",
+			entry: START_HOOK_ENTRY as Record<string, unknown>,
+			cmd: "agent-gauntlet start-hook",
+			wrap: false,
+		},
+		"cursor-start": {
+			dir: ".cursor",
+			file: "hooks.json",
+			hookKey: "sessionStart",
+			entry: CURSOR_START_HOOK_ENTRY as Record<string, unknown>,
+			cmd: "agent-gauntlet start-hook --adapter cursor",
+			wrap: false,
+		},
+	} as const;
+
+	const key = `${variant}-${kind}` as keyof typeof hookConfigs;
+	const cfg = hookConfigs[key];
+	const prefix = isCursor ? "Cursor " : "";
+	const kindLabel = isCursor ? kind : isStop ? "Stop" : "Start";
+	const purpose = isStop
+		? "gauntlet will run automatically when agent stops"
+		: "agent will be primed with gauntlet instructions at session start";
+
+	return {
+		config: {
+			filePath: path.join(projectRoot, cfg.dir, cfg.file),
+			hookKey: cfg.hookKey,
+			hookEntry: cfg.entry,
+			deduplicateCmd: cfg.cmd,
+			wrapInHooksArray: cfg.wrap,
+			...(isCursor ? { baseConfig: { version: 1 } } : {}),
+		},
+		installedMsg: `${prefix}${kindLabel} hook installed - ${purpose}`,
+		existsMsg: `${prefix}${kindLabel} hook already installed`,
+	};
+}
+
+async function installHookBySpec(
+	projectRoot: string,
+	variant: "claude" | "cursor",
+	kind: "stop" | "start",
+): Promise<void> {
+	const spec = buildHookSpec(projectRoot, variant, kind);
+	await installHookWithLog(spec.config, spec.installedMsg, spec.existsMsg);
+}
+
+export async function installStopHook(projectRoot: string): Promise<void> {
+	await installHookBySpec(projectRoot, "claude", "stop");
 }
 
 export async function installCursorStopHook(
 	projectRoot: string,
 ): Promise<void> {
-	await installHookWithLog(
-		{
-			filePath: path.join(projectRoot, ".cursor", "hooks.json"),
-			hookKey: "stop",
-			hookEntry: CURSOR_STOP_HOOK_ENTRY,
-			deduplicateCmd: "agent-gauntlet stop-hook",
-			wrapInHooksArray: false,
-			baseConfig: { version: 1 },
-		},
-		"Cursor stop hook installed - gauntlet will run automatically when agent stops",
-		"Cursor stop hook already installed",
-	);
+	await installHookBySpec(projectRoot, "cursor", "stop");
 }
 
 export async function installStartHook(projectRoot: string): Promise<void> {
-	await installHookWithLog(
-		{
-			filePath: path.join(projectRoot, ".claude", "settings.local.json"),
-			hookKey: "SessionStart",
-			hookEntry: START_HOOK_ENTRY,
-			deduplicateCmd: "agent-gauntlet start-hook",
-			wrapInHooksArray: false,
-		},
-		"Start hook installed - agent will be primed with gauntlet instructions at session start",
-		"Start hook already installed",
-	);
+	await installHookBySpec(projectRoot, "claude", "start");
 }
 
 export async function installCursorStartHook(
 	projectRoot: string,
 ): Promise<void> {
-	await installHookWithLog(
-		{
-			filePath: path.join(projectRoot, ".cursor", "hooks.json"),
-			hookKey: "sessionStart",
-			hookEntry: CURSOR_START_HOOK_ENTRY,
-			deduplicateCmd: "agent-gauntlet start-hook --adapter cursor",
-			wrapInHooksArray: false,
-			baseConfig: { version: 1 },
-		},
-		"Cursor start hook installed - agent will be primed with gauntlet instructions at session start",
-		"Cursor start hook already installed",
-	);
+	await installHookBySpec(projectRoot, "cursor", "start");
 }
