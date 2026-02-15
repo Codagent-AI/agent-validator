@@ -521,7 +521,12 @@ async function installExternalFiles(
 		if (!adapter.supportsHooks()) continue;
 		if (adapter.name !== "claude" && adapter.name !== "cursor") continue;
 		for (const kind of ["stop", "start"] as const) {
-			await installHookWithChecksums(projectRoot, adapter.name, kind, skipPrompts);
+			await installHookWithChecksums(
+				projectRoot,
+				adapter.name,
+				kind,
+				skipPrompts,
+			);
 		}
 	}
 }
