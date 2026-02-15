@@ -23,7 +23,7 @@ Targeted refactoring (scoped to what this change touches):
   - Exit 0
 - [ ] 1.4 Add start hook config constants to `src/commands/init.ts`:
   - `CLAUDE_START_HOOK_CONFIG` (SessionStart hook with matcher for startup|resume|clear|compact)
-  - `CURSOR_START_HOOK_CONFIG` (beforeSubmitPrompt hook with command `agent-gauntlet start-hook --adapter cursor`)
+  - `CURSOR_START_HOOK_CONFIG` (sessionStart hook with command `agent-gauntlet start-hook --adapter cursor`)
 - [ ] 1.5 Implement `installStartHook(projectRoot)` using the `mergeHookConfig` helper from pre-factoring step 0.1, including console confirmation message
 - [ ] 1.6 Implement `installCursorStartHook(projectRoot)` using the `mergeHookConfig` helper, including console confirmation message
 - [ ] 1.7 Call `installStartHook()` and `installCursorStartHook()` from `registerInitCommand()` alongside existing stop hook installation
@@ -44,7 +44,7 @@ Targeted refactoring (scoped to what this change touches):
 - [ ] 2.7 Test: `installStartHook` creates `SessionStart` hook in new settings file
 - [ ] 2.8 Test: `installStartHook` merges into existing settings without overwriting
 - [ ] 2.9 Test: `installStartHook` deduplicates on repeated runs
-- [ ] 2.10 Test: `installCursorStartHook` creates `beforeSubmitPrompt` hook in new hooks file
+- [ ] 2.10 Test: `installCursorStartHook` creates `sessionStart` hook in new hooks file
 - [ ] 2.11 Test: `installCursorStartHook` deduplicates on repeated runs
 - [ ] 2.11b Test: `installCursorStartHook` merges into existing hooks file without overwriting
 - [ ] 2.12 Test: `buildGauntletSkillContent('run')` generates frontmatter with `disable-model-invocation: false` and actionable description

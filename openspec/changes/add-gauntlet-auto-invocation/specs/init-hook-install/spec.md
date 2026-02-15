@@ -17,7 +17,7 @@ The init command SHALL install a start hook for each detected CLI alongside the 
 - **GIVEN** the user runs `agent-gauntlet init`
 - **AND** Cursor is detected as an available CLI
 - **WHEN** the init command installs hooks
-- **THEN** `.cursor/hooks.json` SHALL contain a `hooks.beforeSubmitPrompt` array with a command entry
+- **THEN** `.cursor/hooks.json` SHALL contain a `hooks.sessionStart` array with a command entry
 - **AND** the command SHALL be `agent-gauntlet start-hook --adapter cursor`
 
 #### Scenario: Start hook merged with existing Claude Code settings
@@ -30,7 +30,7 @@ The init command SHALL install a start hook for each detected CLI alongside the 
 - **GIVEN** `.cursor/hooks.json` already exists with other hooks
 - **WHEN** the start hook is installed
 - **THEN** the existing hooks configuration SHALL be merged (not overwritten)
-- **AND** existing beforeSubmitPrompt hooks SHALL be preserved alongside the new hook
+- **AND** existing sessionStart hooks SHALL be preserved alongside the new hook
 
 #### Scenario: Duplicate start hook prevention
 - **GIVEN** `.claude/settings.local.json` already contains an `agent-gauntlet start-hook` entry in `hooks.SessionStart`
@@ -38,7 +38,7 @@ The init command SHALL install a start hook for each detected CLI alongside the 
 - **THEN** no duplicate start hook entry SHALL be added
 
 #### Scenario: Cursor duplicate start hook prevention
-- **GIVEN** `.cursor/hooks.json` already contains an `agent-gauntlet start-hook --adapter cursor` entry in `hooks.beforeSubmitPrompt`
+- **GIVEN** `.cursor/hooks.json` already contains an `agent-gauntlet start-hook --adapter cursor` entry in `hooks.sessionStart`
 - **WHEN** `agent-gauntlet init` runs again
 - **THEN** no duplicate start hook entry SHALL be added
 

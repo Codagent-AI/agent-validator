@@ -353,7 +353,7 @@ Start hooks are automatically installed during `agent-gauntlet init` for Claude 
 #### Integration
 
 - **Claude Code**: Configured in `.claude/settings.local.json` as a `SessionStart` hook (fires once per session event: startup, resume, clear, compact)
-- **Cursor**: Configured in `.cursor/hooks.json` as a `beforeSubmitPrompt` hook (fires before each prompt, since Cursor has no session-start event)
+- **Cursor**: Configured in `.cursor/hooks.json` as a `sessionStart` hook
 
 ## Change detection
 

@@ -54,7 +54,7 @@ The start-hook command SHALL select the output protocol from the `--adapter` fla
 - **WHEN** it outputs context injection
 - **THEN** the output SHALL be valid JSON following the format: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "<message>" } }`
 
-#### Scenario: Cursor beforeSubmitPrompt output format
+#### Scenario: Cursor sessionStart output format
 - **GIVEN** the start-hook is invoked with `--adapter cursor`
 - **WHEN** it outputs context injection
 - **THEN** the output SHALL be the plain text context message written directly to stdout (not wrapped in JSON)

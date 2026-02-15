@@ -899,7 +899,7 @@ export async function installCursorStartHook(
 	await installHookWithLog(
 		{
 			filePath: path.join(projectRoot, ".cursor", "hooks.json"),
-			hookKey: "beforeSubmitPrompt",
+			hookKey: "sessionStart",
 			hookEntry: CURSOR_START_HOOK_ENTRY,
 			deduplicateCmd: "agent-gauntlet start-hook --adapter cursor",
 			wrapInHooksArray: false,

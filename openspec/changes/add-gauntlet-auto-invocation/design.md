@@ -93,8 +93,8 @@ Claude Code (`SessionStart` hook):
 }
 ```
 
-Cursor (`beforeSubmitPrompt` hook):
-Cursor's `beforeSubmitPrompt` hook receives the prompt via stdin and can inject additional context. The start-hook command outputs the context message so Cursor includes it as part of the agent's input.
+Cursor (`sessionStart` hook):
+Cursor's `sessionStart` hook runs at session start and can inject additional context. The start-hook command outputs the context message so Cursor includes it as part of the agent's input.
 
 #### Hook configs
 
@@ -119,13 +119,13 @@ const CLAUDE_START_HOOK_CONFIG = {
 };
 ```
 
-**Cursor** -- `beforeSubmitPrompt` in `.cursor/hooks.json`:
+**Cursor** -- `sessionStart` in `.cursor/hooks.json`:
 
 ```typescript
 const CURSOR_START_HOOK_CONFIG = {
   version: 1,
   hooks: {
-    beforeSubmitPrompt: [
+    sessionStart: [
       {
         command: "agent-gauntlet start-hook --adapter cursor",
       },
@@ -144,7 +144,7 @@ const CURSOR_START_HOOK_CONFIG = {
 `installCursorStartHook(projectRoot)` -- mirrors `installCursorStopHook()`:
 - Merges into existing `.cursor/hooks.json`
 - Deduplicates
-- Merges into `beforeSubmitPrompt` array
+- Merges into `sessionStart` array
 
 Called from `registerInitCommand()`:
 

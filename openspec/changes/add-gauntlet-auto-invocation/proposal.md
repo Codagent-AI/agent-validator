@@ -6,7 +6,7 @@ The gauntlet-run skill has `disable-model-invocation: true` and a vague descript
 ## What Changes
 - Update gauntlet-run skill frontmatter: set `disable-model-invocation: false` and provide a clear, actionable description so Claude's auto-invocation logic knows when to trigger it
 - Add a new `agent-gauntlet start-hook` CLI command that outputs context injection JSON at session start, priming the agent with explicit instructions to run `/gauntlet-run` before reporting work as complete
-- Install start hooks for Claude Code (`SessionStart`) and Cursor (`beforeSubmitPrompt`) during `agent-gauntlet init`
+- Install start hooks for Claude Code (`SessionStart`) and Cursor (`sessionStart`) during `agent-gauntlet init`
 - Add `installStartHook()` and `installCursorStartHook()` functions mirroring the existing stop hook installers
 
 ## Alternatives Considered

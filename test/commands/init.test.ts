@@ -701,16 +701,16 @@ describe("Cursor Start Hook Installation", () => {
 		]),
 	);
 
-	it("should create beforeSubmitPrompt hook in new hooks file", async () => {
+	it("should create sessionStart hook in new hooks file", async () => {
 		await installCursorStartHook(TEST_DIR);
 
 		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
 		const content = await fs.readFile(hooksPath, "utf-8");
 		const config = JSON.parse(content);
 
-		expect(Array.isArray(config.hooks.beforeSubmitPrompt)).toBe(true);
-		expect(config.hooks.beforeSubmitPrompt.length).toBe(1);
-		expect(config.hooks.beforeSubmitPrompt[0].command).toBe(
+		expect(Array.isArray(config.hooks.sessionStart)).toBe(true);
+		expect(config.hooks.sessionStart.length).toBe(1);
+		expect(config.hooks.sessionStart[0].command).toBe(
 			"agent-gauntlet start-hook --adapter cursor",
 		);
 	});
@@ -723,7 +723,7 @@ describe("Cursor Start Hook Installation", () => {
 		const content = await fs.readFile(hooksPath, "utf-8");
 		const config = JSON.parse(content);
 
-		expect(config.hooks.beforeSubmitPrompt.length).toBe(1);
+		expect(config.hooks.sessionStart.length).toBe(1);
 	});
 
 	it("should merge into existing hooks file without overwriting", async () => {
@@ -750,11 +750,11 @@ describe("Cursor Start Hook Installation", () => {
 		const content = await fs.readFile(hooksPath, "utf-8");
 		const config = JSON.parse(content);
 
-		// Both stop and beforeSubmitPrompt should exist
+		// Both stop and sessionStart should exist
 		expect(config.hooks.stop).toBeDefined();
 		expect(config.hooks.stop[0].command).toBe("agent-gauntlet stop-hook");
-		expect(config.hooks.beforeSubmitPrompt).toBeDefined();
-		expect(config.hooks.beforeSubmitPrompt[0].command).toBe(
+		expect(config.hooks.sessionStart).toBeDefined();
+		expect(config.hooks.sessionStart[0].command).toBe(
 			"agent-gauntlet start-hook --adapter cursor",
 		);
 	});
