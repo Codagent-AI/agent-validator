@@ -82,3 +82,7 @@ Skips all interactive prompts with these defaults:
 4. **Unified skill installation** — always to `.claude/skills/`, with `@file_path` instructions for non-native CLIs
 5. **`num_reviews` configuration** — prompted during init based on review CLI count
 6. **Built-in reviewer announcement** — explicit messaging about the code quality reviewer
+
+## Pre-factoring
+
+No hotspots modified.
