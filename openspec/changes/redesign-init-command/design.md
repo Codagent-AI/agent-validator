@@ -58,10 +58,10 @@ Runs always, regardless of Phase 4 outcome.
 ### Phase 6 — Instructions
 
 **For Claude Code / Cursor users:**
-- "To complete setup, run `/gauntlet-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run."
+- "To complete setup, run `/gauntlet-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run."
 
 **For non-Claude/non-Cursor CLIs:**
-- "To complete setup, reference the setup skill in your CLI: `@.claude/skills/gauntlet-setup/SKILL.md`. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run."
+- "To complete setup, reference the setup skill in your CLI: `@.claude/skills/gauntlet-setup/SKILL.md`. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run."
 - List all available skills with `@file_path` syntax and one-line descriptions
 
 **Mixed selection** (both native and non-native CLIs): print both sets of instructions.

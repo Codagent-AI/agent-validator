@@ -1,6 +1,6 @@
 # Skills Guide
 
-Agent Gauntlet installs **skills** (for Claude Code) and **flat commands** (for other CLI agents) that let you invoke gauntlet workflows directly from your AI agent session.
+Agent Gauntlet installs **skills** that let you invoke gauntlet workflows directly from your AI agent session.
 
 ## Available Skills
 
@@ -16,7 +16,7 @@ Agent Gauntlet installs **skills** (for Claude Code) and **flat commands** (for 
 
 ## Installation
 
-Skills are installed during `agent-gauntlet init` (Phase 5) into the project's `.claude/skills/` directory. Installation uses **checksum-based comparison**:
+Skills are installed during `agent-gauntlet init` into the project's `.claude/skills/` directory. Installation uses **checksum-based comparison**:
 
 - **Missing skills** are created silently
 - **Unchanged skills** (checksum matches) are skipped silently
@@ -47,7 +47,7 @@ Skills are installed as directory-based `SKILL.md` files:
     ci-pr-troubleshooting.md
 ```
 
-For **non-native CLI agents** (Codex, Gemini, etc.), Phase 6 of `init` prints `@file_path` references so you can point your agent at the skill files directly (e.g., `@.claude/skills/gauntlet-run/SKILL.md`).
+For **non-native CLI agents** (Codex, Gemini, etc.), `init` prints `@file_path` references so you can point your agent at the skill files directly (e.g., `@.claude/skills/gauntlet-run/SKILL.md`).
 
 ## Usage
 

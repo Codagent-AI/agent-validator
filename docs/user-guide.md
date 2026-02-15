@@ -255,14 +255,14 @@ Guided interactive setup that creates `.gauntlet/`, installs skills, and configu
     code-quality.yml      # Built-in code-quality review (num_reviews: 1)
 ```
 
-The `init` command runs in 6 phases:
+The `init` command walks you through the following steps:
 
-1. **Phase 1 — CLI Detection**: Discovers available CLIs on the system
-2. **Phase 2 — Development CLI Selection**: Multi-select prompt for your development tools. Hooks are installed for CLIs that support them (Claude Code, Cursor). CLIs without hook support display a warning.
-3. **Phase 3 — Review CLI Selection**: Multi-select prompt for review tools. Populates `cli.default_preference` in the user's selection order. If one review CLI is selected, `num_reviews` is set to 1 automatically. If multiple are selected, you're prompted for how many to run per review.
-4. **Phase 4 — Scaffold `.gauntlet/`**: Creates the directory, config skeleton (`entry_points: []`), and built-in code-quality review. **Skipped entirely** if `.gauntlet/` already exists (config is never overwritten).
-5. **Phase 5 — Install External Files**: Installs skills to `.claude/skills/` and hooks for development CLIs. **Always runs**, even on re-init. Uses SHA-256 checksums to: create missing files silently, skip unchanged files, and prompt before overwriting changed files.
-6. **Phase 6 — Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor) get `/gauntlet-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
+1. **CLI Detection**: Discovers available CLIs on the system
+2. **Development CLI Selection**: Multi-select prompt for your development tools. Hooks are installed for CLIs that support them (Claude Code, Cursor). CLIs without hook support display a warning.
+3. **Review CLI Selection**: Multi-select prompt for review tools. Populates `cli.default_preference` in the user's selection order. If one review CLI is selected, `num_reviews` is set to 1 automatically. If multiple are selected, you're prompted for how many to run per review.
+4. **Scaffold `.gauntlet/`**: Creates the directory, config skeleton (`entry_points: []`), and built-in code-quality review. **Skipped entirely** if `.gauntlet/` already exists (config is never overwritten).
+5. **Install External Files**: Installs skills to `.claude/skills/` and hooks for development CLIs. **Always runs**, even on re-init. Uses SHA-256 checksums to: create missing files silently, skip unchanged files, and prompt before overwriting changed files.
+6. **Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor) get `/gauntlet-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
 
 After `init`, run `/gauntlet-setup` in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
 
