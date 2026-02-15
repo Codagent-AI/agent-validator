@@ -5,6 +5,20 @@ import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { type CLIAdapter, getAllAdapters } from "../cli-adapters/index.js";
+import {
+	computeExpectedHookChecksum,
+	computeExpectedSkillChecksum,
+	computeHookChecksum,
+	computeSkillChecksum,
+	isGauntletHookEntry,
+} from "./init-checksums.js";
+import {
+	promptDevCLIs,
+	promptFileOverwrite,
+	promptHookOverwrite,
+	promptNumReviews,
+	promptReviewCLIs,
+} from "./init-prompts.js";
 import { exists } from "./shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -174,7 +188,7 @@ const PROJECT_STRUCTURE_REFERENCE = readSkillTemplate(
 );
 
 /**
- * Skill definitions used by installCommands.
+ * Skill definitions used by installExternalFiles.
  * Each entry maps a skill action name to its content and metadata.
  */
 const SKILL_DEFINITIONS = [
@@ -200,11 +214,14 @@ const SKILL_DEFINITIONS = [
 	},
 ] as const;
 
-type InstallLevel = "none" | "project" | "user";
-
 interface InitOptions {
 	yes?: boolean;
 }
+
+/**
+ * Native CLIs that support the /gauntlet-setup skill invocation.
+ */
+const NATIVE_CLIS = new Set(["claude", "cursor"]);
 
 export function registerInitCommand(program: Command): void {
 	program
@@ -214,13 +231,9 @@ export function registerInitCommand(program: Command): void {
 		.action(async (options: InitOptions) => {
 			const projectRoot = process.cwd();
 			const targetDir = path.join(projectRoot, ".gauntlet");
+			const skipPrompts = options.yes ?? false;
 
-			if (await exists(targetDir)) {
-				console.log(chalk.yellow(".gauntlet directory already exists."));
-				return;
-			}
-
-			// 1. CLI Detection
+			// Phase 1: CLI Detection
 			console.log("Detecting available CLI agents...");
 			const availableAdapters = await detectAvailableCLIs();
 
@@ -229,32 +242,53 @@ export function registerInitCommand(program: Command): void {
 				return;
 			}
 
-			// 2. Scaffold .gauntlet directory, config, reviews, skills
-			await scaffoldProject({
+			const detectedNames = availableAdapters.map((a) => a.name);
+
+			// Phase 2: Dev CLI Selection
+			const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
+			const devAdapters = availableAdapters.filter((a) =>
+				devCLINames.includes(a.name),
+			);
+
+			// Warn about CLIs without hook support
+			for (const adapter of devAdapters) {
+				if (!adapter.supportsHooks()) {
+					console.log(
+						chalk.yellow(
+							`  ${adapter.name} doesn't support hooks yet, skipping hook installation`,
+						),
+					);
+				}
+			}
+
+			// Phase 3: Review CLI Selection & Config
+			const reviewCLINames = await promptReviewCLIs(detectedNames, skipPrompts);
+			const numReviews = await promptNumReviews(
+				reviewCLINames.length,
+				skipPrompts,
+			);
+			console.log(
+				chalk.cyan(
+					"Agent Gauntlet's built-in code quality reviewer will be installed.",
+				),
+			);
+
+			// Phase 4: Scaffold .gauntlet/
+			await scaffoldGauntletDir(
 				projectRoot,
 				targetDir,
-				availableAdapters,
-				skipPrompts: options.yes ?? false,
-			});
+				reviewCLINames,
+				numReviews,
+			);
 
-			// 3. Auto-install hooks for detected CLIs
-			if (availableAdapters.some((a) => a.name === "claude")) {
-				await installStopHook(projectRoot);
-				await installStartHook(projectRoot);
-			}
-			if (availableAdapters.some((a) => a.name === "cursor")) {
-				await installCursorStopHook(projectRoot);
-				await installCursorStartHook(projectRoot);
-			}
+			// Phase 5: Install External Files (ALWAYS runs)
+			await installExternalFiles(projectRoot, devAdapters, skipPrompts);
 
-			// 4. Add log directory to .gitignore
+			// Add log directory to .gitignore
 			await addToGitignore(projectRoot, "gauntlet_logs");
 
-			// 5. Next-step message
-			console.log();
-			console.log(
-				chalk.bold("Run /gauntlet-setup to configure your checks and reviews"),
-			);
+			// Phase 6: Instructions
+			printPostInitInstructions(devCLINames);
 		});
 }
 
@@ -267,47 +301,34 @@ function printNoCLIsMessage(): void {
 	console.log();
 }
 
-interface ScaffoldOptions {
-	projectRoot: string;
-	targetDir: string;
-	availableAdapters: CLIAdapter[];
-	skipPrompts: boolean;
-}
-
-async function scaffoldProject(options: ScaffoldOptions): Promise<void> {
-	const { projectRoot, targetDir, availableAdapters, skipPrompts } = options;
+/**
+ * Phase 4: Scaffold the .gauntlet/ directory.
+ * If .gauntlet/ already exists, skip scaffolding entirely.
+ * No early return — Phase 5 always runs after this.
+ */
+async function scaffoldGauntletDir(
+	_projectRoot: string,
+	targetDir: string,
+	reviewCLINames: string[],
+	numReviews: number,
+): Promise<void> {
+	if (await exists(targetDir)) {
+		console.log(chalk.dim(".gauntlet/ already exists, skipping scaffolding"));
+		return;
+	}
 
 	// Create base directory structure
 	await fs.mkdir(targetDir);
 	await fs.mkdir(path.join(targetDir, "checks"));
 	await fs.mkdir(path.join(targetDir, "reviews"));
 
-	// Build and install skills
-	const commands: SkillCommand[] = SKILL_DEFINITIONS.map((skill) => ({
-		action: skill.action,
-		content: skill.content,
-		...("references" in skill ? { references: skill.references } : {}),
-		...("skillsOnly" in skill ? { skillsOnly: skill.skillsOnly } : {}),
-	}));
-
-	if (skipPrompts) {
-		await installCommands({
-			level: "project",
-			agentNames: ["claude"],
-			projectRoot,
-			commands,
-		});
-	} else {
-		await promptAndInstallCommands({ projectRoot, commands });
-	}
-
 	// Generate config.yml
-	await writeConfigYml(targetDir, availableAdapters);
+	await writeConfigYml(targetDir, reviewCLINames);
 
 	// Default code review
 	await fs.writeFile(
 		path.join(targetDir, "reviews", "code-quality.yml"),
-		"builtin: code-quality\nnum_reviews: 1\n",
+		`builtin: code-quality\nnum_reviews: ${numReviews}\n`,
 	);
 	console.log(chalk.green("Created .gauntlet/reviews/code-quality.yml"));
 
@@ -315,18 +336,205 @@ async function scaffoldProject(options: ScaffoldOptions): Promise<void> {
 	await copyStatusScript(targetDir);
 }
 
+/**
+ * Phase 5: Install external files (skills + hooks).
+ * Always runs, even if .gauntlet/ already existed.
+ */
+async function installExternalFiles(
+	projectRoot: string,
+	devAdapters: CLIAdapter[],
+	skipPrompts: boolean,
+): Promise<void> {
+	// Install skills to .claude/skills/
+	const skillsDir = path.join(projectRoot, ".claude", "skills");
+	for (const skill of SKILL_DEFINITIONS) {
+		const actionDir = path.join(skillsDir, `gauntlet-${skill.action}`);
+		const skillPath = path.join(actionDir, "SKILL.md");
+
+		const references =
+			"references" in skill
+				? (skill.references as Record<string, string>)
+				: undefined;
+
+		if (!(await exists(actionDir))) {
+			// Directory doesn't exist — create and install silently
+			await fs.mkdir(actionDir, { recursive: true });
+			await fs.writeFile(skillPath, skill.content);
+			const relPath = path.relative(projectRoot, skillPath);
+			console.log(chalk.green(`Created ${relPath}`));
+
+			// Install reference files
+			if (references) {
+				const refsDir = path.join(actionDir, "references");
+				await fs.mkdir(refsDir, { recursive: true });
+				for (const [fileName, fileContent] of Object.entries(references)) {
+					await fs.writeFile(path.join(refsDir, fileName), fileContent);
+				}
+			}
+		} else {
+			// Directory exists — check checksums
+			const expectedChecksum = computeExpectedSkillChecksum(
+				skill.content,
+				references,
+			);
+			const actualChecksum = await computeSkillChecksum(actionDir);
+
+			if (expectedChecksum === actualChecksum) {
+				// Checksums match — skip silently
+				continue;
+			}
+
+			// Checksums differ — prompt for overwrite
+			const shouldOverwrite = await promptFileOverwrite(
+				`gauntlet-${skill.action}`,
+				skipPrompts,
+			);
+			if (!shouldOverwrite) continue;
+
+			// Overwrite skill file
+			await fs.writeFile(skillPath, skill.content);
+			const relPath = path.relative(projectRoot, skillPath);
+			console.log(chalk.green(`Updated ${relPath}`));
+
+			// Update reference files
+			if (references) {
+				const refsDir = path.join(actionDir, "references");
+				await fs.mkdir(refsDir, { recursive: true });
+				for (const [fileName, fileContent] of Object.entries(references)) {
+					await fs.writeFile(path.join(refsDir, fileName), fileContent);
+				}
+			}
+		}
+	}
+
+	// Install hooks for dev CLIs with hook support
+	for (const adapter of devAdapters) {
+		if (!adapter.supportsHooks()) continue;
+
+		const variant = adapter.name as "claude" | "cursor";
+		for (const kind of ["stop", "start"] as const) {
+			const spec = buildHookSpec(projectRoot, variant, kind);
+
+			// Read existing hook entries to check checksums
+			let existingConfig: Record<string, unknown> = {};
+			if (await exists(spec.config.filePath)) {
+				try {
+					existingConfig = JSON.parse(
+						await fs.readFile(spec.config.filePath, "utf-8"),
+					);
+				} catch {
+					existingConfig = {};
+				}
+			}
+
+			const existingHooks =
+				(existingConfig.hooks as Record<string, unknown>) || {};
+			const existingEntries = Array.isArray(existingHooks[spec.config.hookKey])
+				? (existingHooks[spec.config.hookKey] as Record<string, unknown>[])
+				: [];
+
+			if (existingEntries.length > 0) {
+				// Check if gauntlet entries already exist and match
+				const gauntletEntries = existingEntries.filter((e) =>
+					isGauntletHookEntry(e),
+				);
+				if (gauntletEntries.length > 0) {
+					// Build expected entries for comparison
+					const expectedEntry = spec.config.wrapInHooksArray
+						? { hooks: [spec.config.hookEntry] }
+						: spec.config.hookEntry;
+					const expectedChecksum = computeExpectedHookChecksum([
+						expectedEntry as Record<string, unknown>,
+					]);
+					const actualChecksum = computeHookChecksum(existingEntries);
+
+					if (expectedChecksum === actualChecksum) {
+						console.log(chalk.dim(spec.existsMsg));
+						continue;
+					}
+
+					// Checksums differ — prompt for overwrite
+					const shouldOverwrite = await promptHookOverwrite(
+						spec.config.filePath,
+						skipPrompts,
+					);
+					if (!shouldOverwrite) {
+						console.log(chalk.dim(spec.existsMsg));
+						continue;
+					}
+
+					// Remove old gauntlet entries, then re-add
+					const nonGauntletEntries = existingEntries.filter(
+						(e) => !isGauntletHookEntry(e),
+					);
+					const entryToAdd = spec.config.wrapInHooksArray
+						? { hooks: [spec.config.hookEntry] }
+						: spec.config.hookEntry;
+					const newEntries = [...nonGauntletEntries, entryToAdd];
+
+					const merged: Record<string, unknown> = {
+						...(spec.config.baseConfig ?? {}),
+						...existingConfig,
+						hooks: {
+							...existingHooks,
+							[spec.config.hookKey]: newEntries,
+						},
+					};
+					await fs.mkdir(path.dirname(spec.config.filePath), {
+						recursive: true,
+					});
+					await fs.writeFile(
+						spec.config.filePath,
+						`${JSON.stringify(merged, null, 2)}\n`,
+					);
+					console.log(chalk.green(spec.installedMsg));
+					continue;
+				}
+			}
+
+			// No existing gauntlet entries — install normally
+			await installHookWithLog(spec.config, spec.installedMsg, spec.existsMsg);
+		}
+	}
+}
+
+/**
+ * Phase 6: Print post-init instructions based on detected CLIs.
+ */
+function printPostInitInstructions(devCLINames: string[]): void {
+	const hasNative = devCLINames.some((name) => NATIVE_CLIS.has(name));
+	const nonNativeNames = devCLINames.filter((name) => !NATIVE_CLIS.has(name));
+	const hasNonNative = nonNativeNames.length > 0;
+
+	console.log();
+	if (hasNative) {
+		console.log(
+			chalk.bold("Run /gauntlet-setup to configure your checks and reviews"),
+		);
+	}
+	if (hasNonNative) {
+		const skillPaths = SKILL_DEFINITIONS.filter(
+			(s) => !("skillsOnly" in s && s.skillsOnly),
+		).map((s) => `.claude/skills/gauntlet-${s.action}/SKILL.md`);
+		console.log(
+			chalk.bold("Reference these skill files in your agent configuration:"),
+		);
+		for (const sp of skillPaths) {
+			console.log(`  @${sp}`);
+		}
+	}
+}
+
 async function writeConfigYml(
 	targetDir: string,
-	adapters: CLIAdapter[],
+	reviewCLINames: string[],
 ): Promise<void> {
 	const baseBranch = await detectBaseBranch();
-	const sortedAdapters = [...adapters].sort(
-		(a, b) =>
-			CLI_PREFERENCE_ORDER.indexOf(a.name) -
-			CLI_PREFERENCE_ORDER.indexOf(b.name),
+	const sortedNames = [...reviewCLINames].sort(
+		(a, b) => CLI_PREFERENCE_ORDER.indexOf(a) - CLI_PREFERENCE_ORDER.indexOf(b),
 	);
-	const cliList = sortedAdapters.map((a) => `    - ${a.name}`).join("\n");
-	const adapterSettings = buildAdapterSettingsBlock(adapters);
+	const cliList = sortedNames.map((name) => `    - ${name}`).join("\n");
+	const adapterSettings = buildAdapterSettingsBlock(reviewCLINames);
 
 	const content = `# Ordered list of CLI agents to try for reviews
 cli:
@@ -446,12 +654,12 @@ async function detectBaseBranch(): Promise<string> {
 	return "origin/main";
 }
 
-function buildAdapterSettingsBlock(adapters: CLIAdapter[]): string {
-	const items = adapters.filter((a) => ADAPTER_CONFIG[a.name]);
+function buildAdapterSettingsBlock(adapterNames: string[]): string {
+	const items = adapterNames.filter((name) => ADAPTER_CONFIG[name]);
 	if (items.length === 0) return "";
-	const lines = items.map((a) => {
-		const c = ADAPTER_CONFIG[a.name];
-		return `    ${a.name}:\n      allow_tool_use: ${c?.allow_tool_use}\n      thinking_budget: ${c?.thinking_budget}`;
+	const lines = items.map((name) => {
+		const c = ADAPTER_CONFIG[name];
+		return `    ${name}:\n      allow_tool_use: ${c?.allow_tool_use}\n      thinking_budget: ${c?.thinking_budget}`;
 	});
 	return `  # Recommended settings (see docs/eval-results.md)\n  adapters:\n${lines.join("\n")}\n`;
 }
@@ -510,215 +718,6 @@ async function copyStatusScript(targetDir: string): Promise<void> {
 				"Warning: bundled status script not found; /gauntlet-status may fail.",
 			),
 		);
-	}
-}
-
-interface PromptAndInstallOptions {
-	projectRoot: string;
-	commands: SkillCommand[];
-}
-
-async function promptAndInstallCommands(
-	options: PromptAndInstallOptions,
-): Promise<void> {
-	const { projectRoot, commands } = options;
-
-	await installCommands({
-		level: "project",
-		agentNames: ["claude"],
-		projectRoot,
-		commands,
-	});
-}
-
-/**
- * A skill/command to be installed.
- */
-interface SkillCommand {
-	/** The skill action name (e.g., "run", "check", "push-pr"). */
-	action: string;
-	/** The Markdown content (with YAML frontmatter). */
-	content: string;
-	/** Optional reference files to install alongside SKILL.md (skills-only). */
-	references?: Record<string, string>;
-	/** If true, this skill is only installed for skills-capable adapters (not flat commands). */
-	skillsOnly?: boolean;
-}
-
-interface InstallContext {
-	isUserLevel: boolean;
-	projectRoot: string;
-}
-
-interface InstallCommandsOptions {
-	level: InstallLevel;
-	agentNames: string[];
-	projectRoot: string;
-	commands: SkillCommand[];
-}
-
-/**
- * Install a single skill for Claude as a SKILL.md in a nested directory.
- */
-async function installSkill(
-	skillDir: string,
-	ctx: InstallContext,
-	command: SkillCommand,
-): Promise<void> {
-	const actionDir = path.join(skillDir, `gauntlet-${command.action}`);
-	const skillPath = path.join(actionDir, "SKILL.md");
-
-	await fs.mkdir(actionDir, { recursive: true });
-
-	if (await exists(skillPath)) {
-		const relPath = ctx.isUserLevel
-			? skillPath
-			: path.relative(ctx.projectRoot, skillPath);
-		console.log(chalk.dim(`  claude: ${relPath} already exists, skipping`));
-		return;
-	}
-
-	await fs.writeFile(skillPath, command.content);
-	const relPath = ctx.isUserLevel
-		? skillPath
-		: path.relative(ctx.projectRoot, skillPath);
-	console.log(chalk.green(`Created ${relPath}`));
-
-	// Install reference files if present
-	if (command.references) {
-		const refsDir = path.join(actionDir, "references");
-		await fs.mkdir(refsDir, { recursive: true });
-		for (const [fileName, fileContent] of Object.entries(command.references)) {
-			const refPath = path.join(refsDir, fileName);
-			if (await exists(refPath)) continue;
-			await fs.writeFile(refPath, fileContent);
-			const refRelPath = ctx.isUserLevel
-				? refPath
-				: path.relative(ctx.projectRoot, refPath);
-			console.log(chalk.green(`Created ${refRelPath}`));
-		}
-	}
-}
-
-/**
- * Install a single flat command file for a non-Claude adapter.
- * Uses the "gauntlet" name prefix for non-namespaced agents.
- */
-async function installFlatCommand(
-	adapter: CLIAdapter,
-	commandDir: string,
-	ctx: InstallContext,
-	command: SkillCommand,
-): Promise<void> {
-	// Non-Claude agents get flat files named "gauntlet" (for run) or the action name
-	const name = command.action === "run" ? "gauntlet" : command.action;
-	const fileName = `${name}${adapter.getCommandExtension()}`;
-	const filePath = path.join(commandDir, fileName);
-
-	if (await exists(filePath)) {
-		const relPath = ctx.isUserLevel
-			? filePath
-			: path.relative(ctx.projectRoot, filePath);
-		console.log(
-			chalk.dim(`  ${adapter.name}: ${relPath} already exists, skipping`),
-		);
-		return;
-	}
-
-	const transformedContent = adapter.transformCommand(command.content);
-	await fs.writeFile(filePath, transformedContent);
-	const relPath = ctx.isUserLevel
-		? filePath
-		: path.relative(ctx.projectRoot, filePath);
-	console.log(chalk.green(`Created ${relPath}`));
-}
-
-/**
- * Install skills for a skills-capable adapter (e.g., Claude).
- */
-async function installSkillsForAdapter(
-	adapter: CLIAdapter,
-	skillDir: string,
-	ctx: InstallContext,
-	commands: SkillCommand[],
-): Promise<void> {
-	const resolvedSkillDir = ctx.isUserLevel
-		? skillDir
-		: path.join(ctx.projectRoot, skillDir);
-	try {
-		for (const command of commands) {
-			await installSkill(resolvedSkillDir, ctx, command);
-		}
-	} catch (error: unknown) {
-		const err = error as { message?: string };
-		console.log(
-			chalk.yellow(
-				`  ${adapter.name}: Could not create skill - ${err.message}`,
-			),
-		);
-	}
-}
-
-/**
- * Install flat command files for a non-skills adapter.
- */
-async function installFlatCommandsForAdapter(
-	adapter: CLIAdapter,
-	commandDir: string,
-	ctx: InstallContext,
-	commands: SkillCommand[],
-): Promise<void> {
-	const resolvedCommandDir = ctx.isUserLevel
-		? commandDir
-		: path.join(ctx.projectRoot, commandDir);
-	try {
-		await fs.mkdir(resolvedCommandDir, { recursive: true });
-		// Non-Claude agents only get run, push-pr, and fix-pr (not check/status/help)
-		const flatCommands = commands.filter(
-			(c) => c.action !== "check" && c.action !== "status" && !c.skillsOnly,
-		);
-		for (const command of flatCommands) {
-			await installFlatCommand(adapter, resolvedCommandDir, ctx, command);
-		}
-	} catch (error: unknown) {
-		const err = error as { message?: string };
-		console.log(
-			chalk.yellow(
-				`  ${adapter.name}: Could not create command - ${err.message}`,
-			),
-		);
-	}
-}
-
-async function installCommands(options: InstallCommandsOptions): Promise<void> {
-	const { level, agentNames, projectRoot, commands } = options;
-	if (level === "none" || agentNames.length === 0) return;
-
-	console.log();
-	const allAdapters = getAllAdapters();
-
-	const isUserLevel = level === "user";
-	const ctx: InstallContext = { isUserLevel, projectRoot };
-
-	for (const agentName of agentNames) {
-		const adapter = allAdapters.find((a) => a.name === agentName);
-		if (!adapter) continue;
-
-		const skillDir = isUserLevel
-			? adapter.getUserSkillDir()
-			: adapter.getProjectSkillDir();
-
-		if (skillDir) {
-			await installSkillsForAdapter(adapter, skillDir, ctx, commands);
-			continue;
-		}
-
-		const commandDir = isUserLevel
-			? adapter.getUserCommandDir()
-			: adapter.getProjectCommandDir();
-		if (!commandDir) continue;
-
-		await installFlatCommandsForAdapter(adapter, commandDir, ctx, commands);
 	}
 }
 
