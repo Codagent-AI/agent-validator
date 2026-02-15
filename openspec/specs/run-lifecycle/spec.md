@@ -405,12 +405,20 @@ The execution state file (`.execution_state`) MUST include a `working_tree_ref` 
   - `commit`: HEAD SHA at run completion
   - `working_tree_ref`: stash SHA capturing working tree state
 
-#### Scenario: Working tree ref creation with uncommitted changes
-- **GIVEN** the working tree has uncommitted changes (staged, unstaged, or untracked files)
+#### Scenario: Working tree ref creation with tracked changes
+- **GIVEN** the working tree has staged or unstaged changes to tracked files
 - **WHEN** a run completes (success or failure)
 - **THEN** the system SHALL execute `git stash create --include-untracked`
 - **AND** the command SHALL return a stash SHA
 - **AND** the system SHALL store this SHA as `working_tree_ref`
+
+#### Scenario: Working tree ref creation with untracked-only changes
+- **GIVEN** the working tree has ONLY untracked files (no staged or modified tracked files)
+- **WHEN** a run completes (success or failure)
+- **THEN** the system SHALL execute `git stash create --include-untracked`
+- **AND** the command SHALL return empty (known git limitation: `git stash create --include-untracked` does not produce a stash when only untracked files exist)
+- **AND** the system SHALL fall back to storing the current HEAD SHA as `working_tree_ref`
+- **NOTE** This means `working_tree_ref` will equal `commit` even though the tree is dirty. Auto-clean logic MUST NOT rely on `working_tree_ref !== commit` to detect a dirty tree.
 
 #### Scenario: Working tree ref creation with clean working tree
 - **GIVEN** the working tree has no uncommitted changes
@@ -496,14 +504,36 @@ The execution state file MUST persist across all clean operations (manual and au
 - **THEN** `.execution_state` SHALL be deleted (reset)
 - **AND** the next run SHALL operate in first-run mode against base branch
 
-#### Scenario: Auto-clean resets execution state on commit merged
+#### Scenario: Auto-clean resets execution state on commit merged (clean tree)
 
 - **GIVEN** `.execution_state` exists with `commit: "abc123"`
 - **AND** commit "abc123" is now an ancestor of the base branch
+- **AND** `git status --porcelain` returns empty (no working tree changes)
 - **WHEN** auto-clean detects the merged commit
-- **THEN** `.execution_state` SHALL be deleted (reset) unconditionally
-- **AND** the `working_tree_ref` validity SHALL NOT be checked (stash existence in git is irrelevant after merge)
+- **THEN** `.execution_state` SHALL be deleted (reset)
 - **AND** the next run SHALL operate in first-run mode against base branch
+
+#### Scenario: Auto-clean skipped when commit merged but working tree is dirty
+
+- **GIVEN** `.execution_state` exists with `commit: "abc123"`
+- **AND** commit "abc123" is now an ancestor of the base branch
+- **AND** `git status --porcelain` returns non-empty (working tree has changes)
+- **WHEN** auto-clean checks the merged commit
+- **THEN** auto-clean SHALL NOT fire (the merge-base check is skipped entirely)
+- **AND** the execution state SHALL be preserved
+- **AND** the retry counter and narrowed diff capability SHALL remain intact
+
+#### Scenario: Auto-clean skipped when commit merged and only untracked files exist
+
+- **GIVEN** `.execution_state` exists with `commit: "abc123"`
+- **AND** commit "abc123" is now an ancestor of the base branch
+- **AND** the working tree has ONLY untracked files (no staged or modified tracked files)
+- **AND** `working_tree_ref` equals `commit` (due to `git stash create` limitation)
+- **AND** `git status --porcelain` returns non-empty (untracked files shown as `??`)
+- **WHEN** auto-clean checks the merged commit
+- **THEN** auto-clean SHALL NOT fire
+- **AND** the execution state SHALL be preserved
+- **NOTE** This scenario previously caused a false positive: `working_tree_ref === commit` made the tree appear clean. The fix uses `git status --porcelain` instead of the `working_tree_ref` proxy.
 
 ### Requirement: Runtime Usage Limit Detection
 This requirement MUST record unhealthy adapters in the global unhealthy adapter state file rather than `.execution_state`.

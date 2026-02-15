@@ -15,6 +15,21 @@ import { Command } from "commander";
 const TEST_DIR = path.join(process.cwd(), `test-init-${Date.now()}`);
 
 /**
+ * Read and parse the hook config file for a given adapter variant.
+ */
+async function readHookConfig(
+	testDir: string,
+	variant: "claude" | "cursor",
+): Promise<Record<string, unknown>> {
+	const filePath =
+		variant === "claude"
+			? path.join(testDir, ".claude", "settings.local.json")
+			: path.join(testDir, ".cursor", "hooks.json");
+	const content = await fs.readFile(filePath, "utf-8");
+	return JSON.parse(content) as Record<string, unknown>;
+}
+
+/**
  * Shared cleanup: restore console.log, cwd, and remove test artifacts.
  */
 async function cleanupTestEnv(
@@ -66,7 +81,7 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 }));
 
 // Import after mocking
-const { registerInitCommand, installStopHook, installCursorStopHook } =
+const { registerInitCommand, installStopHook, installCursorStopHook, mergeHookConfig, installStartHook, installCursorStartHook } =
 	await import("../../src/commands/init.js");
 
 describe("Init Command", () => {
@@ -534,6 +549,377 @@ describe("Cursor Stop Hook Installation", () => {
 	});
 });
 
+describe("Claude Start Hook Installation", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(() =>
+		cleanupTestEnv(originalConsoleLog, originalCwd, [
+			path.join(TEST_DIR, ".claude"),
+		]),
+	);
+
+	it("should create SessionStart hook in new settings file", async () => {
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		expect(Array.isArray(settings.hooks.SessionStart)).toBe(true);
+		expect(settings.hooks.SessionStart.length).toBeGreaterThan(0);
+
+		const entry = settings.hooks.SessionStart[0];
+		const innerHook = entry.hooks[0];
+		expect(innerHook.command).toBe("agent-gauntlet start-hook");
+		expect(innerHook.type).toBe("command");
+	});
+
+	it("should set start hook as synchronous", async () => {
+		await installStartHook(TEST_DIR);
+		const settings = await readHookConfig(TEST_DIR, "claude");
+		const hooks = settings.hooks as Record<string, unknown[]>;
+		const entry = hooks.SessionStart[0] as Record<string, unknown>;
+		const innerHooks = entry.hooks as Record<string, unknown>[];
+		expect(innerHooks[0].async).toBe(false);
+	});
+
+	it("should set matcher for session start events", async () => {
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		const matcher = settings.hooks.SessionStart[0].matcher;
+		expect(matcher).toContain("startup");
+		expect(matcher).toContain("resume");
+		expect(matcher).toContain("clear");
+		expect(matcher).toContain("compact");
+	});
+
+	it("should merge into existing settings without overwriting", async () => {
+		// Pre-create settings with Stop hook
+		await fs.mkdir(path.join(TEST_DIR, ".claude"), { recursive: true });
+		await fs.writeFile(
+			path.join(TEST_DIR, ".claude", "settings.local.json"),
+			JSON.stringify({
+				hooks: {
+					Stop: [
+						{
+							hooks: [
+								{
+									type: "command",
+									command: "agent-gauntlet stop-hook",
+									timeout: 300,
+								},
+							],
+						},
+					],
+				},
+			}),
+		);
+
+		await installStartHook(TEST_DIR);
+
+		const settingsPath = path.join(
+			TEST_DIR,
+			".claude",
+			"settings.local.json",
+		);
+		const content = await fs.readFile(settingsPath, "utf-8");
+		const settings = JSON.parse(content);
+
+		// Both Stop and SessionStart should exist
+		expect(settings.hooks.Stop).toBeDefined();
+		expect(settings.hooks.SessionStart).toBeDefined();
+	});
+
+	it("should deduplicate on repeated runs", async () => {
+		await installStartHook(TEST_DIR);
+		await installStartHook(TEST_DIR);
+		const settings = await readHookConfig(TEST_DIR, "claude");
+		const hooks = settings.hooks as Record<string, unknown[]>;
+		expect(hooks.SessionStart.length).toBe(1);
+	});
+
+	it("should show confirmation message", async () => {
+		await installStartHook(TEST_DIR);
+
+		const output = logs.join("\n");
+		expect(output).toContain("Start hook installed");
+	});
+});
+
+describe("Cursor Start Hook Installation", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(() =>
+		cleanupTestEnv(originalConsoleLog, originalCwd, [
+			path.join(TEST_DIR, ".cursor"),
+		]),
+	);
+
+	it("should create sessionStart hook in new hooks file", async () => {
+		await installCursorStartHook(TEST_DIR);
+
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		const config = JSON.parse(content);
+
+		expect(Array.isArray(config.hooks.sessionStart)).toBe(true);
+		expect(config.hooks.sessionStart.length).toBe(1);
+		expect(config.hooks.sessionStart[0].command).toBe(
+			"agent-gauntlet start-hook --adapter cursor",
+		);
+	});
+
+	it("should deduplicate on repeated runs", async () => {
+		await installCursorStartHook(TEST_DIR);
+		await installCursorStartHook(TEST_DIR);
+		const config = await readHookConfig(TEST_DIR, "cursor");
+		const hooks = config.hooks as Record<string, unknown[]>;
+		expect(hooks.sessionStart.length).toBe(1);
+	});
+
+	it("should merge into existing hooks file without overwriting", async () => {
+		// Pre-create with stop hook
+		await fs.mkdir(path.join(TEST_DIR, ".cursor"), { recursive: true });
+		await fs.writeFile(
+			path.join(TEST_DIR, ".cursor", "hooks.json"),
+			JSON.stringify({
+				version: 1,
+				hooks: {
+					stop: [
+						{
+							command: "agent-gauntlet stop-hook",
+							loop_limit: 10,
+						},
+					],
+				},
+			}),
+		);
+
+		await installCursorStartHook(TEST_DIR);
+
+		const hooksPath = path.join(TEST_DIR, ".cursor", "hooks.json");
+		const content = await fs.readFile(hooksPath, "utf-8");
+		const config = JSON.parse(content);
+
+		// Both stop and sessionStart should exist
+		expect(config.hooks.stop).toBeDefined();
+		expect(config.hooks.stop[0].command).toBe("agent-gauntlet stop-hook");
+		expect(config.hooks.sessionStart).toBeDefined();
+		expect(config.hooks.sessionStart[0].command).toBe(
+			"agent-gauntlet start-hook --adapter cursor",
+		);
+	});
+
+	it("should show confirmation message", async () => {
+		await installCursorStartHook(TEST_DIR);
+
+		const output = logs.join("\n");
+		expect(output).toContain("Cursor start hook installed");
+	});
+});
+
+describe("mergeHookConfig helper", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(() =>
+		cleanupTestEnv(originalConsoleLog, originalCwd, [
+			path.join(TEST_DIR, ".merge-test"),
+		]),
+	);
+
+	it("should create new file with hook config when file doesn't exist", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		const filePath = path.join(dir, "settings.json");
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.hooks.Stop).toBeDefined();
+		expect(Array.isArray(content.hooks.Stop)).toBe(true);
+		expect(content.hooks.Stop[0].hooks[0].command).toBe("my-cmd");
+	});
+
+	it("should merge into existing file without overwriting other keys", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		await fs.mkdir(dir, { recursive: true });
+		const filePath = path.join(dir, "settings.json");
+
+		// Write existing config with other keys
+		await fs.writeFile(
+			filePath,
+			JSON.stringify({
+				someKey: "preserved",
+				hooks: { PreToolUse: [{ command: "echo hi" }] },
+			}),
+		);
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.someKey).toBe("preserved");
+		expect(content.hooks.PreToolUse).toBeDefined();
+		expect(content.hooks.Stop).toBeDefined();
+	});
+
+	it("should deduplicate on repeated calls", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		const filePath = path.join(dir, "settings.json");
+
+		// First call
+		await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		// Second call — should detect duplicate
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "Stop",
+			hookEntry: { type: "command", command: "my-cmd", timeout: 60 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: true,
+		});
+
+		expect(added).toBe(false);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.hooks.Stop.length).toBe(1);
+	});
+
+	it("should work with flat hook entries (Cursor format, no wrapInHooksArray)", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		const filePath = path.join(dir, "hooks.json");
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "stop",
+			hookEntry: { command: "my-cmd", loop_limit: 10 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: false,
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		expect(content.hooks.stop).toBeDefined();
+		expect(Array.isArray(content.hooks.stop)).toBe(true);
+		// Flat format: entry is directly in the array, not wrapped
+		expect(content.hooks.stop[0].command).toBe("my-cmd");
+		expect(content.hooks.stop[0].hooks).toBeUndefined();
+	});
+
+	it("should preserve existing version in Cursor format", async () => {
+		const dir = path.join(TEST_DIR, ".merge-test");
+		await fs.mkdir(dir, { recursive: true });
+		const filePath = path.join(dir, "hooks.json");
+
+		// Write existing config with version already set
+		await fs.writeFile(
+			filePath,
+			JSON.stringify({
+				version: 2,
+				hooks: {},
+			}),
+		);
+
+		const added = await mergeHookConfig({
+			filePath,
+			hookKey: "stop",
+			hookEntry: { command: "my-cmd", loop_limit: 10 },
+			deduplicateCmd: "my-cmd",
+			wrapInHooksArray: false,
+			baseConfig: { version: 1 },
+		});
+
+		expect(added).toBe(true);
+		const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		// Should preserve existing version (2), not overwrite with baseConfig (1)
+		expect(content.version).toBe(2);
+		expect(content.hooks.stop[0].command).toBe("my-cmd");
+	});
+});
+
 describe("Skills Migration", () => {
 	let program: Command;
 	const originalConsoleLog = console.log;
@@ -725,7 +1111,7 @@ describe("Skills Installation for Claude", () => {
 
 		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
 
-		for (const action of ["run", "check", "push-pr", "fix-pr", "status"]) {
+		for (const action of ["check", "push-pr", "fix-pr", "status"]) {
 			const content = await fs.readFile(
 				path.join(skillsBase, `gauntlet-${action}`, "SKILL.md"),
 				"utf-8",
@@ -733,6 +1119,26 @@ describe("Skills Installation for Claude", () => {
 			expect(content).toContain(`name: gauntlet-${action}`);
 			expect(content).toContain("disable-model-invocation: true");
 		}
+
+		// "run" should have disable-model-invocation: false (auto-invocation enabled)
+		const runContent = await fs.readFile(
+			path.join(skillsBase, "gauntlet-run", "SKILL.md"),
+			"utf-8",
+		);
+		expect(runContent).toContain("name: gauntlet-run");
+		expect(runContent).toContain("disable-model-invocation: false");
+	});
+
+	it("should include actionable description in gauntlet-run frontmatter", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
+		const runContent = await fs.readFile(
+			path.join(skillsBase, "gauntlet-run", "SKILL.md"),
+			"utf-8",
+		);
+		expect(runContent).toContain("final step after completing a coding task");
+		expect(runContent).toContain("before committing, pushing, or creating PRs");
 	});
 
 	it("should not install commands for non-Claude adapters", async () => {

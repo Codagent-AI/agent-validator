@@ -280,6 +280,37 @@ export function getExecutionStateFilename(): string {
 }
 
 /**
+ * Check if the working tree has any changes (staged, unstaged, or untracked files).
+ * Uses `git status --porcelain` which correctly reports all change types,
+ * unlike `git stash create --include-untracked` which returns empty for untracked-only changes.
+ */
+export async function hasWorkingTreeChanges(): Promise<boolean> {
+	return new Promise((resolve) => {
+		const child = spawn("git", ["status", "--porcelain"], {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		let stdout = "";
+		child.stdout.on("data", (data: Buffer) => {
+			stdout += data.toString();
+		});
+
+		child.on("close", (code) => {
+			if (code === 0) {
+				resolve(stdout.trim().length > 0);
+			} else {
+				// If git status fails, assume changes exist to prevent accidental state deletion
+				resolve(true);
+			}
+		});
+
+		child.on("error", () => {
+			resolve(true);
+		});
+	});
+}
+
+/**
  * Check if a git object (commit, tree, blob, etc.) exists in the repository.
  * Uses `git cat-file -t <sha>` to check object type.
  */

@@ -8,6 +8,7 @@ import {
 	deleteExecutionState,
 	getCurrentBranch,
 	getExecutionStateFilename,
+	hasWorkingTreeChanges,
 	isCommitInBranch,
 	readExecutionState,
 } from "../utils/execution-state.js";
@@ -50,11 +51,16 @@ export async function shouldAutoClean(
 	}
 
 	// Check if commit was merged into base branch.
-	// Skip this check when working_tree_ref differs from commit, which indicates
-	// uncommitted changes were captured. In that case, the execution state still
-	// holds meaningful context (the working tree snapshot) and cleaning would
-	// destroy the retry counter and narrowed diff capability.
-	if (!state.working_tree_ref || state.working_tree_ref === state.commit) {
+	// Skip this check when the working tree has uncommitted changes (staged,
+	// unstaged, or untracked). In that case, the execution state still holds
+	// meaningful context and cleaning would destroy the retry counter and
+	// narrowed diff capability.
+	// Note: We use `git status --porcelain` instead of comparing working_tree_ref
+	// vs commit because `git stash create --include-untracked` returns empty when
+	// only untracked files exist, causing working_tree_ref to equal commit even
+	// though the tree is dirty.
+	const hasChanges = await hasWorkingTreeChanges();
+	if (!hasChanges) {
 		try {
 			const isMerged = await isCommitInBranch(state.commit, baseBranch);
 			if (isMerged) {

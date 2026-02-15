@@ -335,12 +335,13 @@ describe("shouldAutoClean", () => {
 		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
 		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
+		const hasChangesSpy = spyOn(executionState, "hasWorkingTreeChanges").mockResolvedValue(false);
 
 		const state = {
 			last_run_completed_at: new Date().toISOString(),
 			branch: "test-branch",
 			commit: mergedCommit,
-			working_tree_ref: mergedCommit, // Same as commit = clean tree
+			working_tree_ref: mergedCommit,
 		};
 		await fs.writeFile(
 			path.join(TEST_DIR, getExecutionStateFilename()),
@@ -354,19 +355,20 @@ describe("shouldAutoClean", () => {
 
 		branchSpy.mockRestore();
 		mergedSpy.mockRestore();
+		hasChangesSpy.mockRestore();
 	});
 
 	it("returns clean: false when commit is merged but uncommitted changes exist", async () => {
 		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-		const stashRef = "abcdef1234567890abcdef1234567890abcdef12";
 		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
-		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
+		const hasChangesSpy = spyOn(executionState, "hasWorkingTreeChanges").mockResolvedValue(true);
+		// isCommitInBranch should NOT be called because hasWorkingTreeChanges returns true
 
 		const state = {
 			last_run_completed_at: new Date().toISOString(),
 			branch: "test-branch",
 			commit: mergedCommit,
-			working_tree_ref: stashRef, // Differs from commit = uncommitted changes
+			working_tree_ref: mergedCommit, // Same as commit, but hasWorkingTreeChanges is true
 		};
 		await fs.writeFile(
 			path.join(TEST_DIR, getExecutionStateFilename()),
@@ -377,13 +379,14 @@ describe("shouldAutoClean", () => {
 		expect(result.clean).toBe(false);
 
 		branchSpy.mockRestore();
-		mergedSpy.mockRestore();
+		hasChangesSpy.mockRestore();
 	});
 
 	it("returns resetState: true when commit is merged and working_tree_ref is absent", async () => {
 		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
 		const mergedSpy = spyOn(executionState, "isCommitInBranch").mockResolvedValue(true);
+		const hasChangesSpy = spyOn(executionState, "hasWorkingTreeChanges").mockResolvedValue(false);
 
 		const state = {
 			last_run_completed_at: new Date().toISOString(),
@@ -403,6 +406,32 @@ describe("shouldAutoClean", () => {
 
 		branchSpy.mockRestore();
 		mergedSpy.mockRestore();
+		hasChangesSpy.mockRestore();
+	});
+
+	it("returns clean: false when commit is merged and only untracked files exist", async () => {
+		// This is the exact bug case: git stash create returns empty for untracked-only
+		// changes, so working_tree_ref === commit even though the tree is dirty.
+		const mergedCommit = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+		const branchSpy = spyOn(executionState, "getCurrentBranch").mockResolvedValue("test-branch");
+		const hasChangesSpy = spyOn(executionState, "hasWorkingTreeChanges").mockResolvedValue(true);
+
+		const state = {
+			last_run_completed_at: new Date().toISOString(),
+			branch: "test-branch",
+			commit: mergedCommit,
+			working_tree_ref: mergedCommit, // Same as commit due to git stash create limitation
+		};
+		await fs.writeFile(
+			path.join(TEST_DIR, getExecutionStateFilename()),
+			JSON.stringify(state),
+		);
+
+		const result = await shouldAutoClean(TEST_DIR, "origin/main");
+		expect(result.clean).toBe(false);
+
+		branchSpy.mockRestore();
+		hasChangesSpy.mockRestore();
 	});
 });
 
@@ -543,30 +572,32 @@ describe("auto-clean workflow integration", () => {
 	});
 
 	it("full auto-clean workflow: logs exist + same branch → no clean, rerun mode", async () => {
-		// Write a mock execution state with the current branch but a dummy commit
-		// that cannot be found in origin/main (avoids "commit merged" false positive).
-		// Set working_tree_ref to differ from commit so the merge-base check is
-		// skipped entirely — this avoids shallow-clone issues in CI.
+		// Write a mock execution state with the current branch but a dummy commit.
+		// Mock hasWorkingTreeChanges to return true so the merge-base check is
+		// skipped entirely — this avoids shallow-clone issues in CI where
+		// git merge-base on a non-existent commit can behave unpredictably.
 		const currentBranch = await getCurrentBranch();
+		const hasChangesSpy = spyOn(executionState, "hasWorkingTreeChanges").mockResolvedValue(true);
 		await fs.writeFile(
 			path.join(TEST_DIR, getExecutionStateFilename()),
 			JSON.stringify({
 				last_run_completed_at: new Date().toISOString(),
 				branch: currentBranch,
 				commit: "0000000000000000000000000000000000000000",
-				working_tree_ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			}),
 		);
 
 		// Add log files (simulating a previous run)
 		await fs.writeFile(path.join(TEST_DIR, "check_src.1.log"), "content");
 
-		// Step 1: shouldAutoClean returns false (same branch)
+		// Step 1: shouldAutoClean returns false (same branch, dirty tree)
 		const autoClean = await shouldAutoClean(TEST_DIR, "origin/main");
 		expect(autoClean.clean).toBe(false);
 
 		// Step 2: hasExistingLogs returns true (rerun mode preserved)
 		expect(await hasExistingLogs(TEST_DIR)).toBe(true);
+
+		hasChangesSpy.mockRestore();
 	});
 });
 

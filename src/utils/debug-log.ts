@@ -187,6 +187,13 @@ export class DebugLogger {
 	}
 
 	/**
+	 * Log a start hook invocation.
+	 */
+	async logStartHook(adapter: string): Promise<void> {
+		await this.write(`START_HOOK adapter=${adapter}`);
+	}
+
+	/**
 	 * Log stop hook diagnostic information.
 	 * Used to debug duplicate/unexpected stop hook invocations.
 	 */
