@@ -572,13 +572,12 @@ describe("auto-clean workflow integration", () => {
 	});
 
 	it("full auto-clean workflow: logs exist + same branch → no clean, rerun mode", async () => {
-		// Write a mock execution state with the current branch but a dummy commit
-		// that cannot be found in origin/main (avoids "commit merged" false positive).
-		// hasWorkingTreeChanges() will return the real git status; if the tree has
-		// changes the merge-base check is skipped entirely, avoiding shallow-clone
-		// issues in CI. If the tree is clean, the dummy commit won't be found as
-		// an ancestor of origin/main, so the test still passes.
+		// Write a mock execution state with the current branch but a dummy commit.
+		// Mock hasWorkingTreeChanges to return true so the merge-base check is
+		// skipped entirely — this avoids shallow-clone issues in CI where
+		// git merge-base on a non-existent commit can behave unpredictably.
 		const currentBranch = await getCurrentBranch();
+		const hasChangesSpy = spyOn(executionState, "hasWorkingTreeChanges").mockResolvedValue(true);
 		await fs.writeFile(
 			path.join(TEST_DIR, getExecutionStateFilename()),
 			JSON.stringify({
@@ -591,12 +590,14 @@ describe("auto-clean workflow integration", () => {
 		// Add log files (simulating a previous run)
 		await fs.writeFile(path.join(TEST_DIR, "check_src.1.log"), "content");
 
-		// Step 1: shouldAutoClean returns false (same branch)
+		// Step 1: shouldAutoClean returns false (same branch, dirty tree)
 		const autoClean = await shouldAutoClean(TEST_DIR, "origin/main");
 		expect(autoClean.clean).toBe(false);
 
 		// Step 2: hasExistingLogs returns true (rerun mode preserved)
 		expect(await hasExistingLogs(TEST_DIR)).toBe(true);
+
+		hasChangesSpy.mockRestore();
 	});
 });
 
