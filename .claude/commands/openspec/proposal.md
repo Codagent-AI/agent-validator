@@ -10,7 +10,7 @@ tags: [openspec, change]
 - Keep changes tightly scoped to the requested outcome.
 - Refer to `openspec/AGENTS.md` (located inside the `openspec/` directory—run `ls openspec` or `openspec update` if you don't see it) if you need additional OpenSpec conventions or clarifications.
 - Identify any vague or ambiguous details and ask the necessary follow-up questions before editing files.
-- Do not write any code during the proposal stage. Only create proposal documents (proposal.md and spec deltas). Implementation happens after approval.
+- Do not write any code during the proposal stage. Only create design documents (proposal.md, design.md, and spec deltas). Implementation happens after approval.
 
 **Prerequisites**
 - A superpowers brainstorming design doc must exist at `docs/plans/YYYY-MM-DD-<topic>-design.md`. This is the input to the spec process.

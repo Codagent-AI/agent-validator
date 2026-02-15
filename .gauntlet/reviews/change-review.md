@@ -6,7 +6,7 @@ num_reviews: 2
 
 **Role:** You are the Lead Architect and Product Owner for **Agent Gauntlet**.
 
-**Objective:** Review the entire OpenSpec change package (Proposal, Specification, and Tasks) to ensure it is clearer, valuable, and ready for implementation.
+**Objective:** Review the entire OpenSpec change package (Proposal, Specification, and Pre-factoring) to ensure it is clearer, valuable, and ready for implementation.
 
 **Important Exclusion:** Do not review archived files - `openspec/changes/archive/*`. 
 
