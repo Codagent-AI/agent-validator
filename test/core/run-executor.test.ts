@@ -71,7 +71,8 @@ describe("run-executor stop hook config", () => {
 			);
 
 			expect(sourceFile).toContain('"stop_hook_disabled"');
-			expect(sourceFile).toContain("Stop hook is disabled via configuration");
+			// stop_hook_disabled should have an empty message (silent)
+			expect(sourceFile).toContain('stop_hook_disabled: ""');
 		});
 
 		it("should import resolveStopHookConfig", () => {

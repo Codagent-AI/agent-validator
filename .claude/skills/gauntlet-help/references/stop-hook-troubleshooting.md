@@ -14,7 +14,7 @@
 | `ci_timeout` | CI wait exhausted — max attempts reached | CI polling hit 3 attempts; allows stop for manual review |
 | `no_config` | Not a gauntlet project — no `.gauntlet/config.yml` found | No gauntlet configuration in this repo |
 | `stop_hook_active` | Stop hook cycle detected — allowing stop to prevent infinite loop | Recursion prevention triggered |
-| `stop_hook_disabled` | Stop hook is disabled via configuration | `stop_hook.enabled: false` in config or `GAUNTLET_STOP_HOOK_ENABLED=false` |
+| `stop_hook_disabled` | *(silent — no message displayed)* | `stop_hook.enabled: false` in config or `GAUNTLET_STOP_HOOK_ENABLED=false` |
 | `interval_not_elapsed` | Run interval not elapsed | `stop_hook.run_interval_minutes` hasn't elapsed since last run |
 | `invalid_input` | Invalid hook input — could not parse JSON | Stop-hook couldn't parse stdin JSON from the IDE |
 | `lock_conflict` | Another gauntlet run is already in progress | Lock file exists with a live PID |

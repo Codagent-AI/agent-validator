@@ -220,7 +220,7 @@ const statusMessages: Record<GauntletStatus, string> = {
 	loop_detected: "Loop detected — rapid blocks overridden.",
 	interval_not_elapsed: "Run interval not elapsed.",
 	invalid_input: "Invalid input.",
-	stop_hook_disabled: "Stop hook is disabled via configuration.",
+	stop_hook_disabled: "",
 	pr_push_required: "Gates passed — PR needs to be created/updated.",
 	ci_pending: "CI checks still running.",
 	ci_failed: "CI checks failed or review changes requested.",
