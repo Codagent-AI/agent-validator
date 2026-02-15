@@ -57,7 +57,7 @@ export class EntryPointExpander {
 					});
 				}
 			} else if (this.isGlobPattern(ep.path)) {
-				// Glob pattern (e.g., "openspec/changes/**/tasks.md")
+				// Glob pattern (e.g., "openspec/changes/**/spec.md")
 				if (this.hasMatchingFiles(ep.path, filteredChanges)) {
 					results.push({
 						path: ep.path,
@@ -97,7 +97,7 @@ export class EntryPointExpander {
 					results.push({ path: subDir, config: ep });
 				}
 			} else if (this.isGlobPattern(ep.path)) {
-				// Glob pattern (e.g., "openspec/changes/**/tasks.md")
+				// Glob pattern (e.g., "openspec/changes/**/spec.md")
 				// Include as-is for expandAll since it's a virtual entry point
 				results.push({ path: ep.path, config: ep });
 			} else {

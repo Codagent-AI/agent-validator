@@ -496,24 +496,14 @@ The execution state file MUST persist across all clean operations (manual and au
 - **THEN** `.execution_state` SHALL be deleted (reset)
 - **AND** the next run SHALL operate in first-run mode against base branch
 
-#### Scenario: Auto-clean resets execution state on commit merged (clean tree)
+#### Scenario: Auto-clean resets execution state on commit merged
 
 - **GIVEN** `.execution_state` exists with `commit: "abc123"`
 - **AND** commit "abc123" is now an ancestor of the base branch
-- **AND** `working_tree_ref` equals `commit` (no uncommitted changes were captured)
 - **WHEN** auto-clean detects the merged commit
-- **THEN** `.execution_state` SHALL be deleted (reset)
+- **THEN** `.execution_state` SHALL be deleted (reset) unconditionally
+- **AND** the `working_tree_ref` validity SHALL NOT be checked (stash existence in git is irrelevant after merge)
 - **AND** the next run SHALL operate in first-run mode against base branch
-
-#### Scenario: Commit merged but uncommitted changes present (dirty tree)
-
-- **GIVEN** `.execution_state` exists with `commit: "abc123"`
-- **AND** commit "abc123" is now an ancestor of the base branch
-- **AND** `working_tree_ref` differs from `commit` (uncommitted changes were captured)
-- **WHEN** auto-clean evaluates the context
-- **THEN** auto-clean SHALL NOT fire
-- **AND** `.execution_state` SHALL be preserved
-- **AND** logs SHALL remain in place for the retry counter to function correctly
 
 ### Requirement: Runtime Usage Limit Detection
 This requirement MUST record unhealthy adapters in the global unhealthy adapter state file rather than `.execution_state`.

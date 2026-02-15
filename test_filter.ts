@@ -2,15 +2,14 @@ import { Glob } from 'bun';
 
 const patterns = [
   "openspec/changes/archive",
-  "**/tasks.md"
+  "**/design.md"
 ];
 
 const files = [
   "openspec/changes/improve-review-tracking/design.md",
-  "openspec/changes/improve-review-tracking/proposal.md", 
+  "openspec/changes/improve-review-tracking/proposal.md",
   "openspec/changes/improve-review-tracking/specs/agent-command/spec.md",
-  "openspec/changes/improve-review-tracking/specs/log-management/spec.md",
-  "openspec/changes/improve-review-tracking/tasks.md"
+  "openspec/changes/improve-review-tracking/specs/log-management/spec.md"
 ];
 
 const globs: Glob[] = [];

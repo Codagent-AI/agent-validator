@@ -8,7 +8,7 @@ Instructions for AI coding assistants using OpenSpec for spec-driven development
 - Decide scope: new capability vs modify existing capability
 - Pick a unique `change-id`: kebab-case, verb-led (`add-`, `update-`, `remove-`, `refactor-`)
 - Move the superpowers design doc into the change dir: `mv docs/plans/YYYY-MM-DD-<topic>-design.md openspec/changes/<id>/design.md`
-- Scaffold: `proposal.md`, `tasks.md`, and delta specs per affected capability (design.md is already present from brainstorming)
+- Scaffold: `proposal.md` and delta specs per affected capability (design.md is already present from brainstorming)
 - Write deltas: use `## ADDED|MODIFIED|REMOVED|RENAMED Requirements`; include at least one `#### Scenario:` per requirement
 - Validate: `openspec validate [change-id] --strict --no-interactive` and fix issues
 - Request approval: Do not start implementation until proposal is approved
@@ -48,14 +48,14 @@ A superpowers brainstorming design doc (`docs/plans/YYYY-MM-DD-<topic>-design.md
 1. Review `openspec/project.md`, `openspec list`, and `openspec list --specs` to understand current context.
 2. Choose a unique verb-led `change-id` and create the change directory: `mkdir -p openspec/changes/<id>/specs/`
 3. Move the design doc into the change dir: `mv docs/plans/YYYY-MM-DD-<topic>-design.md openspec/changes/<id>/design.md`. YOU MUST use `mv`, do not copy it, because we want the one in openspec to be the single source of truth.
-4. Read `design.md` and use it as the basis for writing `proposal.md`, `tasks.md`, and spec deltas under `openspec/changes/<id>/`.
+4. Read `design.md` and use it as the basis for writing `proposal.md` and spec deltas under `openspec/changes/<id>/`.
 5. Draft spec deltas using `## ADDED|MODIFIED|REMOVED Requirements` with at least one `#### Scenario:` per requirement.
 6. Run `openspec validate <id> --strict --no-interactive` and resolve any issues before sharing the proposal.
 7. After validation passes, use the `gauntlet-run` skill to automatically run the spec reviewer agent. It reviews files in the git diff including the openspec proposal. Address any issues it reports.
 
 YOU MUST complete all steps above before stopping or proceeding to implementation.
 
-**Source of truth:** After spec review, the openspec change directory (`openspec/changes/<change-name>/`) contains the authoritative documents: `proposal.md`, `design.md`, `tasks.md`, and spec deltas. The design doc was moved here from `docs/plans/` during Stage 1 and may be updated during review.
+**Source of truth:** After spec review, the openspec change directory (`openspec/changes/<change-name>/`) contains the authoritative documents: `proposal.md`, `design.md`, and spec deltas. The design doc was moved here from `docs/plans/` during Stage 1 and may be updated during review.
 
 ### Stage 2: Implementing Changes
 
@@ -64,15 +64,10 @@ Implementation uses the superpowers plugin for planning and execution. After the
 1. Create a worktree and launch an agent: `wt switch -c feat-name -b main -x claude`
 2. Tell the agent to write a plan and execute it in one shot:
    ```text
-   Write a plan for <feature> using the spec at openspec/changes/<change-name>/proposal.md,
-   then immediately execute it using subagent-driven-development.
+   Read all files in openspec/changes/<change-name>/, then write a plan and
+   immediately execute it using subagent-driven-development.
    ```
 3. The agent will write the plan, execute all tasks via fresh subagents with automated spec + quality reviews, run `/run_gauntlet`, and create a PR via `/push-pr`.
-
-**Superpowers overrides for this project:**
-- After writing a plan with writing-plans, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
-- The openspec proposal is the source of truth for planning — read `openspec/changes/<change-name>/proposal.md`, not the brainstorm design doc.
-- When complete, run `/run_gauntlet` then `/push-pr`. Do not use finishing-a-development-branch.
 
 ### Stage 3: Archiving Changes
 After deployment, create separate PR to:
@@ -150,7 +145,6 @@ openspec/
 ├── changes/                # Proposals - what SHOULD change
 │   ├── [change-name]/
 │   │   ├── proposal.md     # Why, what, impact
-│   │   ├── tasks.md        # Implementation checklist
 │   │   ├── design.md       # Technical decisions (moved from superpowers brainstorming)
 │   │   └── specs/          # Delta changes
 │   │       └── [capability]/
@@ -218,92 +212,25 @@ The system SHALL provide...
 ```
 If multiple capabilities are affected, create multiple delta files under `changes/[change-id]/specs/<capability>/spec.md`—one per capability.
 
-4. **Create tasks.md:**
-
-Every `tasks.md` MUST begin with a **Pre-factoring** section. This section checks
-whether any files **that this change will modify** are CodeScene hotspots and, if so,
-lists targeted refactorings to complete **before** the main implementation work.
-
-The scope is strictly **files touched by this change** — not all hotspots in the project.
-
-**How to populate the Pre-factoring section (requires CodeScene MCP server):**
-
-> **HOTSPOT_THRESHOLD = 8.5** (Code Health score; files at or below are hotspot candidates)
-
-1. Determine which source files will be modified by the change (from the Impact section of `proposal.md`).
-2. For each affected file, run `code_health_score` to get its Code Health score (1.0–10.0).
-   - **Score ≤ HOTSPOT_THRESHOLD** → the file is a hotspot candidate. Proceed to step 3.
-   - **Score > HOTSPOT_THRESHOLD** → the file is healthy. No pre-factoring needed for it.
-3. For each file scoring ≤ HOTSPOT_THRESHOLD, get refactoring priorities:
-   - `code_health_review` — get the full Code Health review listing code smells.
-   - `code_health_auto_refactor` — get an automated refactoring recommendation for the worst-scoring function.
-4. Optionally, cross-reference with project-level data if available:
-   - `list_technical_debt_hotspots_for_project_file` — check if the file is a known project hotspot.
-   - `list_technical_debt_hotspots_for_project` — list all project hotspots and filter to affected files.
-5. Record the results in the Pre-factoring section. If none of the files touched by this change score ≤ HOTSPOT_THRESHOLD, write "No hotspots modified."
-
-> **Note:** If the CodeScene MCP server is not available, write "CodeScene not available — hotspot analysis skipped." in the Pre-factoring section and proceed with implementation. See the [CodeScene MCP server documentation](https://github.com/codescene-oss/codescene-mcp) for setup instructions.
-
-```markdown
-## 0. Pre-factoring
-<!-- Always present. Lists refactorings for CodeScene hotspots touched by this change. -->
-<!-- If no hotspots are modified, state: "No hotspots modified." -->
-
-- [ ] 0.1 Refactor `processPayment` in `src/billing.ts` (Code Health: 3.2 — Complex Method, Large Method)
-- [ ] 0.2 Refactor `validateOrder` in `src/orders.ts` (Code Health: 4.1 — Deep Nested Complexity)
-
-<!-- or: No hotspots modified. -->
-
-## 1. Implementation
-- [ ] 1.1 Create database schema
-- [ ] 1.2 Implement API endpoint
-- [ ] 1.3 Add frontend component
-
-## 2. Tests
-- [ ] 2.1 Unit/integration test for Scenario: Success case
-- [ ] 2.2 Unit/integration test for Scenario: Error handling
-- [ ] 2.3 ... (one test per scenario in spec)
-
-## 3. Manual Verification (Optional)
-<!-- Include this section only when there are verification steps that cannot be automated by the gauntlet. -->
-<!-- These steps MUST be performed by the agent before marking the task complete — not by a human. -->
-<!-- Examples: -->
-<!-- - Grep checks for removed patterns -->
-<!-- - Manual CLI health checks -->
-<!-- - Visual inspection of output format -->
-
-- [ ] 3.1 Verify no "hello" health check prompts remain: `grep -r "echo.*hello" src/`
-- [ ] 3.2 Manual: run `agent-gauntlet health` - should show adapters as installed/missing (no usage limit check)
-```
-
-**Test coverage rule:** Make sure there are tests cases for all code paths and core functionality.
-
-Always include the following as the final validation instructions in `tasks.md` Example:
-```markdown
-## 8. Validation
-
-If there is a "Manual Verification" section above, complete all verification steps before marking the task complete.
-
-There are no automated validation tasks that need to be explicitly run. When work is completed, a stop hook should execute the full gauntlet of verification tasks and give direction on what needs to be fixed.
-```
-**Do not** include linting, tests, build, etc. in the validation; the gauntlet suite runs all of this.
-
-**Manual Verification guidance:**
-- Add a `## Manual Verification (Optional)` section **only** when there are verification steps the gauntlet cannot automate.
-- These are steps the **agent** must perform before declaring work complete — not steps for a human reviewer.
-- Examples of valid manual verification steps:
-  - `grep -r "pattern" src/` — verify removed code patterns don't remain
-  - `npm run command -- --flag` — verify CLI output or behavior
-  - `cat path/to/file | head -n 5` — verify file structure or format
-- Prefix manual CLI steps with "Manual:" to distinguish from automated checks.
-
-5. **Enrich design.md (already present from brainstorming):**
+4. **Enrich design.md (already present from brainstorming):**
    The design doc was moved into the change directory in step 1. Review it and add the following sections if not already present:
-   - **Pre-factoring** — when the Pre-factoring section in `tasks.md` lists any refactorings (i.e., hotspots will be modified), add a `## Pre-factoring` section documenting:
-     - Which files are hotspots and their current Code Health scores
-     - The specific code smells identified by CodeScene (e.g., Complex Method, Bumpy Road)
-     - The refactoring strategy for each (extracted from `code_health_review` / `code_health_auto_refactor`)
-     - Why the refactoring is necessary before the main implementation
+   - **Pre-factoring** — analyze CodeScene hotspots for files this change will modify. Add a `## Pre-factoring` section:
+
+     > **HOTSPOT_THRESHOLD = 8.5** (Code Health score; files at or below are hotspot candidates)
+
+     1. Determine which source files will be modified by the change (from the Impact section of `proposal.md`).
+     2. For each affected file, run `code_health_score` to get its Code Health score (1.0–10.0).
+        - **Score ≤ HOTSPOT_THRESHOLD** → the file is a hotspot candidate. Proceed to step 3.
+        - **Score > HOTSPOT_THRESHOLD** → the file is healthy. No pre-factoring needed for it.
+     3. For each file scoring ≤ HOTSPOT_THRESHOLD, get refactoring priorities:
+        - `code_health_review` — get the full Code Health review listing code smells.
+        - `code_health_auto_refactor` — get an automated refactoring recommendation for the worst-scoring function.
+     4. Optionally, cross-reference with project-level data if available:
+        - `list_technical_debt_hotspots_for_project_file` — check if the file is a known project hotspot.
+        - `list_technical_debt_hotspots_for_project` — list all project hotspots and filter to affected files.
+     5. Document: which files are hotspots, their scores, code smells, and refactoring strategy. If no files score ≤ HOTSPOT_THRESHOLD, write "No hotspots modified."
+
+     > **Note:** If the CodeScene MCP server is not available, write "CodeScene not available — hotspot analysis skipped." See the [CodeScene MCP server documentation](https://github.com/codescene-oss/codescene-mcp) for setup instructions.
 
 ## Spec File Format
 
@@ -400,7 +327,6 @@ openspec list
 CHANGE=add-two-factor-auth
 mkdir -p openspec/changes/$CHANGE/{specs/auth}
 printf "## Why\n...\n\n## What Changes\n- ...\n\n## Impact\n- ...\n" > openspec/changes/$CHANGE/proposal.md
-printf "## 1. Implementation\n- [ ] 1.1 ...\n" > openspec/changes/$CHANGE/tasks.md
 
 # 3) Add deltas (example)
 cat > openspec/changes/$CHANGE/specs/auth/spec.md << 'EOF'
@@ -422,7 +348,6 @@ openspec validate $CHANGE --strict --no-interactive
 ```
 openspec/changes/add-2fa-notify/
 ├── proposal.md
-├── tasks.md
 └── specs/
     ├── auth/
     │   └── spec.md   # ADDED: Two-Factor Authentication
@@ -512,7 +437,6 @@ Only add complexity with:
 
 ### File Purposes
 - `proposal.md` - Why and what
-- `tasks.md` - Implementation steps
 - `design.md` - Technical decisions
 - `spec.md` - Requirements and behavior
 

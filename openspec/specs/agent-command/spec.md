@@ -92,41 +92,309 @@ The command template SHALL NOT include a hardcoded retry limit. Instead, the tem
 
 ### Requirement: Push PR Template Command
 
-The system SHALL provide a `push_pr.md` template command that instructs the agent to commit changes and create or update a pull request.
+The system SHALL provide a `/gauntlet-push-pr` skill (migrated from `push_pr.md`) that instructs the agent to commit changes and create or update a pull request.
 
 #### Scenario: Template prioritizes project-level instructions
-- **GIVEN** the push-pr template command is invoked
+- **GIVEN** the `/gauntlet-push-pr` skill is invoked
 - **WHEN** the agent reads the instructions
 - **THEN** it SHALL first look for project-level commit/PR instructions or skills (e.g., a `/commit` command, `/push-pr` skill, project CONTRIBUTING.md)
 
 #### Scenario: Template includes minimal fallback
-- **GIVEN** the push-pr template command is invoked
+- **GIVEN** the `/gauntlet-push-pr` skill is invoked
 - **AND** no project-level commit/PR instructions are found
 - **WHEN** the agent follows the template
 - **THEN** it SHALL use the minimal fallback steps: stage changes, commit with descriptive message, push to remote, and create PR via `gh pr create`
 
-#### Scenario: Template installed during init
+#### Scenario: Skill installed during init
 - **GIVEN** a user runs `agent-gauntlet init`
 - **WHEN** the init command completes
-- **THEN** `.gauntlet/push_pr.md` SHALL be created from the template
+- **THEN** `.gauntlet/skills/gauntlet-push-pr/SKILL.md` SHALL be created from the template
 
 ### Requirement: Fix PR Template Command
 
-The system SHALL provide a `fix_pr.md` template command that instructs the agent to address review comments and CI failures on a pull request.
+The system SHALL provide a `/gauntlet-fix-pr` skill (migrated from `fix_pr.md`) that instructs the agent to address review comments and CI failures on a pull request.
 
 #### Scenario: Template prioritizes project-level instructions
-- **GIVEN** the fix-pr template command is invoked
+- **GIVEN** the `/gauntlet-fix-pr` skill is invoked
 - **WHEN** the agent reads the instructions
 - **THEN** it SHALL first look for project-level instructions or skills for addressing PR feedback (e.g., a `/fix-pr` skill, `.claude/commands/fix-pr.md`)
 
 #### Scenario: Template includes minimal fallback
-- **GIVEN** the fix-pr template command is invoked
+- **GIVEN** the `/gauntlet-fix-pr` skill is invoked
 - **AND** no project-level fix-pr instructions are found
 - **WHEN** the agent follows the template
 - **THEN** it SHALL use minimal fallback steps: check CI status, read failure logs, fetch review comments, fix issues, and push
 
-#### Scenario: Template installed during init
+#### Scenario: Skill installed during init
 - **GIVEN** a user runs `agent-gauntlet init`
 - **WHEN** the init command completes
-- **THEN** `.gauntlet/fix_pr.md` SHALL be created from the template
+- **THEN** `.gauntlet/skills/gauntlet-fix-pr/SKILL.md` SHALL be created from the template
+
+### Requirement: Gauntlet Help Diagnostic Skill
+The system SHALL provide a `/gauntlet-help` skill for evidence-based diagnosis of gauntlet behavior. The skill SHALL be diagnosis-only (no auto-fix behavior) and SHALL operate without requiring source code access.
+
+#### Scenario: Diagnose a "no changes" question from runtime evidence
+- **GIVEN** a user asks "/gauntlet-help: the hook reported no changes, why?"
+- **WHEN** the skill investigates
+- **THEN** it SHALL resolve `log_dir` from `.gauntlet/config.yml`
+- **AND** inspect runtime evidence from `<log_dir>/.debug.log`, `<log_dir>/.execution_state`, and relevant gate/review logs
+- **AND** return a structured response including Diagnosis, Evidence, Confidence (`high`/`medium`/`low`), and Next steps
+
+### Requirement: Situation-Based Skill Structure
+The `gauntlet-help` skill SHALL use a multi-file structure with `SKILL.md` containing always-needed content (evidence sources, output contract, diagnostic workflow, routing logic) and situation-based reference files under `references/` organized by troubleshooting domain.
+
+#### Scenario: Router selects only needed reference for a stop-hook question
+- **GIVEN** the `gauntlet-help` skill bundle is installed
+- **WHEN** the user asks why the stop hook blocked their stop
+- **THEN** `SKILL.md` SHALL route to `references/stop-hook-troubleshooting.md`
+- **AND** the skill SHALL remain prompt-only (no bundled executable scripts)
+
+#### Scenario: Router selects only needed reference for a config question
+- **GIVEN** the `gauntlet-help` skill bundle is installed
+- **WHEN** the user asks about a config validation error
+- **THEN** `SKILL.md` SHALL route to `references/config-troubleshooting.md`
+
+### Requirement: Comprehensive Diagnostic Playbooks
+The `gauntlet-help` skill SHALL provide situation-based troubleshooting references that cover all gauntlet stop-hook statuses, config issues, gate failures, lock conflicts, adapter health, and CI/PR integration, and SHALL use dynamic evidence acquisition to gather only the additional signals needed for diagnosis.
+
+#### Scenario: Explain any stop-hook outcome with targeted evidence gathering
+- **GIVEN** a user asks why the stop hook allowed or blocked
+- **WHEN** logs/state do not provide enough evidence for a confident explanation
+- **THEN** the skill SHALL run one or more of `agent-gauntlet list`, `agent-gauntlet health`, and `agent-gauntlet detect` as needed
+- **AND** it SHALL explain the observed result using the relevant troubleshooting reference
+
+### Requirement: Skill Directory Structure
+The system SHALL store canonical skill files under `.gauntlet/skills/gauntlet-<action>/SKILL.md` using a flat directory structure with hyphenated naming to achieve `/gauntlet-<action>` invocation.
+
+#### Scenario: Canonical skill files created during init
+- **WHEN** `agent-gauntlet init` creates the gauntlet configuration
+- **THEN** skill directories SHALL be created under `.gauntlet/skills/` for each action: `gauntlet-run`, `gauntlet-check`, `gauntlet-push-pr`, `gauntlet-fix-pr`, `gauntlet-status`
+- **AND** each directory SHALL contain a `SKILL.md` file with YAML frontmatter
+
+#### Scenario: Skill frontmatter format
+- **WHEN** a skill `SKILL.md` file is created
+- **THEN** it SHALL contain YAML frontmatter with `name`, `description`, and `allowed-tools` fields
+- **AND** all gauntlet skills (`gauntlet-run`, `gauntlet-check`, `gauntlet-push-pr`, `gauntlet-fix-pr`, `gauntlet-status`) SHALL set `disable-model-invocation: true`
+
+#### Scenario: Hyphenated skill invocation
+- **GIVEN** a skill at `.claude/skills/gauntlet-run/SKILL.md`
+- **WHEN** the user types `/gauntlet-run`
+- **THEN** Claude Code SHALL invoke the skill from the flat `gauntlet-run/` directory
+
+### Requirement: Skill Installation for Claude
+The init command SHALL install skills into `.claude/skills/` for Claude Code by writing skill files directly via `installSkill`.
+
+#### Scenario: Project-level Claude skill installation
+- **GIVEN** a user selects project-level installation during init
+- **AND** Claude is a selected agent
+- **WHEN** skills are installed
+- **THEN** skill directories SHALL be created under `.claude/skills/gauntlet-<action>/` for each skill
+- **AND** each `SKILL.md` SHALL be written directly (not symlinked) by the `installSkill` function
+
+#### Scenario: User-level Claude skill installation
+- **GIVEN** a user selects user-level installation during init
+- **AND** Claude is a selected agent
+- **WHEN** skills are installed
+- **THEN** skill files SHALL be written directly to `~/.claude/skills/gauntlet-<action>/SKILL.md`
+
+### Requirement: Command Installation for Non-Claude Agents
+The init command SHALL continue installing flat command files for agents that do not support the skills directory model.
+
+#### Scenario: Gemini command installation
+- **GIVEN** a user selects Gemini as an agent during init
+- **WHEN** commands are installed
+- **THEN** flat command files SHALL be created in the Gemini command directory
+
+#### Scenario: Codex command installation
+- **GIVEN** a user selects Codex as an agent during init
+- **WHEN** commands are installed
+- **THEN** flat command files SHALL be created in the Codex command directory
+
+### Requirement: Check Skill
+The system SHALL provide a `/gauntlet-check` skill that runs only check gates (no reviews), following the same iterative fix workflow as `/gauntlet-run`.
+
+#### Scenario: Check skill runs checks only
+- **WHEN** the agent invokes `/gauntlet-check`
+- **THEN** the skill SHALL instruct the agent to run `agent-gauntlet check`
+- **AND** the fix-and-rerun loop SHALL follow the same pattern as `/gauntlet-run`
+
+#### Scenario: Check skill installed during init
+- **GIVEN** a user runs `agent-gauntlet init`
+- **WHEN** skills are installed
+- **THEN** the `gauntlet-check` skill SHALL be included in the installed skills
+
+### Requirement: Status Skill
+The system SHALL provide a `/gauntlet-status` skill that summarizes the most recent gauntlet session from log files.
+
+#### Scenario: Status from active logs
+- **WHEN** the agent invokes `/gauntlet-status`
+- **AND** `gauntlet_logs/` contains active log files
+- **THEN** the skill SHALL run its bundled script to parse the logs
+- **AND** produce a summary including: iteration count, overall status, failures fixed/skipped/outstanding, and per-iteration change statistics
+
+#### Scenario: Status from previous logs
+- **WHEN** the agent invokes `/gauntlet-status`
+- **AND** `gauntlet_logs/` has no active logs but `gauntlet_logs/previous/` contains archived logs
+- **THEN** the skill SHALL parse the previous session's logs and indicate they are from an archived session
+
+#### Scenario: No logs available
+- **WHEN** the agent invokes `/gauntlet-status`
+- **AND** neither `gauntlet_logs/` nor `gauntlet_logs/previous/` contain log files
+- **THEN** the skill SHALL report that no gauntlet session data is available
+
+#### Scenario: Status skill bundled script
+- **GIVEN** the `gauntlet-status` skill directory
+- **THEN** it SHALL contain a bundled script at `.gauntlet/skills/gauntlet/status/scripts/status.ts`
+- **AND** the SKILL.md SHALL instruct the agent to run the script via `bun`
+- **AND** the script SHALL parse console logs, debug logs, and review JSON files
+
+#### Scenario: Status summary content
+- **WHEN** the status script produces output
+- **THEN** the summary SHALL include:
+  - Number of iterations (runs) in the session
+  - Overall session status (passed, failed, retry limit exceeded, in progress)
+  - Per-iteration: files changed, lines added/removed, gates run, pass/fail counts
+  - Violations fixed, skipped, and outstanding across all iterations
+  - Gate-level results (which specific checks/reviews passed or failed)
+
+### Requirement: Skill Naming Convention
+All gauntlet skills SHALL use a flat `gauntlet-<action>/` directory structure with hyphenated naming to achieve `/gauntlet-<action>` invocation.
+
+#### Scenario: Skill name format
+- **WHEN** a gauntlet skill is registered
+- **THEN** its directory structure SHALL be `gauntlet-<action>/SKILL.md` (e.g., `gauntlet-run/SKILL.md`, `gauntlet-check/SKILL.md`, `gauntlet-status/SKILL.md`)
+- **AND** the `name` field in frontmatter SHALL be `gauntlet-<action>` (e.g., `gauntlet-run`, `gauntlet-check`, `gauntlet-status`)
+
+### Requirement: Setup Skill Installation
+
+The `init` command SHALL install the `/gauntlet-setup` skill alongside existing skills (run, check, push-pr, fix-pr, status, help). The setup skill SHALL be installed as a multi-file skill with a SKILL.md and a references directory.
+
+#### Scenario: Setup skill installed during init
+- **GIVEN** a user runs `agent-gauntlet init`
+- **AND** selects CLI agents that support skills
+- **WHEN** skills are installed
+- **THEN** the `gauntlet-setup` skill SHALL be installed with `SKILL.md` and `references/check-catalog.md`
+
+#### Scenario: Setup skill not overwritten
+- **GIVEN** the `gauntlet-setup` skill already exists
+- **WHEN** `agent-gauntlet init` runs
+- **THEN** existing skill files SHALL NOT be overwritten, but any missing skill files SHALL be created
+
+### Requirement: Setup Skill Fresh Configuration
+
+The `/gauntlet-setup` skill SHALL guide the agent through scanning a project, discovering available tooling, and configuring `entry_points` in `.gauntlet/config.yml`. On fresh setup (empty `entry_points`), the skill performs a full project scan.
+
+#### Scenario: Config file missing
+- **GIVEN** `.gauntlet/config.yml` does not exist
+- **WHEN** the agent invokes `/gauntlet-setup`
+- **THEN** the agent SHALL inform the user to run `agent-gauntlet init` first
+- **AND** SHALL NOT proceed with scanning
+
+#### Scenario: Fresh setup with discovered checks
+- **GIVEN** `.gauntlet/config.yml` exists with `entry_points: []`
+- **WHEN** the agent invokes `/gauntlet-setup`
+- **THEN** the agent SHALL scan the project for tooling signals across 6 categories (build, lint, typecheck, test, security-deps, security-code)
+- **AND** present a table of discovered checks with tool names, commands, and confidence levels
+- **AND** ask the user to confirm which checks to enable
+
+#### Scenario: Check YAML files created
+- **GIVEN** the user confirms discovered checks
+- **WHEN** the agent creates check configurations
+- **THEN** individual `.gauntlet/checks/<name>.yml` files SHALL be created for each confirmed check
+- **AND** each file SHALL follow the check gate schema (command, parallel, run_in_ci, run_locally, etc.)
+
+#### Scenario: Source directory determination
+- **GIVEN** the user has confirmed which checks to enable
+- **WHEN** the agent needs to set the `entry_points[].path` value
+- **THEN** the agent SHALL ask the user for the source directory or infer it from project structure
+- **AND** the agent SHALL skip this step when adding checks to an existing entry point that already has a path
+
+#### Scenario: Entry points updated with checks and built-in review
+- **GIVEN** the user confirms checks and source directory
+- **WHEN** the agent updates `.gauntlet/config.yml`
+- **THEN** `entry_points` SHALL include the confirmed checks and the `code-quality` review
+- **AND** the agent SHALL run `agent-gauntlet validate` to verify the configuration
+
+#### Scenario: Suggest next steps after successful setup
+- **GIVEN** the agent has validated the configuration
+- **WHEN** validation passes
+- **THEN** the agent SHALL inform the user they can run `/gauntlet-run`
+
+#### Scenario: Validation fails after setup
+- **GIVEN** the agent has created check files and updated config.yml
+- **WHEN** `agent-gauntlet validate` reports errors
+- **THEN** the agent SHALL display the validation errors to the user
+- **AND** apply one corrective update attempt based on the error messages
+- **AND** rerun `agent-gauntlet validate` once more
+- **AND** if validation still fails, stop and ask the user for guidance
+
+#### Scenario: User declines all discovered checks
+- **GIVEN** the agent presents discovered checks to the user
+- **WHEN** the user declines all of them
+- **THEN** the agent SHALL offer the custom addition flow to manually specify checks or reviews
+- **AND** the agent SHALL still include the `code-quality` review in `entry_points`
+
+#### Scenario: No tools discovered during scan
+- **GIVEN** `.gauntlet/config.yml` exists with `entry_points: []`
+- **WHEN** the agent scans the project and finds no recognizable tooling signals
+- **THEN** the agent SHALL inform the user that no tools were automatically detected
+- **AND** offer the custom addition flow to manually specify checks
+
+### Requirement: Setup Skill Existing Configuration
+
+When `entry_points` is already populated, the `/gauntlet-setup` skill SHALL offer options to extend or reconfigure the existing setup.
+
+#### Scenario: Existing config shows options
+- **GIVEN** `.gauntlet/config.yml` exists with populated `entry_points`
+- **WHEN** the agent invokes `/gauntlet-setup`
+- **THEN** the agent SHALL show a summary of current entry points and checks
+- **AND** offer three options: add checks (scan for unconfigured tools), add custom (user-specified), or reconfigure (start fresh)
+
+#### Scenario: Add checks filters existing
+- **GIVEN** the user selects "add checks" on an existing configuration
+- **WHEN** the agent scans the project
+- **THEN** checks that are already configured SHALL be filtered out of the results
+
+#### Scenario: Reconfigure backs up existing
+- **GIVEN** the user selects "reconfigure" on an existing configuration
+- **WHEN** the agent starts fresh setup
+- **THEN** existing check files (`.gauntlet/checks/*.yml`) and custom review files (`.gauntlet/reviews/*.md` — reviews with user-authored prompts, not built-in `.yml` references) SHALL be renamed with a `.bak` suffix before being replaced (overwriting any previous `.bak` files)
+
+### Requirement: Setup Skill Custom Additions
+
+The `/gauntlet-setup` skill SHALL support adding custom checks and reviews that the agent did not discover through scanning.
+
+#### Scenario: Add custom check
+- **GIVEN** the user wants to add a custom check
+- **WHEN** the agent prompts for details
+- **THEN** the agent SHALL ask for the command, target entry point, and optional settings (timeout, parallel, etc.)
+- **AND** create the corresponding `.gauntlet/checks/<name>.yml` file
+
+#### Scenario: Add custom review
+- **GIVEN** the user wants to add a custom review
+- **WHEN** the agent prompts for details
+- **THEN** the agent SHALL ask whether to use the built-in code-quality review or write a custom prompt
+- **AND** for built-in reviews, create `.gauntlet/reviews/<name>.yml` with `builtin: code-quality`
+- **AND** for custom reviews, create `.gauntlet/reviews/<name>.md` with the user's review prompt
+- **AND** add the review name to the target entry point's `reviews` array in `config.yml`
+
+#### Scenario: Add something else loop
+- **GIVEN** the agent has created check or review files
+- **WHEN** the files are written
+- **THEN** the agent SHALL ask "Add something else?"
+- **AND** if yes, loop back to the custom addition flow
+- **AND** if no, proceed to the validation step (run `agent-gauntlet validate`)
+
+### Requirement: Setup Skill Check Catalog Reference
+
+The setup skill SHALL include a `references/check-catalog.md` file that documents check categories, the check YAML schema, and example configurations. This reference is loaded by the agent when the skill is activated.
+
+#### Scenario: Check catalog content
+- **GIVEN** the setup skill is activated
+- **WHEN** the agent loads the check catalog reference
+- **THEN** it SHALL contain definitions for 6 check categories (build, lint, typecheck, test, security-deps, security-code)
+- **AND** the check YAML schema with all available fields
+- **AND** at least one example check file per category
+- **AND** the review YAML schema including built-in reviewer reference
+- **AND** the config entry_points schema
 
