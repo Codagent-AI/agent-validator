@@ -20,7 +20,16 @@ Initialize configuration in your project root:
 agent-gauntlet init
 ```
 
-This creates the `.gauntlet/` directory with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout)). It prompts you to select which CLIs to use, auto-detects the base branch, installs skills for your AI agents, and auto-installs stop hooks for Claude Code and Cursor.
+This walks you through an interactive setup:
+
+1. **Detects available CLIs** on your system
+2. **Prompts for development CLIs** — the tools you work in (hooks are installed for these)
+3. **Prompts for review CLIs** — the tools used for AI code reviews (sets `cli.default_preference`)
+4. **Creates `.gauntlet/`** with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout))
+5. **Installs skills and hooks** using checksum-based comparison for safe re-runs
+6. **Prints next steps** with context-aware instructions for your selected CLIs
+
+Use `--yes` to skip all prompts (selects all detected CLIs, overwrites changed files).
 
 After init, configure your checks and reviews by running the setup skill in your AI agent session:
 
@@ -205,7 +214,7 @@ Your local check definitions (`.gauntlet/checks/`) are automatically used in CI.
 
 The stop hook automatically runs the gauntlet when an AI agent tries to stop working, ensuring all gates pass before completion.
 
-**Automatic setup:** Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) when they are among the selected CLIs. No manual configuration is needed.
+**Automatic setup:** Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) when they are selected as **development CLIs**. No manual configuration is needed.
 
 **Manual setup for Claude Code** (if not using `init`):
 

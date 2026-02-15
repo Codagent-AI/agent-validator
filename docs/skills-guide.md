@@ -16,18 +16,22 @@ Agent Gauntlet installs **skills** (for Claude Code) and **flat commands** (for 
 
 ## Installation
 
-Skills are installed during `agent-gauntlet init`. You can choose:
+Skills are installed during `agent-gauntlet init` (Phase 5) into the project's `.claude/skills/` directory. Installation uses **checksum-based comparison**:
 
-- **Project level** (default with `--yes`): Installs into the repo (e.g., `.claude/skills/`)
-- **User level**: Installs into your home directory (e.g., `~/.claude/skills/`)
+- **Missing skills** are created silently
+- **Unchanged skills** (checksum matches) are skipped silently
+- **Changed skills** (checksum differs) prompt for confirmation before overwriting
 
-For **Claude Code**, skills are installed as directory-based `SKILL.md` files:
+With `--yes`, changed files are overwritten without prompting.
+
+Skills are installed as directory-based `SKILL.md` files:
 
 ```text
 .claude/skills/
   gauntlet-setup/SKILL.md
   gauntlet-setup/references/
     check-catalog.md
+    project-structure.md
   gauntlet-run/SKILL.md
   gauntlet-check/SKILL.md
   gauntlet-push-pr/SKILL.md
@@ -43,16 +47,7 @@ For **Claude Code**, skills are installed as directory-based `SKILL.md` files:
     ci-pr-troubleshooting.md
 ```
 
-For **other CLI agents** (Gemini, Codex, etc.), a subset is installed as flat command files:
-
-```text
-.gemini/commands/
-  gauntlet.md        # equivalent to /gauntlet-run
-  push-pr.md
-  fix-pr.md
-```
-
-Non-Claude agents receive only `run`, `push-pr`, and `fix-pr` (not `check`, `status`, or `help`).
+For **non-native CLI agents** (Codex, Gemini, etc.), Phase 6 of `init` prints `@file_path` references so you can point your agent at the skill files directly (e.g., `@.claude/skills/gauntlet-run/SKILL.md`).
 
 ## Usage
 
@@ -136,4 +131,4 @@ allowed-tools: Bash
 
 ## Re-installing Skills
 
-To reinstall skills (e.g., after updating Agent Gauntlet), delete the existing skill files and re-run `agent-gauntlet init`. Existing files are never overwritten.
+To update skills after upgrading Agent Gauntlet, re-run `agent-gauntlet init`. The checksum-based comparison detects changed skills and prompts you to update them. Use `--yes` to overwrite all changed skills without prompting.

@@ -88,13 +88,18 @@ If the code looks good, please reply with "LGTM!" (Looks Good To Me).
 
 ## Getting started
 
-### 1) Create config skeleton
+### 1) Run interactive setup
 
 ```bash
 agent-gauntlet init
 ```
 
-This creates:
+This walks you through a guided setup:
+
+1. **Detects available CLIs** on your system
+2. **Prompts for development CLIs** — the tools you work in (hooks are installed for CLIs that support them)
+3. **Prompts for review CLIs** — the tools used for AI code reviews (populates `cli.default_preference`)
+4. **Creates `.gauntlet/`** (skipped if it already exists):
 
 ```text
 .gauntlet/
@@ -103,7 +108,8 @@ This creates:
     code-quality.yml      # built-in code-quality review
 ```
 
-It also auto-installs start and stop hooks for Claude Code and Cursor (if selected) and installs the `/gauntlet-setup` skill.
+5. **Installs skills and hooks** — always runs, even on re-init. Uses checksums to skip unchanged files and prompt before overwriting changed ones.
+6. **Prints next steps** — context-aware instructions based on your selected CLIs
 
 ### 2) Configure checks and reviews
 
@@ -239,7 +245,7 @@ Checks availability of supported review CLIs (`gemini`, `codex`, `claude`, `gith
 
 ### `agent-gauntlet init`
 
-Creates `.gauntlet/` with a minimal starter config and a sample review definition.
+Guided interactive setup that creates `.gauntlet/`, installs skills, and configures hooks.
 
 ```text
 .gauntlet/
@@ -249,20 +255,20 @@ Creates `.gauntlet/` with a minimal starter config and a sample review definitio
     code-quality.yml      # Built-in code-quality review (num_reviews: 1)
 ```
 
-The `init` command handles mechanical setup only:
+The `init` command runs in 6 phases:
 
-1. **Detects available CLIs** and prompts you to select which ones to use
-2. **Auto-detects base branch** from the git remote (falls back to `origin/main`)
-3. **Creates the `.gauntlet/` directory** with a config skeleton (`entry_points: []`) and the built-in code-quality review
-4. **Installs skills/commands** for your selected CLI agents (see [Skills Guide](skills-guide.md))
-5. **Auto-installs start and stop hooks** for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) if they are among the selected CLIs -- no prompt required
-6. **Prints next step**: "Run `/gauntlet-setup` to configure your checks and reviews"
+1. **Phase 1 — CLI Detection**: Discovers available CLIs on the system
+2. **Phase 2 — Development CLI Selection**: Multi-select prompt for your development tools. Hooks are installed for CLIs that support them (Claude Code, Cursor). CLIs without hook support display a warning.
+3. **Phase 3 — Review CLI Selection**: Multi-select prompt for review tools. Populates `cli.default_preference` in the user's selection order. If one review CLI is selected, `num_reviews` is set to 1 automatically. If multiple are selected, you're prompted for how many to run per review.
+4. **Phase 4 — Scaffold `.gauntlet/`**: Creates the directory, config skeleton (`entry_points: []`), and built-in code-quality review. **Skipped entirely** if `.gauntlet/` already exists (config is never overwritten).
+5. **Phase 5 — Install External Files**: Installs skills to `.claude/skills/` and hooks for development CLIs. **Always runs**, even on re-init. Uses SHA-256 checksums to: create missing files silently, skip unchanged files, and prompt before overwriting changed files.
+6. **Phase 6 — Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor) get `/gauntlet-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
 
 After `init`, run `/gauntlet-setup` in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
 
 #### Options
 
-- `-y, --yes`: Skip prompts and use defaults (project-level commands for all supported agents)
+- `-y, --yes`: Skip all interactive prompts. Selects all detected CLIs as both development and review CLIs, sets `num_reviews` to the detected count, and overwrites changed files without asking.
 
 ### `agent-gauntlet ci`
 

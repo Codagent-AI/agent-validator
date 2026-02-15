@@ -60,7 +60,7 @@ This document lists the configuration files Agent Gauntlet loads and all support
   - **auto_push_pr**: boolean (optional; default `false`)
     When enabled, the stop hook checks whether a PR exists and is up to date after gates pass. If no PR exists or the PR HEAD doesn't match the local HEAD, the hook blocks with `pr_push_required` and provides instructions for creating/updating a PR.
 
-  Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`). No manual setup is required.
+  Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) when they are selected as **development CLIs** in Phase 2. No manual setup is required.
 - **auto_fix_pr**: boolean (optional; default `false`)
   When enabled (and `auto_push_pr` is also enabled), the stop hook waits for CI checks after a PR is created. If checks fail or blocking reviews are present, it blocks with fix instructions; if checks pass, it approves.
 - **entry_points**: array (required)
