@@ -251,6 +251,10 @@ export class ClaudeAdapter implements CLIAdapter {
 		return markdownContent;
 	}
 
+	supportsHooks(): boolean {
+		return true;
+	}
+
 	async execute(opts: {
 		prompt: string;
 		diff: string;

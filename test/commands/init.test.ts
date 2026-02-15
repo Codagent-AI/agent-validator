@@ -56,6 +56,7 @@ const mockAdapters = [
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => true,
 		transformCommand: (content: string) => content,
+		supportsHooks: () => true,
 	},
 	{
 		name: "mock-cli-2",
@@ -67,6 +68,7 @@ const mockAdapters = [
 		getCommandExtension: () => ".sh",
 		canUseSymlink: () => false,
 		transformCommand: (content: string) => content,
+		supportsHooks: () => false,
 	},
 ];
 
@@ -1002,6 +1004,7 @@ describe("Skills Installation for Claude", () => {
 			getCommandExtension: () => ".md",
 			canUseSymlink: () => true,
 			transformCommand: (content: string) => content,
+			supportsHooks: () => true,
 		},
 		{
 			name: "other-mock",
@@ -1013,6 +1016,7 @@ describe("Skills Installation for Claude", () => {
 			getCommandExtension: () => ".md",
 			canUseSymlink: () => false,
 			transformCommand: (content: string) => content,
+			supportsHooks: () => false,
 		},
 	];
 
@@ -1038,6 +1042,7 @@ describe("Skills Installation for Claude", () => {
 				getCommandExtension: () => ".md",
 				canUseSymlink: () => true,
 				transformCommand: (content: string) => content,
+				supportsHooks: () => true,
 			},
 			{
 				name: "mock-cli-2",
@@ -1049,6 +1054,7 @@ describe("Skills Installation for Claude", () => {
 				getCommandExtension: () => ".sh",
 				canUseSymlink: () => false,
 				transformCommand: (content: string) => content,
+				supportsHooks: () => false,
 			},
 		);
 	});
