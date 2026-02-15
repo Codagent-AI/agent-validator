@@ -2,6 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Command } from "commander";
 import YAML from "yaml";
+import { loadGlobalConfig } from "../config/global.js";
+import {
+	getDebugLogConfig,
+	getLogDir,
+} from "../hooks/stop-hook-handler.js";
+import { DebugLogger, mergeDebugLogConfig } from "../utils/debug-log.js";
 
 const START_HOOK_MESSAGE = `<IMPORTANT>
 This project uses Agent Gauntlet for automated quality verification.
@@ -77,6 +83,23 @@ export function registerStartHookCommand(program: Command): void {
 			}
 
 			const adapter = options.adapter;
+
+			// Log to .debug.log
+			try {
+				const cwd = process.cwd();
+				const logDir = path.join(cwd, await getLogDir(cwd));
+				const globalConfig = await loadGlobalConfig();
+				const projectDebugLogConfig = await getDebugLogConfig(cwd);
+				const debugLogConfig = mergeDebugLogConfig(
+					projectDebugLogConfig,
+					globalConfig.debug_log,
+				);
+				const debugLogger = new DebugLogger(logDir, debugLogConfig);
+				await debugLogger.logStartHook(adapter);
+			} catch {
+				// Debug logging should never break the hook
+			}
+
 			const output =
 				adapter === "cursor"
 					? formatCursorOutput(START_HOOK_MESSAGE)

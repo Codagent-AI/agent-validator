@@ -10,6 +10,18 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun src/index.ts start-hook",
+            "async": false
+          }
+        ],
+        "matcher": "startup|resume|clear|compact"
+      }
     ]
   },
   "permissions": {
