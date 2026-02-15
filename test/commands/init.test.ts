@@ -312,7 +312,7 @@ describe("Init Command", () => {
 		const output = logs.join("\n");
 		// Claude is a native CLI, should get /gauntlet-setup instruction
 		expect(output).toContain(
-			"Run /gauntlet-setup to configure your checks and reviews",
+			"To complete setup, run /gauntlet-setup in your CLI.",
 		);
 	});
 

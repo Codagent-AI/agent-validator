@@ -192,16 +192,37 @@ const PROJECT_STRUCTURE_REFERENCE = readSkillTemplate(
  * Each entry maps a skill action name to its content and metadata.
  */
 const SKILL_DEFINITIONS = [
-	{ action: "run", content: GAUNTLET_RUN_SKILL_CONTENT },
-	{ action: "check", content: GAUNTLET_CHECK_SKILL_CONTENT },
-	{ action: "push-pr", content: PUSH_PR_SKILL_CONTENT },
-	{ action: "fix-pr", content: FIX_PR_SKILL_CONTENT },
-	{ action: "status", content: GAUNTLET_STATUS_SKILL_CONTENT },
+	{
+		action: "run",
+		content: GAUNTLET_RUN_SKILL_CONTENT,
+		description: "Run the verification suite",
+	},
+	{
+		action: "check",
+		content: GAUNTLET_CHECK_SKILL_CONTENT,
+		description: "Run a single check gate",
+	},
+	{
+		action: "push-pr",
+		content: PUSH_PR_SKILL_CONTENT,
+		description: "Commit, push, and create a PR",
+	},
+	{
+		action: "fix-pr",
+		content: FIX_PR_SKILL_CONTENT,
+		description: "Fix PR review comments and CI failures",
+	},
+	{
+		action: "status",
+		content: GAUNTLET_STATUS_SKILL_CONTENT,
+		description: "Show gauntlet status",
+	},
 	{
 		action: "help",
 		content: HELP_SKILL_BUNDLE.content,
 		references: HELP_SKILL_BUNDLE.references,
 		skillsOnly: true,
+		description: "Diagnose and explain gauntlet behavior",
 	},
 	{
 		action: "setup",
@@ -211,6 +232,7 @@ const SKILL_DEFINITIONS = [
 			"project-structure.md": PROJECT_STRUCTURE_REFERENCE,
 		},
 		skillsOnly: true,
+		description: "Configure checks and reviews interactively",
 	},
 ] as const;
 
@@ -509,18 +531,23 @@ function printPostInitInstructions(devCLINames: string[]): void {
 	console.log();
 	if (hasNative) {
 		console.log(
-			chalk.bold("Run /gauntlet-setup to configure your checks and reviews"),
+			chalk.bold(
+				"To complete setup, run /gauntlet-setup in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run.",
+			),
 		);
 	}
 	if (hasNonNative) {
-		const skillPaths = SKILL_DEFINITIONS.filter(
-			(s) => !("skillsOnly" in s && s.skillsOnly),
-		).map((s) => `.claude/skills/gauntlet-${s.action}/SKILL.md`);
 		console.log(
-			chalk.bold("Reference these skill files in your agent configuration:"),
+			chalk.bold(
+				"To complete setup, reference the setup skill in your CLI: @.claude/skills/gauntlet-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run.",
+			),
 		);
-		for (const sp of skillPaths) {
-			console.log(`  @${sp}`);
+		console.log();
+		console.log("Available skills:");
+		for (const s of SKILL_DEFINITIONS) {
+			console.log(
+				`  @.claude/skills/gauntlet-${s.action}/SKILL.md — ${s.description}`,
+			);
 		}
 	}
 }
@@ -530,10 +557,7 @@ async function writeConfigYml(
 	reviewCLINames: string[],
 ): Promise<void> {
 	const baseBranch = await detectBaseBranch();
-	const sortedNames = [...reviewCLINames].sort(
-		(a, b) => CLI_PREFERENCE_ORDER.indexOf(a) - CLI_PREFERENCE_ORDER.indexOf(b),
-	);
-	const cliList = sortedNames.map((name) => `    - ${name}`).join("\n");
+	const cliList = reviewCLINames.map((name) => `    - ${name}`).join("\n");
 	const adapterSettings = buildAdapterSettingsBlock(reviewCLINames);
 
 	const content = `# Ordered list of CLI agents to try for reviews
