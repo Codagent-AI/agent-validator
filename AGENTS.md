@@ -24,6 +24,16 @@ The user configures which paths in their repo should trigger which validations â
 - Write clean, DRY code.
 - Prefer functional patterns where appropriate.
 
+## CRITICAL: Never use background subagents
+**NEVER use `run_in_background: true` with the Task tool. NEVER use TaskOutput.** Always use synchronous Task calls. This is non-negotiable â€” do not "optimize" by parallelizing subagents in the background, even if tasks appear independent. There is a known bug in Claude Code's TaskOutput retrieval path that returns raw JSONL transcript garbage instead of the subagent's actual answer. Synchronous Task calls work correctly. Background ones do not. Do not improvise around this rule.
+
+## Skill updates have two locations
+When asked to update a skill (e.g., gauntlet-run, gauntlet-check, push-pr), remember there are generally two versions:
+1. **The local project copy** in `.claude/skills/<skill-name>/` (used by this project)
+2. **The init-generated version** in `src/commands/init.ts` (the `buildGauntletSkillContent()` function or skill template files that produce the skill for every consumer project)
+
+These should generally stay in sync unless otherwise specified. There may be slight variations between the local copy and the generated template.
+
 ## Agent-triggered workflows
 - After drafting an openspec proposal, use the `gauntlet-run` skill to verify correctness.
 - After writing a plan with `writing-plans` skill, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
