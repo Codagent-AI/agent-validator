@@ -82,30 +82,37 @@ allowed-tools: ${allowedTools}
 	];
 
 	if (isRun) {
+		// Replace generic steps 1-2 with prescriptive versions that include timeout
+		steps.length = 0;
 		steps.push(
-			`3. If it fails:
+			`1. Run \`agent-gauntlet clean\` to archive any previous log files.`,
+			`2. Run \`${command}\` using \`Bash\` with \`timeout: 300000\`. Wait for the complete output. **Verify you can see a \`Status:\` line in the output before continuing.**`,
+			`3. **Check the status line:**
+   - \`Status: Passed\` → Go to step 8.
+   - \`Status: Passed with warnings\` → Go to step 8.
+   - \`Status: Failed\` → Continue to step 4. **You MUST continue — do not stop here.**
+   - \`Status: Retry limit exceeded\` → Run \`agent-gauntlet clean\` to archive logs. Go to step 8.
+   - No status line visible → The command may have timed out or failed to run. Re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
+4. **Extract failures** (required when status is Failed):
    - Infer the log directory from the file paths in the console output (e.g., if output references \`gauntlet_logs/check_._lint.1.log\`, the log directory is \`gauntlet_logs/\`)
    - Read \`extract-prompt.md\` from this skill's directory
    - **Extract log failures** using the first available strategy:
      a. **Task tool** (Claude Code): \`Task\` with \`subagent_type="general-purpose"\`, \`model="haiku"\`, \`prompt=\` extract-prompt content + \`"\\n\\nLog directory: <inferred path>"\`. NEVER use \`run_in_background: true\`.
      b. **Subagent delegation**: If your environment supports delegating work to a subagent but not the Task tool, delegate the extract-prompt instructions with the log directory to a subagent for processing.
      c. **Inline fallback**: If no subagent capability is available, follow the extract-prompt instructions yourself to read the log files and produce the compact failure summary.
-4. Fix code based on the compact summary:
+5. **Fix code** based on the compact summary. You MUST address every actionable item:
    - CHECK failures with Fix Skill: invoke the named skill
    - CHECK failures with Fix Instructions: follow the instructions
    - REVIEW violations: apply the trust level above, fix or skip
-5. For REVIEW violations you addressed:
+6. For REVIEW violations you addressed:
    - Read \`update-prompt.md\` from this skill's directory
-   - **Update review decisions** using the first available strategy (same as step 3):
+   - **Update review decisions** using the first available strategy (same as step 4):
      a. **Task tool** (Claude Code): \`Task\` with \`subagent_type="general-purpose"\`, \`model="haiku"\`, \`prompt=\` update-prompt content + log directory + decisions list. NEVER use \`run_in_background: true\`.
      b. **Subagent delegation**: Delegate the update-prompt instructions with the log directory and decisions to a subagent.
      c. **Inline fallback**: Follow the update-prompt instructions yourself to update the review JSON files.
-6. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries. The tool detects existing logs and automatically switches to verification mode.
-7. Repeat steps 3-6 until one of the following termination conditions is met:
-   - "Status: Passed" appears in the output (logs are automatically archived)
-   - "Status: Passed with warnings" appears in the output (remaining issues were skipped)
-   - "Status: Retry limit exceeded" appears in the output -> Run \`agent-gauntlet clean\` to archive logs for the session record. Do NOT retry after cleaning.
-8. Provide a summary of the session:
+7. **Re-run verification:** Run \`${command}\` again with \`Bash\` and \`timeout: 300000\`. Do NOT run \`agent-gauntlet clean\` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to step 3** to check the status line and repeat.
+8. **Provide a summary** of the session:
+   - Final Status: (Passed / Passed with warnings / Retry limit exceeded)
    - Issues Fixed: (list key fixes)
    - Issues Skipped: (list skipped items and reasons)
    - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)`,
@@ -142,7 +149,18 @@ ${heading}
 
 **Review trust level: medium** \u2014 Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
 
-**SAFETY: When using the Task tool for subagent calls, NEVER use \`run_in_background: true\`. All subagent calls MUST be synchronous.**
+## Critical rules \u2014 read before proceeding
+
+**This is a BLOCKING GATE, not an optional check.** You may NOT declare your coding task complete, commit, push, or create a PR until the gauntlet reaches a terminal status. Treat every gauntlet run as the single most important step of your workflow.
+
+**MANDATORY BEHAVIORS:**
+- **ALL Bash commands in this skill MUST be synchronous.** NEVER use \`run_in_background: true\` for any Bash call. NEVER use \`&\` to background any command.
+- **ALL Task tool calls MUST be synchronous.** NEVER use \`run_in_background: true\`.
+- **ALWAYS wait for and read the full command output** before proceeding. The command typically takes 1-2 minutes. Set \`timeout: 300000\` (5 minutes) on Bash calls to allow headroom.
+- **NEVER assume success.** You must see an explicit \`Status:\` line in the output. If you do not see \`Status: Passed\`, \`Status: Passed with warnings\`, or \`Status: Retry limit exceeded\` in the output, the run is not complete \u2014 wait for it or investigate.
+- **NEVER skip the fix-retry loop.** If the run fails, you MUST extract failures, fix code, and re-run. This is not optional.
+
+## Procedure
 
 ${steps.join("\n")}
 `;
