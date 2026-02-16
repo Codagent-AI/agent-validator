@@ -66,7 +66,7 @@ The gauntlet-run skill SHALL use a two-phase subagent delegation pattern to keep
 - **GIVEN** the agent has completed fixing code and determined fix/skip decisions for review violations
 - **WHEN** the agent is ready to record its decisions
 - **THEN** the agent SHALL spawn a synchronous UPDATE subagent (Task tool, general-purpose, cost-optimized model) with the log directory path and the list of decisions
-- **AND** the UPDATE subagent SHALL match violations by exact equality on `file` and `line` fields, then update `status` and `result` fields
+- **AND** the UPDATE subagent SHALL match violations by exact equality on `file` and `line` fields and by prefix match on the `issue` field, then update `status` and `result` fields
 
 ### Requirement: Subagent Safety Constraint
 The gauntlet-run skill SHALL explicitly prohibit background subagent execution to prevent context pollution from the TaskOutput truncation bug.

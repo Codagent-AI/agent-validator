@@ -72,7 +72,7 @@ New state: main agent sees only a compact summary per gate (a few lines for chec
 
 ## Pre-factoring
 
-`src/commands/init.ts` — Code Health score: 9.09 (above 8.5 threshold). No hotspots modified.
+`src/commands/init.ts` — Code Health score: 9.09 (above 8.5 threshold). No pre-factoring required.
 
 ## Safety Constraints
 

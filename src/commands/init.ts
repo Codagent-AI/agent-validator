@@ -65,12 +65,14 @@ function buildGauntletSkillContent(mode: "run" | "check"): string {
 		: "Run the gauntlet checks only \u2014 no AI reviews.";
 	const disableModelInvocation = isRun ? "false" : "true";
 
+	const allowedTools = isRun ? "Bash, Task" : "Bash";
+
 	const frontmatter = `---
 name: gauntlet-${name}
 description: >-
   ${description}
 disable-model-invocation: ${disableModelInvocation}
-allowed-tools: Bash
+allowed-tools: ${allowedTools}
 ---`;
 
 	// Common prefix: archive old logs, then run the command
@@ -82,21 +84,23 @@ allowed-tools: Bash
 	if (isRun) {
 		steps.push(
 			`3. If it fails:
-   - Identify the failed gates from the console output.
-   - For CHECK failures: Read the \`.log\` file path provided in the output. If the log contains a \`--- Fix Instructions ---\` section, follow those instructions to fix the issue. If it contains a \`--- Fix Skill: <name> ---\` section, invoke that skill.
-   - For REVIEW failures: Read the \`.json\` file path provided in the "Review: <path>" output.
-4. Address the violations:
-   - For REVIEW violations: You MUST update the \`"status"\` and \`"result"\` fields in the provided \`.json\` file for EACH violation.
-     - Set \`"status": "fixed"\` and add a brief description to \`"result"\` for issues you fix.
-     - Set \`"status": "skipped"\` and add a brief reason to \`"result"\` for issues you skip (based on the trust level).
-     - Do NOT modify any other attributes (file, line, issue, priority) in the JSON file.
-   - Apply the trust level above when deciding whether to act on AI reviewer feedback.
-5. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries. The tool detects existing logs and automatically switches to verification mode.
-6. Repeat steps 3-5 until one of the following termination conditions is met:
+   - Infer the log directory from the file paths in the console output (e.g., if output references \`gauntlet_logs/check_._lint.1.log\`, the log directory is \`gauntlet_logs/\`)
+   - Read \`extract-prompt.md\` from this skill's directory
+   - Spawn an EXTRACT subagent: Task tool with \`subagent_type="general-purpose"\`, \`model="haiku"\`, \`prompt=\` the extract-prompt content appended with \`"\\n\\nLog directory: <inferred path>"\`
+   - The subagent returns a compact summary of all failures
+4. Fix code based on the compact summary:
+   - CHECK failures with Fix Skill: invoke the named skill
+   - CHECK failures with Fix Instructions: follow the instructions
+   - REVIEW violations: apply the trust level above, fix or skip
+5. For REVIEW violations you addressed:
+   - Read \`update-prompt.md\` from this skill's directory
+   - Spawn an UPDATE subagent: Task tool with \`subagent_type="general-purpose"\`, \`model="haiku"\`, \`prompt=\` the update-prompt content appended with the log directory and your list of decisions (file, line, issue_prefix, status, result)
+6. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries. The tool detects existing logs and automatically switches to verification mode.
+7. Repeat steps 3-6 until one of the following termination conditions is met:
    - "Status: Passed" appears in the output (logs are automatically archived)
    - "Status: Passed with warnings" appears in the output (remaining issues were skipped)
    - "Status: Retry limit exceeded" appears in the output -> Run \`agent-gauntlet clean\` to archive logs for the session record. Do NOT retry after cleaning.
-7. Provide a summary of the session:
+8. Provide a summary of the session:
    - Issues Fixed: (list key fixes)
    - Issues Skipped: (list skipped items and reasons)
    - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)`,
@@ -133,6 +137,8 @@ ${heading}
 
 **Review trust level: medium** \u2014 Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
 
+**SAFETY: NEVER use \`run_in_background: true\` for subagent Task calls. All subagent calls MUST be synchronous.**
+
 ${steps.join("\n")}
 `;
 	}
@@ -147,6 +153,10 @@ ${steps.join("\n")}
 }
 
 const GAUNTLET_RUN_SKILL_CONTENT = buildGauntletSkillContent("run");
+const GAUNTLET_RUN_SIBLING_FILES: Record<string, string> = {
+	"extract-prompt.md": readSkillTemplate("gauntlet-run-extract-prompt.md"),
+	"update-prompt.md": readSkillTemplate("gauntlet-run-update-prompt.md"),
+};
 const GAUNTLET_CHECK_SKILL_CONTENT = buildGauntletSkillContent("check");
 
 const PUSH_PR_SKILL_CONTENT = readSkillTemplate("push-pr.md");
@@ -196,6 +206,7 @@ const SKILL_DEFINITIONS = [
 		action: "run",
 		content: GAUNTLET_RUN_SKILL_CONTENT,
 		description: "Run the verification suite",
+		siblingFiles: GAUNTLET_RUN_SIBLING_FILES,
 	},
 	{
 		action: "check",
@@ -380,21 +391,27 @@ async function scaffoldGauntletDir(
 }
 
 /**
- * Write a skill's SKILL.md and optional reference files into a directory.
+ * Write a skill's SKILL.md, optional sibling files, and optional reference files into a directory.
  */
+async function writeFilesToDir(
+	dir: string,
+	files: Record<string, string>,
+): Promise<void> {
+	await fs.mkdir(dir, { recursive: true });
+	for (const [fileName, fileContent] of Object.entries(files)) {
+		await fs.writeFile(path.join(dir, fileName), fileContent);
+	}
+}
+
 async function writeSkillFiles(
 	actionDir: string,
 	content: string,
 	references: Record<string, string> | undefined,
+	siblingFiles?: Record<string, string>,
 ): Promise<void> {
-	await fs.mkdir(actionDir, { recursive: true });
-	await fs.writeFile(path.join(actionDir, "SKILL.md"), content);
+	await writeFilesToDir(actionDir, { "SKILL.md": content, ...siblingFiles });
 	if (references) {
-		const refsDir = path.join(actionDir, "references");
-		await fs.mkdir(refsDir, { recursive: true });
-		for (const [fileName, fileContent] of Object.entries(references)) {
-			await fs.writeFile(path.join(refsDir, fileName), fileContent);
-		}
+		await writeFilesToDir(path.join(actionDir, "references"), references);
 	}
 }
 
@@ -413,9 +430,13 @@ async function installSkillsWithChecksums(
 			"references" in skill
 				? (skill.references as Record<string, string>)
 				: undefined;
+		const siblingFiles =
+			"siblingFiles" in skill
+				? (skill.siblingFiles as Record<string, string>)
+				: undefined;
 
 		if (!(await exists(actionDir))) {
-			await writeSkillFiles(actionDir, skill.content, references);
+			await writeSkillFiles(actionDir, skill.content, references, siblingFiles);
 			console.log(
 				chalk.green(`Created ${path.relative(projectRoot, skillPath)}`),
 			);
@@ -425,6 +446,7 @@ async function installSkillsWithChecksums(
 		const expectedChecksum = computeExpectedSkillChecksum(
 			skill.content,
 			references,
+			siblingFiles,
 		);
 		const actualChecksum = await computeSkillChecksum(actionDir);
 		if (expectedChecksum === actualChecksum) continue;
@@ -437,7 +459,7 @@ async function installSkillsWithChecksums(
 
 		// Clean and rewrite to remove stale files
 		await fs.rm(actionDir, { recursive: true, force: true });
-		await writeSkillFiles(actionDir, skill.content, references);
+		await writeSkillFiles(actionDir, skill.content, references, siblingFiles);
 		console.log(
 			chalk.green(`Updated ${path.relative(projectRoot, skillPath)}`),
 		);

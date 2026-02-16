@@ -1302,6 +1302,32 @@ describe("Skills Installation for Claude", () => {
 		expect(structure).toContain("wildcard");
 	});
 
+	it("should install prompt template files for gauntlet-run skill", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const runSkillDir = path.join(
+			TEST_DIR,
+			".claude",
+			"skills",
+			"gauntlet-run",
+		);
+
+		// Should have extract-prompt.md and update-prompt.md alongside SKILL.md
+		const extractPrompt = await fs.readFile(
+			path.join(runSkillDir, "extract-prompt.md"),
+			"utf-8",
+		);
+		expect(extractPrompt.length).toBeGreaterThan(100);
+		expect(extractPrompt).toContain("EXTRACT");
+
+		const updatePrompt = await fs.readFile(
+			path.join(runSkillDir, "update-prompt.md"),
+			"utf-8",
+		);
+		expect(updatePrompt.length).toBeGreaterThan(100);
+		expect(updatePrompt).toContain("UPDATE");
+	});
+
 	it("should handle existing skill files with matching checksums", async () => {
 		// First run installs all skills
 		await program.parseAsync(["node", "test", "init", "--yes"]);
@@ -1322,5 +1348,37 @@ describe("Skills Installation for Claude", () => {
 		// Should not see "Created" or "Updated" for any skill
 		expect(output).not.toContain("Created .claude/skills/gauntlet-run/SKILL.md");
 		expect(output).not.toContain("Updated .claude/skills/gauntlet-run/SKILL.md");
+	});
+
+	it("should include Task in allowed-tools for gauntlet-run", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const runContent = await fs.readFile(
+			path.join(TEST_DIR, ".claude", "skills", "gauntlet-run", "SKILL.md"),
+			"utf-8",
+		);
+		expect(runContent).toContain("allowed-tools: Bash, Task");
+	});
+
+	it("should include subagent safety warning in gauntlet-run", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const runContent = await fs.readFile(
+			path.join(TEST_DIR, ".claude", "skills", "gauntlet-run", "SKILL.md"),
+			"utf-8",
+		);
+		expect(runContent).toContain("run_in_background");
+		expect(runContent).toContain("NEVER");
+	});
+
+	it("should reference extract-prompt.md and update-prompt.md in SKILL.md", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const runContent = await fs.readFile(
+			path.join(TEST_DIR, ".claude", "skills", "gauntlet-run", "SKILL.md"),
+			"utf-8",
+		);
+		expect(runContent).toContain("extract-prompt.md");
+		expect(runContent).toContain("update-prompt.md");
 	});
 });
