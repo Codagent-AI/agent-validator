@@ -92,7 +92,7 @@ After updating, `review_src_code-quality_claude@1.2.json` becomes:
 
 ### Example Response
 
-```
+```text
 Updated 2 violations:
 - src/main.ts:45 — set to fixed
 - src/utils.ts:10 — set to skipped
@@ -101,13 +101,13 @@ Updated 2 violations:
 ## Output
 
 Return a brief confirmation listing each decision applied:
-```
+```text
 Updated <N> violations:
 - <file>:<line> — set to <status>
 ```
 
 If any decisions could not be matched, add:
-```
+```text
 Unmatched decisions:
 - <file>:<line> — <issue_prefix> (not found in any JSON file)
 ```

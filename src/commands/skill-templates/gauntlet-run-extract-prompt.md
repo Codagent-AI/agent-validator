@@ -19,7 +19,7 @@ You receive a log directory path as your only input.
 Return a plain-text summary using EXACTLY this format:
 
 For check failures:
-```
+```text
 CHECKS:
 - <gate_label> | FAIL | <log_file_path>
   Errors: <concise error description>
@@ -28,7 +28,7 @@ CHECKS:
 ```
 
 For review failures:
-```
+```text
 REVIEWS:
 - <gate_label> | FAIL | <json_file_path>
   [<priority>] <file>:<line> — <issue summary> (fix: <fix suggestion>)
@@ -48,7 +48,7 @@ The directory contains:
 - `review_src_code-quality_claude@1.2.json`
 
 **console.2.log** contains:
-```
+```text
 [START] check:src:lint
 [FAIL]  check:src:lint (1.23s) - Exited with code 1
       Log: gauntlet_logs/check_src_lint.2.log
@@ -58,7 +58,7 @@ The directory contains:
 ```
 
 **check_src_lint.2.log** contains:
-```
+```text
 [2026-02-15T10:23:45.123Z] Starting check: lint
 Executing command: bun run lint
 Working directory: /Users/user/project/src
@@ -100,7 +100,7 @@ Replace all `var` declarations with `const` or `let`.
 
 ### Example Output
 
-```
+```text
 CHECKS:
 - check:src:lint | FAIL | gauntlet_logs/check_src_lint.2.log
   Errors: src/helpers.ts:3:5 - error: Unexpected var, use let or const instead
