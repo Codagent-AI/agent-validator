@@ -38,6 +38,17 @@ The `run`, `check`, and `review` commands MUST automatically detect whether to o
 - **THEN** the command SHALL report "No changes detected" and exit with code 0
 - **AND** log files SHALL remain in the log directory (no clean)
 
+#### Scenario: Rerun with no changes but all previous failures resolved
+- **GIVEN** the log directory contains log files (rerun mode)
+- **AND** all previous review violations have been addressed (status set to "fixed" or "skipped" in the review JSON files)
+- **AND** no unresolved check or review failures remain (findPreviousFailures returns an empty list after filtering out "skipped" violations)
+- **AND** no code changes have been made since the session ref
+- **WHEN** the command executes without explicit diff flags
+- **THEN** the command SHALL NOT report "No changes detected"
+- **AND** if any review JSON file contains violations with status "skipped", the command SHALL report "Passed with warnings" and exit with code 0
+- **AND** if no violations have status "skipped" (all were "fixed"), the command SHALL report "Passed" and exit with code 0, and logs SHALL be archived
+- **NOTE** This handles the edge case where an agent skips all review violations without making code changes. Without this, the rerun would bail out with "No changes detected" and never reach a terminal status, leaving logs unarchived.
+
 #### Scenario: Explicit --uncommitted with empty log directory
 - **GIVEN** the log directory is empty or does not exist
 - **WHEN** the user passes `--uncommitted`

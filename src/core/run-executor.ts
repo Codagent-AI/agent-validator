@@ -35,6 +35,7 @@ import {
 } from "../utils/execution-state.js";
 import {
 	findPreviousFailures,
+	hasSkippedViolationsInLogs,
 	type PassedSlot,
 	type PreviousViolation,
 } from "../utils/log-parser.js";
@@ -474,6 +475,37 @@ export async function executeRun(
 			const changes = await changeDetector.getChangedFiles();
 
 			if (changes.length === 0) {
+				// In rerun mode, all previous failures may have been resolved
+				// (violations skipped/fixed) without code changes. Detect this
+				// and report the correct terminal status instead of "no_changes".
+				if (isRerun && failuresMap && failuresMap.size === 0) {
+					const hasSkipped = await hasSkippedViolationsInLogs({
+						logDir: config.project.log_dir,
+					});
+					const status: GauntletStatus = hasSkipped
+						? "passed_with_warnings"
+						: "passed";
+
+					if (status === "passed") {
+						await debugLogger?.logClean("auto", "all_passed");
+						await cleanLogs(
+							config.project.log_dir,
+							config.project.max_previous_logs,
+						);
+					}
+
+					log.info(getStatusMessage(status));
+					consoleLogHandle?.restore();
+					if (loggerInitializedHere) {
+						await resetLogger();
+					}
+					return {
+						status,
+						message: getStatusMessage(status),
+						gatesRun: 0,
+					};
+				}
+
 				log.info("No changes detected.");
 				// Do not write execution state - no gates ran
 				consoleLogHandle?.restore();
