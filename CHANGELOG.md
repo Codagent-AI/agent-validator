@@ -1,5 +1,17 @@
 # agent-gauntlet
 
+## 0.14.0
+
+### Minor Changes
+
+- [#60](https://github.com/pacaplan/agent-gauntlet/pull/60) Add gauntlet auto-invocation via skill frontmatter and start hooks, enabling automatic quality verification when coding tasks are detected
+
+- [#62](https://github.com/pacaplan/agent-gauntlet/pull/62) Redesign `init` command with interactive CLI selection, reviewer setup, and checksum-based change detection for idempotent re-runs
+
+### Patch Changes
+
+- [#61](https://github.com/pacaplan/agent-gauntlet/pull/61) Remove openspec `tasks.md` and simplify the proposal workflow to reduce overhead
+
 ## 0.13.1
 
 ### Patch Changes
