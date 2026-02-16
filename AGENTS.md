@@ -44,5 +44,6 @@ These should generally stay in sync unless otherwise specified. There may be sli
 
 ## Agent-triggered workflows
 - After drafting an openspec proposal, use the `gauntlet-run` skill to verify correctness.
+- After writing a design doc from brainstorming, do NOT proceed to implementation. Give the user the file path and ask them to review it before continuing.
 - After writing a plan with `writing-plans` skill, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
 - When implementation is complete, run the `gauntlet-run` skill to verify correctness. Then the `push-pr` skill. Do not use finishing-a-development-branch.
