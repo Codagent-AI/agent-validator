@@ -59,9 +59,15 @@ Execute the autonomous verification suite.
      a. **Task tool** (Claude Code): `Task` with `subagent_type="general-purpose"`, `model="haiku"`, `prompt=` update-prompt content + log directory + decisions list. NEVER use `run_in_background: true`.
      b. **Subagent delegation**: Delegate the update-prompt instructions with the log directory and decisions to a subagent.
      c. **Inline fallback**: Follow the update-prompt instructions yourself to update the review JSON files.
+6b. **Capture noteworthy violations for eval inventory** (if any REVIEW violations were found):
+   - Collect the JSON file paths from the REVIEW failures identified in step 4 (the `.json` file paths)
+   - Read `SKILL.md` from the `capture-eval-issues` skill directory (sibling of this skill's directory)
+   - Follow the capture skill's procedure, passing the JSON file paths
+   - Note the `CAPTURED:` summary line for inclusion in step 8
 7. **Re-run verification:** Run `agent-gauntlet run` again with `Bash` and `timeout: 300000`. Do NOT run `agent-gauntlet clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to step 3** to check the status line and repeat.
 8. **Provide a summary** of the session:
    - Final Status: (Passed / Passed with warnings / Retry limit exceeded)
    - Issues Fixed: (list key fixes)
    - Issues Skipped: (list skipped items and reasons)
+   - Eval Captures: (list captured issue IDs from step 6b, or "none")
    - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)
