@@ -104,7 +104,7 @@ export class CursorAdapter implements CLIAdapter {
 		if (opts.onOutput) {
 			return runStreamingCommand({
 				command: "agent",
-				args: [],
+				args: ["--trust"],
 				tmpFile,
 				timeoutMs: opts.timeoutMs,
 				onOutput: opts.onOutput,
@@ -118,7 +118,7 @@ export class CursorAdapter implements CLIAdapter {
 		// (os.tmpdir() + Date.now() + process.pid), not user-supplied, eliminating injection risk.
 		// Double quotes handle paths with spaces.
 		try {
-			const cmd = `cat "${tmpFile}" | agent`;
+			const cmd = `cat "${tmpFile}" | agent --trust`;
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,
