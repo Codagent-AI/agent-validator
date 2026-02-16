@@ -56,6 +56,7 @@ const mockAdapters = [
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => true,
 		transformCommand: (content: string) => content,
+		supportsHooks: () => true,
 	},
 	{
 		name: "mock-cli-2",
@@ -67,6 +68,7 @@ const mockAdapters = [
 		getCommandExtension: () => ".sh",
 		canUseSymlink: () => false,
 		transformCommand: (content: string) => content,
+		supportsHooks: () => false,
 	},
 ];
 
@@ -132,13 +134,7 @@ describe("Init Command", () => {
 		const configFile = path.join(gauntletDir, "config.yml");
 		const reviewsDir = path.join(gauntletDir, "reviews");
 		const checksDir = path.join(gauntletDir, "checks");
-		const statusScriptDir = path.join(
-			gauntletDir,
-			"skills",
-			"gauntlet",
-			"status",
-			"scripts",
-		);
+		const statusScriptDir = path.join(gauntletDir, "scripts");
 
 		expect(await fs.stat(gauntletDir)).toBeDefined();
 		expect(await fs.stat(configFile)).toBeDefined();
@@ -170,7 +166,35 @@ describe("Init Command", () => {
 		);
 	});
 
-	it("should not create directory if .gauntlet already exists", async () => {
+	it("should not overwrite config when .gauntlet already exists but still install skills", async () => {
+		// Create .gauntlet directory with a config file
+		const gauntletDir = path.join(TEST_DIR, ".gauntlet");
+		await fs.mkdir(gauntletDir, { recursive: true });
+		await fs.writeFile(
+			path.join(gauntletDir, "config.yml"),
+			"# custom config\n",
+		);
+
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const output = logs.join("\n");
+		// Phase 4 skipped
+		expect(output).toContain(".gauntlet/ already exists, skipping scaffolding");
+
+		// Config was NOT overwritten
+		const configContent = await fs.readFile(
+			path.join(gauntletDir, "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toBe("# custom config\n");
+
+		// Phase 5 still ran — skills were installed
+		const skillsDir = path.join(TEST_DIR, ".claude", "skills");
+		const stat = await fs.stat(skillsDir).catch(() => null);
+		expect(stat).not.toBeNull();
+	});
+
+	it("should not exit early when .gauntlet/ already exists (re-runnable)", async () => {
 		// Create .gauntlet directory first
 		const gauntletDir = path.join(TEST_DIR, ".gauntlet");
 		await fs.mkdir(gauntletDir, { recursive: true });
@@ -178,7 +202,12 @@ describe("Init Command", () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain(".gauntlet directory already exists");
+		// Should NOT exit early — should still run Phase 5 and 6
+		expect(output).toContain(".gauntlet/ already exists, skipping scaffolding");
+		// Phase 5: skills installed
+		expect(output).toContain("Created .claude/skills/gauntlet-run/SKILL.md");
+		// Phase 6: instructions printed
+		expect(output).toContain("/gauntlet-setup");
 	});
 
 	it("should create config with empty entry_points", async () => {
@@ -262,6 +291,108 @@ describe("Init Command", () => {
 		);
 		const matches = content.match(/gauntlet_logs/g);
 		expect(matches?.length).toBe(1);
+	});
+
+	it("should announce built-in code quality reviewer", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const output = logs.join("\n");
+		expect(output).toContain(
+			"Agent Gauntlet's built-in code quality reviewer will be installed.",
+		);
+	});
+
+	it("should print context-aware instructions for native CLIs", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const output = logs.join("\n");
+		// Claude is a native CLI, should get /gauntlet-setup instruction
+		expect(output).toContain(
+			"To complete setup, run /gauntlet-setup in your CLI.",
+		);
+	});
+
+	it("should set num_reviews based on review CLI count with --yes", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const reviewContent = await fs.readFile(
+			path.join(TEST_DIR, ".gauntlet", "reviews", "code-quality.yml"),
+			"utf-8",
+		);
+		// With --yes and 1 detected CLI, promptNumReviews returns count (1)
+		expect(reviewContent).toContain("num_reviews: 1");
+	});
+
+	it("should update skill when checksum differs and --yes is passed", async () => {
+		// Pre-create skill dir with stale content
+		const skillDir = path.join(
+			TEST_DIR,
+			".claude",
+			"skills",
+			"gauntlet-run",
+		);
+		await fs.mkdir(skillDir, { recursive: true });
+		await fs.writeFile(
+			path.join(skillDir, "SKILL.md"),
+			"# outdated content",
+		);
+
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		// Skill should have been updated (checksum mismatch + --yes = auto-overwrite)
+		const content = await fs.readFile(
+			path.join(skillDir, "SKILL.md"),
+			"utf-8",
+		);
+		expect(content).not.toBe("# outdated content");
+		expect(content).toContain("gauntlet-run");
+
+		const output = logs.join("\n");
+		expect(output).toContain("Updated .claude/skills/gauntlet-run/SKILL.md");
+	});
+
+	it("should skip skill when checksum matches", async () => {
+		// First run: install skills
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		// Record skill content
+		const skillDir = path.join(
+			TEST_DIR,
+			".claude",
+			"skills",
+			"gauntlet-run",
+		);
+		const contentBefore = await fs.readFile(
+			path.join(skillDir, "SKILL.md"),
+			"utf-8",
+		);
+
+		// Reset logs and .gauntlet for second run
+		logs = [];
+		await fs.rm(path.join(TEST_DIR, ".gauntlet"), {
+			recursive: true,
+			force: true,
+		});
+		await fs.mkdir(path.join(TEST_DIR, ".gauntlet"), { recursive: true });
+
+		// Re-create program for second parse
+		program = new Command();
+		registerInitCommand(program);
+
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		// Skill should still have same content (not updated since checksums match)
+		const contentAfter = await fs.readFile(
+			path.join(skillDir, "SKILL.md"),
+			"utf-8",
+		);
+		expect(contentAfter).toBe(contentBefore);
+
+		// Should NOT see "Updated" or "Created" for this skill
+		const output = logs.join("\n");
+		expect(output).not.toContain(
+			"Updated .claude/skills/gauntlet-run/SKILL.md",
+		);
+		expect(output).not.toContain(
+			"Created .claude/skills/gauntlet-run/SKILL.md",
+		);
 	});
 });
 
@@ -956,31 +1087,18 @@ describe("Skills Migration", () => {
 
 		// Script may or may not exist depending on bundled file availability
 		// but the directory should be created
-		const dirPath = path.join(
-			TEST_DIR,
-			".gauntlet",
-			"skills",
-			"gauntlet",
-			"status",
-			"scripts",
-		);
+		const dirPath = path.join(TEST_DIR, ".gauntlet", "scripts");
 		const stat = await fs.stat(dirPath);
 		expect(stat.isDirectory()).toBe(true);
 	});
 
-	it("should only install commands to .claude/skills, not other adapter dirs", async () => {
+	it("should install skills to .claude/skills", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		// Claude skills should be created
 		const claudeSkillsDir = path.join(TEST_DIR, ".claude", "skills");
 		const stat = await fs.stat(claudeSkillsDir);
 		expect(stat.isDirectory()).toBe(true);
-
-		// No other adapter directories should be created
-		const mock2Exists = await fs
-			.stat(path.join(TEST_DIR, ".mock2"))
-			.catch(() => null);
-		expect(mock2Exists).toBeNull();
 	});
 });
 
@@ -990,67 +1108,12 @@ describe("Skills Installation for Claude", () => {
 	let logs: string[];
 	let program: Command;
 
-	// Override mock adapters to include a Claude adapter with skills
-	const claudeMockAdapters = [
-		{
-			name: "claude",
-			isAvailable: async () => true,
-			getProjectCommandDir: () => ".claude-mock/commands",
-			getUserCommandDir: () => null,
-			getProjectSkillDir: () => ".claude-mock/skills",
-			getUserSkillDir: () => null,
-			getCommandExtension: () => ".md",
-			canUseSymlink: () => true,
-			transformCommand: (content: string) => content,
-		},
-		{
-			name: "other-mock",
-			isAvailable: async () => true,
-			getProjectCommandDir: () => ".other-mock",
-			getUserCommandDir: () => null,
-			getProjectSkillDir: () => null,
-			getUserSkillDir: () => null,
-			getCommandExtension: () => ".md",
-			canUseSymlink: () => false,
-			transformCommand: (content: string) => content,
-		},
-	];
-
 	beforeAll(async () => {
 		await fs.mkdir(TEST_DIR, { recursive: true });
-		// Override mock adapters temporarily
-		mockAdapters.length = 0;
-		mockAdapters.push(...(claudeMockAdapters as typeof mockAdapters));
 	});
 
 	afterAll(async () => {
 		await fs.rm(TEST_DIR, { recursive: true, force: true });
-		// Restore original mock adapters
-		mockAdapters.length = 0;
-		mockAdapters.push(
-			{
-				name: "claude",
-				isAvailable: async () => true,
-				getProjectCommandDir: () => ".claude/commands",
-				getUserCommandDir: () => null,
-				getProjectSkillDir: () => ".claude/skills",
-				getUserSkillDir: () => null,
-				getCommandExtension: () => ".md",
-				canUseSymlink: () => true,
-				transformCommand: (content: string) => content,
-			},
-			{
-				name: "mock-cli-2",
-				isAvailable: async () => false,
-				getProjectCommandDir: () => ".mock2",
-				getUserCommandDir: () => null,
-				getProjectSkillDir: () => null,
-				getUserSkillDir: () => null,
-				getCommandExtension: () => ".sh",
-				canUseSymlink: () => false,
-				transformCommand: (content: string) => content,
-			},
-		);
 	});
 
 	beforeEach(() => {
@@ -1066,15 +1129,14 @@ describe("Skills Installation for Claude", () => {
 	afterEach(() =>
 		cleanupTestEnv(originalConsoleLog, originalCwd, [
 			path.join(TEST_DIR, ".gauntlet"),
-			path.join(TEST_DIR, ".claude-mock"),
-			path.join(TEST_DIR, ".other-mock"),
+			path.join(TEST_DIR, ".claude"),
 		]),
 	);
 
 	it("should install Claude skills as SKILL.md files under .claude/skills/gauntlet-*/", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const skillsDir = path.join(TEST_DIR, ".claude-mock", "skills");
+		const skillsDir = path.join(TEST_DIR, ".claude", "skills");
 		const actions = ["run", "check", "push-pr", "fix-pr", "status", "help", "setup"];
 
 		for (const action of actions) {
@@ -1096,7 +1158,7 @@ describe("Skills Installation for Claude", () => {
 
 		const checkPath = path.join(
 			TEST_DIR,
-			".claude-mock",
+			".claude",
 			"skills",
 			"gauntlet-check",
 			"SKILL.md",
@@ -1109,7 +1171,7 @@ describe("Skills Installation for Claude", () => {
 	it("should set correct frontmatter for all skills", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
+		const skillsBase = path.join(TEST_DIR, ".claude", "skills");
 
 		for (const action of ["check", "push-pr", "fix-pr", "status"]) {
 			const content = await fs.readFile(
@@ -1132,7 +1194,7 @@ describe("Skills Installation for Claude", () => {
 	it("should include actionable description in gauntlet-run frontmatter", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const skillsBase = path.join(TEST_DIR, ".claude-mock", "skills");
+		const skillsBase = path.join(TEST_DIR, ".claude", "skills");
 		const runContent = await fs.readFile(
 			path.join(skillsBase, "gauntlet-run", "SKILL.md"),
 			"utf-8",
@@ -1141,22 +1203,12 @@ describe("Skills Installation for Claude", () => {
 		expect(runContent).toContain("before committing, pushing, or creating PRs");
 	});
 
-	it("should not install commands for non-Claude adapters", async () => {
-		await program.parseAsync(["node", "test", "init", "--yes"]);
-
-		// other-mock should NOT get any command files (only claude is installed)
-		const otherDirExists = await fs
-			.stat(path.join(TEST_DIR, ".other-mock"))
-			.catch(() => null);
-		expect(otherDirExists).toBeNull();
-	});
-
 	it("should install gauntlet-help SKILL.md for Claude", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const helpSkillPath = path.join(
 			TEST_DIR,
-			".claude-mock",
+			".claude",
 			"skills",
 			"gauntlet-help",
 			"SKILL.md",
@@ -1177,7 +1229,7 @@ describe("Skills Installation for Claude", () => {
 
 		const refsDir = path.join(
 			TEST_DIR,
-			".claude-mock",
+			".claude",
 			"skills",
 			"gauntlet-help",
 			"references",
@@ -1204,45 +1256,12 @@ describe("Skills Installation for Claude", () => {
 		expect(files.length).toBe(6);
 	});
 
-	it("should not create directories for non-Claude adapters", async () => {
-		await program.parseAsync(["node", "test", "init", "--yes"]);
-
-		// other-mock should NOT have any directory created
-		const otherDirExists = await fs
-			.stat(path.join(TEST_DIR, ".other-mock"))
-			.catch(() => null);
-		expect(otherDirExists).toBeNull();
-	});
-
-	it("should preserve existing Claude skill files", async () => {
-		// Pre-create a skill with existing content
-		const existingDir = path.join(
-			TEST_DIR,
-			".claude-mock",
-			"skills",
-			"gauntlet-run",
-		);
-		await fs.mkdir(existingDir, { recursive: true });
-		await fs.writeFile(
-			path.join(existingDir, "SKILL.md"),
-			"# My custom run skill",
-		);
-
-		await program.parseAsync(["node", "test", "init", "--yes"]);
-
-		const content = await fs.readFile(
-			path.join(existingDir, "SKILL.md"),
-			"utf-8",
-		);
-		expect(content).toBe("# My custom run skill");
-	});
-
 	it("should install gauntlet-setup SKILL.md for Claude", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const setupSkillPath = path.join(
 			TEST_DIR,
-			".claude-mock",
+			".claude",
 			"skills",
 			"gauntlet-setup",
 			"SKILL.md",
@@ -1260,7 +1279,7 @@ describe("Skills Installation for Claude", () => {
 
 		const refsDir = path.join(
 			TEST_DIR,
-			".claude-mock",
+			".claude",
 			"skills",
 			"gauntlet-setup",
 			"references",
@@ -1283,35 +1302,25 @@ describe("Skills Installation for Claude", () => {
 		expect(structure).toContain("wildcard");
 	});
 
-	it("should not install gauntlet-setup for non-Claude adapters", async () => {
+	it("should handle existing skill files with matching checksums", async () => {
+		// First run installs all skills
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		// other-mock should NOT get any files
-		const otherDirExists = await fs
-			.stat(path.join(TEST_DIR, ".other-mock"))
-			.catch(() => null);
-		expect(otherDirExists).toBeNull();
-	});
+		// Second run should skip skills with matching checksums
+		logs = [];
+		await fs.rm(path.join(TEST_DIR, ".gauntlet"), {
+			recursive: true,
+			force: true,
+		});
+		await fs.mkdir(path.join(TEST_DIR, ".gauntlet"), { recursive: true });
 
-	it("should preserve existing gauntlet-setup skill files", async () => {
-		const existingDir = path.join(
-			TEST_DIR,
-			".claude-mock",
-			"skills",
-			"gauntlet-setup",
-		);
-		await fs.mkdir(existingDir, { recursive: true });
-		await fs.writeFile(
-			path.join(existingDir, "SKILL.md"),
-			"# My custom setup skill",
-		);
-
+		program = new Command();
+		registerInitCommand(program);
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		const content = await fs.readFile(
-			path.join(existingDir, "SKILL.md"),
-			"utf-8",
-		);
-		expect(content).toBe("# My custom setup skill");
+		const output = logs.join("\n");
+		// Should not see "Created" or "Updated" for any skill
+		expect(output).not.toContain("Created .claude/skills/gauntlet-run/SKILL.md");
+		expect(output).not.toContain("Updated .claude/skills/gauntlet-run/SKILL.md");
 	});
 });

@@ -69,6 +69,10 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 		return markdownContent;
 	}
 
+	supportsHooks(): boolean {
+		return false;
+	}
+
 	async execute(opts: {
 		prompt: string;
 		diff: string;

@@ -193,6 +193,10 @@ export interface CLIAdapter {
 	 * The source content is always Markdown with YAML frontmatter.
 	 */
 	transformCommand(markdownContent: string): string;
+	/**
+	 * Returns true if this CLI supports hooks (stop hook, start hook).
+	 */
+	supportsHooks(): boolean;
 }
 
 import { ClaudeAdapter } from "./claude.js";

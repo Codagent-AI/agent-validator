@@ -118,7 +118,7 @@ const STATUS_MESSAGES: Record<string, string> = {
 		"↺ Stop hook cycle detected — allowing stop to prevent infinite loop.",
 	loop_detected:
 		"↺ Loop detected — stop hook blocked 3 times within 60s. Allowing stop to prevent infinite loop.",
-	stop_hook_disabled: "○ Stop hook is disabled via configuration.",
+	stop_hook_disabled: "",
 	invalid_input: "⚠ Invalid hook input — could not parse JSON, allowing stop.",
 };
 

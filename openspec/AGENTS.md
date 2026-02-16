@@ -214,7 +214,7 @@ If multiple capabilities are affected, create multiple delta files under `change
 
 4. **Enrich design.md (already present from brainstorming):**
    The design doc was moved into the change directory in step 1. Review it and add the following sections if not already present:
-   - **Pre-factoring** — analyze CodeScene hotspots for files this change will modify. Add a `## Pre-factoring` section:
+   - **Pre-factoring** (must be the **first** `##` section in design.md, immediately after the front-matter/title) — analyze CodeScene hotspots for files this change will modify. Add a `## Pre-factoring` section at the top so that any required refactoring is completed before implementation begins:
 
      > **HOTSPOT_THRESHOLD = 8.5** (Code Health score; files at or below are hotspot candidates)
 

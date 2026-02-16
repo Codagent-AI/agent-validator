@@ -243,8 +243,8 @@ The system SHALL provide a `/gauntlet-status` skill that summarizes the most rec
 - **THEN** the skill SHALL report that no gauntlet session data is available
 
 #### Scenario: Status skill bundled script
-- **GIVEN** the `gauntlet-status` skill directory
-- **THEN** it SHALL contain a bundled script at `.gauntlet/skills/gauntlet/status/scripts/status.ts`
+- **GIVEN** the `gauntlet-status` skill is installed
+- **THEN** the shared status script SHALL be present at `.gauntlet/scripts/status.ts`
 - **AND** the SKILL.md SHALL instruct the agent to run the script via `bun`
 - **AND** the script SHALL parse console logs, debug logs, and review JSON files
 
@@ -397,4 +397,14 @@ The setup skill SHALL include a `references/check-catalog.md` file that document
 - **AND** at least one example check file per category
 - **AND** the review YAML schema including built-in reviewer reference
 - **AND** the config entry_points schema
+
+### Requirement: Gauntlet-Run Skill Auto-Invocation
+The gauntlet-run skill SHALL have auto-invocation enabled so that Claude's skill invocation logic can trigger it automatically when the agent completes a coding task.
+
+#### Scenario: Gauntlet-run skill auto-invocation enabled
+- **GIVEN** the gauntlet-run skill template is defined in `buildGauntletSkillContent()`
+- **WHEN** `agent-gauntlet init` generates the gauntlet-run skill content
+- **THEN** the skill frontmatter SHALL set `disable-model-invocation: false`
+- **AND** the `description` field SHALL contain the phrase "final step after completing a coding task"
+- **AND** the `description` field SHALL contain the phrase "before committing, pushing, or creating PRs"
 

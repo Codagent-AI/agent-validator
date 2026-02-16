@@ -91,7 +91,7 @@ export class CursorStopHookAdapter implements StopHookAdapter {
 
 		// Include systemMessage for user feedback even when not blocking
 		const response: CursorHookResponse = {
-			systemMessage: result.message,
+			...(result.message ? { systemMessage: result.message } : {}),
 		};
 		return JSON.stringify(response);
 	}

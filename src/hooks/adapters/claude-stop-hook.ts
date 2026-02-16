@@ -10,10 +10,10 @@ import type {
 interface ClaudeHookResponse {
 	decision: "block" | "approve";
 	reason?: string;
-	stopReason: string;
+	stopReason?: string;
 	systemMessage?: string;
 	status: string;
-	message: string;
+	message?: string;
 }
 
 /**
@@ -66,12 +66,14 @@ export class ClaudeStopHookAdapter implements StopHookAdapter {
 
 		const response: ClaudeHookResponse = {
 			decision: result.shouldBlock ? "block" : "approve",
-			stopReason,
-			systemMessage: result.message,
 			status: result.status,
-			message: result.message,
 		};
 
+		if (stopReason) response.stopReason = stopReason;
+		if (result.message) {
+			response.systemMessage = result.message;
+			response.message = result.message;
+		}
 		if (result.shouldBlock && blockReason) {
 			response.reason = blockReason;
 		}

@@ -64,9 +64,9 @@ describe("StopHookHandler", () => {
 			expect(message).toContain("Stop hook cycle detected");
 		});
 
-		it("should return appropriate message for stop_hook_disabled status", () => {
+		it("should return empty message for stop_hook_disabled status (silent)", () => {
 			const message = getStatusMessage("stop_hook_disabled");
-			expect(message).toContain("Stop hook is disabled");
+			expect(message).toBe("");
 		});
 
 		it("should include interval minutes in interval_not_elapsed message", () => {
