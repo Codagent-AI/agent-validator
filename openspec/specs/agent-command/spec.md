@@ -244,7 +244,7 @@ The system SHALL provide a `/gauntlet-status` skill that summarizes the most rec
 
 #### Scenario: Status skill bundled script
 - **GIVEN** the `gauntlet-status` skill directory
-- **THEN** it SHALL contain a bundled script at `.gauntlet/skills/gauntlet/status/scripts/status.ts`
+- **THEN** it SHALL contain a bundled script at `.gauntlet/scripts/status.ts`
 - **AND** the SKILL.md SHALL instruct the agent to run the script via `bun`
 - **AND** the script SHALL parse console logs, debug logs, and review JSON files
 

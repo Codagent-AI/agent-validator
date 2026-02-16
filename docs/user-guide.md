@@ -264,6 +264,8 @@ The `init` command walks you through the following steps:
 5. **Install External Files**: Installs skills to `.claude/skills/` and hooks for development CLIs. **Always runs**, even on re-init. Uses SHA-256 checksums to: create missing files silently, skip unchanged files, and prompt before overwriting changed files.
 6. **Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor) get `/gauntlet-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
 
+**Re-running init:** When `.gauntlet/` already exists, steps 2–4 are skipped entirely. The command jumps from CLI detection straight to external file installation, updating skills and hooks for all detected CLIs via checksums. This lets you update skills/hooks after upgrading Agent Gauntlet without re-configuring your project.
+
 After `init`, run `/gauntlet-setup` in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
 
 #### Options

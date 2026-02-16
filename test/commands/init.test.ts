@@ -134,13 +134,7 @@ describe("Init Command", () => {
 		const configFile = path.join(gauntletDir, "config.yml");
 		const reviewsDir = path.join(gauntletDir, "reviews");
 		const checksDir = path.join(gauntletDir, "checks");
-		const statusScriptDir = path.join(
-			gauntletDir,
-			"skills",
-			"gauntlet",
-			"status",
-			"scripts",
-		);
+		const statusScriptDir = path.join(gauntletDir, "scripts");
 
 		expect(await fs.stat(gauntletDir)).toBeDefined();
 		expect(await fs.stat(configFile)).toBeDefined();
@@ -1093,14 +1087,7 @@ describe("Skills Migration", () => {
 
 		// Script may or may not exist depending on bundled file availability
 		// but the directory should be created
-		const dirPath = path.join(
-			TEST_DIR,
-			".gauntlet",
-			"skills",
-			"gauntlet",
-			"status",
-			"scripts",
-		);
+		const dirPath = path.join(TEST_DIR, ".gauntlet", "scripts");
 		const stat = await fs.stat(dirPath);
 		expect(stat.isDirectory()).toBe(true);
 	});

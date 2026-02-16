@@ -4,6 +4,12 @@
 
 Redesign `agent-gauntlet init` from a non-interactive scaffolding command into a guided, phased setup experience. The new init asks which CLIs are used for development vs reviews, installs hooks and skills accordingly, handles re-runs gracefully with checksum-based file comparison, and provides clear instructions for non-native CLI users.
 
+## Flow Variants
+
+**Fresh run** (`.gauntlet/` does not exist): Phases 1 → 2 → 3 → 4 → 5 → 6.
+
+**Re-run** (`.gauntlet/` already exists): Phases 2–4 SHALL be skipped. The command proceeds from Phase 1 (detection) directly to Phase 5 (external file installation). On re-runs, Phase 5 SHALL use all detected CLIs for hook and skill installation — not just the subset originally selected — because the purpose of re-running init is to update external files for the current environment. The config inside `.gauntlet/` (including `cli.default_preference`) is never modified on re-run.
+
 ## Phases
 
 ### Phase 1 — CLI Detection
@@ -36,7 +42,7 @@ Redesign `agent-gauntlet init` from a non-interactive scaffolding command into a
 
 ### Phase 5 — Install External Files
 
-Runs always, regardless of Phase 4 outcome.
+Runs always, regardless of Phase 4 outcome. See "Flow Variants" for re-run adapter selection behavior.
 
 **Checksum logic per file/skill:**
 
