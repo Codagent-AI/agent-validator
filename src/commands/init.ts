@@ -563,14 +563,14 @@ function printPostInitInstructions(devCLINames: string[]): void {
 	if (hasNative) {
 		console.log(
 			chalk.bold(
-				"To complete setup, run /gauntlet-setup in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run.",
+				"To complete setup, run /gauntlet-setup in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run.",
 			),
 		);
 	}
 	if (hasNonNative) {
 		console.log(
 			chalk.bold(
-				"To complete setup, reference the setup skill in your CLI: @.claude/skills/gauntlet-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run.",
+				"To complete setup, reference the setup skill in your CLI: @.claude/skills/gauntlet-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run.",
 			),
 		);
 		console.log();

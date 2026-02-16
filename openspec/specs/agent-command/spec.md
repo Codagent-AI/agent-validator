@@ -243,8 +243,8 @@ The system SHALL provide a `/gauntlet-status` skill that summarizes the most rec
 - **THEN** the skill SHALL report that no gauntlet session data is available
 
 #### Scenario: Status skill bundled script
-- **GIVEN** the `gauntlet-status` skill directory
-- **THEN** it SHALL contain a bundled script at `.gauntlet/scripts/status.ts`
+- **GIVEN** the `gauntlet-status` skill is installed
+- **THEN** the shared status script SHALL be present at `.gauntlet/scripts/status.ts`
 - **AND** the SKILL.md SHALL instruct the agent to run the script via `bun`
 - **AND** the script SHALL parse console logs, debug logs, and review JSON files
 
