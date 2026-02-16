@@ -19,24 +19,19 @@ export async function computeSkillChecksum(skillDir: string): Promise<string> {
 }
 
 /**
- * Compute the expected checksum for a skill from its template content
- * and references (without needing files on disk).
+ * Compute the expected checksum for a skill from its template content,
+ * optional sibling files, and optional references (without needing files on disk).
  */
 export function computeExpectedSkillChecksum(
 	content: string,
 	references?: Record<string, string>,
+	siblingFiles?: Record<string, string>,
 ): string {
 	const entries: { relativePath: string; content: string }[] = [
 		{ relativePath: "SKILL.md", content },
+		...toEntries(siblingFiles, ""),
+		...toEntries(references, "references"),
 	];
-	if (references) {
-		for (const [name, refContent] of Object.entries(references)) {
-			entries.push({
-				relativePath: path.join("references", name),
-				content: refContent,
-			});
-		}
-	}
 	entries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 
 	const hash = createHash("sha256");
@@ -45,6 +40,17 @@ export function computeExpectedSkillChecksum(
 		hash.update(entry.content);
 	}
 	return hash.digest("hex");
+}
+
+function toEntries(
+	files: Record<string, string> | undefined,
+	prefix: string,
+): { relativePath: string; content: string }[] {
+	if (!files) return [];
+	return Object.entries(files).map(([name, content]) => ({
+		relativePath: prefix ? path.join(prefix, name) : name,
+		content,
+	}));
 }
 
 /**

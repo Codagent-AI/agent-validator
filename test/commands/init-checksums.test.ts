@@ -62,6 +62,27 @@ describe("computeExpectedSkillChecksum", () => {
     const expectedChecksum = computeExpectedSkillChecksum("# Skill", { "ref.md": "Ref content" });
     expect(diskChecksum).toBe(expectedChecksum);
   });
+
+  it("should include siblingFiles in expected checksum", () => {
+    const content = "---\nname: test\n---\n# Test";
+    const siblings = { "extra.md": "extra content" };
+
+    const withSiblings = computeExpectedSkillChecksum(content, undefined, siblings);
+    const withoutSiblings = computeExpectedSkillChecksum(content);
+
+    expect(withSiblings).not.toBe(withoutSiblings);
+  });
+
+  it("should match disk checksum with siblingFiles", async () => {
+    const dir = path.join(TEST_DIR, "sibling-match");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "SKILL.md"), "# Skill");
+    await fs.writeFile(path.join(dir, "prompt.md"), "Prompt content");
+
+    const diskChecksum = await computeSkillChecksum(dir);
+    const expectedChecksum = computeExpectedSkillChecksum("# Skill", undefined, { "prompt.md": "Prompt content" });
+    expect(diskChecksum).toBe(expectedChecksum);
+  });
 });
 
 describe("computeHookChecksum", () => {
