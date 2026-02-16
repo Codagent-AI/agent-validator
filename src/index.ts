@@ -13,6 +13,7 @@ import {
 	registerReviewCommand,
 	registerRunCommand,
 	registerStartHookCommand,
+	registerStatusCommand,
 	registerStopHookCommand,
 	registerValidateCommand,
 	registerWaitCICommand,
@@ -37,6 +38,7 @@ registerHealthCommand(program);
 registerInitCommand(program);
 registerValidateCommand(program);
 registerStartHookCommand(program);
+registerStatusCommand(program);
 registerStopHookCommand(program);
 registerWaitCICommand(program);
 registerHelpCommand(program);

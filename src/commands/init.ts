@@ -562,7 +562,6 @@ async function installExternalFiles(
 	skipPrompts: boolean,
 ): Promise<void> {
 	await installSkillsWithChecksums(projectRoot, skipPrompts);
-	await copyStatusScript(path.join(projectRoot, ".gauntlet"));
 
 	for (const adapter of devAdapters) {
 		if (!adapter.supportsHooks()) continue;
@@ -764,35 +763,6 @@ async function detectAvailableCLIs(): Promise<CLIAdapter[]> {
 		}
 	}
 	return available;
-}
-
-/**
- * Copy the status script into .gauntlet/scripts/.
- * The script is sourced from the package's src/scripts/status.ts.
- */
-async function copyStatusScript(targetDir: string): Promise<void> {
-	const statusScriptDir = path.join(targetDir, "scripts");
-	const statusScriptPath = path.join(statusScriptDir, "status.ts");
-	await fs.mkdir(statusScriptDir, { recursive: true });
-
-	if (await exists(statusScriptPath)) return;
-
-	const bundledScript = path.join(
-		path.dirname(new URL(import.meta.url).pathname),
-		"..",
-		"scripts",
-		"status.ts",
-	);
-	if (await exists(bundledScript)) {
-		await fs.copyFile(bundledScript, statusScriptPath);
-		console.log(chalk.green("Created .gauntlet/scripts/status.ts"));
-	} else {
-		console.log(
-			chalk.yellow(
-				"Warning: bundled status script not found; /gauntlet-status may fail.",
-			),
-		);
-	}
 }
 
 /**

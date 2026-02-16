@@ -134,13 +134,11 @@ describe("Init Command", () => {
 		const configFile = path.join(gauntletDir, "config.yml");
 		const reviewsDir = path.join(gauntletDir, "reviews");
 		const checksDir = path.join(gauntletDir, "checks");
-		const statusScriptDir = path.join(gauntletDir, "scripts");
 
 		expect(await fs.stat(gauntletDir)).toBeDefined();
 		expect(await fs.stat(configFile)).toBeDefined();
 		expect(await fs.stat(reviewsDir)).toBeDefined();
 		expect(await fs.stat(checksDir)).toBeDefined();
-		expect(await fs.stat(statusScriptDir)).toBeDefined();
 
 		// Verify config content
 		const configContent = await fs.readFile(configFile, "utf-8");
@@ -1081,16 +1079,6 @@ describe("Skills Migration", () => {
 			path.join(TEST_DIR, ".claude"),
 		]),
 	);
-
-	it("should copy status script bundle into .gauntlet/", async () => {
-		await program.parseAsync(["node", "test", "init", "--yes"]);
-
-		// Script may or may not exist depending on bundled file availability
-		// but the directory should be created
-		const dirPath = path.join(TEST_DIR, ".gauntlet", "scripts");
-		const stat = await fs.stat(dirPath);
-		expect(stat.isDirectory()).toBe(true);
-	});
 
 	it("should install skills to .claude/skills", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
