@@ -34,8 +34,3 @@ The user configures which paths in their repo should trigger which validations â
 - If design.md contains a `## Pre-factoring` section with hotspot refactorings, the plan's first task should be those refactorings â€” complete them before starting implementation work.
 - When applicable, the plan should include a task for updating any user-facing docs in `docs/` (quick-start.md, user-guide.md, skills-guide.md, config-reference.md) to reflect the changes.
 - When applicable, plan should also include a task for archiving the openspec change, see `.claude/commands/openspec/archive.md`.
-
-## Subagent-driven development: gauntlet as quality gate
-When running subagent-driven-development, do NOT dispatch the code quality reviewer subagent from superpowers. Instead, after the spec compliance reviewer passes, dispatch a subagent that runs `agent-gauntlet run` and reports the results. Use its output as the quality gate:
-- If gauntlet passes: mark the quality review as passed and proceed to the next task.
-- If gauntlet fails: relay the specific failures to the implementer subagent for fixing, then re-run gauntlet after fixes are committed.
