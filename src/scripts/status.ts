@@ -407,7 +407,7 @@ function resolvePreviousLogDir(previousDir: string): string | null {
 	return prevDirs[0] as string;
 }
 
-function main(): void {
+export function main(): void {
 	const cwd = process.cwd();
 	const logDirName = getLogDir(cwd);
 	const activeDir = path.join(cwd, logDirName);
@@ -430,4 +430,10 @@ function main(): void {
 	console.log(output);
 }
 
-main();
+// Auto-execute when run directly (e.g., `bun src/scripts/status.ts`)
+const isDirectRun =
+	import.meta.url === `file://${process.argv[1]}` ||
+	(typeof Bun !== "undefined" && import.meta.url === `file://${Bun.main}`);
+if (isDirectRun) {
+	main();
+}

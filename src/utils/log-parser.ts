@@ -694,3 +694,34 @@ export async function findPreviousFailures(
 		return includePassedSlots ? { failures: [], passedSlots: new Map() } : [];
 	}
 }
+
+/**
+ * Check if any review JSON files in the log directory contain violations
+ * with status "skipped". Used to determine the correct terminal status
+ * when a rerun has no code changes but all failures have been addressed.
+ */
+export async function hasSkippedViolationsInLogs(opts: {
+	logDir: string;
+}): Promise<boolean> {
+	const { logDir } = opts;
+	try {
+		const files = await fs.readdir(logDir);
+		for (const file of files) {
+			if (!file.endsWith(".json")) continue;
+			try {
+				const content = await fs.readFile(path.join(logDir, file), "utf-8");
+				const data = JSON.parse(content) as {
+					violations?: { status?: string }[];
+				};
+				if (data.violations?.some((v) => v.status === "skipped")) {
+					return true;
+				}
+			} catch {
+				continue;
+			}
+		}
+		return false;
+	} catch {
+		return false;
+	}
+}
