@@ -1,4 +1,4 @@
-# Development
+# General
 
 ## Project Overview
 This project is "Agent Gauntlet", a configurable “feedback loop” runner for AI-assisted development workflows.
@@ -34,13 +34,15 @@ When asked to update a skill (e.g., gauntlet-run, gauntlet-check, push-pr), reme
 
 These should generally stay in sync unless otherwise specified. There may be slight variations between the local copy and the generated template.
 
-## Agent-triggered workflows
-- After drafting an openspec proposal, use the `gauntlet-run` skill to verify correctness.
-- After writing a plan with `writing-plans` skill, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
-- When implementation is complete, run the `gauntlet-run` skill to verify correctness. Then the `push-pr` skill. Do not use finishing-a-development-branch.
+# Spec-driven development with OpenSpec and Superpowers
 
 ## Planning with superpowers
 - The openspec change directory is the source of truth for planning. When using `writing-plan` skill, read all files in `openspec/changes/<change-name>/` (proposal.md, design.md, and spec deltas), not the brainstorm design doc in docs/plans/.
 - If design.md contains a `## Pre-factoring` section with hotspot refactorings, the plan's first task should be those refactorings — complete them before starting implementation work.
 - When applicable, the plan should include a task for updating any user-facing docs in `docs/` (quick-start.md, user-guide.md, skills-guide.md, config-reference.md) to reflect the changes.
 - When applicable, plan should also include a task for archiving the openspec change, see `.claude/commands/openspec/archive.md`.
+
+## Agent-triggered workflows
+- After drafting an openspec proposal, use the `gauntlet-run` skill to verify correctness.
+- After writing a plan with `writing-plans` skill, automatically execute it using subagent-driven-development. Do not ask which execution option to use.
+- When implementation is complete, run the `gauntlet-run` skill to verify correctness. Then the `push-pr` skill. Do not use finishing-a-development-branch.
