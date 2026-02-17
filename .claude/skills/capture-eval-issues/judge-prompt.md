@@ -24,7 +24,7 @@ You receive one or more review JSON file paths. Each JSON file has this structur
 ## Process
 
 1. Read each JSON file using the Read tool
-2. Collect all violations with `status: "new"` (skip "fixed" and "skipped")
+2. Collect all violations (ignore the `status` field — it tracks whether the developer fixed the issue, not whether the reviewer's catch was good)
 3. Judge each violation against BOTH capture criteria below
 4. For violations that pass both criteria, produce a YAML entry
 5. Pipe the YAML entries to the append-inventory script

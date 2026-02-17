@@ -23,7 +23,12 @@ export function appendToInventory(
   newYaml: string
 ): { added: number } {
   const parsed = parse(newYaml);
-  const newIssues: InventoryIssue[] = Array.isArray(parsed) ? parsed : parsed?.issues ?? [];
+  const candidate = Array.isArray(parsed)
+    ? parsed
+    : parsed && Array.isArray(parsed.issues)
+      ? parsed.issues
+      : [];
+  const newIssues: InventoryIssue[] = candidate;
 
   if (newIssues.length === 0) {
     return { added: 0 };
@@ -61,6 +66,9 @@ async function main() {
   let dir = resolve(import.meta.dir);
   while (dir !== "/" && !existsSync(resolve(dir, "package.json"))) {
     dir = resolve(dir, "..");
+  }
+  if (!existsSync(resolve(dir, "package.json"))) {
+    throw new Error("Could not locate repository root (package.json not found)");
   }
   const inventoryPath = resolve(dir, "evals", "inventory.yml");
 
