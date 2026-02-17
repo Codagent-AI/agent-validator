@@ -1,5 +1,19 @@
 # agent-gauntlet
 
+## 0.15.0
+
+### Minor Changes
+
+- [#64](https://github.com/pacaplan/agent-gauntlet/pull/64) Refactor `gauntlet-run` to delegate log and JSON file processing to disposable haiku subagents, keeping the main agent's context window free of ephemeral detail
+
+- [#65](https://github.com/pacaplan/agent-gauntlet/pull/65) Add `agent-gauntlet status` CLI command, 3-tier subagent fallback strategy with Cursor `--trust` flag support, and prescriptive skill prompt improvements
+
+- [#66](https://github.com/pacaplan/agent-gauntlet/pull/66) Add `capture-eval-issues` skill that uses a sonnet subagent to judge review violations and capture noteworthy ones into `evals/inventory.yml` for the eval framework
+
+- [#67](https://github.com/pacaplan/agent-gauntlet/pull/67) Add per-adapter model resolution that automatically selects the highest-versioned CLI model matching a configured base name, with support for Cursor and Copilot adapters
+
+- [#68](https://github.com/pacaplan/agent-gauntlet/pull/68) Update built-in `code-quality` review prompt to conditionally dispatch pr-review-toolkit agents (`code-reviewer`, `silent-failure-hunter`, `type-design-analyzer`) with inline fallback when agents are unavailable
+
 ## 0.14.0
 
 ### Minor Changes
