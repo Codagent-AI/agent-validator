@@ -12,7 +12,7 @@ cli:
     - gemini
   adapters:
     claude:
-      allow_tool_use: false
+      allow_tool_use: true
       thinking_budget: high
     codex:
       allow_tool_use: false

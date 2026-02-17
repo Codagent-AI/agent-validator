@@ -277,9 +277,9 @@ export class ClaudeAdapter implements CLIAdapter {
 		if (opts.allowToolUse === false) {
 			args.push("--tools", "");
 		} else {
-			args.push("--allowedTools", "Read,Glob,Grep");
+			args.push("--allowedTools", "Read,Glob,Grep,Task");
 		}
-		args.push("--max-turns", "10");
+		args.push("--max-turns", "25");
 
 		const otelEnv = buildOtelEnv();
 		const thinkingEnv: Record<string, string> = {};
