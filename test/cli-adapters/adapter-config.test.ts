@@ -97,7 +97,11 @@ describe("cliConfigSchema with adapters", () => {
 		const result = cliConfigSchema.parse({
 			default_preference: ["cursor"],
 			adapters: {
-				cursor: { allow_tool_use: false, thinking_budget: "low", model: "codex" },
+				cursor: {
+					allow_tool_use: false,
+					thinking_budget: "low",
+					model: "codex",
+				},
 			},
 		});
 		expect(result.adapters?.cursor?.model).toBe("codex");
@@ -165,7 +169,7 @@ describe("GeminiAdapter applyThinkingSettings", () => {
 			await fs.mkdir(settingsDir, { recursive: true });
 			await fs.writeFile(settingsPath, originalSettings);
 		} else {
-			await fs.unlink(settingsPath).catch(() => { });
+			await fs.unlink(settingsPath).catch(() => {});
 		}
 	});
 

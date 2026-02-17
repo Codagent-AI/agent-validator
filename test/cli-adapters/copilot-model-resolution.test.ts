@@ -1,11 +1,4 @@
-import {
-	describe,
-	expect,
-	it,
-	beforeEach,
-	afterEach,
-	spyOn,
-} from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import * as childProcess from "node:child_process";
 
 // Helper: mock exec to return given stdout or fail
@@ -21,7 +14,9 @@ function mockExec(stdout: string, shouldFail = false) {
 					callback(null, stdout, "");
 				}
 			}
+			// biome-ignore lint/suspicious/noExplicitAny: mock typing
 			return {} as any;
+			// biome-ignore lint/suspicious/noExplicitAny: mock typing
 		}) as any,
 	);
 }
@@ -32,8 +27,9 @@ describe("GitHubCopilotAdapter.resolveModel", () => {
 	let execSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(async () => {
+		// Import directly from github-copilot.js to avoid mock.module leaking from other test files
 		const { GitHubCopilotAdapter } = await import(
-			"../../src/cli-adapters/index.js"
+			"../../src/cli-adapters/github-copilot.js"
 		);
 		adapter = new GitHubCopilotAdapter();
 	});

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
-	matchesBaseName,
-	isTierVariant,
 	extractVersion,
+	isTierVariant,
+	matchesBaseName,
 	resolveModelFromList,
 } from "../../src/cli-adapters/model-resolution.js";
 
@@ -54,11 +54,7 @@ describe("resolveModelFromList", () => {
 	});
 
 	it("excludes tier variants", () => {
-		const models = [
-			"gpt-5.3-codex",
-			"gpt-5.3-codex-low",
-			"gpt-5.3-codex-high",
-		];
+		const models = ["gpt-5.3-codex", "gpt-5.3-codex-low", "gpt-5.3-codex-high"];
 		expect(
 			resolveModelFromList(models, "codex", { preferThinking: false }),
 		).toBe("gpt-5.3-codex");
@@ -71,9 +67,9 @@ describe("resolveModelFromList", () => {
 			"opus-4.5",
 			"opus-4.5-thinking",
 		];
-		expect(
-			resolveModelFromList(models, "opus", { preferThinking: true }),
-		).toBe("opus-4.6-thinking");
+		expect(resolveModelFromList(models, "opus", { preferThinking: true })).toBe(
+			"opus-4.6-thinking",
+		);
 	});
 
 	it("falls back to non-thinking when no thinking variant exists", () => {

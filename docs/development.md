@@ -45,7 +45,7 @@ The worktree agent writes a detailed implementation plan and immediately execute
 
 ```
 /clear
-/superpowers:write-plan Read all files in openspec/changes/<change>, then make a plan, then immediately execute it using the subagent-driven-development skill.
+/superpowers:write-plan Read all files in openspec/changes/<change>, then make a plan, then immediately execute it using the subagent-driven-development skill. No parallel subagents.
 ```
 
 The agent will:

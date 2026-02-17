@@ -3,9 +3,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getCategoryLogger } from "../output/app-logger.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
 import { resolveModelFromList } from "./model-resolution.js";
-import { getCategoryLogger } from "../output/app-logger.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -106,14 +106,10 @@ export class CursorAdapter implements CLIAdapter {
 	): Promise<string | undefined> {
 		try {
 			const stdout = await new Promise<string>((resolve, reject) => {
-				exec(
-					"agent --list-models",
-					{ timeout: 10000 },
-					(error, stdout) => {
-						if (error) reject(error);
-						else resolve(stdout);
-					},
-				);
+				exec("agent --list-models", { timeout: 10000 }, (error, stdout) => {
+					if (error) reject(error);
+					else resolve(stdout);
+				});
 			});
 			const models = parseModelList(stdout);
 			const preferThinking =

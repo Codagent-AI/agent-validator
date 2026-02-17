@@ -1,11 +1,4 @@
-import {
-	describe,
-	expect,
-	it,
-	beforeEach,
-	afterEach,
-	spyOn,
-} from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import * as childProcess from "node:child_process";
 
 // Helper: mock exec to return given stdout or fail
@@ -21,7 +14,9 @@ function mockExec(stdout: string, shouldFail = false) {
 					callback(null, stdout, "");
 				}
 			}
+			// biome-ignore lint/suspicious/noExplicitAny: mock typing
 			return {} as any;
+			// biome-ignore lint/suspicious/noExplicitAny: mock typing
 		}) as any,
 	);
 }
@@ -32,11 +27,8 @@ describe("CursorAdapter.resolveModel", () => {
 	let execSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(async () => {
-		// Import from index.js to avoid circular dependency issues
-		// (cursor.ts imports from index.ts which instantiates all adapters)
-		const { CursorAdapter } = await import(
-			"../../src/cli-adapters/index.js"
-		);
+		// Import directly from cursor.js to avoid mock.module leaking from other test files
+		const { CursorAdapter } = await import("../../src/cli-adapters/cursor.js");
 		adapter = new CursorAdapter();
 	});
 

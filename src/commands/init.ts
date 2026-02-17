@@ -37,13 +37,21 @@ const CLI_PREFERENCE_ORDER = [
 ];
 
 // Recommended adapter config: https://github.com/pacaplan/agent-gauntlet/blob/main/docs/eval-results.md
-type AdapterCfg = { allow_tool_use: boolean; thinking_budget: string; model?: string };
+type AdapterCfg = {
+	allow_tool_use: boolean;
+	thinking_budget: string;
+	model?: string;
+};
 const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
 	claude: { allow_tool_use: false, thinking_budget: "high" },
 	codex: { allow_tool_use: false, thinking_budget: "low" },
 	gemini: { allow_tool_use: false, thinking_budget: "low" },
 	cursor: { allow_tool_use: false, thinking_budget: "low", model: "codex" },
-	"github-copilot": { allow_tool_use: false, thinking_budget: "low", model: "codex" },
+	"github-copilot": {
+		allow_tool_use: false,
+		thinking_budget: "low",
+		model: "codex",
+	},
 };
 
 // --- Skill content templates ---
