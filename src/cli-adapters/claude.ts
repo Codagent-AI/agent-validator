@@ -275,7 +275,7 @@ export class ClaudeAdapter implements CLIAdapter {
 
 		const args = ["-p"];
 		if (opts.allowToolUse === false) {
-			args.push("--tools", "");
+			args.push("--allowedTools", "Task");
 		} else {
 			args.push("--allowedTools", "Read,Glob,Grep,Task");
 		}
