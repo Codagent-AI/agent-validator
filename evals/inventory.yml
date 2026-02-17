@@ -8,6 +8,13 @@ issues:
       a shell command string passed to exec. If a model ID contains shell metacharacters, arbitrary
       commands can execute. The code builds a command like "cat ... | agent --trust${modelFlag}"
       where modelFlag contains user-controlled input without proper escaping.
+    code_snippet: |
+      const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : "";
+      const cmd = `cat "${tmpFile}" | agent --trust${modelFlag}`;
+      const { stdout } = await execAsync(cmd, {
+        timeout: opts.timeoutMs,
+        maxBuffer: MAX_BUFFER_BYTES,
+      });
     category: security
     difficulty: medium
     priority: high
@@ -21,6 +28,13 @@ issues:
       shell command executed via exec. A malicious or specially-crafted model string can break out
       of the intended arguments and execute arbitrary shell commands. The code uses string
       interpolation to build shell commands with untrusted model values.
+    code_snippet: |
+      const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : "";
+      const cmd = `cat "${tmpFile}" | copilot --allow-tool "shell(cat)" ...${modelFlag}`;
+      const { stdout } = await execAsync(cmd, {
+        timeout: opts.timeoutMs,
+        maxBuffer: MAX_BUFFER_BYTES,
+      });
     category: security
     difficulty: medium
     priority: high

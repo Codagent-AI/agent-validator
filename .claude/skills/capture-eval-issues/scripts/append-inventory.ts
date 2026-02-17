@@ -8,6 +8,7 @@ interface InventoryIssue {
   file: string;
   line_range: [number, number];
   description: string;
+  code_snippet: string;
   category: "bug" | "security" | "performance";
   difficulty: "easy" | "medium" | "hard";
   priority: "critical" | "high" | "medium" | "low";
