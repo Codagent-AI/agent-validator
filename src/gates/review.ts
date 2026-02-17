@@ -699,7 +699,7 @@ export class ReviewGateExecutor {
 			const output = await adapter.execute({
 				prompt: finalPrompt,
 				diff,
-				model: config.model,
+				model: adapterCfg?.model ?? config.model,
 				timeoutMs: config.timeout
 					? config.timeout * 1000
 					: REVIEW_ADAPTER_TIMEOUT_MS,
