@@ -18,11 +18,13 @@ import type { AdapterConfig } from "../../src/config/types.js";
 function resolveAdapterOpts(
 	toolName: string,
 	adapterConfigs?: Record<string, AdapterConfig>,
-): { allowToolUse?: boolean; thinkingBudget?: string } {
+	configModel?: string,
+): { allowToolUse?: boolean; thinkingBudget?: string; model?: string } {
 	const adapterCfg = adapterConfigs?.[toolName];
 	return {
 		allowToolUse: adapterCfg?.allow_tool_use,
 		thinkingBudget: adapterCfg?.thinking_budget,
+		model: adapterCfg?.model ?? configModel,
 	};
 }
 
@@ -110,5 +112,35 @@ describe("Adapter config threading", () => {
 		const opts = resolveAdapterOpts("claude", undefined);
 		expect(opts.allowToolUse).toBeUndefined();
 		expect(opts.thinkingBudget).toBeUndefined();
+	});
+
+	// ─── Model config threading ──────────────────────────────────────
+
+	it("passes adapter config model when present", () => {
+		const opts = resolveAdapterOpts("cursor", {
+			cursor: { allow_tool_use: false, model: "codex" },
+		});
+		expect(opts.model).toBe("codex");
+	});
+
+	it("falls back to review-level model when adapter has no model", () => {
+		const opts = resolveAdapterOpts("cursor", {
+			cursor: { allow_tool_use: false },
+		}, "opus");
+		expect(opts.model).toBe("opus");
+	});
+
+	it("adapter model takes priority over review-level model", () => {
+		const opts = resolveAdapterOpts("cursor", {
+			cursor: { allow_tool_use: false, model: "codex" },
+		}, "opus");
+		expect(opts.model).toBe("codex");
+	});
+
+	it("model is undefined when neither adapter nor config specifies it", () => {
+		const opts = resolveAdapterOpts("cursor", {
+			cursor: { allow_tool_use: false },
+		});
+		expect(opts.model).toBeUndefined();
 	});
 });

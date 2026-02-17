@@ -3,10 +3,32 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getCategoryLogger } from "../output/app-logger.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import {
+	resolveModelFromList,
+	SAFE_MODEL_ID_PATTERN,
+} from "./model-resolution.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const log = getCategoryLogger("cursor");
+
+/**
+ * Parse `agent --list-models` output into an array of model IDs.
+ * Each line has the format: "model-id - Display Name"
+ */
+function parseModelList(output: string): string[] {
+	return output
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0)
+		.map((line) => {
+			const dashIndex = line.indexOf(" - ");
+			return dashIndex >= 0 ? line.substring(0, dashIndex).trim() : line.trim();
+		})
+		.filter((id) => id.length > 0);
+}
 
 export class CursorAdapter implements CLIAdapter {
 	name = "cursor";
@@ -74,12 +96,55 @@ export class CursorAdapter implements CLIAdapter {
 		return true;
 	}
 
+	/**
+	 * Resolve a base model name to a specific model ID using `agent --list-models`.
+	 * Returns undefined if resolution fails or no matching model is found.
+	 *
+	 * Uses exec() directly (instead of the module-level execAsync) so that
+	 * spyOn(childProcess, "exec") can intercept calls in tests.
+	 */
+	private async resolveModel(
+		baseName: string,
+		thinkingBudget?: string,
+	): Promise<string | undefined> {
+		try {
+			const stdout = await new Promise<string>((resolve, reject) => {
+				exec("agent --list-models", { timeout: 10000 }, (error, stdout) => {
+					if (error) reject(error);
+					else resolve(stdout);
+				});
+			});
+			const models = parseModelList(stdout);
+			const preferThinking =
+				thinkingBudget !== undefined && thinkingBudget !== "off";
+			const resolved = resolveModelFromList(models, {
+				baseName,
+				preferThinking,
+			});
+			if (resolved === undefined) {
+				log.warn(`No matching model found for "${baseName}"`);
+				return undefined;
+			}
+			if (!SAFE_MODEL_ID_PATTERN.test(resolved)) {
+				log.warn(`Resolved model "${resolved}" contains unsafe characters`);
+				return undefined;
+			}
+			return resolved;
+		} catch (err) {
+			log.warn(
+				`Failed to resolve model "${baseName}": ${err instanceof Error ? err.message : String(err)}`,
+			);
+			return undefined;
+		}
+	}
+
 	async execute(opts: {
 		prompt: string;
 		diff: string;
 		model?: string;
 		timeoutMs?: number;
 		onOutput?: (chunk: string) => void;
+		thinkingBudget?: string;
 	}): Promise<string> {
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
@@ -98,13 +163,25 @@ export class CursorAdapter implements CLIAdapter {
 		// safe for code review use. If Cursor adds such flags in the future, they should
 		// be added here for defense-in-depth.
 
+		// Resolve model if a base name is provided
+		let resolvedModel: string | undefined;
+		if (opts.model) {
+			resolvedModel = await this.resolveModel(opts.model, opts.thinkingBudget);
+		}
+
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+
+		// Build args with optional --model flag
+		const args = ["--trust"];
+		if (resolvedModel) {
+			args.push("--model", resolvedModel);
+		}
 
 		// If onOutput callback is provided, use spawn for real-time streaming
 		if (opts.onOutput) {
 			return runStreamingCommand({
 				command: "agent",
-				args: ["--trust"],
+				args,
 				tmpFile,
 				timeoutMs: opts.timeoutMs,
 				onOutput: opts.onOutput,
@@ -118,7 +195,8 @@ export class CursorAdapter implements CLIAdapter {
 		// (os.tmpdir() + Date.now() + process.pid), not user-supplied, eliminating injection risk.
 		// Double quotes handle paths with spaces.
 		try {
-			const cmd = `cat "${tmpFile}" | agent --trust`;
+			const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : "";
+			const cmd = `cat "${tmpFile}" | agent --trust${modelFlag}`;
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,

@@ -3,6 +3,7 @@ import { z } from "zod";
 export const adapterConfigSchema = z.object({
 	allow_tool_use: z.boolean().default(true),
 	thinking_budget: z.enum(["off", "low", "medium", "high"]).optional(),
+	model: z.string().optional(),
 });
 
 export const cliConfigSchema = z.object({

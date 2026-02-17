@@ -59,6 +59,18 @@ const mockAdapters = [
 		supportsHooks: () => true,
 	},
 	{
+		name: "cursor",
+		isAvailable: async () => true,
+		getProjectCommandDir: () => null,
+		getUserCommandDir: () => null,
+		getProjectSkillDir: () => null,
+		getUserSkillDir: () => null,
+		getCommandExtension: () => ".md",
+		canUseSymlink: () => false,
+		transformCommand: (content: string) => content,
+		supportsHooks: () => true,
+	},
+	{
 		name: "mock-cli-2",
 		isAvailable: async () => false, // Not available
 		getProjectCommandDir: () => ".mock2",
@@ -114,6 +126,7 @@ describe("Init Command", () => {
 		cleanupTestEnv(originalConsoleLog, originalCwd, [
 			path.join(TEST_DIR, ".gauntlet"),
 			path.join(TEST_DIR, ".claude"),
+			path.join(TEST_DIR, ".cursor"),
 			path.join(TEST_DIR, ".gitignore"),
 		]),
 	);
@@ -155,7 +168,7 @@ describe("Init Command", () => {
 			"utf-8",
 		);
 		expect(reviewContent).toContain("builtin: code-quality");
-		expect(reviewContent).toContain("num_reviews: 1");
+		expect(reviewContent).toContain("num_reviews: 2");
 
 		// Verify entry_points configuration
 		expect(configContent).toContain("entry_points: []");
@@ -220,13 +233,28 @@ describe("Init Command", () => {
 		);
 	});
 
-	it("should create reviews/code-quality.yml with num_reviews: 1", async () => {
+	it("should include model setting for cursor adapter in config", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+		const configContent = await fs.readFile(
+			path.join(TEST_DIR, ".gauntlet", "config.yml"),
+			"utf-8",
+		);
+		// Cursor adapter should have model: codex
+		expect(configContent).toContain("model: codex");
+		// Claude adapter should NOT have a model field
+		// (claude block should not contain "model:")
+		const claudeSection = configContent.split("claude:")[1]?.split("\n") ?? [];
+		const claudeBlock = claudeSection.slice(0, 3).join("\n");
+		expect(claudeBlock).not.toContain("model:");
+	});
+
+	it("should create reviews/code-quality.yml with num_reviews: 2", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 		const reviewContent = await fs.readFile(
 			path.join(TEST_DIR, ".gauntlet", "reviews", "code-quality.yml"),
 			"utf-8",
 		);
-		expect(reviewContent).toContain("num_reviews: 1");
+		expect(reviewContent).toContain("num_reviews: 2");
 		expect(reviewContent).toContain("builtin: code-quality");
 	});
 
@@ -314,8 +342,8 @@ describe("Init Command", () => {
 			path.join(TEST_DIR, ".gauntlet", "reviews", "code-quality.yml"),
 			"utf-8",
 		);
-		// With --yes and 1 detected CLI, promptNumReviews returns count (1)
-		expect(reviewContent).toContain("num_reviews: 1");
+		// With --yes and 2 detected CLIs, promptNumReviews returns count (2)
+		expect(reviewContent).toContain("num_reviews: 2");
 	});
 
 	it("should update skill when checksum differs and --yes is passed", async () => {
@@ -1077,6 +1105,7 @@ describe("Skills Migration", () => {
 		cleanupTestEnv(originalConsoleLog, originalCwd, [
 			path.join(TEST_DIR, ".gauntlet"),
 			path.join(TEST_DIR, ".claude"),
+			path.join(TEST_DIR, ".cursor"),
 		]),
 	);
 
@@ -1118,6 +1147,7 @@ describe("Skills Installation for Claude", () => {
 		cleanupTestEnv(originalConsoleLog, originalCwd, [
 			path.join(TEST_DIR, ".gauntlet"),
 			path.join(TEST_DIR, ".claude"),
+			path.join(TEST_DIR, ".cursor"),
 		]),
 	);
 

@@ -1,0 +1,41 @@
+issues:
+  - id: cursor-command-injection
+    file: src/cli-adapters/cursor.ts
+    line_range:
+      - 186
+      - 186
+    description: Shell command injection vulnerability where resolvedModel is interpolated directly into
+      a shell command string passed to exec. If a model ID contains shell metacharacters, arbitrary
+      commands can execute. The code builds a command like "cat ... | agent --trust${modelFlag}"
+      where modelFlag contains user-controlled input without proper escaping.
+    code_snippet: |
+      const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : "";
+      const cmd = `cat "${tmpFile}" | agent --trust${modelFlag}`;
+      const { stdout } = await execAsync(cmd, {
+        timeout: opts.timeoutMs,
+        maxBuffer: MAX_BUFFER_BYTES,
+      });
+    category: security
+    difficulty: medium
+    priority: high
+    source: 2026-02-16 reviewer-model-resolution.agent-gauntlet
+  - id: copilot-command-injection
+    file: src/cli-adapters/github-copilot.ts
+    line_range:
+      - 193
+      - 193
+    description: Shell command injection vulnerability where resolvedModel is appended unquoted into a
+      shell command executed via exec. A malicious or specially-crafted model string can break out
+      of the intended arguments and execute arbitrary shell commands. The code uses string
+      interpolation to build shell commands with untrusted model values.
+    code_snippet: |
+      const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : "";
+      const cmd = `cat "${tmpFile}" | copilot --allow-tool "shell(cat)" ...${modelFlag}`;
+      const { stdout } = await execAsync(cmd, {
+        timeout: opts.timeoutMs,
+        maxBuffer: MAX_BUFFER_BYTES,
+      });
+    category: security
+    difficulty: medium
+    priority: high
+    source: 2026-02-16 reviewer-model-resolution.agent-gauntlet

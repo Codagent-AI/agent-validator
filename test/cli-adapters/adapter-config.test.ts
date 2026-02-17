@@ -49,6 +49,20 @@ describe("adapterConfigSchema", () => {
 			adapterConfigSchema.parse({ allow_tool_use: "yes" }),
 		).toThrow();
 	});
+
+	it("accepts optional model string", () => {
+		const result = adapterConfigSchema.parse({ model: "codex" });
+		expect(result.model).toBe("codex");
+	});
+
+	it("defaults model to undefined when not provided", () => {
+		const result = adapterConfigSchema.parse({});
+		expect(result.model).toBeUndefined();
+	});
+
+	it("rejects non-string model", () => {
+		expect(() => adapterConfigSchema.parse({ model: 42 })).toThrow();
+	});
 });
 
 describe("cliConfigSchema with adapters", () => {
@@ -77,6 +91,20 @@ describe("cliConfigSchema with adapters", () => {
 			adapters: {},
 		});
 		expect(result.adapters).toEqual({});
+	});
+
+	it("accepts config with model in adapter settings", () => {
+		const result = cliConfigSchema.parse({
+			default_preference: ["cursor"],
+			adapters: {
+				cursor: {
+					allow_tool_use: false,
+					thinking_budget: "low",
+					model: "codex",
+				},
+			},
+		});
+		expect(result.adapters?.cursor?.model).toBe("codex");
 	});
 });
 
@@ -141,7 +169,7 @@ describe("GeminiAdapter applyThinkingSettings", () => {
 			await fs.mkdir(settingsDir, { recursive: true });
 			await fs.writeFile(settingsPath, originalSettings);
 		} else {
-			await fs.unlink(settingsPath).catch(() => { });
+			await fs.unlink(settingsPath).catch(() => {});
 		}
 	});
 

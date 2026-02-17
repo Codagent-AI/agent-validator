@@ -37,11 +37,21 @@ const CLI_PREFERENCE_ORDER = [
 ];
 
 // Recommended adapter config: https://github.com/pacaplan/agent-gauntlet/blob/main/docs/eval-results.md
-type AdapterCfg = { allow_tool_use: boolean; thinking_budget: string };
+type AdapterCfg = {
+	allow_tool_use: boolean;
+	thinking_budget: string;
+	model?: string;
+};
 const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
 	claude: { allow_tool_use: false, thinking_budget: "high" },
 	codex: { allow_tool_use: false, thinking_budget: "low" },
 	gemini: { allow_tool_use: false, thinking_budget: "low" },
+	cursor: { allow_tool_use: false, thinking_budget: "low", model: "codex" },
+	"github-copilot": {
+		allow_tool_use: false,
+		thinking_budget: "low",
+		model: "codex",
+	},
 };
 
 // --- Skill content templates ---
@@ -758,7 +768,11 @@ function buildAdapterSettingsBlock(adapterNames: string[]): string {
 	if (items.length === 0) return "";
 	const lines = items.map((name) => {
 		const c = ADAPTER_CONFIG[name];
-		return `    ${name}:\n      allow_tool_use: ${c?.allow_tool_use}\n      thinking_budget: ${c?.thinking_budget}`;
+		let block = `    ${name}:\n      allow_tool_use: ${c?.allow_tool_use}\n      thinking_budget: ${c?.thinking_budget}`;
+		if (c?.model) {
+			block += `\n      model: ${c.model}`;
+		}
+		return block;
 	});
 	return `  # Recommended settings (see docs/eval-results.md)\n  adapters:\n${lines.join("\n")}\n`;
 }

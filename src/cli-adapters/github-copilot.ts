@@ -3,10 +3,29 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getCategoryLogger } from "../output/app-logger.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import {
+	resolveModelFromList,
+	SAFE_MODEL_ID_PATTERN,
+} from "./model-resolution.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const log = getCategoryLogger("github-copilot");
+
+/**
+ * Parse `copilot --help` output to extract model choices.
+ * The help output includes a section like:
+ *   --model <model>  Choose a model (choices: "gpt-5.3-codex", "gpt-5.2-codex", "opus-4.6")
+ */
+function parseCopilotModels(helpOutput: string): string[] {
+	const match = helpOutput.match(/choices:\s*(.+?)\)/);
+	if (!match?.[1]) return [];
+	return [...match[1].matchAll(/"([^"]+)"/g)]
+		.map((m) => m[1])
+		.filter((id): id is string => id !== undefined);
+}
 
 export class GitHubCopilotAdapter implements CLIAdapter {
 	name = "github-copilot";
@@ -73,12 +92,54 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 		return false;
 	}
 
+	/**
+	 * Resolve a base model name to a specific model ID using `copilot --help`.
+	 * Returns undefined if resolution fails or no matching model is found.
+	 *
+	 * Uses exec() directly (instead of the module-level execAsync) so that
+	 * spyOn(childProcess, "exec") can intercept calls in tests.
+	 */
+	private async resolveModel(
+		baseName: string,
+		_thinkingBudget?: string,
+	): Promise<string | undefined> {
+		try {
+			const stdout = await new Promise<string>((resolve, reject) => {
+				exec("copilot --help", { timeout: 10000 }, (error, stdout) => {
+					if (error) reject(error);
+					else resolve(stdout);
+				});
+			});
+			const models = parseCopilotModels(stdout);
+			// Copilot has NO thinking variants, so always pass preferThinking: false
+			const resolved = resolveModelFromList(models, {
+				baseName,
+				preferThinking: false,
+			});
+			if (resolved === undefined) {
+				log.warn(`No matching model found for "${baseName}"`);
+				return undefined;
+			}
+			if (!SAFE_MODEL_ID_PATTERN.test(resolved)) {
+				log.warn(`Resolved model "${resolved}" contains unsafe characters`);
+				return undefined;
+			}
+			return resolved;
+		} catch (err) {
+			log.warn(
+				`Failed to resolve model "${baseName}": ${err instanceof Error ? err.message : String(err)}`,
+			);
+			return undefined;
+		}
+	}
+
 	async execute(opts: {
 		prompt: string;
 		diff: string;
 		model?: string;
 		timeoutMs?: number;
 		onOutput?: (chunk: string) => void;
+		thinkingBudget?: string;
 	}): Promise<string> {
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
@@ -96,6 +157,13 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 		// they are read-only and necessary for code review functionality.
 		// The copilot CLI is scoped to the repo directory by default.
 		// git is excluded to prevent access to commit history (review should only see diff).
+
+		// Resolve model if a base name is provided
+		let resolvedModel: string | undefined;
+		if (opts.model) {
+			resolvedModel = await this.resolveModel(opts.model, opts.thinkingBudget);
+		}
+
 		const args = [
 			"--allow-tool",
 			"shell(cat)",
@@ -110,6 +178,9 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 			"--allow-tool",
 			"shell(tail)",
 		];
+		if (resolvedModel) {
+			args.push("--model", resolvedModel);
+		}
 
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
@@ -131,7 +202,8 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 		// (os.tmpdir() + Date.now() + process.pid), not user-supplied, eliminating injection risk.
 		// Double quotes handle paths with spaces. This pattern matches claude.ts:131.
 		try {
-			const cmd = `cat "${tmpFile}" | copilot --allow-tool "shell(cat)" --allow-tool "shell(grep)" --allow-tool "shell(ls)" --allow-tool "shell(find)" --allow-tool "shell(head)" --allow-tool "shell(tail)"`;
+			const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : "";
+			const cmd = `cat "${tmpFile}" | copilot --allow-tool "shell(cat)" --allow-tool "shell(grep)" --allow-tool "shell(ls)" --allow-tool "shell(find)" --allow-tool "shell(head)" --allow-tool "shell(tail)"${modelFlag}`;
 			const { stdout } = await execAsync(cmd, {
 				timeout: opts.timeoutMs,
 				maxBuffer: MAX_BUFFER_BYTES,
