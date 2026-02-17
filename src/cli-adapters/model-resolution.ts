@@ -1,6 +1,17 @@
 // Tier suffixes to exclude from model resolution
 const TIER_SUFFIXES = ["-low", "-high", "-xhigh", "-fast"];
 
+/** Only allow model IDs with alphanumeric chars, hyphens, and dots. */
+const SAFE_MODEL_ID = /^[a-zA-Z0-9._-]+$/;
+
+/**
+ * Validate that a model ID is safe for shell interpolation.
+ * Rejects IDs containing shell metacharacters.
+ */
+export function isSafeModelId(modelId: string): boolean {
+	return SAFE_MODEL_ID.test(modelId);
+}
+
 /**
  * Check if a model ID contains the base name as a complete hyphen-delimited segment.
  * e.g. "codex" matches "gpt-5.3-codex" (codex is a segment), but NOT "gpt-5.3-codecx"
@@ -29,6 +40,34 @@ export function extractVersion(modelId: string): [number, number] | null {
 }
 
 /**
+ * Apply thinking preference filter to candidate models.
+ * When preferThinking is true, narrows to -thinking variants if available.
+ * When false, excludes -thinking variants.
+ */
+function applyThinkingFilter(
+	candidates: string[],
+	preferThinking: boolean,
+): string[] {
+	if (preferThinking) {
+		const thinking = candidates.filter((id) => id.endsWith("-thinking"));
+		return thinking.length > 0 ? thinking : candidates;
+	}
+	return candidates.filter((id) => !id.endsWith("-thinking"));
+}
+
+/** Compare two version tuples descending (higher version first). */
+function compareVersionsDesc(
+	a: [number, number] | null,
+	b: [number, number] | null,
+): number {
+	if (!a && !b) return 0;
+	if (!a) return 1;
+	if (!b) return -1;
+	if (a[0] !== b[0]) return b[0] - a[0];
+	return b[1] - a[1];
+}
+
+/**
  * Core model resolution logic shared between adapters.
  * Filters by base name, excludes tier variants, handles thinking preference,
  * sorts by version descending, and returns the best match.
@@ -38,39 +77,18 @@ export function resolveModelFromList(
 	baseName: string,
 	opts: { preferThinking: boolean },
 ): string | undefined {
-	// Filter by base name segment match
-	let candidates = allModels.filter((id) => matchesBaseName(id, baseName));
-
-	// Exclude tier variants
-	candidates = candidates.filter((id) => !isTierVariant(id));
+	const candidates = allModels
+		.filter((id) => matchesBaseName(id, baseName))
+		.filter((id) => !isTierVariant(id));
 
 	if (candidates.length === 0) return undefined;
 
-	if (opts.preferThinking) {
-		const thinkingCandidates = candidates.filter((id) =>
-			id.endsWith("-thinking"),
-		);
-		if (thinkingCandidates.length > 0) {
-			candidates = thinkingCandidates;
-		}
-		// If no thinking variants, fall back to non-thinking candidates
-	} else {
-		// When thinking is not preferred, exclude thinking variants
-		candidates = candidates.filter((id) => !id.endsWith("-thinking"));
-	}
+	const filtered = applyThinkingFilter(candidates, opts.preferThinking);
+	if (filtered.length === 0) return undefined;
 
-	if (candidates.length === 0) return undefined;
+	filtered.sort((a, b) =>
+		compareVersionsDesc(extractVersion(a), extractVersion(b)),
+	);
 
-	// Sort by version descending
-	candidates.sort((a, b) => {
-		const vA = extractVersion(a);
-		const vB = extractVersion(b);
-		if (!vA && !vB) return 0;
-		if (!vA) return 1;
-		if (!vB) return -1;
-		if (vA[0] !== vB[0]) return vB[0] - vA[0];
-		return vB[1] - vA[1];
-	});
-
-	return candidates[0];
+	return filtered[0];
 }

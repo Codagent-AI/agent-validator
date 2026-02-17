@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getCategoryLogger } from "../output/app-logger.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
-import { resolveModelFromList } from "./model-resolution.js";
+import { isSafeModelId, resolveModelFromList } from "./model-resolution.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -112,6 +112,10 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 			const resolved = resolveModelFromList(models, baseName, {
 				preferThinking: false,
 			});
+			if (resolved && !isSafeModelId(resolved)) {
+				log.warn(`Resolved model "${resolved}" contains unsafe characters`);
+				return undefined;
+			}
 			return resolved;
 		} catch (err) {
 			log.warn(
