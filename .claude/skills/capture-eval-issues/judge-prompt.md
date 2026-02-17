@@ -31,18 +31,20 @@ You receive one or more review JSON file paths. Each JSON file has this structur
 
 ## Capture Criteria
 
-A violation is capture-worthy ONLY if it meets BOTH:
+A violation is capture-worthy ONLY if it meets ALL THREE:
 
-1. **Critical or high priority** — the `priority` field is `"critical"` or `"high"`
-2. **Non-obvious catch** — it is NOT something a linter or formatter would flag. It IS one of:
+1. **In a code file** — the `file` field must point to a source code file (e.g., `.ts`, `.js`, `.py`, `.go`, `.rs`, `.java`, `.tsx`, `.jsx`). Skip violations in non-code files such as `.md`, `.yml`, `.yaml`, `.json`, `.toml`, `.txt`, `.cfg`, or any other documentation/configuration format.
+2. **Critical or high priority** — the `priority` field is `"critical"` or `"high"`
+3. **Non-obvious catch** — it is NOT something a linter or formatter would flag. It IS one of:
    - Logic errors, race conditions, security flaws, architectural problems
    - The fix requires understanding context beyond the immediate line
    - A junior developer would likely miss it
 
-If EITHER criterion fails, skip the violation. Examples:
+If ANY criterion fails, skip the violation. Examples:
+- File is `spec.md` with `priority: "high"` → SKIP (not a code file)
 - `priority: "critical"` but the issue is "unused import" → SKIP (linter catch)
 - `priority: "medium"` but the issue is a race condition → SKIP (not critical/high)
-- `priority: "high"` and the issue is "missing null check on nullable return" → CAPTURE
+- `priority: "high"` and file is `src/auth.ts` and the issue is "missing null check on nullable return" → CAPTURE
 
 ## Output Schema
 

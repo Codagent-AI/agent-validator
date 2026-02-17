@@ -274,12 +274,16 @@ export class ClaudeAdapter implements CLIAdapter {
 		await fs.writeFile(tmpFile, fullContent);
 
 		const args = ["-p"];
+		// Task is always allowed so Claude can dispatch pr-review-toolkit
+		// subagents. allow_tool_use only controls file-reading tools
+		// (Read, Glob, Grep) which increase token usage without improving
+		// review quality.
 		if (opts.allowToolUse === false) {
-			args.push("--tools", "");
+			args.push("--allowedTools", "Task");
 		} else {
-			args.push("--allowedTools", "Read,Glob,Grep");
+			args.push("--allowedTools", "Read,Glob,Grep,Task");
 		}
-		args.push("--max-turns", "10");
+		args.push("--max-turns", "25");
 
 		const otelEnv = buildOtelEnv();
 		const thinkingEnv: Record<string, string> = {};
