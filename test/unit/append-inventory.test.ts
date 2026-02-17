@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { appendToInventory } from "../../.claude/skills/capture-eval-issues/scripts/append-inventory.ts";
-import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from "fs";
 import { resolve } from "path";
 import { tmpdir } from "os";
 import { stringify } from "yaml";
@@ -16,7 +16,7 @@ describe("appendToInventory", () => {
   });
 
   afterEach(() => {
-    if (existsSync(inventoryPath)) unlinkSync(inventoryPath);
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("creates inventory file when it does not exist", () => {
@@ -80,6 +80,29 @@ describe("appendToInventory", () => {
     const contents = readFileSync(inventoryPath, "utf-8");
     expect(contents).toContain("existing-issue");
     expect(contents).toContain("new-issue");
+  });
+
+  it("accepts {issues: [...]} wrapped format", () => {
+    const yaml = stringify({
+      issues: [
+        {
+          id: "wrapped-issue",
+          file: "src/wrap.ts",
+          line_range: [1, 1],
+          description: "Wrapped format test",
+          category: "bug",
+          difficulty: "easy",
+          priority: "high",
+          source: "2026-02-16 test",
+        },
+      ],
+    });
+
+    const result = appendToInventory(inventoryPath, yaml);
+    expect(result.added).toBe(1);
+
+    const contents = readFileSync(inventoryPath, "utf-8");
+    expect(contents).toContain("wrapped-issue");
   });
 
   it("returns 0 when input has no issues", () => {
