@@ -53,6 +53,11 @@ Execute the autonomous verification suite.
    - CHECK failures with Fix Skill: invoke the named skill
    - CHECK failures with Fix Instructions: follow the instructions
    - REVIEW violations: apply the trust level above, fix or skip
+5b. **Capture noteworthy violations for eval inventory** (if any REVIEW violations were found):
+   - Collect the JSON file paths from the REVIEW failures identified in step 4 (the `.json` file paths)
+   - Read `SKILL.md` from the `capture-eval-issues` skill directory (sibling of this skill's directory)
+   - Follow the capture skill's procedure, passing the JSON file paths
+   - Note the `CAPTURED:` summary line for inclusion in step 8
 6. For REVIEW violations you addressed:
    - Read `update-prompt.md` from this skill's directory
    - **Update review decisions** using the first available strategy (same as step 4):
@@ -64,4 +69,5 @@ Execute the autonomous verification suite.
    - Final Status: (Passed / Passed with warnings / Retry limit exceeded)
    - Issues Fixed: (list key fixes)
    - Issues Skipped: (list skipped items and reasons)
+   - Eval Captures: (list captured issue IDs from step 5b, or "none")
    - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)
