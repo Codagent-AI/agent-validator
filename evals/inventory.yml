@@ -1,0 +1,39 @@
+issues:
+  - id: spec-runtime-behavior-not-testable
+    file: openspec/changes/update-builtin-code-quality-prompt/specs/review-config/spec.md
+    line_range:
+      - 13
+      - 13
+    description: Scenario specifies runtime behavior (dispatching agents, merging findings) that cannot
+      be verified by the system because it depends on Claude's interpretation at runtime. The
+      gauntlet codebase has no mechanism to verify which agents Claude actually dispatched. Spec
+      should test prompt content, not runtime behavior.
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-02-16 agent-gauntlet
+  - id: spec-untestable-reviewer-behavior
+    file: openspec/changes/update-builtin-code-quality-prompt/specs/review-config/spec.md
+    line_range:
+      - 21
+      - 21
+    description: Scenario specifies runtime reviewer behavior ("the reviewer SHALL perform the review
+      inline") that cannot be verified by the system. The gauntlet review executor cannot confirm
+      which execution path Claude chose. Spec must constrain prompt content, not agent behavior.
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-02-16 agent-gauntlet
+  - id: spec-runtime-behavior-outside-scope
+    file: openspec/changes/update-builtin-code-quality-prompt/specs/review-config/spec.md
+    line_range:
+      - 16
+      - 16
+    description: Requirement mandates runtime behavior (dispatching specific external agents) that is
+      outside the implemented change scope (prompt text only). This makes the requirement
+      architecture-misaligned and impossible to verify deterministically because agent dispatch is
+      controlled by a different component than the prompt.
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-02-16 agent-gauntlet
