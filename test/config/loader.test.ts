@@ -197,9 +197,9 @@ entry_points:
 
 		const review = config.reviews["code-quality"];
 		expect(review).toBeDefined();
-		expect(review!.promptContent).toContain("Bugs");
+		expect(review!.promptContent).toContain("code-reviewer");
 		expect(review!.promptContent).toContain("Security");
-		expect(review!.promptContent).toContain("Maintainability");
+		expect(review!.promptContent).toContain("silent-failure-hunter");
 		expect(review!.promptContent).toContain("Performance");
 		expect(review!.num_reviews).toBe(2);
 	});
@@ -314,7 +314,7 @@ entry_points:
 		]);
 	});
 
-	it("should load built-in prompt as pure markdown with expected focus areas", async () => {
+	it("should load built-in prompt with pr-review-toolkit agent instructions and fallback", async () => {
 		await setupTestEnv(
 			`
 base_branch: origin/main
@@ -335,14 +335,42 @@ entry_points:
 
 		// Pure markdown — no frontmatter delimiters
 		expect(content).not.toMatch(/^---/);
-		// Expected focus areas
-		expect(content).toContain("Bugs");
-		expect(content).toContain("Security");
-		expect(content).toContain("Performance");
-		expect(content).toContain("Maintainability");
-		// Should NOT contain Documentation references (project-specific)
-		expect(content).not.toContain("Documentation");
+
+		// Primary path: pr-review-toolkit agent instructions
+		expect(content).toContain("code-reviewer");
+		expect(content).toContain("silent-failure-hunter");
+		expect(content).toContain("type-design-analyzer");
+
+		// Fallback path: inline review framework covering three lenses
+		expect(content).toMatch(/bug|security|logic error/i);
+		expect(content).toMatch(/silent fail|swallowed error|error handling/i);
+		expect(content).toMatch(/type design|type invariant|encapsulation/i);
+
+		// Should NOT contain project-specific documentation references
 		expect(content).not.toContain("docs/");
+	});
+
+	it("should instruct reviewer to use available agents and fall back for missing ones", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - code-quality
+`,
+			{
+				"code-quality.yml": `builtin: code-quality\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+		const content = config.reviews["code-quality"]!.promptContent!;
+
+		// Partial availability: use available agents, fall back for missing
+		expect(content).toMatch(/available|unavailable|not available|fall\s?back/i);
 	});
 
 	it("should reject user-defined review file with built-in: prefix in filename", async () => {
