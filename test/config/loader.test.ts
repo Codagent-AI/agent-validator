@@ -198,9 +198,8 @@ entry_points:
 		const review = config.reviews["code-quality"];
 		expect(review).toBeDefined();
 		expect(review!.promptContent).toContain("code-reviewer");
-		expect(review!.promptContent).toContain("Security");
 		expect(review!.promptContent).toContain("silent-failure-hunter");
-		expect(review!.promptContent).toContain("Performance");
+		expect(review!.promptContent).toContain("type-design-analyzer");
 		expect(review!.num_reviews).toBe(2);
 	});
 
@@ -284,7 +283,7 @@ entry_points:
 		const config = await loadConfig(tmpDir);
 
 		expect(config.reviews["my-builtin"]).toBeDefined();
-		expect(config.reviews["my-builtin"]!.promptContent).toContain("Bugs");
+		expect(config.reviews["my-builtin"]!.promptContent).toContain("code-reviewer");
 		expect(config.reviews["my-custom"]).toBeDefined();
 		expect(config.reviews["my-custom"]!.num_reviews).toBe(3);
 	});
