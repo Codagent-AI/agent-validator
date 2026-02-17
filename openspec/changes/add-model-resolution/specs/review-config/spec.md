@@ -52,7 +52,7 @@ When an adapter has a `model` configured, the adapter MUST resolve the base mode
 2. Filter to models whose ID contains the configured base name as a complete hyphen-delimited segment (e.g. `codex` matches `gpt-5.3-codex` and `gpt-5.3-codex-low` because `codex` is a complete segment, but does NOT match `gpt-5.3-codecx` because `codecx` is a different segment). The base name MUST appear as a whole token between hyphens (or at the start/end of the ID), not as an arbitrary substring.
 3. Exclude quality-tier variants (model IDs ending in `-low`, `-high`, `-xhigh`, or `-fast`).
 4. If `thinking_budget` is set and not `off`, prefer models with a `-thinking` suffix when available (Cursor only; GitHub Copilot has no thinking variants). When thinking is preferred but no `-thinking` variant exists for the matched models, the adapter MUST fall back to the non-thinking variant.
-5. Sort remaining candidates by version descending and select the highest. The version SHALL be extracted as the first numeric segment (major.minor) appearing in the model ID. Versions SHALL be compared numerically (major first, then minor).
+5. Sort remaining candidates by version descending and select the highest. The version SHALL be extracted as the first occurrence of a `MAJOR.MINOR` pattern (regex `(\d+)\.(\d+)`) in the model ID. If no `MAJOR.MINOR` pattern is found, the model is sorted after all versioned models. Versions SHALL be compared numerically (major first, then minor). When two candidates have the same version, the first one encountered in the input list is selected.
 6. On failure (CLI query fails, no matches found), log a warning and proceed without a `--model` flag.
 
 #### Scenario: Cursor resolves highest-versioned codex model
@@ -77,6 +77,13 @@ When an adapter has a `model` configured, the adapter MUST resolve the base mode
 - **WHEN** the Cursor adapter resolves the model
 - **THEN** `gpt-5.3-codex` MUST be selected as the best available match
 - **AND** the CLI MUST be invoked with `--model gpt-5.3-codex`
+
+#### Scenario: Thinking variants excluded when thinking_budget is off
+- **GIVEN** `cli.adapters.cursor.model: opus` and `cli.adapters.cursor.thinking_budget: off`
+- **AND** `agent --list-models` returns `opus-4.6`, `opus-4.6-thinking`
+- **WHEN** the Cursor adapter resolves the model
+- **THEN** `opus-4.6` MUST be selected (non-thinking variant)
+- **AND** `opus-4.6-thinking` MUST NOT be selected
 
 #### Scenario: GitHub Copilot resolves model without thinking variants
 - **GIVEN** `cli.adapters.github-copilot.model: codex`

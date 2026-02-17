@@ -5,7 +5,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getCategoryLogger } from "../output/app-logger.js";
 import { type CLIAdapter, runStreamingCommand } from "./index.js";
-import { isSafeModelId, resolveModelFromList } from "./model-resolution.js";
+import {
+	resolveModelFromList,
+	SAFE_MODEL_ID_PATTERN,
+} from "./model-resolution.js";
 
 const execAsync = promisify(exec);
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -109,14 +112,15 @@ export class GitHubCopilotAdapter implements CLIAdapter {
 			});
 			const models = parseCopilotModels(stdout);
 			// Copilot has NO thinking variants, so always pass preferThinking: false
-			const resolved = resolveModelFromList(models, baseName, {
+			const resolved = resolveModelFromList(models, {
+				baseName,
 				preferThinking: false,
 			});
 			if (resolved === undefined) {
 				log.warn(`No matching model found for "${baseName}"`);
 				return undefined;
 			}
-			if (!isSafeModelId(resolved)) {
+			if (!SAFE_MODEL_ID_PATTERN.test(resolved)) {
 				log.warn(`Resolved model "${resolved}" contains unsafe characters`);
 				return undefined;
 			}
