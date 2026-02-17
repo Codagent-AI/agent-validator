@@ -430,10 +430,14 @@ export function main(): void {
 	console.log(output);
 }
 
-// Auto-execute when run directly (e.g., `bun src/scripts/status.ts`)
+// Auto-execute when run directly (e.g., `bun src/scripts/status.ts`
+// or `node dist/scripts/status.js`). The filename check prevents
+// this from triggering when the module is bundled into dist/index.js.
 const isDirectRun =
-	import.meta.url === `file://${process.argv[1]}` ||
-	(typeof Bun !== "undefined" && import.meta.url === `file://${Bun.main}`);
+	(import.meta.url === `file://${process.argv[1]}` ||
+		(typeof Bun !== "undefined" && import.meta.url === `file://${Bun.main}`)) &&
+	(process.argv[1]?.endsWith("status.ts") ||
+		process.argv[1]?.endsWith("status.js"));
 if (isDirectRun) {
 	main();
 }

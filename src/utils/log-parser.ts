@@ -717,7 +717,7 @@ export async function hasSkippedViolationsInLogs(opts: {
 					return true;
 				}
 			} catch {
-				continue;
+				// Skip unparseable files and continue to next
 			}
 		}
 		return false;
