@@ -274,6 +274,10 @@ export class ClaudeAdapter implements CLIAdapter {
 		await fs.writeFile(tmpFile, fullContent);
 
 		const args = ["-p"];
+		// Task is always allowed so Claude can dispatch pr-review-toolkit
+		// subagents. allow_tool_use only controls file-reading tools
+		// (Read, Glob, Grep) which increase token usage without improving
+		// review quality.
 		if (opts.allowToolUse === false) {
 			args.push("--allowedTools", "Task");
 		} else {
