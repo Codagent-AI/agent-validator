@@ -52,7 +52,7 @@ For each captured violation, produce a YAML entry with these fields:
 - `file`: the file path from the violation
 - `line_range`: `[line, line]` (use the violation's line number for both start and end)
 - `description`: a clear explanation of what the bug is and why it's bad (rewrite the issue description to be self-contained and specific)
-- `code_snippet`: the problematic source code (REQUIRED). Read the file at the violation's line and extract a minimal snippet (3-8 lines) showing the buggy code. Use YAML literal block scalar (`|`) for multi-line snippets. This snippet is critical for the eval to be useful later.
+- `code_snippet`: the problematic source code (REQUIRED). Read the file at the violation's line and extract 3-8 lines centered on the violation line (fewer if near file boundaries). Use YAML literal block scalar (`|`) for multi-line snippets. If the file cannot be read (not found, binary, permissions), set to `"<unavailable>"` and note the reason in `description`. This snippet is critical for the eval to be useful later.
 - `category`: one of `bug`, `security`, `performance`
 - `difficulty`: your assessment — `easy` (obvious in diff), `medium` (requires context), `hard` (requires reading other files)
 - `priority`: the violation's priority value
