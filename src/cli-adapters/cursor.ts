@@ -117,7 +117,11 @@ export class CursorAdapter implements CLIAdapter {
 			const resolved = resolveModelFromList(models, baseName, {
 				preferThinking,
 			});
-			if (resolved && !isSafeModelId(resolved)) {
+			if (resolved === undefined) {
+				log.warn(`No matching model found for "${baseName}"`);
+				return undefined;
+			}
+			if (!isSafeModelId(resolved)) {
 				log.warn(`Resolved model "${resolved}" contains unsafe characters`);
 				return undefined;
 			}
