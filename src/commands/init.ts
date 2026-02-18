@@ -215,14 +215,17 @@ async function scaffoldGauntletDir(
 /**
  * Recursively copy a source directory to a target directory.
  */
-async function copyDirRecursive(src: string, dest: string): Promise<void> {
-	await fs.mkdir(dest, { recursive: true });
-	const entries = await fs.readdir(src, { withFileTypes: true });
+async function copyDirRecursive(opts: {
+	src: string;
+	dest: string;
+}): Promise<void> {
+	await fs.mkdir(opts.dest, { recursive: true });
+	const entries = await fs.readdir(opts.src, { withFileTypes: true });
 	for (const entry of entries) {
-		const srcPath = path.join(src, entry.name);
-		const destPath = path.join(dest, entry.name);
+		const srcPath = path.join(opts.src, entry.name);
+		const destPath = path.join(opts.dest, entry.name);
 		if (entry.isDirectory()) {
-			await copyDirRecursive(srcPath, destPath);
+			await copyDirRecursive({ src: srcPath, dest: destPath });
 		} else {
 			await fs.copyFile(srcPath, destPath);
 		}
@@ -245,7 +248,7 @@ async function installSkillsWithChecksums(
 		const skillPath = path.join(targetDir, "SKILL.md");
 
 		if (!(await exists(targetDir))) {
-			await copyDirRecursive(sourceDir, targetDir);
+			await copyDirRecursive({ src: sourceDir, dest: targetDir });
 			console.log(
 				chalk.green(`Created ${path.relative(projectRoot, skillPath)}`),
 			);
@@ -261,7 +264,7 @@ async function installSkillsWithChecksums(
 
 		// Clean and re-copy to remove stale files
 		await fs.rm(targetDir, { recursive: true, force: true });
-		await copyDirRecursive(sourceDir, targetDir);
+		await copyDirRecursive({ src: sourceDir, dest: targetDir });
 		console.log(
 			chalk.green(`Updated ${path.relative(projectRoot, skillPath)}`),
 		);
