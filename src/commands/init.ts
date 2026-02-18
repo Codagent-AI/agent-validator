@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +6,6 @@ import type { Command } from "commander";
 import { type CLIAdapter, getAllAdapters } from "../cli-adapters/index.js";
 import {
 	computeExpectedHookChecksum,
-	computeExpectedSkillChecksum,
 	computeHookChecksum,
 	computeSkillChecksum,
 	isGauntletHookEntry,
@@ -23,10 +21,27 @@ import { exists } from "./shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function readSkillTemplate(filename: string): string {
-	const templatePath = path.join(__dirname, "skill-templates", filename);
-	return readFileSync(templatePath, "utf-8");
-}
+const SKILLS_SOURCE_DIR = path.join(__dirname, "..", "..", "skills");
+
+const SKILL_ACTIONS = [
+	"run",
+	"check",
+	"push-pr",
+	"fix-pr",
+	"status",
+	"help",
+	"setup",
+] as const;
+
+const SKILL_DESCRIPTIONS: Record<(typeof SKILL_ACTIONS)[number], string> = {
+	run: "Run the verification suite",
+	check: "Run a single check gate",
+	"push-pr": "Commit, push, and create a PR",
+	"fix-pr": "Fix PR review comments and CI failures",
+	status: "Show gauntlet status",
+	help: "Diagnose and explain gauntlet behavior",
+	setup: "Configure checks and reviews interactively",
+};
 
 const CLI_PREFERENCE_ORDER = [
 	"codex",
@@ -53,232 +68,6 @@ const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
 		model: "codex",
 	},
 };
-
-// --- Skill content templates ---
-// These are used for both skills (Claude) and flat commands (other agents).
-// The frontmatter fields (name, disable-model-invocation) are only meaningful
-// for skills but are harmless in flat command files.
-
-/**
- * Build gauntlet run/check skill content. Shared structure avoids duplication
- * between the "run" and "check" skills.
- */
-function buildGauntletSkillContent(mode: "run" | "check"): string {
-	const isRun = mode === "run";
-	const name = isRun ? "run" : "check";
-	const description = isRun
-		? "Run the full verification gauntlet. Use this as the final step after completing a coding task — verifies quality, runs checks, and ensures all gates pass. Must be run before committing, pushing, or creating PRs."
-		: "Run checks only (no reviews)";
-	const command = isRun ? "agent-gauntlet run" : "agent-gauntlet check";
-	const heading = isRun
-		? "Execute the autonomous verification suite."
-		: "Run the gauntlet checks only \u2014 no AI reviews.";
-	const disableModelInvocation = isRun ? "false" : "true";
-
-	const allowedTools = isRun ? "Bash, Task" : "Bash";
-
-	const frontmatter = `---
-name: gauntlet-${name}
-description: >-
-  ${description}
-disable-model-invocation: ${disableModelInvocation}
-allowed-tools: ${allowedTools}
----`;
-
-	// Common prefix: archive old logs, then run the command
-	const steps = [
-		`1. Run \`agent-gauntlet clean\` to archive any previous log files`,
-		`2. Run \`${command}\``,
-	];
-
-	if (isRun) {
-		// Replace generic steps 1-2 with prescriptive versions that include timeout
-		steps.length = 0;
-		steps.push(
-			`1. Run \`agent-gauntlet clean\` to archive any previous log files.`,
-			`2. Run \`${command}\` using \`Bash\` with \`timeout: 300000\`. Wait for the complete output. **Verify you can see a \`Status:\` line in the output before continuing.**`,
-			`3. **Check the status line:**
-   - \`Status: Passed\` → Go to step 8.
-   - \`Status: Passed with warnings\` → Go to step 8.
-   - \`Status: Failed\` → Continue to step 4. **You MUST continue — do not stop here.**
-   - \`Status: Retry limit exceeded\` → Run \`agent-gauntlet clean\` to archive logs. Go to step 8.
-   - No status line visible → The command may have timed out or failed to run. Re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
-4. **Extract failures** (required when status is Failed):
-   - Infer the log directory from the file paths in the console output (e.g., if output references \`gauntlet_logs/check_._lint.1.log\`, the log directory is \`gauntlet_logs/\`)
-   - Read \`extract-prompt.md\` from this skill's directory
-   - **Extract log failures** using the first available strategy:
-     a. **Task tool** (Claude Code): \`Task\` with \`subagent_type="general-purpose"\`, \`model="haiku"\`, \`prompt=\` extract-prompt content + \`"\\n\\nLog directory: <inferred path>"\`. NEVER use \`run_in_background: true\`.
-     b. **Subagent delegation**: If your environment supports delegating work to a subagent but not the Task tool, delegate the extract-prompt instructions with the log directory to a subagent for processing.
-     c. **Inline fallback**: If no subagent capability is available, follow the extract-prompt instructions yourself to read the log files and produce the compact failure summary.
-5. **Fix code** based on the compact summary. You MUST address every actionable item:
-   - CHECK failures with Fix Skill: invoke the named skill
-   - CHECK failures with Fix Instructions: follow the instructions
-   - REVIEW violations: apply the trust level above, fix or skip
-6. For REVIEW violations you addressed:
-   - Read \`update-prompt.md\` from this skill's directory
-   - **Update review decisions** using the first available strategy (same as step 4):
-     a. **Task tool** (Claude Code): \`Task\` with \`subagent_type="general-purpose"\`, \`model="haiku"\`, \`prompt=\` update-prompt content + log directory + decisions list. NEVER use \`run_in_background: true\`.
-     b. **Subagent delegation**: Delegate the update-prompt instructions with the log directory and decisions to a subagent.
-     c. **Inline fallback**: Follow the update-prompt instructions yourself to update the review JSON files.
-7. **Re-run verification:** Run \`${command}\` again with \`Bash\` and \`timeout: 300000\`. Do NOT run \`agent-gauntlet clean\` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to step 3** to check the status line and repeat.
-8. **Provide a summary** of the session:
-   - Final Status: (Passed / Passed with warnings / Retry limit exceeded)
-   - Issues Fixed: (list key fixes)
-   - Issues Skipped: (list skipped items and reasons)
-   - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)`,
-		);
-	} else {
-		steps.push(
-			`3. If any checks fail:
-   - Read the \`.log\` file path provided in the output for each failed check. If the log contains a \`--- Fix Instructions ---\` section, follow those instructions. If it contains a \`--- Fix Skill: <name> ---\` section, invoke that skill.
-   - Fix the issues found.
-4. Run \`${command}\` again to verify your fixes. Do NOT run \`agent-gauntlet clean\` between retries.
-5. Repeat steps 3-4 until all checks pass or you've made 3 attempts.
-6. Provide a summary of the session:
-   - Checks Passed: (list)
-   - Checks Failed: (list with brief reason)
-   - Fixes Applied: (list key fixes)`,
-		);
-	}
-
-	if (isRun) {
-		return `${frontmatter}
-<!--
-  REVIEW TRUST LEVEL
-  Controls how aggressively the agent acts on AI reviewer feedback.
-  Change the trust_level value below to one of: high, medium, low
-
-  - high:   Fix all issues unless you strongly disagree or have low confidence the human wants the change.
-  - medium: Fix issues you reasonably agree with or believe the human wants fixed. (DEFAULT)
-  - low:    Fix only issues you strongly agree with or are confident the human wants fixed.
--->
-<!-- trust_level: medium -->
-
-# /gauntlet-${name}
-${heading}
-
-**Review trust level: medium** \u2014 Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
-
-## Critical rules \u2014 read before proceeding
-
-**This is a BLOCKING GATE, not an optional check.** You may NOT declare your coding task complete, commit, push, or create a PR until the gauntlet reaches a terminal status. Treat every gauntlet run as the single most important step of your workflow.
-
-**MANDATORY BEHAVIORS:**
-- **ALL Bash commands in this skill MUST be synchronous.** NEVER use \`run_in_background: true\` for any Bash call. NEVER use \`&\` to background any command.
-- **ALL Task tool calls MUST be synchronous.** NEVER use \`run_in_background: true\`.
-- **ALWAYS wait for and read the full command output** before proceeding. The command typically takes 1-2 minutes. Set \`timeout: 300000\` (5 minutes) on Bash calls to allow headroom.
-- **NEVER assume success.** You must see an explicit \`Status:\` line in the output. If you do not see \`Status: Passed\`, \`Status: Passed with warnings\`, or \`Status: Retry limit exceeded\` in the output, the run is not complete \u2014 wait for it or investigate.
-- **NEVER skip the fix-retry loop.** If the run fails, you MUST extract failures, fix code, and re-run. This is not optional.
-
-## Procedure
-
-${steps.join("\n")}
-`;
-	}
-
-	return `${frontmatter}
-
-# /gauntlet-${name}
-${heading}
-
-${steps.join("\n")}
-`;
-}
-
-const GAUNTLET_RUN_SKILL_CONTENT = buildGauntletSkillContent("run");
-const GAUNTLET_RUN_SIBLING_FILES: Record<string, string> = {
-	"extract-prompt.md": readSkillTemplate("gauntlet-run-extract-prompt.md"),
-	"update-prompt.md": readSkillTemplate("gauntlet-run-update-prompt.md"),
-};
-const GAUNTLET_CHECK_SKILL_CONTENT = buildGauntletSkillContent("check");
-
-const PUSH_PR_SKILL_CONTENT = readSkillTemplate("push-pr.md");
-
-const FIX_PR_SKILL_CONTENT = readSkillTemplate("fix-pr.md");
-
-const GAUNTLET_STATUS_SKILL_CONTENT = readSkillTemplate("status.md");
-
-const HELP_SKILL_BUNDLE = {
-	content: readSkillTemplate("help-skill.md"),
-	references: {
-		"stop-hook-troubleshooting.md": readSkillTemplate(
-			"help-ref-stop-hook-troubleshooting.md",
-		),
-		"config-troubleshooting.md": readSkillTemplate(
-			"help-ref-config-troubleshooting.md",
-		),
-		"gate-troubleshooting.md": readSkillTemplate(
-			"help-ref-gate-troubleshooting.md",
-		),
-		"lock-troubleshooting.md": readSkillTemplate(
-			"help-ref-lock-troubleshooting.md",
-		),
-		"adapter-troubleshooting.md": readSkillTemplate(
-			"help-ref-adapter-troubleshooting.md",
-		),
-		"ci-pr-troubleshooting.md": readSkillTemplate(
-			"help-ref-ci-pr-troubleshooting.md",
-		),
-	},
-};
-
-const SETUP_SKILL_CONTENT = readSkillTemplate("setup-skill.md");
-
-const CHECK_CATALOG_REFERENCE = readSkillTemplate("check-catalog.md");
-
-const PROJECT_STRUCTURE_REFERENCE = readSkillTemplate(
-	"setup-ref-project-structure.md",
-);
-
-/**
- * Skill definitions used by installExternalFiles.
- * Each entry maps a skill action name to its content and metadata.
- */
-const SKILL_DEFINITIONS = [
-	{
-		action: "run",
-		content: GAUNTLET_RUN_SKILL_CONTENT,
-		description: "Run the verification suite",
-		siblingFiles: GAUNTLET_RUN_SIBLING_FILES,
-	},
-	{
-		action: "check",
-		content: GAUNTLET_CHECK_SKILL_CONTENT,
-		description: "Run a single check gate",
-	},
-	{
-		action: "push-pr",
-		content: PUSH_PR_SKILL_CONTENT,
-		description: "Commit, push, and create a PR",
-	},
-	{
-		action: "fix-pr",
-		content: FIX_PR_SKILL_CONTENT,
-		description: "Fix PR review comments and CI failures",
-	},
-	{
-		action: "status",
-		content: GAUNTLET_STATUS_SKILL_CONTENT,
-		description: "Show gauntlet status",
-	},
-	{
-		action: "help",
-		content: HELP_SKILL_BUNDLE.content,
-		references: HELP_SKILL_BUNDLE.references,
-		skillsOnly: true,
-		description: "Diagnose and explain gauntlet behavior",
-	},
-	{
-		action: "setup",
-		content: SETUP_SKILL_CONTENT,
-		references: {
-			"check-catalog.md": CHECK_CATALOG_REFERENCE,
-			"project-structure.md": PROJECT_STRUCTURE_REFERENCE,
-		},
-		skillsOnly: true,
-		description: "Configure checks and reviews interactively",
-	},
-] as const;
 
 interface InitOptions {
 	yes?: boolean;
@@ -424,75 +213,55 @@ async function scaffoldGauntletDir(
 }
 
 /**
- * Write a skill's SKILL.md, optional sibling files, and optional reference files into a directory.
+ * Recursively copy a source directory to a target directory.
  */
-async function writeFilesToDir(
-	dir: string,
-	files: Record<string, string>,
-): Promise<void> {
-	await fs.mkdir(dir, { recursive: true });
-	for (const [fileName, fileContent] of Object.entries(files)) {
-		await fs.writeFile(path.join(dir, fileName), fileContent);
-	}
-}
-
-async function writeSkillFiles(
-	actionDir: string,
-	content: string,
-	references: Record<string, string> | undefined,
-	siblingFiles?: Record<string, string>,
-): Promise<void> {
-	await writeFilesToDir(actionDir, { "SKILL.md": content, ...siblingFiles });
-	if (references) {
-		await writeFilesToDir(path.join(actionDir, "references"), references);
+async function copyDirRecursive(src: string, dest: string): Promise<void> {
+	await fs.mkdir(dest, { recursive: true });
+	const entries = await fs.readdir(src, { withFileTypes: true });
+	for (const entry of entries) {
+		const srcPath = path.join(src, entry.name);
+		const destPath = path.join(dest, entry.name);
+		if (entry.isDirectory()) {
+			await copyDirRecursive(srcPath, destPath);
+		} else {
+			await fs.copyFile(srcPath, destPath);
+		}
 	}
 }
 
 /**
  * Install or update skills using checksum-based comparison.
+ * Compares the bundled source directory against the installed target directory.
  */
 async function installSkillsWithChecksums(
 	projectRoot: string,
 	skipPrompts: boolean,
 ): Promise<void> {
 	const skillsDir = path.join(projectRoot, ".claude", "skills");
-	for (const skill of SKILL_DEFINITIONS) {
-		const actionDir = path.join(skillsDir, `gauntlet-${skill.action}`);
-		const skillPath = path.join(actionDir, "SKILL.md");
-		const references =
-			"references" in skill
-				? (skill.references as Record<string, string>)
-				: undefined;
-		const siblingFiles =
-			"siblingFiles" in skill
-				? (skill.siblingFiles as Record<string, string>)
-				: undefined;
+	for (const action of SKILL_ACTIONS) {
+		const dirName = `gauntlet-${action}`;
+		const sourceDir = path.join(SKILLS_SOURCE_DIR, dirName);
+		const targetDir = path.join(skillsDir, dirName);
+		const skillPath = path.join(targetDir, "SKILL.md");
 
-		if (!(await exists(actionDir))) {
-			await writeSkillFiles(actionDir, skill.content, references, siblingFiles);
+		if (!(await exists(targetDir))) {
+			await copyDirRecursive(sourceDir, targetDir);
 			console.log(
 				chalk.green(`Created ${path.relative(projectRoot, skillPath)}`),
 			);
 			continue;
 		}
 
-		const expectedChecksum = computeExpectedSkillChecksum(
-			skill.content,
-			references,
-			siblingFiles,
-		);
-		const actualChecksum = await computeSkillChecksum(actionDir);
-		if (expectedChecksum === actualChecksum) continue;
+		const sourceChecksum = await computeSkillChecksum(sourceDir);
+		const targetChecksum = await computeSkillChecksum(targetDir);
+		if (sourceChecksum === targetChecksum) continue;
 
-		const shouldOverwrite = await promptFileOverwrite(
-			`gauntlet-${skill.action}`,
-			skipPrompts,
-		);
+		const shouldOverwrite = await promptFileOverwrite(dirName, skipPrompts);
 		if (!shouldOverwrite) continue;
 
-		// Clean and rewrite to remove stale files
-		await fs.rm(actionDir, { recursive: true, force: true });
-		await writeSkillFiles(actionDir, skill.content, references, siblingFiles);
+		// Clean and re-copy to remove stale files
+		await fs.rm(targetDir, { recursive: true, force: true });
+		await copyDirRecursive(sourceDir, targetDir);
 		console.log(
 			chalk.green(`Updated ${path.relative(projectRoot, skillPath)}`),
 		);
@@ -629,9 +398,9 @@ function printPostInitInstructions(devCLINames: string[]): void {
 		);
 		console.log();
 		console.log("Available skills:");
-		for (const s of SKILL_DEFINITIONS) {
+		for (const action of SKILL_ACTIONS) {
 			console.log(
-				`  @.claude/skills/gauntlet-${s.action}/SKILL.md — ${s.description}`,
+				`  @.claude/skills/gauntlet-${action}/SKILL.md — ${SKILL_DESCRIPTIONS[action]}`,
 			);
 		}
 	}

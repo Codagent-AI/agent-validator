@@ -1,4 +1,4 @@
-import { chmod, cp, readFile, writeFile } from "node:fs/promises";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const entrypoints = ["./src/index.ts", "./src/scripts/status.ts"];
@@ -33,11 +33,6 @@ for (const entry of entrypoints) {
 	}
 	await chmod(outPath, 0o755);
 }
-
-// Copy skill-templates (read at runtime by init command)
-await cp("./src/commands/skill-templates", "./dist/skill-templates", {
-	recursive: true,
-});
 
 console.log(
 	`Built ${result.outputs.length} files to dist/`,
