@@ -261,24 +261,22 @@ export class ConsoleReporter {
 							json.violations &&
 							Array.isArray(json.violations)
 						) {
-							json.violations.forEach(
-								(v: {
-									file?: string;
-									line?: number | string;
-									issue?: string;
-									fix?: string;
-								}) => {
-									const file = v.file || "unknown";
-									const line = v.line || "?";
-									const issue = v.issue || "Unknown issue";
-									details.push(
-										`  ${chalk.cyan(file)}:${chalk.yellow(line)} - ${issue}`,
-									);
-									if (v.fix) {
-										details.push(`    ${chalk.dim("Fix:")} ${v.fix}`);
-									}
-								},
-							);
+							for (const v of json.violations as Array<{
+								file?: string;
+								line?: number | string;
+								issue?: string;
+								fix?: string;
+							}>) {
+								const file = v.file || "unknown";
+								const line = v.line || "?";
+								const issue = v.issue || "Unknown issue";
+								details.push(
+									`  ${chalk.cyan(file)}:${chalk.yellow(line)} - ${issue}`,
+								);
+								if (v.fix) {
+									details.push(`    ${chalk.dim("Fix:")} ${v.fix}`);
+								}
+							}
 						}
 					} catch {
 						// JSON parse failed, fall through to other parsing

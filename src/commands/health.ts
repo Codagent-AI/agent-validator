@@ -80,26 +80,26 @@ export function registerHealthCommand(program: Command): void {
 				const preferredAgents = new Set<string>();
 				const reviewsWithEmptyPreference: string[] = [];
 
-				reviewEntries.forEach(([reviewName, review]) => {
+				for (const [reviewName, review] of reviewEntries) {
 					if (!review.cli_preference || review.cli_preference.length === 0) {
 						reviewsWithEmptyPreference.push(reviewName);
 					} else {
-						review.cli_preference.forEach((agent) => {
+						for (const agent of review.cli_preference) {
 							preferredAgents.add(agent);
-						});
+						}
 					}
-				});
+				}
 
 				// Report Empty Preferences (Loader should handle this via default merging, but good to check)
 				if (reviewsWithEmptyPreference.length > 0) {
 					console.log(chalk.yellow("  ⚠️  Misconfiguration detected:"));
-					reviewsWithEmptyPreference.forEach((name) => {
+					for (const name of reviewsWithEmptyPreference) {
 						console.log(
 							chalk.yellow(
 								`     Review gate "${name}" has empty cli_preference`,
 							),
 						);
-					});
+					}
 					console.log();
 				}
 

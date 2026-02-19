@@ -60,14 +60,14 @@ export async function validateConfig(
 				projectConfig = gauntletConfigSchema.parse(raw);
 			} catch (error: unknown) {
 				if (error instanceof ZodError) {
-					error.issues.forEach((err) => {
+					for (const err of error.issues) {
 						issues.push({
 							file: configPath,
 							severity: "error",
 							message: err.message,
 							field: err.path.join("."),
 						});
-					});
+					}
 				} else {
 					const err = error as { name?: string; message?: string };
 					if (err.name === "YAMLSyntaxError" || err.message?.includes("YAML")) {
@@ -132,14 +132,14 @@ export async function validateConfig(
 						// Use filename-based name since name is no longer in YAML
 						existingCheckNames.add(name);
 						if (error instanceof ZodError) {
-							error.issues.forEach((err) => {
+							for (const err of error.issues) {
 								issues.push({
 									file: filePath,
 									severity: "error",
 									message: err.message,
 									field: err.path.join("."),
 								});
-							});
+							}
 						} else {
 							const err = error as { name?: string; message?: string };
 							if (
@@ -278,14 +278,14 @@ export async function validateConfig(
 				entryPointSchema.parse(entryPoint);
 			} catch (error: unknown) {
 				if (error instanceof ZodError) {
-					error.issues.forEach((err) => {
+					for (const err of error.issues) {
 						issues.push({
 							file: configPath,
 							severity: "error",
 							message: err.message,
 							field: `${entryPointPath}.${err.path.join(".")}`,
 						});
-					});
+					}
 				}
 			}
 
@@ -518,7 +518,7 @@ function handleReviewValidationError(
 	issues: ValidationIssue[],
 ): void {
 	if (error instanceof ZodError) {
-		error.issues.forEach((err) => {
+		for (const err of error.issues) {
 			const fieldPath =
 				err.path && Array.isArray(err.path) ? err.path.join(".") : undefined;
 			const message =
@@ -529,7 +529,7 @@ function handleReviewValidationError(
 				message,
 				field: fieldPath,
 			});
-		});
+		}
 	} else {
 		const err = error as { name?: string; message?: string };
 		if (err.name === "YAMLSyntaxError" || err.message?.includes("YAML")) {
@@ -543,7 +543,7 @@ function handleReviewValidationError(
 			try {
 				const parsed = JSON.parse(errorMessage);
 				if (Array.isArray(parsed)) {
-					parsed.forEach((err: { path: string[]; message: string }) => {
+					for (const err of parsed) {
 						const fieldPath =
 							err.path && Array.isArray(err.path)
 								? err.path.join(".")
@@ -555,7 +555,7 @@ function handleReviewValidationError(
 								err.message || `Invalid value for ${fieldPath || "field"}`,
 							field: fieldPath,
 						});
-					});
+					}
 				} else {
 					issues.push({
 						file: filePath,
