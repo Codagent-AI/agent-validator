@@ -739,7 +739,10 @@ function buildHookSpec(target: HookTarget): HookInstallSpec {
 	const key = `${variant}-${kind}` as keyof typeof hookConfigs;
 	const cfg = hookConfigs[key];
 	const prefix = isCursor ? "Cursor " : "";
-	const kindLabel = isCursor ? kind : isStop ? "Stop" : "Start";
+	let kindLabel: string;
+	if (isCursor) kindLabel = kind;
+	else if (isStop) kindLabel = "Stop";
+	else kindLabel = "Start";
 	const purpose = isStop
 		? "gauntlet will run automatically when agent stops"
 		: "agent will be primed with gauntlet instructions at session start";

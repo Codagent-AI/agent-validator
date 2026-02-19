@@ -233,11 +233,9 @@ function formatFileInventory(logDir: string): string[] {
 // --- Summary output ---
 
 function formatStatusLine(end: RunEnd): string {
-	return end.status === "pass"
-		? "PASSED"
-		: end.status === "fail"
-			? "FAILED"
-			: end.status.toUpperCase();
+	if (end.status === "pass") return "PASSED";
+	if (end.status === "fail") return "FAILED";
+	return end.status.toUpperCase();
 }
 
 function formatAllRuns(sessions: SessionRun[]): string[] {

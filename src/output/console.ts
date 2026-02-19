@@ -18,19 +18,15 @@ export class ConsoleReporter {
 			// Print split results
 
 			for (const sub of result.subResults) {
-				const statusColor =
-					sub.status === "pass"
-						? chalk.green
-						: sub.status === "fail"
-							? chalk.red
-							: chalk.magenta;
+				let statusColor: typeof chalk.green;
+				if (sub.status === "pass") statusColor = chalk.green;
+				else if (sub.status === "fail") statusColor = chalk.red;
+				else statusColor = chalk.magenta;
 
-				const label =
-					sub.status === "pass"
-						? "PASS"
-						: sub.status === "fail"
-							? "FAIL"
-							: "ERROR";
+				let label: string;
+				if (sub.status === "pass") label = "PASS";
+				else if (sub.status === "fail") label = "FAIL";
+				else label = "ERROR";
 
 				let logInfo = "";
 

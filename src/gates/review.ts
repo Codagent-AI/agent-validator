@@ -535,13 +535,16 @@ export class ReviewGateExecutor {
 					logPath = specificLog.replace(/\.log$/, ".json");
 				}
 
-				const errorCount =
-					out.json && Array.isArray(out.json.violations)
-						? out.json.violations.filter((v) => !v.status || v.status === "new")
-								.length
-						: out.status === "fail" || out.status === "error"
-							? 1
-							: 0;
+				let errorCount: number;
+				if (out.json && Array.isArray(out.json.violations)) {
+					errorCount = out.json.violations.filter(
+						(v) => !v.status || v.status === "new",
+					).length;
+				} else if (out.status === "fail" || out.status === "error") {
+					errorCount = 1;
+				} else {
+					errorCount = 0;
+				}
 
 				const fixedCount =
 					out.json && Array.isArray(out.json.violations)
@@ -1263,12 +1266,12 @@ The following violations were NOT marked as fixed or skipped and are still activ
 					// Coerce string line numbers to numbers for validation
 					const lineStr =
 						typeof v.line === "string" ? v.line.trim() : undefined;
-					const lineNum =
-						typeof v.line === "number"
-							? v.line
-							: lineStr && /^\d+$/.test(lineStr)
-								? Number(lineStr)
-								: undefined;
+					let lineNum: number | undefined;
+					if (typeof v.line === "number") {
+						lineNum = v.line;
+					} else if (lineStr && /^\d+$/.test(lineStr)) {
+						lineNum = Number(lineStr);
+					}
 					const isValid = isValidViolationLocation(v.file, lineNum, diffRanges);
 					return isValid;
 				},
