@@ -2,7 +2,6 @@ import { afterAll, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  computeExpectedSkillChecksum,
   computeHookChecksum,
   computeSkillChecksum,
   isGauntletHookEntry,
@@ -42,46 +41,6 @@ describe("computeSkillChecksum", () => {
     await fs.writeFile(path.join(dir, "SKILL.md"), "# Modified");
     const c2 = await computeSkillChecksum(dir);
     expect(c1).not.toBe(c2);
-  });
-});
-
-describe("computeExpectedSkillChecksum", () => {
-  it("should compute checksum from content and references", () => {
-    const checksum = computeExpectedSkillChecksum("# Skill", { "a.md": "A" });
-    expect(typeof checksum).toBe("string");
-    expect(checksum.length).toBe(64);
-  });
-
-  it("should match disk checksum for identical content", async () => {
-    const dir = path.join(TEST_DIR, "expected-match");
-    await fs.mkdir(path.join(dir, "references"), { recursive: true });
-    await fs.writeFile(path.join(dir, "SKILL.md"), "# Skill");
-    await fs.writeFile(path.join(dir, "references", "ref.md"), "Ref content");
-
-    const diskChecksum = await computeSkillChecksum(dir);
-    const expectedChecksum = computeExpectedSkillChecksum("# Skill", { "ref.md": "Ref content" });
-    expect(diskChecksum).toBe(expectedChecksum);
-  });
-
-  it("should include siblingFiles in expected checksum", () => {
-    const content = "---\nname: test\n---\n# Test";
-    const siblings = { "extra.md": "extra content" };
-
-    const withSiblings = computeExpectedSkillChecksum(content, undefined, siblings);
-    const withoutSiblings = computeExpectedSkillChecksum(content);
-
-    expect(withSiblings).not.toBe(withoutSiblings);
-  });
-
-  it("should match disk checksum with siblingFiles", async () => {
-    const dir = path.join(TEST_DIR, "sibling-match");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "SKILL.md"), "# Skill");
-    await fs.writeFile(path.join(dir, "prompt.md"), "Prompt content");
-
-    const diskChecksum = await computeSkillChecksum(dir);
-    const expectedChecksum = computeExpectedSkillChecksum("# Skill", undefined, { "prompt.md": "Prompt content" });
-    expect(diskChecksum).toBe(expectedChecksum);
   });
 });
 
