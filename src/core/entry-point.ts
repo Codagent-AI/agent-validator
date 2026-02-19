@@ -64,14 +64,12 @@ export class EntryPointExpander {
 						config: ep,
 					});
 				}
-			} else {
+			} else if (this.hasChangesInDir(ep.path, filteredChanges)) {
 				// Fixed directory (e.g., "apps/api")
-				if (this.hasChangesInDir(ep.path, filteredChanges)) {
-					results.push({
-						path: ep.path,
-						config: ep,
-					});
-				}
+				results.push({
+					path: ep.path,
+					config: ep,
+				});
 			}
 		}
 

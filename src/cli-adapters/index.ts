@@ -97,14 +97,20 @@ export async function runStreamingCommand(opts: {
 					});
 				});
 
-				child.on("error", (err) => {
+				child.on("error", async (err) => {
 					if (timeoutId) clearTimeout(timeoutId);
-					handle.close().catch(() => {});
-					opts.cleanup().then(() => reject(err));
+					try {
+						await handle.close();
+					} catch {
+						// ignore close errors
+					}
+					await opts.cleanup();
+					reject(err);
 				});
 			})
-			.catch((err) => {
-				opts.cleanup().then(() => reject(err));
+			.catch(async (err) => {
+				await opts.cleanup();
+				reject(err);
 			});
 	});
 }
