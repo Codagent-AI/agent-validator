@@ -42,9 +42,8 @@ export class ChangeDetector {
 
 		if (isCI) {
 			return this.getCIChangedFiles();
-		} else {
-			return this.getLocalChangedFiles();
 		}
+			return this.getLocalChangedFiles();
 	}
 
 	private async getCIChangedFiles(): Promise<string[]> {

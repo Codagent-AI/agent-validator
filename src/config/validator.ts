@@ -391,7 +391,7 @@ export async function validateConfig(
 		// Validate CLI config
 		if (projectConfig.cli) {
 			const defaults = projectConfig.cli.default_preference;
-			if (!defaults || !Array.isArray(defaults) || defaults.length === 0) {
+			if (!(defaults && Array.isArray(defaults) ) || defaults.length === 0) {
 				issues.push({
 					file: configPath,
 					severity: "error",

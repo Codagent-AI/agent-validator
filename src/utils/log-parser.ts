@@ -54,7 +54,7 @@ export function parseReviewFilename(filename: string): {
 	const m = filename.match(/^(.+)_([^@]+)@(\d+)\.(\d+)\.(log|json)$/);
 	if (!m) return null;
 	const [, jobId, adapter, indexStr, runStr, ext] = m;
-	if (!jobId || !adapter || !indexStr || !runStr || !ext) return null;
+	if (!((((jobId && adapter ) && indexStr ) && runStr ) && ext)) return null;
 	return {
 		jobId,
 		adapter,
@@ -157,7 +157,7 @@ export async function parseLogFile(
 
 			for (;;) {
 				match = sectionRegex.exec(content);
-				if (!match || !match[1]) break;
+				if (!(match && match[1])) break;
 				sections.push({
 					adapter: match[1],
 					startIndex: match.index,
@@ -188,7 +188,7 @@ export async function parseLogFile(
 					let vMatch: RegExpExecArray | null;
 					for (;;) {
 						vMatch = violationRegex.exec(parsedContent);
-						if (!vMatch || !vMatch[1] || !vMatch[2] || !vMatch[3]) break;
+						if (!(((vMatch && vMatch[1] ) && vMatch[2] ) && vMatch[3])) break;
 						const file = vMatch[1].trim();
 						let line: number | string = vMatch[2];
 						if (line !== "NaN" && line !== "?")
@@ -262,7 +262,7 @@ export async function parseLogFile(
 
 			if (adapterFailures.length === 0) return null;
 			return { jobId, gateName: "", entryPoint: "", adapterFailures, logPath };
-		} else {
+		}
 			// Check log
 			if (content.includes("Result: pass")) return null;
 
@@ -285,7 +285,6 @@ export async function parseLogFile(
 				],
 				logPath,
 			};
-		}
 	} catch (_error) {
 		return null;
 	}
@@ -496,7 +495,7 @@ export async function findPreviousFailures(
 		for (const file of files) {
 			const isLog = file.endsWith(".log");
 			const isJson = file.endsWith(".json");
-			if (!isLog && !isJson) continue;
+			if (!(isLog || isJson)) continue;
 			if (gateFilter && !file.includes(gateFilter)) continue;
 
 			const parsed = parseReviewFilename(file);
@@ -521,7 +520,7 @@ export async function findPreviousFailures(
 			} else {
 				// Check file or legacy review file
 				const m = file.match(/^(.+)\.(\d+)\.(log|json)$/);
-				if (!m || !m[1] || !m[2] || !m[3]) continue;
+				if (!(((m && m[1] ) && m[2] ) && m[3])) continue;
 
 				const prefix = m[1];
 				const runNum = parseInt(m[2], 10);

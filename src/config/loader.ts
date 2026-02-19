@@ -200,9 +200,7 @@ export async function loadConfig(
 
 	// 3b. Merge default CLI preference if not specified (applies to all reviews)
 	for (const [name, review] of Object.entries(reviews)) {
-		if (!review.cli_preference) {
-			review.cli_preference = projectConfig.cli.default_preference;
-		} else {
+		if (review.cli_preference) {
 			const allowedTools = new Set(projectConfig.cli.default_preference);
 			for (const tool of review.cli_preference) {
 				if (!allowedTools.has(tool)) {
@@ -211,6 +209,8 @@ export async function loadConfig(
 					);
 				}
 			}
+		} else {
+			review.cli_preference = projectConfig.cli.default_preference;
 		}
 	}
 

@@ -439,7 +439,7 @@ ${body.trim()}
 	private async maybeApplyThinking(
 		level?: string,
 	): Promise<(() => Promise<void>) | undefined> {
-		if (!level || !(level in GEMINI_THINKING_BUDGET)) return undefined;
+		if (!(level && (level in GEMINI_THINKING_BUDGET))) return undefined;
 		return this.applyThinkingSettings(GEMINI_THINKING_BUDGET[level] as number);
 	}
 

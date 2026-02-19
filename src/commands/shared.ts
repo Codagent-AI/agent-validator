@@ -199,7 +199,7 @@ async function hasCurrentLogs(logDir: string): Promise<boolean> {
 function getCurrentLogFiles(files: string[]): string[] {
 	const persistentFiles = getPersistentFiles();
 	return files.filter(
-		(file) => !file.startsWith("previous") && !persistentFiles.has(file),
+		(file) => !(file.startsWith("previous") || persistentFiles.has(file)),
 	);
 }
 

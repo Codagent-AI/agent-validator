@@ -42,7 +42,7 @@ function parseTokenBlock(block: string): Partial<OtelUsage> {
 	for (const match of block.matchAll(re)) {
 		const type = match[1] as (typeof TOKEN_TYPES)[number] | undefined;
 		const value = match[2];
-		if (!type || !value) continue;
+		if (!(type && value)) continue;
 		if (TOKEN_TYPES.includes(type)) {
 			result[type] = Number.parseInt(value, 10);
 		}

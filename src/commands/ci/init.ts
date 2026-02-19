@@ -15,7 +15,9 @@ export async function initCI(): Promise<void> {
 	const ciConfigPath = path.join(gauntletDir, "ci.yml");
 
 	// 1. Ensure .gauntlet/ci.yml exists
-	if (!(await fileExists(ciConfigPath))) {
+	if ((await fileExists(ciConfigPath))) {
+		console.log(chalk.dim("Found existing .gauntlet/ci.yml"));
+	} else {
 		console.log(chalk.yellow("Creating starter .gauntlet/ci.yml..."));
 		await fs.mkdir(gauntletDir, { recursive: true });
 		const starterContent = `# CI Configuration for Agent Gauntlet
@@ -40,8 +42,6 @@ checks:
   #   requires_runtimes: [ruby]
 `;
 		await fs.writeFile(ciConfigPath, starterContent);
-	} else {
-		console.log(chalk.dim("Found existing .gauntlet/ci.yml"));
 	}
 
 	// 2. Load CI config to get services

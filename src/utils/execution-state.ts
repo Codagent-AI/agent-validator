@@ -476,7 +476,7 @@ export async function markAdapterHealthy(
 	const adapters = rawData.unhealthy_adapters as
 		| Record<string, UnhealthyAdapter>
 		| undefined;
-	if (!adapters || !(adapterName in adapters)) return;
+	if (!(adapters && (adapterName in adapters))) return;
 
 	delete adapters[adapterName];
 	if (Object.keys(adapters).length === 0) {

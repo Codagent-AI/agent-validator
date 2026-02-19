@@ -39,7 +39,7 @@ export class JobGenerator {
 
 					// Filter based on environment
 					if (isCI && !checkConfig.run_in_ci) continue;
-					if (!isCI && !checkConfig.run_locally) continue;
+					if (!(isCI || checkConfig.run_locally)) continue;
 
 					const workingDirectory =
 						checkConfig.working_directory === "entrypoint"
@@ -77,7 +77,7 @@ export class JobGenerator {
 
 					// Filter based on environment
 					if (isCI && !reviewConfig.run_in_ci) continue;
-					if (!isCI && !reviewConfig.run_locally) continue;
+					if (!(isCI || reviewConfig.run_locally)) continue;
 
 					jobs.push({
 						id: `review:${ep.path}:${reviewName}`,

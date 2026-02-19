@@ -801,11 +801,7 @@ export class ReviewGateExecutor {
 
 			if (evaluation.json) {
 				if (evaluation.json.status === "fail") {
-					if (!Array.isArray(evaluation.json.violations)) {
-						await adapterLogger(
-							"Warning: Missing 'violations' array in failure response\n",
-						);
-					} else {
+					if (Array.isArray(evaluation.json.violations)) {
 						for (const v of evaluation.json.violations) {
 							if (
 								!v.file ||
@@ -820,6 +816,10 @@ export class ReviewGateExecutor {
 								);
 							}
 						}
+					} else {
+						await adapterLogger(
+							"Warning: Missing 'violations' array in failure response\n",
+						);
 					}
 				}
 
@@ -965,9 +965,7 @@ export class ReviewGateExecutor {
 						const err = error as { message?: string; stderr?: string };
 						const msg = [err.message, err.stderr].filter(Boolean).join("\n");
 						if (
-							!msg.includes("Could not access") &&
-							!msg.includes("ENOENT") &&
-							!msg.includes("No such file")
+							!((msg.includes("Could not access") ||msg.includes("ENOENT") ) ||msg.includes("No such file"))
 						) {
 							throw error;
 						}

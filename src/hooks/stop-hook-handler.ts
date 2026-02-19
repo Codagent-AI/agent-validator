@@ -465,7 +465,7 @@ export class StopHookHandler {
 			);
 			return null;
 		}
-		if (!prStatus.prExists || !prStatus.upToDate) {
+		if (!(prStatus.prExists && prStatus.upToDate)) {
 			hctx.log.info("PR missing or outdated — blocking with pr_push_required");
 			return this.blockForPR(hctx);
 		}

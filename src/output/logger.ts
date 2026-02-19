@@ -15,7 +15,7 @@ async function computeGlobalRunNumber(logDir: string): Promise<number> {
 		const files = await fs.readdir(logDir);
 		let max = 0;
 		for (const file of files) {
-			if (!file.endsWith(".log") && !file.endsWith(".json")) continue;
+			if (!(file.endsWith(".log") || file.endsWith(".json"))) continue;
 			// Pattern: <anything>.<number>.(log|json)
 			const m = file.match(/\.(\d+)\.(log|json)$/);
 			if (m?.[1]) {

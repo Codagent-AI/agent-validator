@@ -24,7 +24,7 @@ class DiffParser {
 
 	private processLine(line: string): void {
 		if (this.tryParseFileHeader(line)) return;
-		if (!this.currentFile || !this.currentRanges) return;
+		if (!(this.currentFile && this.currentRanges)) return;
 		if (this.tryParseHunkHeader(line)) return;
 		this.processContentLine(line);
 	}

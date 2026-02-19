@@ -158,7 +158,7 @@ async function findLatestConsoleLog(logDir: string): Promise<string | null> {
 		let latestFile: string | null = null;
 
 		for (const file of files) {
-			if (!file.startsWith("console.") || !file.endsWith(".log")) {
+			if (!(file.startsWith("console.") && file.endsWith(".log"))) {
 				continue;
 			}
 			const middle = file.slice("console.".length, file.length - ".log".length);
