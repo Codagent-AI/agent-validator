@@ -35,7 +35,7 @@ const SKILL_ACTIONS = [
 
 const SKILL_DESCRIPTIONS: Record<(typeof SKILL_ACTIONS)[number], string> = {
 	run: "Run the verification suite",
-	check: "Run a single check gate",
+	check: "Run checks only (no reviews)",
 	"push-pr": "Commit, push, and create a PR",
 	"fix-pr": "Fix PR review comments and CI failures",
 	status: "Show gauntlet status",
@@ -245,13 +245,11 @@ async function installSkillsWithChecksums(
 		const dirName = `gauntlet-${action}`;
 		const sourceDir = path.join(SKILLS_SOURCE_DIR, dirName);
 		const targetDir = path.join(skillsDir, dirName);
-		const skillPath = path.join(targetDir, "SKILL.md");
+		const relativeDir = `${path.relative(projectRoot, targetDir)}/`;
 
 		if (!(await exists(targetDir))) {
 			await copyDirRecursive({ src: sourceDir, dest: targetDir });
-			console.log(
-				chalk.green(`Created ${path.relative(projectRoot, skillPath)}`),
-			);
+			console.log(chalk.green(`Created ${relativeDir}`));
 			continue;
 		}
 
@@ -265,9 +263,7 @@ async function installSkillsWithChecksums(
 		// Clean and re-copy to remove stale files
 		await fs.rm(targetDir, { recursive: true, force: true });
 		await copyDirRecursive({ src: sourceDir, dest: targetDir });
-		console.log(
-			chalk.green(`Updated ${path.relative(projectRoot, skillPath)}`),
-		);
+		console.log(chalk.green(`Updated ${relativeDir}`));
 	}
 }
 
