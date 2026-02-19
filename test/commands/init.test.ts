@@ -216,7 +216,7 @@ describe("Init Command", () => {
 		// Should NOT exit early — should still run Phase 5 and 6
 		expect(output).toContain(".gauntlet/ already exists, skipping scaffolding");
 		// Phase 5: skills installed
-		expect(output).toContain("Created .claude/skills/gauntlet-run/SKILL.md");
+		expect(output).toContain("Created .claude/skills/gauntlet-run/");
 		// Phase 6: instructions printed
 		expect(output).toContain("/gauntlet-setup");
 	});
@@ -371,7 +371,7 @@ describe("Init Command", () => {
 		expect(content).toContain("gauntlet-run");
 
 		const output = logs.join("\n");
-		expect(output).toContain("Updated .claude/skills/gauntlet-run/SKILL.md");
+		expect(output).toContain("Updated .claude/skills/gauntlet-run/");
 	});
 
 	it("should skip skill when checksum matches", async () => {
@@ -414,10 +414,10 @@ describe("Init Command", () => {
 		// Should NOT see "Updated" or "Created" for this skill
 		const output = logs.join("\n");
 		expect(output).not.toContain(
-			"Updated .claude/skills/gauntlet-run/SKILL.md",
+			"Updated .claude/skills/gauntlet-run/",
 		);
 		expect(output).not.toContain(
-			"Created .claude/skills/gauntlet-run/SKILL.md",
+			"Created .claude/skills/gauntlet-run/",
 		);
 	});
 });
@@ -1364,8 +1364,8 @@ describe("Skills Installation for Claude", () => {
 
 		const output = logs.join("\n");
 		// Should not see "Created" or "Updated" for any skill
-		expect(output).not.toContain("Created .claude/skills/gauntlet-run/SKILL.md");
-		expect(output).not.toContain("Updated .claude/skills/gauntlet-run/SKILL.md");
+		expect(output).not.toContain("Created .claude/skills/gauntlet-run/");
+		expect(output).not.toContain("Updated .claude/skills/gauntlet-run/");
 	});
 
 	it("should include Task in allowed-tools for gauntlet-run", async () => {
