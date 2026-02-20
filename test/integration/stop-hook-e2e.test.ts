@@ -6,12 +6,13 @@ import {
 	GAUNTLET_ROOT,
 	initGitRepo,
 	isClaudeAvailable,
+	isDistBuilt,
 } from "./helpers.js";
 
 const TIMEOUT_MS = 5 * 60 * 1000;
 
 let tempDir: string;
-let claudeAvailable: boolean;
+let canRun: boolean;
 
 async function writeProjectConfigs(dir: string): Promise<void> {
 	await fs.writeFile(
@@ -78,6 +79,7 @@ async function runClaude(
 	const env = { ...process.env };
 	delete env.GAUNTLET_STOP_HOOK_ACTIVE;
 	delete env.GAUNTLET_STOP_HOOK_ENABLED;
+	delete env.CLAUDECODE;
 
 	const proc = Bun.spawn(["claude", "-p", prompt], {
 		cwd: dir,
@@ -98,8 +100,8 @@ async function runClaude(
 }
 
 beforeAll(async () => {
-	claudeAvailable = await isClaudeAvailable();
-	if (!claudeAvailable) return;
+	canRun = isDistBuilt() && (await isClaudeAvailable());
+	if (!canRun) return;
 
 	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-e2e-"));
 	await fs.mkdir(path.join(tempDir, ".gauntlet", "checks"), {
@@ -121,7 +123,7 @@ describe("stop-hook E2E (coordinator model)", () => {
 	it(
 		"should block when failed logs exist, then allow after cleanup",
 		async () => {
-			if (!claudeAvailable) return;
+			if (!canRun) return;
 
 			// Phase 1: Seed failed logs, run claude — expect block
 			const logDir = path.join(tempDir, "gauntlet_logs");

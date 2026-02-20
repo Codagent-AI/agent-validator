@@ -1,7 +1,12 @@
+import fs from "node:fs";
 import path from "node:path";
 
 export const GAUNTLET_ROOT = path.resolve(import.meta.dir, "../..");
 export const DIST_BIN = path.join(GAUNTLET_ROOT, "dist", "index.js");
+
+export function isDistBuilt(): boolean {
+	return fs.existsSync(DIST_BIN);
+}
 
 export async function isClaudeAvailable(): Promise<boolean> {
 	const proc = Bun.spawn(["which", "claude"], {

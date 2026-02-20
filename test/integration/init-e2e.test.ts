@@ -2,7 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { initGitRepo, isClaudeAvailable, spawnGauntlet } from "./helpers.js";
+import {
+	initGitRepo,
+	isClaudeAvailable,
+	isDistBuilt,
+	spawnGauntlet,
+} from "./helpers.js";
 
 const SKILL_ACTIONS = [
 	"run",
@@ -16,11 +21,11 @@ const SKILL_ACTIONS = [
 
 let tempDir: string;
 let initResult: { exitCode: number; stdout: string; stderr: string };
-let claudeAvailable: boolean;
+let canRun: boolean;
 
 beforeAll(async () => {
-	claudeAvailable = await isClaudeAvailable();
-	if (!claudeAvailable) return;
+	canRun = isDistBuilt() && (await isClaudeAvailable());
+	if (!canRun) return;
 
 	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-init-e2e-"));
 	await fs.mkdir(path.join(tempDir, "src"), { recursive: true });
@@ -38,12 +43,12 @@ afterAll(async () => {
 
 describe("agent-gauntlet init (E2E)", () => {
 	it("should exit successfully", () => {
-		if (!claudeAvailable) return; // skip
+		if (!canRun) return; // skip
 		expect(initResult.exitCode).toBe(0);
 	});
 
 	it("should install all skill directories with SKILL.md", async () => {
-		if (!claudeAvailable) return;
+		if (!canRun) return;
 		for (const action of SKILL_ACTIONS) {
 			const skillMd = path.join(
 				tempDir,
@@ -58,7 +63,7 @@ describe("agent-gauntlet init (E2E)", () => {
 	});
 
 	it("should scaffold .gauntlet/ with config and review", async () => {
-		if (!claudeAvailable) return;
+		if (!canRun) return;
 		const configPath = path.join(tempDir, ".gauntlet", "config.yml");
 		const reviewPath = path.join(
 			tempDir,
@@ -71,7 +76,7 @@ describe("agent-gauntlet init (E2E)", () => {
 	});
 
 	it("should install hooks in settings.local.json", async () => {
-		if (!claudeAvailable) return;
+		if (!canRun) return;
 		const settingsPath = path.join(
 			tempDir,
 			".claude",
@@ -86,7 +91,7 @@ describe("agent-gauntlet init (E2E)", () => {
 	});
 
 	it("should add gauntlet_logs to .gitignore", async () => {
-		if (!claudeAvailable) return;
+		if (!canRun) return;
 		const gitignore = await fs.readFile(
 			path.join(tempDir, ".gitignore"),
 			"utf-8",
