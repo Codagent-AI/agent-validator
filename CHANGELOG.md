@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 0.15.2
+
+### Patch Changes
+
+- [#73](https://github.com/pacaplan/agent-gauntlet/pull/73) Add E2E integration tests for the `gauntlet-setup` skill and refactor the stop-hook E2E test to use `bun:test` format for consistency
+
 ## 0.15.1
 
 ### Patch Changes
