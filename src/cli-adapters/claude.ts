@@ -266,9 +266,8 @@ export class ClaudeAdapter implements CLIAdapter {
 	}): Promise<string> {
 		const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
-		const tmpDir = os.tmpdir();
 		const tmpFile = path.join(
-			tmpDir,
+			os.tmpdir(),
 			`gauntlet-claude-${process.pid}-${Date.now()}.txt`,
 		);
 		await fs.writeFile(tmpFile, fullContent);
@@ -294,8 +293,10 @@ export class ClaudeAdapter implements CLIAdapter {
 		}
 
 		const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+		// Exclude CLAUDECODE so the child doesn't hit the nesting guard
+		const { CLAUDECODE: _, ...parentEnv } = process.env;
 		const execEnv = {
-			...process.env,
+			...parentEnv,
 			[GAUNTLET_STOP_HOOK_ACTIVE_ENV]: "1",
 			...otelEnv,
 			...thinkingEnv,
