@@ -1,5 +1,13 @@
 # agent-gauntlet
 
+## 0.15.1
+
+### Patch Changes
+
+- [#70](https://github.com/pacaplan/agent-gauntlet/pull/70) Move skills from generated template strings to static distributable source files under `skills/`, simplifying maintenance and enabling direct file distribution
+
+- [#71](https://github.com/pacaplan/agent-gauntlet/pull/71) Exclude `CLAUDECODE` env var from child processes to prevent the nesting guard from blocking stop-hook execution in Claude Code's latest channel
+
 ## 0.15.0
 
 ### Minor Changes
