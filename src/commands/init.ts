@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +29,7 @@ const SKILLS_SOURCE_DIR = (() => {
 	const bundled = path.join(__dirname, "..", "skills");
 	const dev = path.join(__dirname, "..", "..", "skills");
 	try {
-		require("node:fs").statSync(bundled);
+		statSync(bundled);
 		return bundled;
 	} catch (err: unknown) {
 		const code = (err as NodeJS.ErrnoException).code;
