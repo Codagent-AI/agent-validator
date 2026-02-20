@@ -144,6 +144,15 @@ Ask the user. If yes, loop to Step 7. If no, proceed.
 
 Run `agent-gauntlet validate`. If it fails, apply one corrective attempt and re-validate. If it still fails, **STOP** and ask the user.
 
-## Step 11: Suggest next steps
+## Step 11: Commit configuration
+
+Commit all gauntlet configuration and skills so the setup is preserved in version control:
+
+1. Stage all new/modified files: `.gauntlet/`, `.claude/skills/gauntlet-*/`, `.claude/settings.local.json`, `.gitignore`
+2. Create a commit: `git commit -m "chore: configure agent-gauntlet checks and reviews"`
+
+If there are no changes to commit (everything already committed), skip this step silently.
+
+## Step 12: Suggest next steps
 
 Tell the user: configuration is complete. Run `/gauntlet-run` to execute, or `/gauntlet-setup` again to add more.
