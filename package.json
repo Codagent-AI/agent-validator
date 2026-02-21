@@ -1,6 +1,6 @@
 {
   "name": "agent-gauntlet",
-  "version": "0.15.0",
+  "version": "0.15.2",
   "description": "A CLI tool for testing AI coding agents",
   "license": "MIT",
   "author": "Paul Caplan",
@@ -37,7 +37,7 @@
     "build:npm": "bun build.ts",
     "prepublishOnly": "bun run build:npm",
     "test": "bun test",
-    "test:e2e": "bun run build:npm && bun test/integration/stop-hook-e2e.ts",
+    "test:e2e": "bun run build:npm && bun test test/integration/",
     "lint": "biome check src",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "changeset": "changeset",

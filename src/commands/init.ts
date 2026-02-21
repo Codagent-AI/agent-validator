@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +26,21 @@ export {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const SKILLS_SOURCE_DIR = path.join(__dirname, '..', '..', 'skills');
+// After bundling, __dirname is `dist/` (one level below package root).
+// In dev, __dirname is `src/commands/` (two levels below package root).
+// Detect context by checking which path actually contains the skills directory.
+const SKILLS_SOURCE_DIR = (() => {
+  const bundled = path.join(__dirname, '..', 'skills');
+  const dev = path.join(__dirname, '..', '..', 'skills');
+  try {
+    statSync(bundled);
+    return bundled;
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return dev;
+    throw err;
+  }
+})();
 
 const SKILL_ACTIONS = [
   'run',
