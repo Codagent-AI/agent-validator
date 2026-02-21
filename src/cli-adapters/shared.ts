@@ -135,7 +135,11 @@ export async function finalizeProcessClose(opts: {
 }): Promise<void> {
   if (opts.timeoutId) clearTimeout(opts.timeoutId);
   await opts.handle.close().catch(() => {});
-  await opts.cleanup();
+  try {
+    await opts.cleanup();
+  } catch {
+    /* ignore cleanup errors during finalization */
+  }
 
   if (opts.code === 0 || opts.code === null) {
     opts.resolve(opts.chunks.join(''));

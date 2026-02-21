@@ -211,7 +211,11 @@ export async function executeRun(
     }
   } catch (error: unknown) {
     if (loggerInitializedHere) {
-      await resetLogger();
+      try {
+        await resetLogger();
+      } catch {
+        // Ignore errors resetting logger during error handling
+      }
     }
     const err = error as { message?: string };
     return {

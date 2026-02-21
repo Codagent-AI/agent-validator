@@ -66,11 +66,12 @@ function calculateStats(results: GateResult[]): IterationStats {
   const stats: IterationStats = { fixed: 0, skipped: 0, failed: 0 };
 
   for (const result of results) {
-    accumulateResultStats(result, stats);
-    if (result.subResults) {
+    if (result.subResults && result.subResults.length > 0) {
       for (const sub of result.subResults) {
         accumulateResultStats(sub, stats);
       }
+    } else {
+      accumulateResultStats(result, stats);
     }
   }
 

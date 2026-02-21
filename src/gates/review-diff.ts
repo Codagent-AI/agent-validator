@@ -187,6 +187,9 @@ async function getCommitDiff(
   entryPointPath: string,
   commit: string,
 ): Promise<string> {
+  if (!/^[a-f0-9]+$/i.test(commit)) {
+    throw new Error(`Invalid commit ref: ${commit}`);
+  }
   const pArg = pathArg(entryPointPath);
   try {
     return await execDiff(`git diff ${commit}^..${commit}${pArg}`);

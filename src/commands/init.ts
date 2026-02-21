@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -373,7 +374,6 @@ async function addToGitignore(
 }
 
 function gitSilent(args: string[], opts?: { timeout?: number }): string | null {
-  const { execFileSync } = require('node:child_process');
   try {
     return (
       execFileSync('git', args, {

@@ -40,7 +40,10 @@ export class ChangeDetector {
     }
 
     // Priority 3: If fixBase is provided, diff against it
-    if (this.options.fixBase && isValidGitRef(this.options.fixBase)) {
+    if (this.options.fixBase) {
+      if (!isValidGitRef(this.options.fixBase)) {
+        throw new Error(`Invalid fixBase ref: ${this.options.fixBase}`);
+      }
       return this.getFixBaseChangedFiles(this.options.fixBase);
     }
 
@@ -59,6 +62,13 @@ export class ChangeDetector {
     // Base branch priority is already resolved by caller
     const baseRef = this.baseBranch;
     const headRef = process.env.GITHUB_SHA || 'HEAD';
+
+    if (!isValidGitRef(baseRef)) {
+      throw new Error(`Invalid base ref: ${baseRef}`);
+    }
+    if (!isValidGitRef(headRef)) {
+      throw new Error(`Invalid head ref: ${headRef}`);
+    }
 
     // We might need to fetch first in some shallow clones, but assuming strictly for now
     // git diff --name-only base...head

@@ -91,12 +91,13 @@ async function handleAutoClean(
   logDir: string,
   effectiveBaseBranch: string,
   debugLogger: DebugLogger | undefined,
+  maxPreviousLogs?: number,
 ): Promise<void> {
   const autoCleanResult = await shouldAutoClean(logDir, effectiveBaseBranch);
   if (autoCleanResult.clean) {
     console.log(chalk.dim(`Auto-cleaning logs (${autoCleanResult.reason})...`));
     await debugLogger?.logClean('auto', autoCleanResult.reason || 'unknown');
-    await performAutoClean(logDir, autoCleanResult);
+    await performAutoClean(logDir, autoCleanResult, maxPreviousLogs);
   }
 }
 
@@ -375,7 +376,11 @@ async function handleGateError(
     } catch {
       // Ignore errors writing state during error handling
     }
-    await releaseLock(config.project.log_dir);
+    try {
+      await releaseLock(config.project.log_dir);
+    } catch {
+      // Ignore errors releasing lock during error handling
+    }
   }
   const err = error as { message?: string };
   console.error(chalk.red('Error:'), err.message);
@@ -407,7 +412,12 @@ export async function executeGateCommand(
     const { debugLogger, effectiveBaseBranch } = initResult;
     const logDir = config.project.log_dir;
 
-    await handleAutoClean(logDir, effectiveBaseBranch, debugLogger);
+    await handleAutoClean(
+      logDir,
+      effectiveBaseBranch,
+      debugLogger,
+      config.project.max_previous_logs,
+    );
 
     // Detect rerun mode after auto-clean (clean may have removed logs)
     const logsExist = await hasExistingLogs(logDir);

@@ -242,14 +242,14 @@ export async function incompleteResult(
   };
 }
 
-export function buildFinalResult(
+export async function buildFinalResult(
   jobId: string,
   startTime: number,
   logPaths: string[],
   outputs: ReviewOutputEntry[],
   skippedSlotOutputs: SkippedSlotOutput[],
   mainLogger: (msg: string) => Promise<void>,
-): GateResult {
+): Promise<GateResult> {
   const allSkipped = outputs.flatMap((r) => r.skipped || []);
   const { status, message: baseMessage } = aggregateStatus(outputs);
   let message = baseMessage;
@@ -258,7 +258,7 @@ export function buildFinalResult(
   }
   const subResults = buildSubResults(outputs, skippedSlotOutputs, logPaths);
   log.debug(`Complete: ${status} - ${message}`);
-  mainLogger(`Result: ${status} - ${message}\n`);
+  await mainLogger(`Result: ${status} - ${message}\n`);
   return {
     jobId,
     status,
