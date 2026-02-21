@@ -1,4 +1,8 @@
-import { type CLIAdapter, getAdapter, isUsageLimit } from '../cli-adapters/index.js';
+import {
+  type CLIAdapter,
+  getAdapter,
+  isUsageLimit,
+} from '../cli-adapters/index.js';
 import type { AdapterConfig } from '../config/types.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import type { GateResult, PreviousViolation } from './result.js';

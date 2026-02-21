@@ -2,10 +2,10 @@ import fs from 'node:fs/promises';
 import { getAdapter, isUsageLimit } from '../cli-adapters/index.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import {
-  type UnhealthyAdapter,
   getUnhealthyAdapters,
   isAdapterCoolingDown,
   markAdapterHealthy,
+  type UnhealthyAdapter,
 } from '../utils/execution-state.js';
 import type { ReviewFullJsonOutput } from './result.js';
 import { handleUsageLimit } from './review-eval.js';

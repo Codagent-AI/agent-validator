@@ -44,7 +44,10 @@ export interface RunnerOutcome {
 }
 
 /** Count stats from a single gate result entry (top-level or sub-result). */
-function accumulateResultStats(r: Pick<GateResult, 'fixedCount' | 'skipped' | 'errorCount' | 'status'>, stats: IterationStats): void {
+function accumulateResultStats(
+  r: Pick<GateResult, 'fixedCount' | 'skipped' | 'errorCount' | 'status'>,
+  stats: IterationStats,
+): void {
   if (r.fixedCount) stats.fixed += r.fixedCount;
   if (r.skipped) stats.skipped += r.skipped.length;
 
