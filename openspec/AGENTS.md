@@ -214,15 +214,6 @@ If multiple capabilities are affected, create multiple delta files under `change
 
 4. **Enrich design.md (already present from brainstorming):**
    The design doc was moved into the change directory in step 1. Review it and add the following sections if not already present:
-   - **Pre-factoring** (must be the **first** `##` section in design.md, immediately after the front-matter/title) — analyze Biome lint health for files this change will modify. Add a `## Pre-factoring` section at the top so that any required refactoring is completed before implementation begins:
-
-     1. Determine which source files will be modified by the change (from the Impact section of `proposal.md`).
-     2. For each affected file, run `bunx biome lint <file> --max-diagnostics=100` to check for violations.
-        - **Zero errors** → the file is healthy. No pre-factoring needed.
-        - **Any errors** → the file needs refactoring before implementation.
-     3. For files with violations, document the specific issues (cognitive complexity, function length, file length) and the refactoring strategy (extract helpers, split file, etc.).
-     4. Complete all pre-factoring refactoring before starting the implementation.
-
 ## Spec File Format
 
 ### Critical: Scenario Formatting
