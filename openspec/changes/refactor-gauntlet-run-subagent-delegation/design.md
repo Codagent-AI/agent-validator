@@ -70,10 +70,6 @@ Current state: main agent reads full `.log` files (potentially hundreds of lines
 
 New state: main agent sees only a compact summary per gate (a few lines for checks, one line per violation for reviews). All file contents are absorbed by subagents whose context is discarded after they return.
 
-## Pre-factoring
-
-`src/commands/init.ts` — Code Health score: 9.09 (above 8.5 threshold). No pre-factoring required.
-
 ## Safety Constraints
 
 The SKILL.md MUST include an explicit warning: "NEVER use `run_in_background: true` for subagent Task calls. All subagent calls MUST be synchronous." This prevents the model from optimizing by parallelizing subagent calls, which triggers a known TaskOutput truncation bug that returns raw JSONL instead of the subagent's answer.

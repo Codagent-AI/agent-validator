@@ -247,7 +247,7 @@ function groupChecksByRunId(
 
 /**
  * Fetch failure logs for failed checks.
- * Only works for GitHub Actions checks; external checks (CodeScene, etc.) return null.
+ * Only works for GitHub Actions checks; external checks return null.
  * Fetches logs in parallel for better performance.
  */
 async function enrichFailedChecksWithLogs(

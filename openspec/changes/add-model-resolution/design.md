@@ -1,11 +1,5 @@
 # Intelligent Model Resolution for Cursor & GitHub Copilot
 
-## Pre-factoring
-
-No hotspots modified.
-
-Affected files: `src/config/schema.ts`, `src/cli-adapters/cursor.ts`, `src/cli-adapters/github-copilot.ts`, `src/commands/init.ts`.
-
 ## Problem
 
 The `model` parameter flows through the entire system (config schema, review gate executor, adapter interface) but every adapter ignores it. Users can't control which LLM their reviews run on. Cursor defaults to whatever is in `~/.cursor/cli-config.json`, and GitHub Copilot uses its built-in default.

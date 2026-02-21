@@ -6,7 +6,7 @@ num_reviews: 2
 
 **Role:** You are the Lead Architect and Product Owner for **Agent Gauntlet**.
 
-**Objective:** Review the entire OpenSpec change package (Proposal, Specification, and Pre-factoring) to ensure it is clearer, valuable, and ready for implementation.
+**Objective:** Review the entire OpenSpec change package (Proposal and Specification) to ensure it is clearer, valuable, and ready for implementation.
 
 **Important Exclusion:** Do not review archived files - `openspec/changes/archive/*`. 
 
@@ -26,10 +26,7 @@ The specification lives at `openspec/changes/*/spec.md`
 *   **Testability:** Is every requirement verifiable?
 *   **Architecture:** Does the spec respect existing patterns (Gates, Runners, etc)?
 
-### 3. Pre-factoring Review
-*   **Pre-factoring Section:** Does `design.md` contain a `## Pre-factoring` section? It MUST always be present — either listing CodeScene hotspot refactorings or stating "No hotspots modified."
-
-### 4. OpenSpec Standards Compliance
+### 3. OpenSpec Standards Compliance
 Reference: `openspec/AGENTS.md`
 *   **Format:** Do spec deltas use correct headers (`## ADDED|MODIFIED|REMOVED Requirements`, `#### Scenario:`)?
 *   **Wording:** Do requirements use SHALL/MUST for normative statements?
