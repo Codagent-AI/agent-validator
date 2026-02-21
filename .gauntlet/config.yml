@@ -36,7 +36,6 @@ entry_points:
       - security-code
       - security-deps
       - schema-validate
-      - code-health
     reviews:
       - code-quality
 
