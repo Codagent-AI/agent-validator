@@ -4,20 +4,24 @@ import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { type CLIAdapter, getAllAdapters } from "../cli-adapters/index.js";
-import {
-	computeExpectedHookChecksum,
-	computeHookChecksum,
-	computeSkillChecksum,
-	isGauntletHookEntry,
-} from "./init-checksums.js";
+import { computeSkillChecksum } from "./init-checksums.js";
+import { installHooksForAdapters } from "./init-hooks.js";
 import {
 	promptDevCLIs,
 	promptFileOverwrite,
-	promptHookOverwrite,
 	promptNumReviews,
 	promptReviewCLIs,
 } from "./init-prompts.js";
 import { exists } from "./shared.js";
+
+// Re-export hook utilities for external consumers
+export {
+	mergeHookConfig,
+	installStopHook,
+	installCursorStopHook,
+	installStartHook,
+	installCursorStartHook,
+} from "./init-hooks.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -51,7 +55,6 @@ const CLI_PREFERENCE_ORDER = [
 	"gemini",
 ];
 
-// Recommended adapter config: https://github.com/pacaplan/agent-gauntlet/blob/main/docs/eval-results.md
 type AdapterCfg = {
 	allow_tool_use: boolean;
 	thinking_budget: string;
@@ -73,15 +76,7 @@ interface InitOptions {
 	yes?: boolean;
 }
 
-interface HookTarget {
-	projectRoot: string;
-	variant: "claude" | "cursor";
-	kind: "stop" | "start";
-}
-
-/**
- * Native CLIs that support the /gauntlet-setup skill invocation.
- */
+/** Native CLIs that support the /gauntlet-setup skill invocation. */
 const NATIVE_CLIS = new Set(["claude", "cursor"]);
 
 export function registerInitCommand(program: Command): void {
@@ -90,85 +85,64 @@ export function registerInitCommand(program: Command): void {
 		.description("Initialize .gauntlet configuration")
 		.option("-y, --yes", "Skip prompts and use defaults")
 		.action(async (options: InitOptions) => {
-			const projectRoot = process.cwd();
-			const targetDir = path.join(projectRoot, ".gauntlet");
-			const skipPrompts = options.yes ?? false;
+			await runInit(options);
+		});
+}
 
-			// Phase 1: CLI Detection
-			console.log("Detecting available CLI agents...");
-			const availableAdapters = await detectAvailableCLIs();
+async function runInit(options: InitOptions): Promise<void> {
+	const projectRoot = process.cwd();
+	const targetDir = path.join(projectRoot, ".gauntlet");
+	const skipPrompts = options.yes ?? false;
 
-			if (availableAdapters.length === 0) {
-				printNoCLIsMessage();
-				return;
-			}
+	console.log("Detecting available CLI agents...");
+	const availableAdapters = await detectAvailableCLIs();
 
-			const detectedNames = availableAdapters.map((a) => a.name);
-			const gauntletExists = await exists(targetDir);
+	if (availableAdapters.length === 0) {
+		printNoCLIsMessage();
+		return;
+	}
 
-			let hookAdapters: CLIAdapter[];
-			let instructionCLINames: string[];
+	const detectedNames = availableAdapters.map((a) => a.name);
+	const gauntletExists = await exists(targetDir);
 
-			if (gauntletExists) {
-				// Re-run: skip Phases 2-4, use all detected adapters
+	let hookAdapters: CLIAdapter[];
+	let instructionCLINames: string[];
+
+	if (gauntletExists) {
+		console.log(chalk.dim(".gauntlet/ already exists, skipping scaffolding"));
+		hookAdapters = availableAdapters;
+		instructionCLINames = detectedNames;
+	} else {
+		const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
+		hookAdapters = availableAdapters.filter((a) =>
+			devCLINames.includes(a.name),
+		);
+
+		for (const adapter of hookAdapters) {
+			if (!adapter.supportsHooks()) {
 				console.log(
-					chalk.dim(".gauntlet/ already exists, skipping scaffolding"),
-				);
-				hookAdapters = availableAdapters;
-				instructionCLINames = detectedNames;
-			} else {
-				// Phase 2: Dev CLI Selection
-				const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
-				hookAdapters = availableAdapters.filter((a) =>
-					devCLINames.includes(a.name),
-				);
-
-				// Warn about CLIs without hook support
-				for (const adapter of hookAdapters) {
-					if (!adapter.supportsHooks()) {
-						console.log(
-							chalk.yellow(
-								`  ${adapter.name} doesn't support hooks yet, skipping hook installation`,
-							),
-						);
-					}
-				}
-
-				// Phase 3: Review CLI Selection & Config
-				const reviewCLINames = await promptReviewCLIs(
-					detectedNames,
-					skipPrompts,
-				);
-				const numReviews = await promptNumReviews(
-					reviewCLINames.length,
-					skipPrompts,
-				);
-				console.log(
-					chalk.cyan(
-						"Agent Gauntlet's built-in code quality reviewer will be installed.",
+					chalk.yellow(
+						`  ${adapter.name} doesn't support hooks yet, skipping hook installation`,
 					),
 				);
-
-				// Phase 4: Scaffold .gauntlet/
-				await scaffoldGauntletDir(
-					projectRoot,
-					targetDir,
-					reviewCLINames,
-					numReviews,
-				);
-
-				instructionCLINames = devCLINames;
 			}
+		}
 
-			// Phase 5: Install External Files (ALWAYS runs)
-			await installExternalFiles(projectRoot, hookAdapters, skipPrompts);
+		const reviewCLINames = await promptReviewCLIs(detectedNames, skipPrompts);
+		const numReviews = await promptNumReviews(reviewCLINames.length, skipPrompts);
+		console.log(
+			chalk.cyan(
+				"Agent Gauntlet's built-in code quality reviewer will be installed.",
+			),
+		);
 
-			// Add log directory to .gitignore
-			await addToGitignore(projectRoot, "gauntlet_logs");
+		await scaffoldGauntletDir(projectRoot, targetDir, reviewCLINames, numReviews);
+		instructionCLINames = devCLINames;
+	}
 
-			// Phase 6: Instructions
-			printPostInitInstructions(instructionCLINames);
-		});
+	await installExternalFiles(projectRoot, hookAdapters, skipPrompts);
+	await addToGitignore(projectRoot, "gauntlet_logs");
+	printPostInitInstructions(instructionCLINames);
 }
 
 function printNoCLIsMessage(): void {
@@ -180,11 +154,6 @@ function printNoCLIsMessage(): void {
 	console.log();
 }
 
-/**
- * Phase 4: Scaffold the .gauntlet/ directory.
- * If .gauntlet/ already exists, skip scaffolding entirely.
- * No early return — Phase 5 always runs after this.
- */
 async function scaffoldGauntletDir(
 	_projectRoot: string,
 	targetDir: string,
@@ -196,15 +165,12 @@ async function scaffoldGauntletDir(
 		return;
 	}
 
-	// Create base directory structure
 	await fs.mkdir(targetDir);
 	await fs.mkdir(path.join(targetDir, "checks"));
 	await fs.mkdir(path.join(targetDir, "reviews"));
 
-	// Generate config.yml
 	await writeConfigYml(targetDir, reviewCLINames);
 
-	// Default code review
 	await fs.writeFile(
 		path.join(targetDir, "reviews", "code-quality.yml"),
 		`builtin: code-quality\nnum_reviews: ${numReviews}\n`,
@@ -212,9 +178,6 @@ async function scaffoldGauntletDir(
 	console.log(chalk.green("Created .gauntlet/reviews/code-quality.yml"));
 }
 
-/**
- * Recursively copy a source directory to a target directory.
- */
 async function copyDirRecursive(opts: {
 	src: string;
 	dest: string;
@@ -232,10 +195,6 @@ async function copyDirRecursive(opts: {
 	}
 }
 
-/**
- * Install or update skills using checksum-based comparison.
- * Compares the bundled source directory against the installed target directory.
- */
 async function installSkillsWithChecksums(
 	projectRoot: string,
 	skipPrompts: boolean,
@@ -260,122 +219,21 @@ async function installSkillsWithChecksums(
 		const shouldOverwrite = await promptFileOverwrite(dirName, skipPrompts);
 		if (!shouldOverwrite) continue;
 
-		// Clean and re-copy to remove stale files
 		await fs.rm(targetDir, { recursive: true, force: true });
 		await copyDirRecursive({ src: sourceDir, dest: targetDir });
 		console.log(chalk.green(`Updated ${relativeDir}`));
 	}
 }
 
-/**
- * Install or update hooks for a single adapter + kind using checksum-based comparison.
- */
-async function installHookWithChecksums(
-	target: HookTarget,
-	skipPrompts: boolean,
-): Promise<void> {
-	const spec = buildHookSpec(target);
-
-	let existingConfig: Record<string, unknown> = {};
-	if (await exists(spec.config.filePath)) {
-		try {
-			existingConfig = JSON.parse(
-				await fs.readFile(spec.config.filePath, "utf-8"),
-			);
-		} catch {
-			existingConfig = {};
-		}
-	}
-
-	const existingHooks = (existingConfig.hooks as Record<string, unknown>) || {};
-	const existingEntries = Array.isArray(existingHooks[spec.config.hookKey])
-		? (existingHooks[spec.config.hookKey] as Record<string, unknown>[])
-		: [];
-
-	const gauntletEntries = existingEntries.filter((e) => isGauntletHookEntry(e));
-
-	// No existing gauntlet entries — install normally
-	if (gauntletEntries.length === 0) {
-		await installHookWithLog(spec.config, spec.installedMsg, spec.existsMsg);
-		return;
-	}
-
-	// Build expected entries for comparison
-	const expectedEntry = spec.config.wrapInHooksArray
-		? { hooks: [spec.config.hookEntry] }
-		: spec.config.hookEntry;
-	const expectedChecksum = computeExpectedHookChecksum([
-		expectedEntry as Record<string, unknown>,
-	]);
-	const actualChecksum = computeHookChecksum(existingEntries);
-
-	if (expectedChecksum === actualChecksum) {
-		console.log(chalk.dim(spec.existsMsg));
-		return;
-	}
-
-	const shouldOverwrite = await promptHookOverwrite(
-		spec.config.filePath,
-		skipPrompts,
-	);
-	if (!shouldOverwrite) {
-		console.log(chalk.dim(spec.existsMsg));
-		return;
-	}
-
-	// Remove old gauntlet entries, then re-add
-	const nonGauntletEntries = existingEntries.filter(
-		(e) => !isGauntletHookEntry(e),
-	);
-	const entryToAdd = spec.config.wrapInHooksArray
-		? { hooks: [spec.config.hookEntry] }
-		: spec.config.hookEntry;
-	const newEntries = [...nonGauntletEntries, entryToAdd];
-
-	const merged: Record<string, unknown> = {
-		...(spec.config.baseConfig ?? {}),
-		...existingConfig,
-		hooks: {
-			...existingHooks,
-			[spec.config.hookKey]: newEntries,
-		},
-	};
-	await fs.mkdir(path.dirname(spec.config.filePath), { recursive: true });
-	await fs.writeFile(
-		spec.config.filePath,
-		`${JSON.stringify(merged, null, 2)}\n`,
-	);
-	console.log(chalk.green(spec.installedMsg));
-}
-
-/**
- * Phase 5: Install external files (skills + hooks).
- * Always runs, even if .gauntlet/ already existed.
- */
 async function installExternalFiles(
 	projectRoot: string,
 	devAdapters: CLIAdapter[],
 	skipPrompts: boolean,
 ): Promise<void> {
 	await installSkillsWithChecksums(projectRoot, skipPrompts);
-
-	for (const adapter of devAdapters) {
-		if (!adapter.supportsHooks()) continue;
-		if (adapter.name !== "claude" && adapter.name !== "cursor") continue;
-		for (const kind of ["stop", "start"] as const) {
-			const target: HookTarget = {
-				projectRoot,
-				variant: adapter.name,
-				kind,
-			};
-			await installHookWithChecksums(target, skipPrompts);
-		}
-	}
+	await installHooksForAdapters(projectRoot, devAdapters, skipPrompts);
 }
 
-/**
- * Phase 6: Print post-init instructions based on detected CLIs.
- */
 function printPostInitInstructions(devCLINames: string[]): void {
 	const hasNative = devCLINames.some((name) => NATIVE_CLIS.has(name));
 	const nonNativeNames = devCLINames.filter((name) => !NATIVE_CLIS.has(name));
@@ -473,9 +331,6 @@ entry_points: []
 	console.log(chalk.green("Created .gauntlet/config.yml"));
 }
 
-/**
- * Append an entry to .gitignore if it isn't already present.
- */
 async function addToGitignore(
 	projectRoot: string,
 	entry: string,
@@ -486,9 +341,7 @@ async function addToGitignore(
 	if (await exists(gitignorePath)) {
 		content = await fs.readFile(gitignorePath, "utf-8");
 		const lines = content.split("\n").map((l) => l.trim());
-		if (lines.includes(entry)) {
-			return;
-		}
+		if (lines.includes(entry)) return;
 	}
 
 	const suffix = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
@@ -512,22 +365,15 @@ function gitSilent(args: string[], opts?: { timeout?: number }): string | null {
 }
 
 async function detectBaseBranch(): Promise<string> {
-	// Fetch the remote's default branch from the server and cache it locally
 	gitSilent(["remote", "set-head", "origin", "--auto"], { timeout: 5000 });
-
-	// Read the (possibly just-updated) cached remote HEAD
 	const ref = gitSilent(["symbolic-ref", "refs/remotes/origin/HEAD"]);
-	if (ref) {
-		return ref.replace("refs/remotes/", "");
-	}
+	if (ref) return ref.replace("refs/remotes/", "");
 
-	// Check which common default branches actually exist locally
 	for (const candidate of ["origin/main", "origin/master"]) {
 		if (gitSilent(["rev-parse", "--verify", candidate]) !== null) {
 			return candidate;
 		}
 	}
-
 	return "origin/main";
 }
 
@@ -563,225 +409,4 @@ async function detectAvailableCLIs(): Promise<CLIAdapter[]> {
 		}
 	}
 	return available;
-}
-
-/**
- * Check whether a command string already exists in a hook entries array.
- * Handles both flat format (hook.command) and nested format (hook.hooks[].command).
- */
-function hookHasCommand(
-	entries: Record<string, unknown>[],
-	cmd: string,
-): boolean {
-	return entries.some((hook) => {
-		if (hook.command === cmd) return true;
-		const nested = hook.hooks as { command?: string }[] | undefined;
-		return Array.isArray(nested) && nested.some((h) => h.command === cmd);
-	});
-}
-
-/**
- * Shared helper: read/create a JSON config file, merge a hook entry under the
- * given hookKey, deduplicate, and write back. Returns true if the entry was
- * added, false if it was already present.
- */
-export async function mergeHookConfig(opts: {
-	filePath: string;
-	hookKey: string;
-	hookEntry: Record<string, unknown>;
-	deduplicateCmd: string;
-	wrapInHooksArray: boolean;
-	baseConfig?: Record<string, unknown>;
-}): Promise<boolean> {
-	const {
-		filePath,
-		hookKey,
-		hookEntry,
-		deduplicateCmd,
-		wrapInHooksArray,
-		baseConfig,
-	} = opts;
-
-	// Ensure parent directory exists
-	await fs.mkdir(path.dirname(filePath), { recursive: true });
-
-	let existing: Record<string, unknown> = {};
-	if (await exists(filePath)) {
-		try {
-			existing = JSON.parse(await fs.readFile(filePath, "utf-8"));
-		} catch {
-			existing = {};
-		}
-	}
-
-	const existingHooks = (existing.hooks as Record<string, unknown>) || {};
-	const existingEntries = Array.isArray(existingHooks[hookKey])
-		? (existingHooks[hookKey] as Record<string, unknown>[])
-		: [];
-
-	if (hookHasCommand(existingEntries, deduplicateCmd)) {
-		return false;
-	}
-
-	// Wrap entry if needed (Claude Code format wraps in { hooks: [...] })
-	const entryToAdd = wrapInHooksArray ? { hooks: [hookEntry] } : hookEntry;
-
-	const newEntries = [...existingEntries, entryToAdd];
-
-	const merged: Record<string, unknown> = {
-		...(baseConfig ?? {}),
-		...existing,
-		hooks: {
-			...existingHooks,
-			[hookKey]: newEntries,
-		},
-	};
-
-	await fs.writeFile(filePath, `${JSON.stringify(merged, null, 2)}\n`);
-	return true;
-}
-
-/**
- * The start hook configuration for Claude Code.
- */
-const START_HOOK_ENTRY = {
-	matcher: "startup|resume|clear|compact",
-	hooks: [
-		{
-			type: "command",
-			command: "agent-gauntlet start-hook",
-			async: false,
-		},
-	],
-} as const;
-
-/**
- * The start hook configuration for Cursor.
- */
-const CURSOR_START_HOOK_ENTRY = {
-	command: "agent-gauntlet start-hook --adapter cursor",
-} as const;
-
-/**
- * The stop hook configuration for Claude Code.
- */
-const STOP_HOOK_ENTRY = {
-	type: "command",
-	command: "agent-gauntlet stop-hook",
-	timeout: 300,
-} as const;
-
-/**
- * The stop hook configuration for Cursor.
- */
-const CURSOR_STOP_HOOK_ENTRY = {
-	command: "agent-gauntlet stop-hook",
-	loop_limit: 10,
-} as const;
-
-/**
- * Install a hook and log the result.
- */
-async function installHookWithLog(
-	config: Parameters<typeof mergeHookConfig>[0],
-	installedMsg: string,
-	existsMsg: string,
-): Promise<void> {
-	const added = await mergeHookConfig(config);
-	console.log(added ? chalk.green(installedMsg) : chalk.dim(existsMsg));
-}
-
-interface HookInstallSpec {
-	config: Parameters<typeof mergeHookConfig>[0];
-	installedMsg: string;
-	existsMsg: string;
-}
-
-function buildHookSpec(target: HookTarget): HookInstallSpec {
-	const { projectRoot, variant, kind } = target;
-	const isCursor = variant === "cursor";
-	const isStop = kind === "stop";
-	const hookConfigs = {
-		"claude-stop": {
-			dir: ".claude",
-			file: "settings.local.json",
-			hookKey: "Stop",
-			entry: STOP_HOOK_ENTRY as Record<string, unknown>,
-			cmd: "agent-gauntlet stop-hook",
-			wrap: true,
-		},
-		"cursor-stop": {
-			dir: ".cursor",
-			file: "hooks.json",
-			hookKey: "stop",
-			entry: CURSOR_STOP_HOOK_ENTRY as Record<string, unknown>,
-			cmd: "agent-gauntlet stop-hook",
-			wrap: false,
-		},
-		"claude-start": {
-			dir: ".claude",
-			file: "settings.local.json",
-			hookKey: "SessionStart",
-			entry: START_HOOK_ENTRY as Record<string, unknown>,
-			cmd: "agent-gauntlet start-hook",
-			wrap: false,
-		},
-		"cursor-start": {
-			dir: ".cursor",
-			file: "hooks.json",
-			hookKey: "sessionStart",
-			entry: CURSOR_START_HOOK_ENTRY as Record<string, unknown>,
-			cmd: "agent-gauntlet start-hook --adapter cursor",
-			wrap: false,
-		},
-	} as const;
-
-	const key = `${variant}-${kind}` as keyof typeof hookConfigs;
-	const cfg = hookConfigs[key];
-	const prefix = isCursor ? "Cursor " : "";
-	let kindLabel: string;
-	if (isCursor) kindLabel = kind;
-	else if (isStop) kindLabel = "Stop";
-	else kindLabel = "Start";
-	const purpose = isStop
-		? "gauntlet will run automatically when agent stops"
-		: "agent will be primed with gauntlet instructions at session start";
-
-	return {
-		config: {
-			filePath: path.join(projectRoot, cfg.dir, cfg.file),
-			hookKey: cfg.hookKey,
-			hookEntry: cfg.entry,
-			deduplicateCmd: cfg.cmd,
-			wrapInHooksArray: cfg.wrap,
-			...(isCursor ? { baseConfig: { version: 1 } } : {}),
-		},
-		installedMsg: `${prefix}${kindLabel} hook installed - ${purpose}`,
-		existsMsg: `${prefix}${kindLabel} hook already installed`,
-	};
-}
-
-async function installHookBySpec(target: HookTarget): Promise<void> {
-	const spec = buildHookSpec(target);
-	await installHookWithLog(spec.config, spec.installedMsg, spec.existsMsg);
-}
-
-export async function installStopHook(projectRoot: string): Promise<void> {
-	await installHookBySpec({ projectRoot, variant: "claude", kind: "stop" });
-}
-
-export async function installCursorStopHook(
-	projectRoot: string,
-): Promise<void> {
-	await installHookBySpec({ projectRoot, variant: "cursor", kind: "stop" });
-}
-
-export async function installStartHook(projectRoot: string): Promise<void> {
-	await installHookBySpec({ projectRoot, variant: "claude", kind: "start" });
-}
-
-export async function installCursorStartHook(
-	projectRoot: string,
-): Promise<void> {
-	await installHookBySpec({ projectRoot, variant: "cursor", kind: "start" });
 }

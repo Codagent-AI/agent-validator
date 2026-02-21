@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getDebugLogger } from "../utils/debug-log.js";
-import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import { type CLIAdapter, runStreamingCommand } from "./shared.js";
 import { CODEX_REASONING_EFFORT } from "./thinking-budget.js";
 
 const execAsync = promisify(exec);

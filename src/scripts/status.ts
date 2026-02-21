@@ -87,6 +87,61 @@ function parseEventBody(line: string): string {
 
 // --- Debug log parsing ---
 
+function parseRunStart(ts: string, body: string): SessionRun {
+	const kv = parseKeyValue(body);
+	return {
+		start: {
+			timestamp: ts,
+			mode: kv.mode ?? "unknown",
+			baseRef: kv.base_ref,
+			filesChanged: Number(kv.files_changed ?? kv.changes ?? 0),
+			linesAdded: Number(kv.lines_added ?? 0),
+			linesRemoved: Number(kv.lines_removed ?? 0),
+			gates: Number(kv.gates ?? 0),
+		},
+		gates: [],
+	};
+}
+
+function parseGateResult(ts: string, body: string): GateResult {
+	const gateIdMatch = body.match(/^(\S+)/);
+	const kv = parseKeyValue(body);
+	return {
+		timestamp: ts,
+		gateId: gateIdMatch?.[1] ?? "unknown",
+		cli: kv.cli,
+		status: kv.status ?? "unknown",
+		duration: kv.duration ?? "?",
+		violations: kv.violations !== undefined ? Number(kv.violations) : undefined,
+	};
+}
+
+function parseRunEnd(ts: string, body: string): RunEnd {
+	const kv = parseKeyValue(body);
+	return {
+		timestamp: ts,
+		status: kv.status ?? "unknown",
+		fixed: Number(kv.fixed ?? 0),
+		skipped: Number(kv.skipped ?? 0),
+		failed: Number(kv.failed ?? 0),
+		iterations: Number(kv.iterations ?? 0),
+		duration: kv.duration ?? "?",
+	};
+}
+
+function parseStopHookEntry(ts: string, body: string): StopHookEntry {
+	const kv = parseKeyValue(body);
+	return {
+		timestamp: ts,
+		decision: kv.decision ?? "unknown",
+		reason: kv.reason ?? "unknown",
+	};
+}
+
+function isBeforeSession(ts: string, sessionStartTime: Date | undefined): boolean {
+	return sessionStartTime !== undefined && new Date(ts) < sessionStartTime;
+}
+
 function parseDebugLog(content: string, sessionStartTime?: Date): SessionRun[] {
 	const lines = content.split("\n").filter((l) => l.trim());
 	const sessions: SessionRun[] = [];
@@ -98,67 +153,23 @@ function parseDebugLog(content: string, sessionStartTime?: Date): SessionRun[] {
 		const ts = parseTimestamp(line);
 
 		switch (event) {
-			case "RUN_START": {
-				// Skip runs that predate the current session's log files
-				if (sessionStartTime && new Date(ts) < sessionStartTime) {
+			case "RUN_START":
+				if (isBeforeSession(ts, sessionStartTime)) {
 					current = null;
-					break;
+				} else {
+					current = parseRunStart(ts, body);
+					sessions.push(current);
 				}
-				const kv = parseKeyValue(body);
-				current = {
-					start: {
-						timestamp: ts,
-						mode: kv.mode ?? "unknown",
-						baseRef: kv.base_ref,
-						filesChanged: Number(kv.files_changed ?? kv.changes ?? 0),
-						linesAdded: Number(kv.lines_added ?? 0),
-						linesRemoved: Number(kv.lines_removed ?? 0),
-						gates: Number(kv.gates ?? 0),
-					},
-					gates: [],
-				};
-				sessions.push(current);
 				break;
-			}
-			case "GATE_RESULT": {
-				if (!current) break;
-				const gateIdMatch = body.match(/^(\S+)/);
-				const kv = parseKeyValue(body);
-				current.gates.push({
-					timestamp: ts,
-					gateId: gateIdMatch?.[1] ?? "unknown",
-					cli: kv.cli,
-					status: kv.status ?? "unknown",
-					duration: kv.duration ?? "?",
-					violations:
-						kv.violations !== undefined ? Number(kv.violations) : undefined,
-				});
+			case "GATE_RESULT":
+				if (current) current.gates.push(parseGateResult(ts, body));
 				break;
-			}
-			case "RUN_END": {
-				if (!current) break;
-				const kv = parseKeyValue(body);
-				current.end = {
-					timestamp: ts,
-					status: kv.status ?? "unknown",
-					fixed: Number(kv.fixed ?? 0),
-					skipped: Number(kv.skipped ?? 0),
-					failed: Number(kv.failed ?? 0),
-					iterations: Number(kv.iterations ?? 0),
-					duration: kv.duration ?? "?",
-				};
+			case "RUN_END":
+				if (current) current.end = parseRunEnd(ts, body);
 				break;
-			}
-			case "STOP_HOOK": {
-				if (!current) break;
-				const kv = parseKeyValue(body);
-				current.stopHook = {
-					timestamp: ts,
-					decision: kv.decision ?? "unknown",
-					reason: kv.reason ?? "unknown",
-				};
+			case "STOP_HOOK":
+				if (current) current.stopHook = parseStopHookEntry(ts, body);
 				break;
-			}
 		}
 	}
 

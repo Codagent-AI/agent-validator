@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { GAUNTLET_STOP_HOOK_ACTIVE_ENV } from "../commands/stop-hook.js";
 import { getDebugLogger } from "../utils/debug-log.js";
-import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import { type CLIAdapter, runStreamingCommand } from "./shared.js";
 import { CLAUDE_THINKING_TOKENS } from "./thinking-budget.js";
 
 const execAsync = promisify(exec);

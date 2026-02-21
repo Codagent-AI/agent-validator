@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getCategoryLogger } from "../output/app-logger.js";
-import { type CLIAdapter, runStreamingCommand } from "./index.js";
+import { type CLIAdapter, runStreamingCommand } from "./shared.js";
 import {
 	resolveModelFromList,
 	SAFE_MODEL_ID_PATTERN,

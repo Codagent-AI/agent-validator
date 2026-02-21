@@ -851,10 +851,11 @@ describe("Stop Hook Command", () => {
 			// Should set up setTimeout at the start of the action handler
 			const actionStart = sourceFile.indexOf(".action(async ()");
 			const selfTimeoutSetup = sourceFile.indexOf("setTimeout(", actionStart);
-			const stdinRead = sourceFile.indexOf("readStdin", actionStart);
+			const actionDelegate = sourceFile.indexOf("handleStopHookAction", actionStart);
 
-			// Self-timeout should be set BEFORE stdin read
-			expect(selfTimeoutSetup).toBeLessThan(stdinRead);
+			// Self-timeout should be set BEFORE the main action logic runs
+			// (handleStopHookAction eventually calls readStdin via parseStdinInput)
+			expect(selfTimeoutSetup).toBeLessThan(actionDelegate);
 
 			// Should call process.exit(0) in the timeout handler
 			expect(sourceFile).toContain("process.exit(0)");

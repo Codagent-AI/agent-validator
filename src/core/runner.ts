@@ -43,45 +43,38 @@ export interface RunnerOutcome {
 	gateResults: GateResult[];
 }
 
+/** Count stats from a single gate result entry (top-level or sub-result). */
+function accumulateResultStats(
+	r: GateResult,
+	stats: IterationStats,
+): void {
+	if (r.fixedCount) stats.fixed += r.fixedCount;
+	if (r.skipped) stats.skipped += r.skipped.length;
+
+	if (r.errorCount) {
+		stats.failed += r.errorCount;
+	} else if (r.status === "fail" || r.status === "error") {
+		stats.failed += 1;
+	}
+}
+
 /**
  * Calculate iteration statistics from gate results.
  * Aggregates fixed, skipped, and failed counts from all results and subResults.
- * For CHECK gates that don't set errorCount, count failed/error status as 1 failure.
  */
 function calculateStats(results: GateResult[]): IterationStats {
-	let fixed = 0;
-	let skipped = 0;
-	let failed = 0;
+	const stats: IterationStats = { fixed: 0, skipped: 0, failed: 0 };
 
 	for (const result of results) {
-		// Count from top-level result
-		if (result.fixedCount) fixed += result.fixedCount;
-		if (result.skipped) skipped += result.skipped.length;
-
-		// For failed gates, use errorCount if set, otherwise count as 1 failure
-		// This handles CHECK gates which only set status but not errorCount
-		if (result.errorCount) {
-			failed += result.errorCount;
-		} else if (result.status === "fail" || result.status === "error") {
-			failed += 1;
-		}
-
-		// Count from subResults (review gates)
+		accumulateResultStats(result, stats);
 		if (result.subResults) {
 			for (const sub of result.subResults) {
-				if (sub.fixedCount) fixed += sub.fixedCount;
-				if (sub.skipped) skipped += sub.skipped.length;
-
-				if (sub.errorCount) {
-					failed += sub.errorCount;
-				} else if (sub.status === "fail" || sub.status === "error") {
-					failed += 1;
-				}
+				accumulateResultStats(sub, stats);
 			}
 		}
 	}
 
-	return { fixed, skipped, failed };
+	return stats;
 }
 
 export class Runner {

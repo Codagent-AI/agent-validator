@@ -96,6 +96,22 @@ export async function readExecutionState(
  * without modifying the working tree.
  * Returns the stash SHA, or HEAD SHA if working tree is clean.
  */
+/** Resolve a stash create result: use stash SHA, or fall back to HEAD. */
+async function resolveStashResult(
+	code: number | null,
+	stdout: string,
+): Promise<string> {
+	if (code === 0) {
+		const sha = stdout.trim();
+		if (sha) return sha;
+		return getCurrentCommit();
+	}
+	// Non-zero exit: try HEAD as fallback
+	return getCurrentCommit().catch(() => {
+		throw new Error(`git stash create failed with code ${code}`);
+	});
+}
+
 export async function createWorkingTreeRef(): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const child = spawn("git", ["stash", "create", "--include-untracked"], {
@@ -107,30 +123,8 @@ export async function createWorkingTreeRef(): Promise<string> {
 			stdout += data.toString();
 		});
 
-		child.on("close", async (code) => {
-			if (code === 0) {
-				const sha = stdout.trim();
-				if (sha) {
-					// Stash created with working tree changes
-					resolve(sha);
-				} else {
-					// Clean working tree - use HEAD instead
-					try {
-						const headSha = await getCurrentCommit();
-						resolve(headSha);
-					} catch (err) {
-						reject(err);
-					}
-				}
-			} else {
-				// Try to fall back to HEAD
-				try {
-					const headSha = await getCurrentCommit();
-					resolve(headSha);
-				} catch {
-					reject(new Error(`git stash create failed with code ${code}`));
-				}
-			}
+		child.on("close", (code) => {
+			resolveStashResult(code, stdout).then(resolve, reject);
 		});
 
 		child.on("error", reject);
