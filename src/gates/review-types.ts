@@ -1,6 +1,6 @@
 import type { LoadedReviewGateConfig } from '../config/types.js';
 
-export const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+export { MAX_BUFFER_BYTES } from '../constants.js';
 export const MAX_LOG_BUFFER_SIZE = 10000;
 export const REVIEW_ADAPTER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 

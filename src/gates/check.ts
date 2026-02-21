@@ -1,11 +1,11 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { LoadedCheckGateConfig } from '../config/types.js';
+import { MAX_BUFFER_BYTES } from '../constants.js';
 import { resolveCheckCommand } from './resolve-check-command.js';
 import type { GateResult } from './result.js';
 
 const execAsync = promisify(exec);
-const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
 export class CheckGateExecutor {
   async execute(

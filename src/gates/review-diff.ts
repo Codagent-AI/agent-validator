@@ -6,7 +6,7 @@ const log = getCategoryLogger('gate', 'review');
 
 const execAsync = promisify(exec);
 
-export const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+import { MAX_BUFFER_BYTES } from '../constants.js';
 
 // ── Diff Utilities ──────────────────────────────────────────────────
 

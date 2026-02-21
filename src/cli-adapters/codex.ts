@@ -3,12 +3,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import { type CLIAdapter, runStreamingCommand } from './shared.js';
 import { CODEX_REASONING_EFFORT } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
-const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
 interface CodexUsage {
   inputTokens?: number;

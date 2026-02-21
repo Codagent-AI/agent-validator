@@ -4,12 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { GAUNTLET_STOP_HOOK_ACTIVE_ENV } from '../commands/stop-hook.js';
+import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import { type CLIAdapter, runStreamingCommand } from './shared.js';
 import { CLAUDE_THINKING_TOKENS } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
-const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
 // Matches OTel console exporter metric blocks dumped to stdout at process exit.
 // Requires `descriptor`, `dataPointType`, and `dataPoints` fields which are

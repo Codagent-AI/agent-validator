@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import {
   resolveModelFromList,
@@ -11,7 +12,7 @@ import {
 import { type CLIAdapter, runStreamingCommand } from './shared.js';
 
 const execAsync = promisify(exec);
-const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+
 const log = getCategoryLogger('github-copilot');
 
 /**
