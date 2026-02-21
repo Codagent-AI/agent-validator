@@ -1,4 +1,4 @@
-import type { LoadedReviewGateConfig } from "../config/types.js";
+import type { LoadedReviewGateConfig } from '../config/types.js';
 
 export const MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 export const MAX_LOG_BUFFER_SIZE = 10000;
@@ -51,70 +51,70 @@ If NO violations are found:
 export type ReviewConfig = LoadedReviewGateConfig;
 
 export interface ReviewJsonOutput {
-	status: "pass" | "fail";
-	message?: string;
-	violations?: Array<{
-		file: string;
-		line: number | string;
-		issue: string;
-		fix?: string;
-		priority: "critical" | "high" | "medium" | "low";
-		status: "new" | "fixed" | "skipped";
-		result?: string | null;
-	}>;
+  status: 'pass' | 'fail';
+  message?: string;
+  violations?: Array<{
+    file: string;
+    line: number | string;
+    issue: string;
+    fix?: string;
+    priority: 'critical' | 'high' | 'medium' | 'low';
+    status: 'new' | 'fixed' | 'skipped';
+    result?: string | null;
+  }>;
 }
 
 export interface ReviewOutputEntry {
-	adapter: string;
-	reviewIndex: number;
-	duration?: number;
-	status: "pass" | "fail" | "error";
-	message: string;
-	json?: ReviewJsonOutput;
-	skipped?: Array<{
-		file: string;
-		line: number | string;
-		issue: string;
-		result?: string | null;
-	}>;
+  adapter: string;
+  reviewIndex: number;
+  duration?: number;
+  status: 'pass' | 'fail' | 'error';
+  message: string;
+  json?: ReviewJsonOutput;
+  skipped?: Array<{
+    file: string;
+    line: number | string;
+    issue: string;
+    result?: string | null;
+  }>;
 }
 
 export interface SkippedSlotOutput {
-	adapter: string;
-	reviewIndex: number;
-	status: "skipped_prior_pass";
-	message: string;
-	passIteration: number;
+  adapter: string;
+  reviewIndex: number;
+  status: 'skipped_prior_pass';
+  message: string;
+  passIteration: number;
 }
 
 export interface ReviewAssignment {
-	adapter: string;
-	reviewIndex: number;
-	skip?: boolean;
-	skipReason?: string;
-	passIteration?: number;
+  adapter: string;
+  reviewIndex: number;
+  skip?: boolean;
+  skipReason?: string;
+  passIteration?: number;
 }
 
 export interface EvaluationResult {
-	status: "pass" | "fail" | "error";
-	message: string;
-	json?: ReviewJsonOutput;
-	filteredCount?: number;
+  status: 'pass' | 'fail' | 'error';
+  message: string;
+  json?: ReviewJsonOutput;
+  filteredCount?: number;
 }
 
 export interface SingleReviewResult {
-	adapter: string;
-	reviewIndex: number;
-	duration: number;
-	evaluation: {
-		status: "pass" | "fail" | "error";
-		message: string;
-		json?: ReviewJsonOutput;
-		skipped?: Array<{
-			file: string;
-			line: number | string;
-			issue: string;
-			result?: string | null;
-		}>;
-	};
+  adapter: string;
+  reviewIndex: number;
+  duration: number;
+  evaluation: {
+    status: 'pass' | 'fail' | 'error';
+    message: string;
+    json?: ReviewJsonOutput;
+    skipped?: Array<{
+      file: string;
+      line: number | string;
+      issue: string;
+      result?: string | null;
+    }>;
+  };
 }

@@ -24,7 +24,7 @@ describe("run-executor logging", () => {
 
 			// Should check if logger is configured and initialize if not
 			expect(sourceFile).toContain("isLoggerConfigured");
-			expect(sourceFile).toContain('mode: "interactive"');
+			expect(sourceFile).toContain("mode: 'interactive'");
 		});
 	});
 });
@@ -70,9 +70,9 @@ describe("run-executor stop hook config", () => {
 				"utf-8",
 			);
 
-			expect(sourceFile).toContain('"stop_hook_disabled"');
+			expect(sourceFile).toContain("'stop_hook_disabled'");
 			// stop_hook_disabled should have an empty message (silent)
-			expect(sourceFile).toContain('stop_hook_disabled: ""');
+			expect(sourceFile).toContain("stop_hook_disabled: ''");
 		});
 
 		it("should import resolveStopHookConfig", () => {
@@ -103,7 +103,7 @@ describe("run-executor stop hook config", () => {
 			);
 
 			// Should return stop_hook_disabled status
-			expect(sourceFile).toContain('status: "stop_hook_disabled"');
+			expect(sourceFile).toContain("status: 'stop_hook_disabled'");
 		});
 	});
 
@@ -206,8 +206,8 @@ describe("run-executor checkInterval option", () => {
 			);
 
 			// Should return interval_not_elapsed status
-			expect(sourceFile).toContain('"interval_not_elapsed"');
-			expect(sourceFile).toContain('status: "interval_not_elapsed"');
+			expect(sourceFile).toContain("'interval_not_elapsed'");
+			expect(sourceFile).toContain("status: 'interval_not_elapsed'");
 		});
 
 		it("should only check interval when no existing logs (not in rerun mode)", () => {
@@ -269,7 +269,7 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 		// The auto-clean block should include retry_limit_exceeded
 		// Find the section after status determination that calls cleanLogs
 		expect(sourceFile).toMatch(
-			/status\s*===\s*"retry_limit_exceeded"[\s\S]*?cleanLogs/,
+			/status\s*===\s*'retry_limit_exceeded'[\s\S]*?cleanLogs/,
 		);
 	});
 
@@ -311,7 +311,7 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 
 		// The "passed" auto-clean should pass max_previous_logs
 		expect(sourceFile).toMatch(
-			/status\s*===\s*"passed"[\s\S]*?cleanLogs\([\s\S]*?config\.project\.max_previous_logs/,
+			/status\s*===\s*'passed'[\s\S]*?cleanLogs\([\s\S]*?config\.project\.max_previous_logs/,
 		);
 	});
 });

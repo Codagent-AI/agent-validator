@@ -1,15 +1,12 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import matter from "gray-matter";
-import YAML from "yaml";
-import { ZodError } from "zod";
-import { getValidCLITools } from "../cli-adapters/index.js";
-import {
-  reviewPromptFrontmatterSchema,
-  reviewYamlSchema,
-} from "./schema.js";
-import type { ReviewPromptFrontmatter } from "./types.js";
-import type { ValidationIssue } from "./validator.js";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import matter from 'gray-matter';
+import YAML from 'yaml';
+import { ZodError } from 'zod';
+import { getValidCLITools } from '../cli-adapters/index.js';
+import { reviewPromptFrontmatterSchema, reviewYamlSchema } from './schema.js';
+import type { ReviewPromptFrontmatter } from './types.js';
+import type { ValidationIssue } from './validator.js';
 
 export interface ReviewValidationResult {
   reviews: Record<string, ReviewPromptFrontmatter>;
@@ -32,15 +29,25 @@ export async function validateReviewGates(
     detectDuplicateReviewNames(reviewFiles, reviewsPath, issues);
 
     for (const file of reviewFiles) {
-      if (file.endsWith(".md")) {
+      if (file.endsWith('.md')) {
         validateMarkdownReview(
-          file, reviewsPath, reviews, reviewSourceFiles,
-          existingReviewNames, issues, filesChecked,
+          file,
+          reviewsPath,
+          reviews,
+          reviewSourceFiles,
+          existingReviewNames,
+          issues,
+          filesChecked,
         );
-      } else if (file.endsWith(".yml") || file.endsWith(".yaml")) {
+      } else if (file.endsWith('.yml') || file.endsWith('.yaml')) {
         validateYamlReview(
-          file, reviewsPath, reviews, reviewSourceFiles,
-          existingReviewNames, issues, filesChecked,
+          file,
+          reviewsPath,
+          reviews,
+          reviewSourceFiles,
+          existingReviewNames,
+          issues,
+          filesChecked,
         );
       }
     }
@@ -48,7 +55,7 @@ export async function validateReviewGates(
     const err = error as { message?: string };
     issues.push({
       file: reviewsPath,
-      severity: "error",
+      severity: 'error',
       message: `Error reading reviews directory: ${
         err.message || String(error)
       }`,
@@ -66,9 +73,9 @@ function detectDuplicateReviewNames(
   const reviewNameSources = new Map<string, string[]>();
   for (const file of reviewFiles) {
     if (
-      file.endsWith(".md") ||
-      file.endsWith(".yml") ||
-      file.endsWith(".yaml")
+      file.endsWith('.md') ||
+      file.endsWith('.yml') ||
+      file.endsWith('.yaml')
     ) {
       const name = path.basename(file, path.extname(file));
       const sources = reviewNameSources.get(name) || [];
@@ -80,8 +87,8 @@ function detectDuplicateReviewNames(
     if (sources.length > 1) {
       issues.push({
         file: reviewsPath,
-        severity: "error",
-        message: `Duplicate review name "${name}" found across files: ${sources.join(", ")}`,
+        severity: 'error',
+        message: `Duplicate review name "${name}" found across files: ${sources.join(', ')}`,
       });
     }
   }
@@ -97,27 +104,26 @@ async function validateMarkdownReview(
   filesChecked: string[],
 ): Promise<void> {
   const filePath = path.join(reviewsPath, file);
-  const reviewName = path.basename(file, ".md");
+  const reviewName = path.basename(file, '.md');
   existingReviewNames.add(reviewName);
   filesChecked.push(filePath);
   try {
-    const content = await fs.readFile(filePath, "utf-8");
+    const content = await fs.readFile(filePath, 'utf-8');
     const { data: frontmatter, content: _promptBody } = matter(content);
 
     if (!frontmatter || Object.keys(frontmatter).length === 0) {
       issues.push({
         file: filePath,
-        severity: "error",
-        message: "Review gate must have YAML frontmatter",
+        severity: 'error',
+        message: 'Review gate must have YAML frontmatter',
       });
       return;
     }
 
     validateCliPreferenceTools(frontmatter, filePath, issues);
 
-    const parsedFrontmatter =
-      reviewPromptFrontmatterSchema.parse(frontmatter);
-    const name = path.basename(file, ".md");
+    const parsedFrontmatter = reviewPromptFrontmatterSchema.parse(frontmatter);
+    const name = path.basename(file, '.md');
     reviews[name] = parsedFrontmatter;
     reviewSourceFiles[name] = filePath;
 
@@ -141,7 +147,7 @@ async function validateYamlReview(
   existingReviewNames.add(reviewName);
   filesChecked.push(filePath);
   try {
-    const content = await fs.readFile(filePath, "utf-8");
+    const content = await fs.readFile(filePath, 'utf-8');
     const raw = YAML.parse(content);
 
     validateCliPreferenceTools(raw, filePath, issues);
@@ -165,13 +171,13 @@ export function validateCliPreferenceTools(
     for (let i = 0; i < data.cli_preference.length; i++) {
       const toolName = data.cli_preference[i];
       if (
-        typeof toolName === "string" &&
+        typeof toolName === 'string' &&
         !getValidCLITools().includes(toolName)
       ) {
         issues.push({
           file: filePath,
-          severity: "error",
-          message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(", ")}`,
+          severity: 'error',
+          message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(', ')}`,
           field: `cli_preference[${i}]`,
         });
       }
@@ -191,18 +197,18 @@ export function validateReviewSemantics(
   if (parsed.num_reviews !== undefined && parsed.num_reviews < 1) {
     issues.push({
       file: filePath,
-      severity: "error",
-      message: "num_reviews must be at least 1",
-      field: "num_reviews",
+      severity: 'error',
+      message: 'num_reviews must be at least 1',
+      field: 'num_reviews',
     });
   }
 
   if (parsed.timeout !== undefined && parsed.timeout <= 0) {
     issues.push({
       file: filePath,
-      severity: "error",
-      message: "timeout must be greater than 0",
-      field: "timeout",
+      severity: 'error',
+      message: 'timeout must be greater than 0',
+      field: 'timeout',
     });
   }
 }
@@ -215,10 +221,10 @@ function validateReviewCliPreference(
   if (cliPreference.length === 0) {
     issues.push({
       file: filePath,
-      severity: "error",
+      severity: 'error',
       message:
-        "cli_preference if provided cannot be an empty array. Remove it to use defaults.",
-      field: "cli_preference",
+        'cli_preference if provided cannot be an empty array. Remove it to use defaults.',
+      field: 'cli_preference',
     });
     return;
   }
@@ -227,8 +233,8 @@ function validateReviewCliPreference(
     if (!getValidCLITools().includes(toolName)) {
       issues.push({
         file: filePath,
-        severity: "error",
-        message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(", ")}`,
+        severity: 'error',
+        message: `Invalid CLI tool "${toolName}" in cli_preference. Valid options are: ${getValidCLITools().join(', ')}`,
         field: `cli_preference[${i}]`,
       });
     }
@@ -245,11 +251,11 @@ export function handleReviewValidationError(
     return;
   }
   const err = error as { name?: string; message?: string };
-  if (err.name === "YAMLSyntaxError" || err.message?.includes("YAML")) {
+  if (err.name === 'YAMLSyntaxError' || err.message?.includes('YAML')) {
     issues.push({
       file: filePath,
-      severity: "error",
-      message: `Malformed YAML: ${err.message || "Unknown YAML error"}`,
+      severity: 'error',
+      message: `Malformed YAML: ${err.message || 'Unknown YAML error'}`,
     });
     return;
   }
@@ -263,12 +269,11 @@ function pushZodIssues(
 ): void {
   for (const err of error.issues) {
     const fieldPath =
-      err.path && Array.isArray(err.path) ? err.path.join(".") : undefined;
-    const message =
-      err.message || `Invalid value for ${fieldPath || "field"}`;
+      err.path && Array.isArray(err.path) ? err.path.join('.') : undefined;
+    const message = err.message || `Invalid value for ${fieldPath || 'field'}`;
     issues.push({
       file: filePath,
-      severity: "error",
+      severity: 'error',
       message,
       field: fieldPath,
     });
@@ -288,13 +293,12 @@ function pushGenericError(
       for (const item of parsed) {
         const fieldPath =
           item.path && Array.isArray(item.path)
-            ? item.path.join(".")
+            ? item.path.join('.')
             : undefined;
         issues.push({
           file: filePath,
-          severity: "error",
-          message:
-            item.message || `Invalid value for ${fieldPath || "field"}`,
+          severity: 'error',
+          message: item.message || `Invalid value for ${fieldPath || 'field'}`,
           field: fieldPath,
         });
       }
@@ -302,13 +306,13 @@ function pushGenericError(
     }
     issues.push({
       file: filePath,
-      severity: "error",
+      severity: 'error',
       message: errorMessage,
     });
   } catch {
     issues.push({
       file: filePath,
-      severity: "error",
+      severity: 'error',
       message: errorMessage,
     });
   }

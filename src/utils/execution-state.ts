@@ -1,39 +1,39 @@
-import { spawn } from "node:child_process";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { getDebugLogger } from "./debug-log.js";
+import { spawn } from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { getDebugLogger } from './debug-log.js';
 
-const EXECUTION_STATE_FILENAME = ".execution_state";
-const SESSION_REF_FILENAME = ".session_ref";
+const EXECUTION_STATE_FILENAME = '.execution_state';
+const SESSION_REF_FILENAME = '.session_ref';
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-	// Use loose equality to check both null and undefined in one comparison
-	if (value == null) return false;
-	if (Array.isArray(value)) return false;
-	return typeof value === "object";
+  // Use loose equality to check both null and undefined in one comparison
+  if (value == null) return false;
+  if (Array.isArray(value)) return false;
+  return typeof value === 'object';
 }
 
 function extractUnhealthyAdapters(
-	rawData: Record<string, unknown> | null,
+  rawData: Record<string, unknown> | null,
 ): Record<string, UnhealthyAdapter> | undefined {
-	const adapters = rawData?.unhealthy_adapters;
-	if (!isPlainRecord(adapters)) {
-		return undefined;
-	}
-	return adapters as Record<string, UnhealthyAdapter>;
+  const adapters = rawData?.unhealthy_adapters;
+  if (!isPlainRecord(adapters)) {
+    return undefined;
+  }
+  return adapters as Record<string, UnhealthyAdapter>;
 }
 
 export interface UnhealthyAdapter {
-	marked_at: string;
-	reason: string;
+  marked_at: string;
+  reason: string;
 }
 
 export interface ExecutionState {
-	last_run_completed_at: string;
-	branch: string;
-	commit: string;
-	working_tree_ref?: string;
-	unhealthy_adapters?: Record<string, UnhealthyAdapter>;
+  last_run_completed_at: string;
+  branch: string;
+  commit: string;
+  working_tree_ref?: string;
+  unhealthy_adapters?: Record<string, UnhealthyAdapter>;
 }
 
 /**
@@ -41,53 +41,53 @@ export interface ExecutionState {
  * Returns null if the state file or directory doesn't exist.
  */
 function isValidStateData(data: unknown): data is Record<string, unknown> & {
-	last_run_completed_at: string;
-	branch: string;
-	commit: string;
+  last_run_completed_at: string;
+  branch: string;
+  commit: string;
 } {
-	if (typeof data !== "object" || data === null) return false;
-	const record = data as Record<string, unknown>;
-	return (
-		typeof record.last_run_completed_at === "string" &&
-		typeof record.branch === "string" &&
-		typeof record.commit === "string"
-	);
+  if (typeof data !== 'object' || data === null) return false;
+  const record = data as Record<string, unknown>;
+  return (
+    typeof record.last_run_completed_at === 'string' &&
+    typeof record.branch === 'string' &&
+    typeof record.commit === 'string'
+  );
 }
 
 export async function readExecutionState(
-	logDir: string,
+  logDir: string,
 ): Promise<ExecutionState | null> {
-	try {
-		const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-		const content = await fs.readFile(statePath, "utf-8");
-		const data = JSON.parse(content) as unknown;
+  try {
+    const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+    const content = await fs.readFile(statePath, 'utf-8');
+    const data = JSON.parse(content) as unknown;
 
-		if (!isValidStateData(data)) return null;
+    if (!isValidStateData(data)) return null;
 
-		const state: ExecutionState = {
-			last_run_completed_at: data.last_run_completed_at,
-			branch: data.branch,
-			commit: data.commit,
-		};
+    const state: ExecutionState = {
+      last_run_completed_at: data.last_run_completed_at,
+      branch: data.branch,
+      commit: data.commit,
+    };
 
-		if (typeof data.working_tree_ref === "string") {
-			state.working_tree_ref = data.working_tree_ref;
-		}
+    if (typeof data.working_tree_ref === 'string') {
+      state.working_tree_ref = data.working_tree_ref;
+    }
 
-		if (
-			data.unhealthy_adapters &&
-			typeof data.unhealthy_adapters === "object"
-		) {
-			state.unhealthy_adapters = data.unhealthy_adapters as Record<
-				string,
-				UnhealthyAdapter
-			>;
-		}
+    if (
+      data.unhealthy_adapters &&
+      typeof data.unhealthy_adapters === 'object'
+    ) {
+      state.unhealthy_adapters = data.unhealthy_adapters as Record<
+        string,
+        UnhealthyAdapter
+      >;
+    }
 
-		return state;
-	} catch {
-		return null;
-	}
+    return state;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -98,37 +98,37 @@ export async function readExecutionState(
  */
 /** Resolve a stash create result: use stash SHA, or fall back to HEAD. */
 async function resolveStashResult(
-	code: number | null,
-	stdout: string,
+  code: number | null,
+  stdout: string,
 ): Promise<string> {
-	if (code === 0) {
-		const sha = stdout.trim();
-		if (sha) return sha;
-		return getCurrentCommit();
-	}
-	// Non-zero exit: try HEAD as fallback
-	return getCurrentCommit().catch(() => {
-		throw new Error(`git stash create failed with code ${code}`);
-	});
+  if (code === 0) {
+    const sha = stdout.trim();
+    if (sha) return sha;
+    return getCurrentCommit();
+  }
+  // Non-zero exit: try HEAD as fallback
+  return getCurrentCommit().catch(() => {
+    throw new Error(`git stash create failed with code ${code}`);
+  });
 }
 
 export async function createWorkingTreeRef(): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const child = spawn("git", ["stash", "create", "--include-untracked"], {
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['stash', 'create', '--include-untracked'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-		let stdout = "";
-		child.stdout.on("data", (data: Buffer) => {
-			stdout += data.toString();
-		});
+    let stdout = '';
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
 
-		child.on("close", (code) => {
-			resolveStashResult(code, stdout).then(resolve, reject);
-		});
+    child.on('close', (code) => {
+      resolveStashResult(code, stdout).then(resolve, reject);
+    });
 
-		child.on("error", reject);
-	});
+    child.on('error', reject);
+  });
 }
 
 /**
@@ -137,106 +137,106 @@ export async function createWorkingTreeRef(): Promise<string> {
  * Also cleans up legacy .session_ref file if it exists.
  */
 export async function writeExecutionState(logDir: string): Promise<void> {
-	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-	const [branch, commit, workingTreeRef, rawState] = await Promise.all([
-		getCurrentBranch(),
-		getCurrentCommit(),
-		createWorkingTreeRef(),
-		readRawState(statePath),
-	]);
-	const existingUnhealthy = extractUnhealthyAdapters(rawState);
+  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+  const [branch, commit, workingTreeRef, rawState] = await Promise.all([
+    getCurrentBranch(),
+    getCurrentCommit(),
+    createWorkingTreeRef(),
+    readRawState(statePath),
+  ]);
+  const existingUnhealthy = extractUnhealthyAdapters(rawState);
 
-	const state: ExecutionState = {
-		last_run_completed_at: new Date().toISOString(),
-		branch,
-		commit,
-		working_tree_ref: workingTreeRef,
-	};
+  const state: ExecutionState = {
+    last_run_completed_at: new Date().toISOString(),
+    branch,
+    commit,
+    working_tree_ref: workingTreeRef,
+  };
 
-	// Preserve unhealthy_adapters from existing state
-	if (existingUnhealthy) {
-		state.unhealthy_adapters = existingUnhealthy;
-	}
+  // Preserve unhealthy_adapters from existing state
+  if (existingUnhealthy) {
+    state.unhealthy_adapters = existingUnhealthy;
+  }
 
-	// Log changed fields (skip last_run_completed_at since every log line is timestamped)
-	const changes: Record<string, string> = {};
-	const oldState = rawState as Record<string, unknown> | null;
-	if (oldState) {
-		if (oldState.branch !== branch) changes.branch = branch;
-		if (oldState.commit !== commit) changes.commit = commit;
-		if (oldState.working_tree_ref !== workingTreeRef)
-			changes.working_tree_ref = workingTreeRef;
-	} else {
-		// First write - log all fields
-		changes.branch = branch;
-		changes.commit = commit;
-		changes.working_tree_ref = workingTreeRef;
-	}
-	await getDebugLogger()?.logStateWrite(changes);
+  // Log changed fields (skip last_run_completed_at since every log line is timestamped)
+  const changes: Record<string, string> = {};
+  const oldState = rawState as Record<string, unknown> | null;
+  if (oldState) {
+    if (oldState.branch !== branch) changes.branch = branch;
+    if (oldState.commit !== commit) changes.commit = commit;
+    if (oldState.working_tree_ref !== workingTreeRef)
+      changes.working_tree_ref = workingTreeRef;
+  } else {
+    // First write - log all fields
+    changes.branch = branch;
+    changes.commit = commit;
+    changes.working_tree_ref = workingTreeRef;
+  }
+  await getDebugLogger()?.logStateWrite(changes);
 
-	// Ensure the log directory exists
-	await fs.mkdir(logDir, { recursive: true });
-	await fs.writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
+  // Ensure the log directory exists
+  await fs.mkdir(logDir, { recursive: true });
+  await fs.writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8');
 
-	// Clean up legacy .session_ref file if it exists
-	try {
-		const sessionRefPath = path.join(logDir, SESSION_REF_FILENAME);
-		await fs.rm(sessionRefPath, { force: true });
-	} catch {
-		// Ignore errors
-	}
+  // Clean up legacy .session_ref file if it exists
+  try {
+    const sessionRefPath = path.join(logDir, SESSION_REF_FILENAME);
+    await fs.rm(sessionRefPath, { force: true });
+  } catch {
+    // Ignore errors
+  }
 }
 
 /**
  * Get the current git branch name.
  */
 export async function getCurrentBranch(): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const child = spawn("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-		let stdout = "";
-		child.stdout.on("data", (data: Buffer) => {
-			stdout += data.toString();
-		});
+    let stdout = '';
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
 
-		child.on("close", (code) => {
-			if (code === 0) {
-				resolve(stdout.trim());
-			} else {
-				reject(new Error(`git rev-parse failed with code ${code}`));
-			}
-		});
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+      } else {
+        reject(new Error(`git rev-parse failed with code ${code}`));
+      }
+    });
 
-		child.on("error", reject);
-	});
+    child.on('error', reject);
+  });
 }
 
 /**
  * Get the current HEAD commit SHA.
  */
 export async function getCurrentCommit(): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const child = spawn("git", ["rev-parse", "HEAD"], {
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['rev-parse', 'HEAD'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-		let stdout = "";
-		child.stdout.on("data", (data: Buffer) => {
-			stdout += data.toString();
-		});
+    let stdout = '';
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
 
-		child.on("close", (code) => {
-			if (code === 0) {
-				resolve(stdout.trim());
-			} else {
-				reject(new Error(`git rev-parse failed with code ${code}`));
-			}
-		});
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+      } else {
+        reject(new Error(`git rev-parse failed with code ${code}`));
+      }
+    });
 
-		child.on("error", reject);
-	});
+    child.on('error', reject);
+  });
 }
 
 /**
@@ -245,32 +245,32 @@ export async function getCurrentCommit(): Promise<string> {
  * Returns true if commit is reachable from branch.
  */
 export async function isCommitInBranch(
-	commit: string,
-	branch: string,
+  commit: string,
+  branch: string,
 ): Promise<boolean> {
-	return new Promise((resolve) => {
-		const child = spawn(
-			"git",
-			["merge-base", "--is-ancestor", commit, branch],
-			{ stdio: ["ignore", "pipe", "pipe"] },
-		);
+  return new Promise((resolve) => {
+    const child = spawn(
+      'git',
+      ['merge-base', '--is-ancestor', commit, branch],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
 
-		child.on("close", (code) => {
-			// Exit 0 = is ancestor (merged), exit 1 = not ancestor
-			resolve(code === 0);
-		});
+    child.on('close', (code) => {
+      // Exit 0 = is ancestor (merged), exit 1 = not ancestor
+      resolve(code === 0);
+    });
 
-		child.on("error", () => {
-			resolve(false);
-		});
-	});
+    child.on('error', () => {
+      resolve(false);
+    });
+  });
 }
 
 /**
  * Get the execution state filename (for use in clean operations).
  */
 export function getExecutionStateFilename(): string {
-	return EXECUTION_STATE_FILENAME;
+  return EXECUTION_STATE_FILENAME;
 }
 
 /**
@@ -279,29 +279,29 @@ export function getExecutionStateFilename(): string {
  * unlike `git stash create --include-untracked` which returns empty for untracked-only changes.
  */
 export async function hasWorkingTreeChanges(): Promise<boolean> {
-	return new Promise((resolve) => {
-		const child = spawn("git", ["status", "--porcelain"], {
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+  return new Promise((resolve) => {
+    const child = spawn('git', ['status', '--porcelain'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-		let stdout = "";
-		child.stdout.on("data", (data: Buffer) => {
-			stdout += data.toString();
-		});
+    let stdout = '';
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
 
-		child.on("close", (code) => {
-			if (code === 0) {
-				resolve(stdout.trim().length > 0);
-			} else {
-				// If git status fails, assume changes exist to prevent accidental state deletion
-				resolve(true);
-			}
-		});
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout.trim().length > 0);
+      } else {
+        // If git status fails, assume changes exist to prevent accidental state deletion
+        resolve(true);
+      }
+    });
 
-		child.on("error", () => {
-			resolve(true);
-		});
-	});
+    child.on('error', () => {
+      resolve(true);
+    });
+  });
 }
 
 /**
@@ -309,39 +309,39 @@ export async function hasWorkingTreeChanges(): Promise<boolean> {
  * Uses `git cat-file -t <sha>` to check object type.
  */
 export async function gitObjectExists(sha: string): Promise<boolean> {
-	return new Promise((resolve) => {
-		const child = spawn("git", ["cat-file", "-t", sha], {
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+  return new Promise((resolve) => {
+    const child = spawn('git', ['cat-file', '-t', sha], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-		child.on("close", (code) => {
-			resolve(code === 0);
-		});
+    child.on('close', (code) => {
+      resolve(code === 0);
+    });
 
-		child.on("error", () => {
-			resolve(false);
-		});
-	});
+    child.on('error', () => {
+      resolve(false);
+    });
+  });
 }
 
 /**
  * When a commit has been merged, check if working_tree_ref still scopes valid changes.
  */
 async function resolveFixBaseForMergedCommit(
-	working_tree_ref: string | undefined,
+  working_tree_ref: string | undefined,
 ): Promise<{ fixBase: string | null; warning?: string }> {
-	if (!working_tree_ref) {
-		return { fixBase: null };
-	}
-	const refExists = await gitObjectExists(working_tree_ref);
-	if (!refExists) {
-		return { fixBase: null };
-	}
-	return {
-		fixBase: working_tree_ref,
-		warning:
-			"Commit merged into base branch, using working tree ref for diff scope",
-	};
+  if (!working_tree_ref) {
+    return { fixBase: null };
+  }
+  const refExists = await gitObjectExists(working_tree_ref);
+  if (!refExists) {
+    return { fixBase: null };
+  }
+  return {
+    fixBase: working_tree_ref,
+    warning:
+      'Commit merged into base branch, using working tree ref for diff scope',
+  };
 }
 
 /**
@@ -354,37 +354,37 @@ async function resolveFixBaseForMergedCommit(
  * - null if state is stale (commit merged) or all refs are invalid
  */
 export async function resolveFixBase(
-	executionState: ExecutionState,
-	baseBranch: string,
+  executionState: ExecutionState,
+  baseBranch: string,
 ): Promise<{ fixBase: string | null; warning?: string }> {
-	const { commit, working_tree_ref } = executionState;
+  const { commit, working_tree_ref } = executionState;
 
-	// Check if commit has been merged into base branch (state is stale)
-	const commitMerged = await isCommitInBranch(commit, baseBranch);
-	if (commitMerged) {
-		return resolveFixBaseForMergedCommit(working_tree_ref);
-	}
+  // Check if commit has been merged into base branch (state is stale)
+  const commitMerged = await isCommitInBranch(commit, baseBranch);
+  if (commitMerged) {
+    return resolveFixBaseForMergedCommit(working_tree_ref);
+  }
 
-	// Check if working_tree_ref exists
-	if (working_tree_ref) {
-		const refExists = await gitObjectExists(working_tree_ref);
-		if (refExists) {
-			// Use working tree ref for precise diff
-			return { fixBase: working_tree_ref };
-		}
-	}
+  // Check if working_tree_ref exists
+  if (working_tree_ref) {
+    const refExists = await gitObjectExists(working_tree_ref);
+    if (refExists) {
+      // Use working tree ref for precise diff
+      return { fixBase: working_tree_ref };
+    }
+  }
 
-	// working_tree_ref doesn't exist or was gc'd, try commit as fallback
-	const commitExists = await gitObjectExists(commit);
-	if (commitExists) {
-		return {
-			fixBase: commit,
-			warning: "Session stash was garbage collected, using commit as fallback",
-		};
-	}
+  // working_tree_ref doesn't exist or was gc'd, try commit as fallback
+  const commitExists = await gitObjectExists(commit);
+  if (commitExists) {
+    return {
+      fixBase: commit,
+      warning: 'Session stash was garbage collected, using commit as fallback',
+    };
+  }
 
-	// Everything is gone, fall back to base branch
-	return { fixBase: null };
+  // Everything is gone, fall back to base branch
+  return { fixBase: null };
 }
 
 const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
@@ -395,9 +395,9 @@ const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
  * Invalid or missing timestamps default to "expired" (returns false).
  */
 export function isAdapterCoolingDown(entry: UnhealthyAdapter): boolean {
-	const markedAt = new Date(entry.marked_at).getTime();
-	if (Number.isNaN(markedAt)) return false;
-	return Date.now() - markedAt < COOLDOWN_MS;
+  const markedAt = new Date(entry.marked_at).getTime();
+  if (Number.isNaN(markedAt)) return false;
+  return Date.now() - markedAt < COOLDOWN_MS;
 }
 
 /**
@@ -405,11 +405,11 @@ export function isAdapterCoolingDown(entry: UnhealthyAdapter): boolean {
  * Returns an empty object if no unhealthy adapters are recorded.
  */
 export async function getUnhealthyAdapters(
-	logDir: string,
+  logDir: string,
 ): Promise<Record<string, UnhealthyAdapter>> {
-	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-	const rawState = await readRawState(statePath);
-	return extractUnhealthyAdapters(rawState) ?? {};
+  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+  const rawState = await readRawState(statePath);
+  return extractUnhealthyAdapters(rawState) ?? {};
 }
 
 /**
@@ -417,14 +417,14 @@ export async function getUnhealthyAdapters(
  * Returns null if the file doesn't exist or is invalid.
  */
 async function readRawState(
-	statePath: string,
+  statePath: string,
 ): Promise<Record<string, unknown> | null> {
-	try {
-		const content = await fs.readFile(statePath, "utf-8");
-		return JSON.parse(content) as Record<string, unknown>;
-	} catch {
-		return null;
-	}
+  try {
+    const content = await fs.readFile(statePath, 'utf-8');
+    return JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -432,25 +432,25 @@ async function readRawState(
  * Reads the current state, upserts the entry, and writes back.
  */
 export async function markAdapterUnhealthy(
-	logDir: string,
-	adapterName: string,
-	reason: string,
+  logDir: string,
+  adapterName: string,
+  reason: string,
 ): Promise<void> {
-	await getDebugLogger()?.logAdapterHealthChange(adapterName, false, reason);
+  await getDebugLogger()?.logAdapterHealthChange(adapterName, false, reason);
 
-	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-	const rawData = (await readRawState(statePath)) ?? {};
+  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+  const rawData = (await readRawState(statePath)) ?? {};
 
-	const adapters =
-		(rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>) ?? {};
-	adapters[adapterName] = {
-		marked_at: new Date().toISOString(),
-		reason,
-	};
-	rawData.unhealthy_adapters = adapters;
+  const adapters =
+    (rawData.unhealthy_adapters as Record<string, UnhealthyAdapter>) ?? {};
+  adapters[adapterName] = {
+    marked_at: new Date().toISOString(),
+    reason,
+  };
+  rawData.unhealthy_adapters = adapters;
 
-	await fs.mkdir(logDir, { recursive: true });
-	await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), "utf-8");
+  await fs.mkdir(logDir, { recursive: true });
+  await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), 'utf-8');
 }
 
 /**
@@ -458,28 +458,28 @@ export async function markAdapterUnhealthy(
  * Reads the current state, removes the entry, and writes back.
  */
 export async function markAdapterHealthy(
-	logDir: string,
-	adapterName: string,
+  logDir: string,
+  adapterName: string,
 ): Promise<void> {
-	await getDebugLogger()?.logAdapterHealthChange(adapterName, true);
+  await getDebugLogger()?.logAdapterHealthChange(adapterName, true);
 
-	const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-	const rawData = await readRawState(statePath);
-	if (!rawData) return;
+  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+  const rawData = await readRawState(statePath);
+  if (!rawData) return;
 
-	const adapters = rawData.unhealthy_adapters as
-		| Record<string, UnhealthyAdapter>
-		| undefined;
-	if (!(adapters && (adapterName in adapters))) return;
+  const adapters = rawData.unhealthy_adapters as
+    | Record<string, UnhealthyAdapter>
+    | undefined;
+  if (!(adapters && adapterName in adapters)) return;
 
-	delete adapters[adapterName];
-	if (Object.keys(adapters).length === 0) {
-		delete rawData.unhealthy_adapters;
-	} else {
-		rawData.unhealthy_adapters = adapters;
-	}
+  delete adapters[adapterName];
+  if (Object.keys(adapters).length === 0) {
+    delete rawData.unhealthy_adapters;
+  } else {
+    rawData.unhealthy_adapters = adapters;
+  }
 
-	await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), "utf-8");
+  await fs.writeFile(statePath, JSON.stringify(rawData, null, 2), 'utf-8');
 }
 
 /**
@@ -487,11 +487,11 @@ export async function markAdapterHealthy(
  * Used when auto-clean resets state due to context change.
  */
 export async function deleteExecutionState(logDir: string): Promise<void> {
-	try {
-		await getDebugLogger()?.logStateDelete();
-		const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-		await fs.rm(statePath, { force: true });
-	} catch {
-		// Ignore errors
-	}
+  try {
+    await getDebugLogger()?.logStateDelete();
+    const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+    await fs.rm(statePath, { force: true });
+  } catch {
+    // Ignore errors
+  }
 }

@@ -1,28 +1,28 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import YAML from "yaml";
-import { ZodError } from "zod";
-import { getValidCLITools } from "../cli-adapters/index.js";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import YAML from 'yaml';
+import { ZodError } from 'zod';
+import { getValidCLITools } from '../cli-adapters/index.js';
 import {
   checkGateSchema,
   entryPointSchema,
   gauntletConfigSchema,
-} from "./schema.js";
+} from './schema.js';
 import type {
   CheckGateConfig,
   GauntletConfig,
   ReviewPromptFrontmatter,
-} from "./types.js";
-import { validateReviewGates } from "./validate-reviews.js";
+} from './types.js';
+import { validateReviewGates } from './validate-reviews.js';
 
-const GAUNTLET_DIR = ".gauntlet";
-const CONFIG_FILE = "config.yml";
-const CHECKS_DIR = "checks";
-const REVIEWS_DIR = "reviews";
+const GAUNTLET_DIR = '.gauntlet';
+const CONFIG_FILE = 'config.yml';
+const CHECKS_DIR = 'checks';
+const REVIEWS_DIR = 'reviews';
 
 export interface ValidationIssue {
   file: string;
-  severity: "error" | "warning";
+  severity: 'error' | 'warning';
   message: string;
   field?: string;
 }
@@ -59,7 +59,10 @@ export async function validateConfig(
 
   if (projectConfig?.entry_points) {
     validateEntryPointReferences(
-      projectConfig, existingCheckNames, existingReviewNames, ctx,
+      projectConfig,
+      existingCheckNames,
+      existingReviewNames,
+      ctx,
     );
   }
 
@@ -68,7 +71,7 @@ export async function validateConfig(
     validateCliConfig(projectConfig, reviews, reviewSourceFiles, ctx);
   }
 
-  const valid = ctx.issues.filter((i) => i.severity === "error").length === 0;
+  const valid = ctx.issues.filter((i) => i.severity === 'error').length === 0;
   return { valid, issues: ctx.issues, filesChecked: ctx.filesChecked };
 }
 
@@ -78,20 +81,20 @@ async function validateProjectConfig(
   try {
     if (await fileExists(ctx.configPath)) {
       ctx.filesChecked.push(ctx.configPath);
-      const configContent = await fs.readFile(ctx.configPath, "utf-8");
+      const configContent = await fs.readFile(ctx.configPath, 'utf-8');
       return parseProjectConfig(configContent, ctx);
     }
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "error",
-      message: "Config file not found",
+      severity: 'error',
+      message: 'Config file not found',
     });
     return null;
   } catch (error: unknown) {
     const err = error as { message?: string };
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "error",
+      severity: 'error',
       message: `Error reading file: ${err.message}`,
     });
     return null;
@@ -110,9 +113,9 @@ function parseProjectConfig(
       for (const err of error.issues) {
         ctx.issues.push({
           file: ctx.configPath,
-          severity: "error",
+          severity: 'error',
           message: err.message,
-          field: err.path.join("."),
+          field: err.path.join('.'),
         });
       }
     } else {
@@ -122,14 +125,10 @@ function parseProjectConfig(
   }
 }
 
-interface CheckGatesResult {
+async function validateCheckGates(ctx: ValidatorContext): Promise<{
   checks: Record<string, CheckGateConfig>;
   existingCheckNames: Set<string>;
-}
-
-async function validateCheckGates(
-  ctx: ValidatorContext,
-): Promise<CheckGatesResult> {
+}> {
   const checks: Record<string, CheckGateConfig> = {};
   const existingCheckNames = new Set<string>();
   const checksPath = path.join(ctx.gauntletPath, CHECKS_DIR);
@@ -141,7 +140,7 @@ async function validateCheckGates(
   try {
     const checkFiles = await fs.readdir(checksPath);
     for (const file of checkFiles) {
-      if (file.endsWith(".yml") || file.endsWith(".yaml")) {
+      if (file.endsWith('.yml') || file.endsWith('.yaml')) {
         parseCheckFile(file, checksPath, checks, existingCheckNames, ctx);
       }
     }
@@ -149,7 +148,7 @@ async function validateCheckGates(
     const err = error as { message?: string };
     ctx.issues.push({
       file: checksPath,
-      severity: "error",
+      severity: 'error',
       message: `Error reading checks directory: ${err.message}`,
     });
   }
@@ -168,18 +167,18 @@ async function parseCheckFile(
   ctx.filesChecked.push(filePath);
   const name = path.basename(file, path.extname(file));
   try {
-    const content = await fs.readFile(filePath, "utf-8");
+    const content = await fs.readFile(filePath, 'utf-8');
     const raw = YAML.parse(content);
     const parsed = checkGateSchema.parse(raw);
     existingCheckNames.add(name);
     checks[name] = parsed;
 
-    if (!parsed.command || parsed.command.trim() === "") {
+    if (!parsed.command || parsed.command.trim() === '') {
       ctx.issues.push({
         file: filePath,
-        severity: "error",
-        message: "command field is required and cannot be empty",
-        field: "command",
+        severity: 'error',
+        message: 'command field is required and cannot be empty',
+        field: 'command',
       });
     }
   } catch (error: unknown) {
@@ -188,9 +187,9 @@ async function parseCheckFile(
       for (const err of error.issues) {
         ctx.issues.push({
           file: filePath,
-          severity: "error",
+          severity: 'error',
           message: err.message,
-          field: err.path.join("."),
+          field: err.path.join('.'),
         });
       }
     } else {
@@ -199,9 +198,7 @@ async function parseCheckFile(
   }
 }
 
-async function validateReviewGatesWrapper(
-  ctx: ValidatorContext,
-): Promise<{
+async function validateReviewGatesWrapper(ctx: ValidatorContext): Promise<{
   reviews: Record<string, ReviewPromptFrontmatter>;
   reviewSourceFiles: Record<string, string>;
   existingReviewNames: Set<string>;
@@ -231,8 +228,18 @@ function validateEntryPointReferences(
     const entryPointPath = `entry_points[${i}]`;
 
     validateEntryPointSchema(entryPoint, entryPointPath, ctx);
-    validateReferencedChecks(entryPoint, entryPointPath, existingCheckNames, ctx);
-    validateReferencedReviews(entryPoint, entryPointPath, existingReviewNames, ctx);
+    validateReferencedChecks(
+      entryPoint,
+      entryPointPath,
+      existingCheckNames,
+      ctx,
+    );
+    validateReferencedReviews(
+      entryPoint,
+      entryPointPath,
+      existingReviewNames,
+      ctx,
+    );
     validateEntryPointHasGates(entryPoint, entryPointPath, ctx);
     validateEntryPointPathField(entryPoint, entryPointPath, ctx);
   }
@@ -250,9 +257,9 @@ function validateEntryPointSchema(
       for (const err of error.issues) {
         ctx.issues.push({
           file: ctx.configPath,
-          severity: "error",
+          severity: 'error',
           message: err.message,
-          field: `${entryPointPath}.${err.path.join(".")}`,
+          field: `${entryPointPath}.${err.path.join('.')}`,
         });
       }
     }
@@ -272,7 +279,7 @@ function validateReferencedChecks(
     if (!existingCheckNames.has(checkName)) {
       ctx.issues.push({
         file: ctx.configPath,
-        severity: "error",
+        severity: 'error',
         message: `Entry point references non-existent check gate: "${checkName}"`,
         field: `${entryPointPath}.checks`,
       });
@@ -293,7 +300,7 @@ function validateReferencedReviews(
     if (!existingReviewNames.has(reviewName)) {
       ctx.issues.push({
         file: ctx.configPath,
-        severity: "error",
+        severity: 'error',
         message: `Entry point references non-existent review gate: "${reviewName}"`,
         field: `${entryPointPath}.reviews`,
       });
@@ -312,7 +319,7 @@ function validateEntryPointHasGates(
   ) {
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "warning",
+      severity: 'warning',
       message: `Entry point at "${entryPoint.path}" has no checks or reviews configured`,
       field: `${entryPointPath}`,
     });
@@ -324,11 +331,11 @@ function validateEntryPointPathField(
   entryPointPath: string,
   ctx: ValidatorContext,
 ): void {
-  if (!entryPoint.path || entryPoint.path.trim() === "") {
+  if (!entryPoint.path || entryPoint.path.trim() === '') {
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "error",
-      message: "Entry point path cannot be empty",
+      severity: 'error',
+      message: 'Entry point path cannot be empty',
       field: `${entryPointPath}.path`,
     });
   }
@@ -340,25 +347,25 @@ function validateProjectLevelConfig(
 ): void {
   if (
     projectConfig.log_dir !== undefined &&
-    projectConfig.log_dir.trim() === ""
+    projectConfig.log_dir.trim() === ''
   ) {
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "error",
-      message: "log_dir cannot be empty",
-      field: "log_dir",
+      severity: 'error',
+      message: 'log_dir cannot be empty',
+      field: 'log_dir',
     });
   }
 
   if (
     projectConfig.base_branch !== undefined &&
-    projectConfig.base_branch.trim() === ""
+    projectConfig.base_branch.trim() === ''
   ) {
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "error",
-      message: "base_branch cannot be empty",
-      field: "base_branch",
+      severity: 'error',
+      message: 'base_branch cannot be empty',
+      field: 'base_branch',
     });
   }
 
@@ -368,9 +375,9 @@ function validateProjectLevelConfig(
   ) {
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "error",
-      message: "entry_points is required and cannot be empty",
-      field: "entry_points",
+      severity: 'error',
+      message: 'entry_points is required and cannot be empty',
+      field: 'entry_points',
     });
   }
 }
@@ -389,16 +396,19 @@ function validateCliConfig(
   if (!(defaults && Array.isArray(defaults)) || defaults.length === 0) {
     ctx.issues.push({
       file: ctx.configPath,
-      severity: "error",
-      message: "cli.default_preference is required and cannot be empty",
-      field: "cli.default_preference",
+      severity: 'error',
+      message: 'cli.default_preference is required and cannot be empty',
+      field: 'cli.default_preference',
     });
     return;
   }
 
   validateDefaultPreferenceTools(defaults, ctx);
   validateReviewPreferencesAgainstDefaults(
-    defaults, reviews, reviewSourceFiles, ctx,
+    defaults,
+    reviews,
+    reviewSourceFiles,
+    ctx,
   );
 }
 
@@ -411,8 +421,8 @@ function validateDefaultPreferenceTools(
     if (!getValidCLITools().includes(toolName)) {
       ctx.issues.push({
         file: ctx.configPath,
-        severity: "error",
-        message: `Invalid CLI tool "${toolName}" in default_preference. Valid options are: ${getValidCLITools().join(", ")}`,
+        severity: 'error',
+        message: `Invalid CLI tool "${toolName}" in default_preference. Valid options are: ${getValidCLITools().join(', ')}`,
         field: `cli.default_preference[${i}]`,
       });
     }
@@ -438,7 +448,7 @@ function validateReviewPreferencesAgainstDefaults(
         if (!allowedTools.has(tool)) {
           ctx.issues.push({
             file: reviewFile,
-            severity: "error",
+            severity: 'error',
             message: `CLI tool "${tool}" is not in project-level default_preference. Review gates can only use tools enabled in config.yml`,
             field: `cli_preference[${i}]`,
           });
@@ -454,16 +464,16 @@ function pushYamlOrParseError(
   issues: ValidationIssue[],
 ): void {
   const err = error as { name?: string; message?: string };
-  if (err.name === "YAMLSyntaxError" || err.message?.includes("YAML")) {
+  if (err.name === 'YAMLSyntaxError' || err.message?.includes('YAML')) {
     issues.push({
       file: filePath,
-      severity: "error",
+      severity: 'error',
       message: `Malformed YAML: ${err.message}`,
     });
   } else {
     issues.push({
       file: filePath,
-      severity: "error",
+      severity: 'error',
       message: `Parse error: ${err.message}`,
     });
   }
