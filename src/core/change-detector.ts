@@ -21,8 +21,16 @@ export class ChangeDetector {
   ) {}
 
   async getChangedFiles(): Promise<string[]> {
+    // Validate base branch before any shell interpolation
+    if (!isValidGitRef(this.baseBranch)) {
+      throw new Error(`Invalid base branch ref: ${this.baseBranch}`);
+    }
+
     // Priority 1: If commit option is provided, use that
     if (this.options.commit) {
+      if (!isValidGitRef(this.options.commit)) {
+        throw new Error(`Invalid commit ref: ${this.options.commit}`);
+      }
       return this.getCommitChangedFiles(this.options.commit);
     }
 

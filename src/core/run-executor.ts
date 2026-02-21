@@ -20,6 +20,7 @@ import {
   initDebugLogger,
   mergeDebugLogConfig,
 } from '../utils/debug-log.js';
+import { resolveBaseBranch } from '../utils/git.js';
 import {
   checkRunInterval,
   detectAndPrepareChanges,
@@ -93,21 +94,6 @@ async function logCommandInvocation(options: ExecuteRunOptions): Promise<void> {
     options.checkInterval ? '--check-interval' : '',
   ].filter(Boolean);
   await debugLogger?.logCommand('run', args);
-}
-
-/** Resolve the effective base branch from options, env, or config. */
-function resolveBaseBranch(
-  options: ExecuteRunOptions,
-  config: Awaited<ReturnType<typeof loadConfig>>,
-): string {
-  return (
-    options.baseBranch ||
-    (process.env.GITHUB_BASE_REF &&
-    (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true')
-      ? process.env.GITHUB_BASE_REF
-      : null) ||
-    config.project.base_branch
-  );
 }
 
 /** Handle auto-cleaning of logs on context change. */

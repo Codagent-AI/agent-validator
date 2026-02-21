@@ -30,7 +30,7 @@ export async function validateReviewGates(
 
     for (const file of reviewFiles) {
       if (file.endsWith('.md')) {
-        validateMarkdownReview(
+        await validateMarkdownReview(
           file,
           reviewsPath,
           reviews,
@@ -40,7 +40,7 @@ export async function validateReviewGates(
           filesChecked,
         );
       } else if (file.endsWith('.yml') || file.endsWith('.yaml')) {
-        validateYamlReview(
+        await validateYamlReview(
           file,
           reviewsPath,
           reviews,

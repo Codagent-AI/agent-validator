@@ -22,6 +22,7 @@ import {
   resolveFixBase,
   writeExecutionState,
 } from '../utils/execution-state.js';
+import { resolveBaseBranch } from '../utils/git.js';
 import {
   findPreviousFailures,
   type PassedSlot,
@@ -83,21 +84,6 @@ async function initializeDebugLogger(
   const effectiveBaseBranch = resolveBaseBranch(options, config);
 
   return { config, debugLogger, effectiveBaseBranch };
-}
-
-/** Compute effective base branch from options, env vars, and config. */
-function resolveBaseBranch(
-  options: GateCommandOptions,
-  config: Awaited<ReturnType<typeof loadConfig>>,
-): string {
-  return (
-    options.baseBranch ||
-    (process.env.GITHUB_BASE_REF &&
-    (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true')
-      ? process.env.GITHUB_BASE_REF
-      : null) ||
-    config.project.base_branch
-  );
 }
 
 /** Run auto-clean if context has changed. */

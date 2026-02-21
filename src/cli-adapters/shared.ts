@@ -102,14 +102,22 @@ export async function runStreamingCommand(opts: {
           try {
             await handle.close();
           } catch {
-            // ignore close errors
+            /* ignore */
           }
-          await opts.cleanup();
+          try {
+            await opts.cleanup();
+          } catch {
+            /* ignore */
+          }
           reject(err);
         });
       })
       .catch(async (err) => {
-        await opts.cleanup();
+        try {
+          await opts.cleanup();
+        } catch {
+          /* ignore */
+        }
         reject(err);
       });
   });

@@ -141,7 +141,7 @@ async function validateCheckGates(ctx: ValidatorContext): Promise<{
     const checkFiles = await fs.readdir(checksPath);
     for (const file of checkFiles) {
       if (file.endsWith('.yml') || file.endsWith('.yaml')) {
-        parseCheckFile(file, checksPath, checks, existingCheckNames, ctx);
+        await parseCheckFile(file, checksPath, checks, existingCheckNames, ctx);
       }
     }
   } catch (error: unknown) {
