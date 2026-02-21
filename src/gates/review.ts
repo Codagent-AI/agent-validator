@@ -1,4 +1,4 @@
-import { getAdapter, isUsageLimit } from '../cli-adapters/index.js';
+import { type CLIAdapter, getAdapter, isUsageLimit } from '../cli-adapters/index.js';
 import type { AdapterConfig } from '../config/types.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import type { GateResult, PreviousViolation } from './result.js';
@@ -291,7 +291,7 @@ export class ReviewGateExecutor {
   }
 
   private async executeReview(
-    adapter: { name: string; execute: (opts: unknown) => Promise<string> },
+    adapter: CLIAdapter,
     reviewIndex: number,
     config: ReviewConfig,
     diff: string,
@@ -384,26 +384,14 @@ export class ReviewGateExecutor {
 }
 
 async function invokeAdapter(
-  adapter: { name: string; execute: (opts: unknown) => Promise<string> },
+  adapter: CLIAdapter,
   prompt: string,
   diff: string,
   config: ReviewConfig,
   adapterCfg: AdapterConfig | undefined,
   adapterLogger: (msg: string) => Promise<void>,
 ): Promise<string> {
-  return (
-    adapter as unknown as {
-      execute: (opts: {
-        prompt: string;
-        diff: string;
-        model?: string;
-        timeoutMs: number;
-        onOutput: (chunk: string) => void;
-        allowToolUse?: boolean;
-        thinkingBudget?: number;
-      }) => Promise<string>;
-    }
-  ).execute({
+  return adapter.execute({
     prompt,
     diff,
     model: adapterCfg?.model ?? config.model,

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { getAdapter, isUsageLimit } from '../cli-adapters/index.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import {
+  type UnhealthyAdapter,
   getUnhealthyAdapters,
   isAdapterCoolingDown,
   markAdapterHealthy,
@@ -71,7 +72,7 @@ export async function collectHealthyAdapters(
 async function checkAdapterHealth(
   toolName: string,
   adapter: { checkHealth: () => Promise<{ status: string; message?: string }> },
-  unhealthyMap: Record<string, { reason: string }>,
+  unhealthyMap: Record<string, UnhealthyAdapter>,
   mainLogger: (msg: string) => Promise<void>,
   logDir?: string,
 ): Promise<boolean> {
@@ -102,7 +103,7 @@ async function checkAdapterHealth(
 async function handleUnhealthyAdapter(
   toolName: string,
   adapter: { checkHealth: () => Promise<{ status: string; message?: string }> },
-  unhealthyEntry: { reason: string },
+  unhealthyEntry: UnhealthyAdapter,
   mainLogger: (msg: string) => Promise<void>,
   logDir?: string,
 ): Promise<boolean> {
