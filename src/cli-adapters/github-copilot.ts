@@ -203,8 +203,10 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     // (os.tmpdir() + Date.now() + process.pid), not user-supplied, eliminating injection risk.
     // Double quotes handle paths with spaces. This pattern matches claude.ts:131.
     try {
-      const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : '';
-      const cmd = `cat "${tmpFile}" | copilot --allow-tool "shell(cat)" --allow-tool "shell(grep)" --allow-tool "shell(ls)" --allow-tool "shell(find)" --allow-tool "shell(head)" --allow-tool "shell(tail)"${modelFlag}`;
+      const argsStr = args
+        .map((a) => (a.includes('(') ? `"${a}"` : a))
+        .join(' ');
+      const cmd = `cat "${tmpFile}" | copilot ${argsStr}`;
       const { stdout } = await execAsync(cmd, {
         timeout: opts.timeoutMs,
         maxBuffer: MAX_BUFFER_BYTES,

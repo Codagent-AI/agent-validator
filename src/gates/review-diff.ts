@@ -209,12 +209,12 @@ export async function getCIDiff(
   entryPointPath: string,
   baseBranch: string,
 ): Promise<string> {
-  const baseRef = baseBranch;
+  const baseRef = quoteArg(baseBranch);
   const headRef = process.env.GITHUB_SHA || 'HEAD';
   const pArg = pathArg(entryPointPath);
 
   try {
-    return await execDiff(`git diff ${baseRef}...${headRef}${pArg}`);
+    return await execDiff(`git diff ${baseRef}...${quoteArg(headRef)}${pArg}`);
   } catch (_error) {
     return await execDiff(`git diff HEAD^...HEAD${pArg}`);
   }
@@ -225,7 +225,9 @@ export async function getLocalDiff(
   baseBranch: string,
 ): Promise<string> {
   const pArg = pathArg(entryPointPath);
-  const committed = await execDiff(`git diff ${baseBranch}...HEAD${pArg}`);
+  const committed = await execDiff(
+    `git diff ${quoteArg(baseBranch)}...HEAD${pArg}`,
+  );
   const uncommitted = await execDiff(`git diff HEAD${pArg}`);
   const untracked = await untrackedDiff(entryPointPath);
 

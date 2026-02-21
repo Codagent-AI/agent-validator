@@ -378,8 +378,11 @@ async function handleGateError(
     }
     try {
       await releaseLock(config.project.log_dir);
-    } catch {
-      // Ignore errors releasing lock during error handling
+    } catch (releaseErr) {
+      console.error(
+        chalk.yellow('Warning: failed to release lock:'),
+        (releaseErr as Error).message,
+      );
     }
   }
   const err = error as { message?: string };
