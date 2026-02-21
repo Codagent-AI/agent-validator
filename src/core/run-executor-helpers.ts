@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import {
 	cleanLogs,
 	hasExistingLogs,
@@ -10,7 +8,7 @@ import { resolveStopHookConfig } from "../config/stop-hook-config.js";
 import { getCategoryLogger, resetLogger } from "../output/app-logger.js";
 import { ConsoleReporter } from "../output/console.js";
 import type { ConsoleLogHandle } from "../output/console-log.js";
-import { Logger } from "../output/logger.js";
+import type { Logger } from "../output/logger.js";
 import type { GauntletStatus, RunResult } from "../types/gauntlet-status.js";
 import { getDebugLogger } from "../utils/debug-log.js";
 import {
@@ -28,9 +26,14 @@ import { ChangeDetector } from "./change-detector.js";
 import { computeDiffStats } from "./diff-stats.js";
 import { EntryPointExpander } from "./entry-point.js";
 import { JobGenerator } from "./job.js";
+import {
+	findLatestConsoleLog,
+	tryAcquireLock,
+} from "./run-executor-lock.js";
 import { Runner } from "./runner.js";
 
-// ---- Types shared between executor and helpers ----
+// Re-export lock helpers so existing imports from run-executor-helpers still work
+export { findLatestConsoleLog, tryAcquireLock };
 
 export type ChangeOptions = {
 	commit?: string;
@@ -54,119 +57,49 @@ export interface RunContext {
 	effectiveBaseBranch: string;
 }
 
-// ---- Lock helpers ----
+const statusMessages: Record<GauntletStatus, string> = {
+	passed: "All gates passed.",
+	passed_with_warnings: "Passed with warnings -- some issues were skipped.",
+	no_applicable_gates: "No applicable gates for these changes.",
+	no_changes: "No changes detected.",
+	failed: "Gates failed -- issues must be fixed.",
+	retry_limit_exceeded: "Retry limit exceeded -- logs have been automatically archived.",
+	lock_conflict: "Another gauntlet run is already in progress.",
+	error: "Unexpected error occurred.",
+	no_config: "No .gauntlet/config.yml found.",
+	stop_hook_active: "Stop hook already active.",
+	loop_detected: "Loop detected -- rapid blocks overridden.",
+	interval_not_elapsed: "Run interval not elapsed.",
+	invalid_input: "Invalid input.",
+	stop_hook_disabled: "",
+	pr_push_required: "Gates passed -- PR needs to be created/updated.",
+	ci_pending: "CI checks still running.",
+	ci_failed: "CI checks failed or review changes requested.",
+	ci_passed: "CI checks passed, no blocking reviews.",
+	validation_required: "Changes need validation or previous run has unresolved failures.",
+};
 
-const LOCK_FILENAME = ".gauntlet-run.lock";
-const STALE_LOCK_MS = 10 * 60 * 1000;
-
-function isProcessAlive(pid: number): boolean {
-	try {
-		process.kill(pid, 0);
-		return true;
-	} catch (err: unknown) {
-		if (
-			typeof err === "object" &&
-			err !== null &&
-			"code" in err &&
-			(err as { code: string }).code === "EPERM"
-		) {
-			return true;
-		}
-		return false;
-	}
+export function getStatusMessage(status: GauntletStatus): string {
+	return statusMessages[status] || "Unknown status";
 }
 
-async function isLockStale(lockPath: string): Promise<boolean> {
-	try {
-		const lockContent = await fs.readFile(lockPath, "utf-8");
-		const lockPid = Number.parseInt(lockContent.trim(), 10);
-		const lockStat = await fs.stat(lockPath);
-		const lockAgeMs = Date.now() - lockStat.mtimeMs;
-
-		const pidValid = !Number.isNaN(lockPid);
-		if (pidValid && !isProcessAlive(lockPid)) {
-			return true;
-		}
-		if (!pidValid && lockAgeMs > STALE_LOCK_MS) {
-			return true;
-		}
-		return false;
-	} catch {
-		return false;
-	}
+function getRunLogger() {
+	return getCategoryLogger("run");
 }
 
-/**
- * Acquire the lock file. Returns true if successful, false if lock exists.
- */
-export async function tryAcquireLock(logDir: string): Promise<boolean> {
-	await fs.mkdir(logDir, { recursive: true });
-	const lockPath = path.resolve(logDir, LOCK_FILENAME);
-	try {
-		await fs.writeFile(lockPath, String(process.pid), { flag: "wx" });
-		return true;
-	} catch (err: unknown) {
-		const isExist =
-			typeof err === "object" &&
-			err !== null &&
-			"code" in err &&
-			(err as { code: string }).code === "EEXIST";
-
-		if (!isExist) {
-			throw err;
-		}
-
-		const stale = await isLockStale(lockPath);
-		if (!stale) {
-			return false;
-		}
-
-		await fs.rm(lockPath, { force: true });
-		try {
-			await fs.writeFile(lockPath, String(process.pid), { flag: "wx" });
-			return true;
-		} catch {
-			return false;
-		}
+export async function finalizeAndReturn(
+	loggerInitializedHere: boolean,
+	result: RunResult,
+	consoleLogHandle?: ConsoleLogHandle,
+): Promise<RunResult> {
+	consoleLogHandle?.restore();
+	if (loggerInitializedHere) {
+		await resetLogger();
 	}
+	return result;
 }
 
-// ---- Console log finder ----
-
-export async function findLatestConsoleLog(
-	logDir: string,
-): Promise<string | null> {
-	try {
-		const files = await fs.readdir(logDir);
-		let maxNum = -1;
-		let latestFile: string | null = null;
-
-		for (const file of files) {
-			if (!(file.startsWith("console.") && file.endsWith(".log"))) {
-				continue;
-			}
-			const middle = file.slice(
-				"console.".length,
-				file.length - ".log".length,
-			);
-			if (/^\d+$/.test(middle)) {
-				const n = Number.parseInt(middle, 10);
-				if (n > maxNum) {
-					maxNum = n;
-					latestFile = file;
-				}
-			}
-		}
-
-		return latestFile ? path.join(logDir, latestFile) : null;
-	} catch {
-		return null;
-	}
-}
-
-// ---- Interval check ----
-
-async function shouldRunBasedOnInterval(
+export async function shouldRunBasedOnInterval(
 	logDir: string,
 	intervalMinutes: number,
 ): Promise<boolean> {
@@ -184,56 +117,6 @@ async function shouldRunBasedOnInterval(
 	const elapsedMinutes = (now.getTime() - lastRun.getTime()) / (1000 * 60);
 	return elapsedMinutes >= intervalMinutes;
 }
-
-// ---- Status messages ----
-
-const statusMessages: Record<GauntletStatus, string> = {
-	passed: "All gates passed.",
-	passed_with_warnings: "Passed with warnings -- some issues were skipped.",
-	no_applicable_gates: "No applicable gates for these changes.",
-	no_changes: "No changes detected.",
-	failed: "Gates failed -- issues must be fixed.",
-	retry_limit_exceeded:
-		"Retry limit exceeded -- logs have been automatically archived.",
-	lock_conflict: "Another gauntlet run is already in progress.",
-	error: "Unexpected error occurred.",
-	no_config: "No .gauntlet/config.yml found.",
-	stop_hook_active: "Stop hook already active.",
-	loop_detected: "Loop detected -- rapid blocks overridden.",
-	interval_not_elapsed: "Run interval not elapsed.",
-	invalid_input: "Invalid input.",
-	stop_hook_disabled: "",
-	pr_push_required: "Gates passed -- PR needs to be created/updated.",
-	ci_pending: "CI checks still running.",
-	ci_failed: "CI checks failed or review changes requested.",
-	ci_passed: "CI checks passed, no blocking reviews.",
-	validation_required:
-		"Changes need validation or previous run has unresolved failures.",
-};
-
-export function getStatusMessage(status: GauntletStatus): string {
-	return statusMessages[status] || "Unknown status";
-}
-
-function getRunLogger() {
-	return getCategoryLogger("run");
-}
-
-// ---- Finalize helper ----
-
-export async function finalizeAndReturn(
-	loggerInitializedHere: boolean,
-	result: RunResult,
-	consoleLogHandle?: ConsoleLogHandle,
-): Promise<RunResult> {
-	consoleLogHandle?.restore();
-	if (loggerInitializedHere) {
-		await resetLogger();
-	}
-	return result;
-}
-
-// ---- Step: check interval ----
 
 export async function checkRunInterval(
 	ctx: RunContext,
@@ -280,11 +163,6 @@ export async function checkRunInterval(
 	return null;
 }
 
-// ---- Step: process rerun mode ----
-
-/**
- * Build the failures map from previous log data.
- */
 function buildFailuresMap(
 	previousFailures: Awaited<
 		ReturnType<typeof findPreviousFailures>
@@ -304,12 +182,7 @@ function buildFailuresMap(
 	return failuresMap;
 }
 
-/**
- * Handle rerun mode: parse previous failures and build change options.
- */
-async function handleRerunMode(
-	ctx: RunContext,
-): Promise<{
+async function handleRerunMode(ctx: RunContext): Promise<{
 	failuresMap: Map<string, Map<string, PreviousViolation[]>>;
 	passedSlotsMap: Map<string, Map<number, PassedSlot>> | undefined;
 	changeOptions: ChangeOptions;
@@ -352,9 +225,6 @@ async function handleRerunMode(
 	return { failuresMap, passedSlotsMap: passedSlots, changeOptions };
 }
 
-/**
- * Handle fresh run mode: resolve fixBase from execution state.
- */
 async function handleFreshRunMode(
 	ctx: RunContext,
 ): Promise<ChangeOptions | undefined> {
@@ -371,10 +241,7 @@ async function handleFreshRunMode(
 	if (resolved.warning) {
 		log.warn(`Warning: ${resolved.warning}`);
 	}
-	if (resolved.fixBase) {
-		return { fixBase: resolved.fixBase };
-	}
-	return undefined;
+	return resolved.fixBase ? { fixBase: resolved.fixBase } : undefined;
 }
 
 export async function processRerunMode(
@@ -401,7 +268,6 @@ export async function processRerunMode(
 		changeOptions = await handleFreshRunMode(ctx);
 	}
 
-	// Allow explicit commit or uncommitted options to override fixBase
 	if (ctx.options.commit || ctx.options.uncommitted) {
 		changeOptions = {
 			commit: ctx.options.commit,
@@ -412,8 +278,6 @@ export async function processRerunMode(
 
 	return { failuresMap, passedSlotsMap, changeOptions };
 }
-
-// ---- Step: detect and prepare changes ----
 
 async function handleNoChanges(
 	ctx: RunContext,
@@ -511,8 +375,6 @@ export async function detectAndPrepareChanges(
 	return { jobs, changeOpts: effectiveChangeOptions };
 }
 
-// ---- Step: execute and report ----
-
 function determineStatus(outcome: {
 	allPassed: boolean;
 	anySkipped: boolean;
@@ -528,6 +390,38 @@ function determineStatus(outcome: {
 		return "passed";
 	}
 	return "failed";
+}
+
+/** Build the result object from runner outcome. */
+async function buildRunResult(
+	ctx: RunContext,
+	outcome: Awaited<ReturnType<Runner["run"]>>,
+	jobs: ReturnType<JobGenerator["generateJobs"]>,
+): Promise<RunResult> {
+	const consoleLogPath = await findLatestConsoleLog(
+		ctx.config.project.log_dir,
+	);
+	const status = determineStatus(outcome);
+
+	if (status === "passed" || status === "retry_limit_exceeded") {
+		const reason =
+			status === "passed" ? "all_passed" : "retry_limit_exceeded";
+		const debugLogger = getDebugLogger();
+		await debugLogger?.logClean("auto", reason);
+		await cleanLogs(
+			ctx.config.project.log_dir,
+			ctx.config.project.max_previous_logs,
+		);
+	}
+
+	return {
+		status,
+		message: getStatusMessage(status),
+		gatesRun: jobs.length,
+		gatesFailed: outcome.allPassed ? 0 : jobs.length,
+		consoleLogPath: consoleLogPath ?? undefined,
+		gateResults: outcome.gateResults,
+	};
 }
 
 export async function executeAndReport(
@@ -579,28 +473,5 @@ export async function executeAndReport(
 
 	await writeExecutionState(ctx.config.project.log_dir);
 
-	const consoleLogPath = await findLatestConsoleLog(
-		ctx.config.project.log_dir,
-	);
-
-	const status = determineStatus(outcome);
-
-	if (status === "passed" || status === "retry_limit_exceeded") {
-		const reason =
-			status === "passed" ? "all_passed" : "retry_limit_exceeded";
-		await debugLogger?.logClean("auto", reason);
-		await cleanLogs(
-			ctx.config.project.log_dir,
-			ctx.config.project.max_previous_logs,
-		);
-	}
-
-	return {
-		status,
-		message: getStatusMessage(status),
-		gatesRun: jobs.length,
-		gatesFailed: outcome.allPassed ? 0 : jobs.length,
-		consoleLogPath: consoleLogPath ?? undefined,
-		gateResults: outcome.gateResults,
-	};
+	return buildRunResult(ctx, outcome, jobs);
 }

@@ -66,7 +66,7 @@ describe("run-executor stop hook config", () => {
 	describe("stop_hook_disabled status", () => {
 		it("should have stop_hook_disabled in getStatusMessage", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -77,7 +77,7 @@ describe("run-executor stop hook config", () => {
 
 		it("should import resolveStopHookConfig", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -87,7 +87,7 @@ describe("run-executor stop hook config", () => {
 
 		it("should check enabled status before interval check", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -98,7 +98,7 @@ describe("run-executor stop hook config", () => {
 
 		it("should return stop_hook_disabled when disabled", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -110,7 +110,7 @@ describe("run-executor stop hook config", () => {
 	describe("interval zero means always run", () => {
 		it("should skip interval check when interval is 0", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -136,7 +136,7 @@ describe("run-executor checkInterval option", () => {
 	describe("interval checking logic", () => {
 		it("should include shouldRunBasedOnInterval function", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -151,16 +151,16 @@ describe("run-executor checkInterval option", () => {
 				"utf-8",
 			);
 
-			// Interval check should appear before lock acquisition in the executeRun function
+			// Interval check (via checkRunInterval) should appear before lock acquisition
 			const executeRunStart = sourceFile.indexOf(
 				"export async function executeRun",
 			);
 			const intervalCheckInExecute = sourceFile.indexOf(
-				"options.checkInterval",
+				"checkRunInterval",
 				executeRunStart,
 			);
 			const lockAcquisitionInExecute = sourceFile.indexOf(
-				"await tryAcquireLock",
+				"tryAcquireLock",
 				executeRunStart,
 			);
 
@@ -183,11 +183,11 @@ describe("run-executor checkInterval option", () => {
 				"export async function executeRun",
 			);
 			const intervalCheckInExecute = sourceFile.indexOf(
-				"options.checkInterval",
+				"checkRunInterval",
 				executeRunStart,
 			);
 			const autoCleanInExecute = sourceFile.indexOf(
-				"shouldAutoClean",
+				"handleAutoClean",
 				executeRunStart,
 			);
 
@@ -201,7 +201,7 @@ describe("run-executor checkInterval option", () => {
 
 		it("should return interval_not_elapsed status when interval has not elapsed", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -212,7 +212,7 @@ describe("run-executor checkInterval option", () => {
 
 		it("should only check interval when no existing logs (not in rerun mode)", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -224,7 +224,7 @@ describe("run-executor checkInterval option", () => {
 
 		it("should use resolveStopHookConfig for interval configuration", () => {
 			const sourceFile = readFileSync(
-				join(process.cwd(), "src/core/run-executor.ts"),
+				join(process.cwd(), "src/core/run-executor-helpers.ts"),
 				"utf-8",
 			);
 
@@ -262,7 +262,7 @@ describe("run-executor checkInterval option", () => {
 describe("run-executor auto-clean on retry_limit_exceeded", () => {
 	it("should auto-clean logs when status is retry_limit_exceeded", () => {
 		const sourceFile = readFileSync(
-			join(process.cwd(), "src/core/run-executor.ts"),
+			join(process.cwd(), "src/core/run-executor-helpers.ts"),
 			"utf-8",
 		);
 
@@ -275,7 +275,7 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 
 	it("should not delete execution state on retry_limit_exceeded", () => {
 		const sourceFile = readFileSync(
-			join(process.cwd(), "src/core/run-executor.ts"),
+			join(process.cwd(), "src/core/run-executor-helpers.ts"),
 			"utf-8",
 		);
 
@@ -293,7 +293,7 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 
 	it("status message for retry_limit_exceeded should not mention manual clean", () => {
 		const sourceFile = readFileSync(
-			join(process.cwd(), "src/core/run-executor.ts"),
+			join(process.cwd(), "src/core/run-executor-helpers.ts"),
 			"utf-8",
 		);
 
@@ -305,7 +305,7 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 
 	it("should pass max_previous_logs to cleanLogs on passed status", () => {
 		const sourceFile = readFileSync(
-			join(process.cwd(), "src/core/run-executor.ts"),
+			join(process.cwd(), "src/core/run-executor-helpers.ts"),
 			"utf-8",
 		);
 
