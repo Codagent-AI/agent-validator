@@ -214,24 +214,6 @@ If multiple capabilities are affected, create multiple delta files under `change
 
 4. **Enrich design.md (already present from brainstorming):**
    The design doc was moved into the change directory in step 1. Review it and add the following sections if not already present:
-   - **Pre-factoring** (must be the **first** `##` section in design.md, immediately after the front-matter/title) — analyze CodeScene hotspots for files this change will modify. Add a `## Pre-factoring` section at the top so that any required refactoring is completed before implementation begins:
-
-     > **HOTSPOT_THRESHOLD = 8.5** (Code Health score; files at or below are hotspot candidates)
-
-     1. Determine which source files will be modified by the change (from the Impact section of `proposal.md`).
-     2. For each affected file, run `code_health_score` to get its Code Health score (1.0–10.0).
-        - **Score ≤ HOTSPOT_THRESHOLD** → the file is a hotspot candidate. Proceed to step 3.
-        - **Score > HOTSPOT_THRESHOLD** → the file is healthy. No pre-factoring needed for it.
-     3. For each file scoring ≤ HOTSPOT_THRESHOLD, get refactoring priorities:
-        - `code_health_review` — get the full Code Health review listing code smells.
-        - `code_health_auto_refactor` — get an automated refactoring recommendation for the worst-scoring function.
-     4. Optionally, cross-reference with project-level data if available:
-        - `list_technical_debt_hotspots_for_project_file` — check if the file is a known project hotspot.
-        - `list_technical_debt_hotspots_for_project` — list all project hotspots and filter to affected files.
-     5. Document: which files are hotspots, their scores, code smells, and refactoring strategy. If no files score ≤ HOTSPOT_THRESHOLD, write "No hotspots modified."
-
-     > **Note:** If the CodeScene MCP server is not available, write "CodeScene not available — hotspot analysis skipped." See the [CodeScene MCP server documentation](https://github.com/codescene-oss/codescene-mcp) for setup instructions.
-
 ## Spec File Format
 
 ### Critical: Scenario Formatting

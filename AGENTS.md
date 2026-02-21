@@ -36,7 +36,6 @@ When updating a skill, edit the files in `skills/gauntlet-<action>/`. The local 
 
 ## Planning with superpowers
 - The openspec change directory is the source of truth for planning. When using `writing-plan` skill, read all files in `openspec/changes/<change-name>/` (proposal.md, design.md, and spec deltas), not the brainstorm design doc in docs/plans/.
-- If design.md contains a `## Pre-factoring` section with hotspot refactorings, the plan's first task should be those refactorings — complete them before starting implementation work.
 - When applicable, the plan should include a task for updating any user-facing docs in `docs/` (quick-start.md, user-guide.md, skills-guide.md, config-reference.md) to reflect the changes.
 - When applicable, plan should also include a task for archiving the openspec change, see `.claude/commands/openspec/archive.md`.
 

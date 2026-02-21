@@ -1,6 +1,0 @@
-command: cs delta ${BASE_BRANCH} --error-on-warnings
-rerun_command: cs delta ${BASE_BRANCH}
-parallel: true
-run_in_ci: false
-run_locally: true
-timeout: 120

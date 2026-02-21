@@ -1,30 +1,30 @@
 #!/usr/bin/env node
-import { Command } from "commander";
-import packageJson from "../package.json" with { type: "json" };
+import { Command } from 'commander';
+import packageJson from '../package.json' with { type: 'json' };
 import {
-	registerCheckCommand,
-	registerCICommand,
-	registerCleanCommand,
-	registerDetectCommand,
-	registerHealthCommand,
-	registerHelpCommand,
-	registerInitCommand,
-	registerListCommand,
-	registerReviewCommand,
-	registerRunCommand,
-	registerStartHookCommand,
-	registerStatusCommand,
-	registerStopHookCommand,
-	registerValidateCommand,
-	registerWaitCICommand,
-} from "./commands/index.js";
+  registerCheckCommand,
+  registerCICommand,
+  registerCleanCommand,
+  registerDetectCommand,
+  registerHealthCommand,
+  registerHelpCommand,
+  registerInitCommand,
+  registerListCommand,
+  registerReviewCommand,
+  registerRunCommand,
+  registerStartHookCommand,
+  registerStatusCommand,
+  registerStopHookCommand,
+  registerValidateCommand,
+  registerWaitCICommand,
+} from './commands/index.js';
 
 const program = new Command();
 
 program
-	.name("agent-gauntlet")
-	.description("AI-assisted quality gates")
-	.version(packageJson.version);
+  .name('agent-gauntlet')
+  .description('AI-assisted quality gates')
+  .version(packageJson.version);
 
 // Register all commands
 registerRunCommand(program);
@@ -45,7 +45,7 @@ registerHelpCommand(program);
 
 // Default action: help
 if (process.argv.length < 3) {
-	process.argv.push("help");
+  process.argv.push('help');
 }
 
 program.parse(process.argv);
