@@ -349,6 +349,13 @@ function buildAdversarialInput(lineCount: number): string {
     chunks.push(`line ${i}: descriptor: { dataPointType: stuff }`);
     chunks.push(`resource: { body: 'something' }`);
     chunks.push(`some { nested { content } with } braces`);
+    // Every 100th iteration, add a multi-line non-OTel block to exercise depth tracking
+    if (i % 100 === 0) {
+      chunks.push('{');
+      chunks.push('  "nonOtel": true,');
+      chunks.push('  "nested": { "value": 1 }');
+      chunks.push('}');
+    }
   }
   return chunks.join('\n');
 }

@@ -367,10 +367,11 @@ export class ClaudeAdapter implements CLIAdapter {
     thinkingBudget?: string;
   }): Promise<string> {
     const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
+    let timer: ReturnType<typeof setTimeout>;
     return Promise.race([
-      this.doExecute(opts),
-      new Promise<never>((_, reject) =>
-        setTimeout(
+      this.doExecute(opts).finally(() => clearTimeout(timer)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
           () =>
             reject(
               new Error(
@@ -378,8 +379,8 @@ export class ClaudeAdapter implements CLIAdapter {
               ),
             ),
           totalTimeout,
-        ),
-      ),
+        );
+      }),
     ]);
   }
 
