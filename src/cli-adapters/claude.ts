@@ -11,12 +11,7 @@ import { CLAUDE_THINKING_TOKENS } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
 
-// Matches OTel console exporter metric blocks dumped to stdout at process exit.
-// Requires `descriptor`, `dataPointType`, and `dataPoints` fields which are
-// unique to OTel SDK output and won't appear in normal code review content.
-// Optionally matches [otel] prefix that some exporters add.
-const OTEL_METRIC_BLOCK_RE =
-  /(?:\[otel\]\s*)?\{\s*\n\s*descriptor:\s*\{[\s\S]*?dataPointType:\s*\d+[\s\S]*?dataPoints:\s*\[[\s\S]*?\]\s*,?\s*\n\}/g;
+// ─── OTel Usage Types ────────────────────────────────────────────────────────
 
 interface OtelUsage {
   cost?: number;
@@ -28,6 +23,111 @@ interface OtelUsage {
   toolContentBytes?: number;
   apiRequests?: number;
 }
+
+// ─── O(n) Line-Based OTel Block Scanner ──────────────────────────────────────
+// Replaces regex-based block detection to avoid catastrophic backtracking
+// on large outputs (~400KB+). Single-pass, string-aware brace tracking.
+
+export interface ScanResult {
+  metricBlocks: string[];
+  logBlocks: string[];
+  cleaned: string;
+}
+
+/** Strip backslash-escaped characters and quoted strings, then count net brace depth. */
+export function countBraceChange(line: string): number {
+  // Remove escaped characters, then quoted strings, leaving only structural chars
+  const stripped = line
+    .replace(/\\./g, '')
+    .replace(/"[^"]*"/g, '')
+    .replace(/'[^']*'/g, '');
+  let depth = 0;
+  for (const ch of stripped) {
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+  }
+  return depth;
+}
+
+/** Classify a captured block as metric, log, or neither. */
+export function classifyBlock(block: string): 'metric' | 'log' | 'other' {
+  if (
+    block.includes('descriptor:') &&
+    block.includes('dataPointType:') &&
+    block.includes('dataPoints:')
+  ) {
+    return 'metric';
+  }
+  if (block.includes('resource:') && /body:\s*'claude_code\.\w+'/.test(block)) {
+    return 'log';
+  }
+  return 'other';
+}
+
+/** Check if a line starts a brace block (standalone `{` or `[otel] {`). */
+function isBlockStart(line: string): boolean {
+  const trimmed = line.trimStart();
+  return (
+    trimmed === '{' || (trimmed.startsWith('[otel]') && trimmed.includes('{'))
+  );
+}
+
+/** Route a completed block into the correct bucket. */
+function routeBlock(
+  blockLines: string[],
+  metricBlocks: string[],
+  logBlocks: string[],
+  cleanedLines: string[],
+): void {
+  const block = blockLines.join('\n');
+  const kind = classifyBlock(block);
+  if (kind === 'metric') metricBlocks.push(block);
+  else if (kind === 'log') logBlocks.push(block);
+  else cleanedLines.push(...blockLines);
+}
+
+/**
+ * Single-pass line scanner that extracts OTel metric and log blocks from raw output.
+ * Returns classified blocks and cleaned output with OTel blocks removed.
+ */
+export function scanOtelBlocks(raw: string): ScanResult {
+  const lines = raw.split('\n');
+  const metricBlocks: string[] = [];
+  const logBlocks: string[] = [];
+  const cleanedLines: string[] = [];
+
+  let blockLines: string[] | null = null;
+  let depth = 0;
+
+  for (const line of lines) {
+    if (blockLines === null) {
+      if (!isBlockStart(line)) {
+        cleanedLines.push(line);
+        continue;
+      }
+      blockLines = [line];
+      depth = countBraceChange(line);
+    } else {
+      blockLines.push(line);
+      depth += countBraceChange(line);
+    }
+
+    if (depth <= 0) {
+      routeBlock(blockLines, metricBlocks, logBlocks, cleanedLines);
+      blockLines = null;
+      depth = 0;
+    }
+  }
+
+  // If block never closed, restore lines to avoid data loss
+  if (blockLines !== null) {
+    cleanedLines.push(...blockLines);
+  }
+
+  return { metricBlocks, logBlocks, cleaned: cleanedLines.join('\n') };
+}
+
+// ─── Metric Parsing (unchanged) ─────────────────────────────────────────────
 
 const TOKEN_TYPES = ['input', 'output', 'cacheRead', 'cacheCreation'] as const;
 
@@ -65,12 +165,7 @@ function parseOtelMetrics(blocks: string[]): OtelUsage {
   return usage;
 }
 
-// Matches OTel console log exporter event records emitted by Claude Code.
-// The Node.js SDK console exporter uses util.inspect() format with unquoted keys
-// and single-quoted strings. Blocks start with `resource:` and contain a `body:`
-// field with the event name (e.g. 'claude_code.tool_result').
-const OTEL_LOG_BLOCK_RE =
-  /\{\s*\n\s*resource:\s*\{[\s\S]*?body:\s*'claude_code\.\w+'[\s\S]*?\n\}/g;
+// ─── Log Event Parsing ──────────────────────────────────────────────────────
 
 /** Pre-compiled regexes for extracting single-quoted attribute values from OTel log blocks. */
 const OTEL_ATTR_RE = {
@@ -112,19 +207,7 @@ function accumulateApiRequest(block: string, usage: OtelUsage): void {
   }
 }
 
-/** Accumulate tool_result and api_request event data from OTel log blocks. */
-function parseOtelLogEvents(raw: string, usage: OtelUsage): void {
-  const blocks = raw.match(OTEL_LOG_BLOCK_RE);
-  if (!blocks) return;
-  for (const block of blocks) {
-    const body = block.match(OTEL_ATTR_RE.body)?.[1];
-    if (body === 'claude_code.tool_result') {
-      accumulateToolResult(block, usage);
-    } else if (body === 'claude_code.api_request') {
-      accumulateApiRequest(block, usage);
-    }
-  }
-}
+// ─── OTel Summary Formatting ────────────────────────────────────────────────
 
 const OTEL_SUMMARY_FIELDS: Array<[keyof OtelUsage, string]> = [
   ['input', 'in'],
@@ -148,15 +231,25 @@ function formatOtelSummary(usage: OtelUsage): string | null {
   return `[otel] ${parts.join(' ')}`;
 }
 
-function extractOtelMetrics(
+// ─── Main Extraction (uses scanner instead of regexes) ──────────────────────
+
+export function extractOtelMetrics(
   raw: string,
   onLog?: (msg: string) => void,
 ): string {
-  const metricBlocks = raw.match(OTEL_METRIC_BLOCK_RE);
-  const usage = metricBlocks ? parseOtelMetrics(metricBlocks) : {};
+  const { metricBlocks, logBlocks, cleaned } = scanOtelBlocks(raw);
 
-  // Also parse log events for tool call and API request counts
-  parseOtelLogEvents(raw, usage);
+  const usage = metricBlocks.length > 0 ? parseOtelMetrics(metricBlocks) : {};
+
+  // Process log blocks for tool call and API request counts
+  for (const block of logBlocks) {
+    const body = block.match(OTEL_ATTR_RE.body)?.[1];
+    if (body === 'claude_code.tool_result') {
+      accumulateToolResult(block, usage);
+    } else if (body === 'claude_code.api_request') {
+      accumulateApiRequest(block, usage);
+    }
+  }
 
   const summary = formatOtelSummary(usage);
   if (summary) {
@@ -165,11 +258,24 @@ function extractOtelMetrics(
     getDebugLogger()?.logTelemetry({ adapter: 'claude', summary });
   }
 
-  return raw
-    .replace(OTEL_METRIC_BLOCK_RE, '')
-    .replace(OTEL_LOG_BLOCK_RE, '')
-    .trimEnd();
+  return cleaned.trimEnd();
 }
+
+/** Safety wrapper: catches exceptions and returns raw output with a warning. */
+function safeExtractOtelMetrics(
+  raw: string,
+  onLog?: (msg: string) => void,
+): string {
+  try {
+    return extractOtelMetrics(raw, onLog);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[gauntlet] OTel extraction failed: ${msg}\n`);
+    return raw;
+  }
+}
+
+// ─── OTel Environment ───────────────────────────────────────────────────────
 
 /** Build OTel environment overrides for console export. */
 function buildOtelEnv(): Record<string, string> {
@@ -186,13 +292,9 @@ function buildOtelEnv(): Record<string, string> {
   return env;
 }
 
-/** Strip OTel metric and log blocks from raw output. */
-function stripOtelBlocks(raw: string): string {
-  return raw
-    .replace(OTEL_METRIC_BLOCK_RE, '')
-    .replace(OTEL_LOG_BLOCK_RE, '')
-    .trimEnd();
-}
+// ─── Adapter ────────────────────────────────────────────────────────────────
+
+const POST_PROCESS_BUFFER_MS = 30_000;
 
 export class ClaudeAdapter implements CLIAdapter {
   name = 'claude';
@@ -264,6 +366,33 @@ export class ClaudeAdapter implements CLIAdapter {
     allowToolUse?: boolean;
     thinkingBudget?: string;
   }): Promise<string> {
+    const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+      this.doExecute(opts).finally(() => clearTimeout(timer)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                'Adapter execution timed out (post-processing exceeded limit)',
+              ),
+            ),
+          totalTimeout,
+        );
+      }),
+    ]);
+  }
+
+  private async doExecute(opts: {
+    prompt: string;
+    diff: string;
+    model?: string;
+    timeoutMs?: number;
+    onOutput?: (chunk: string) => void;
+    allowToolUse?: boolean;
+    thinkingBudget?: string;
+  }): Promise<string> {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
     const tmpFile = path.join(
@@ -303,24 +432,17 @@ export class ClaudeAdapter implements CLIAdapter {
     };
 
     if (opts.onOutput) {
-      const outputBuffer: string[] = [];
       const raw = await runStreamingCommand({
         command: 'claude',
         args,
         tmpFile,
         timeoutMs: opts.timeoutMs,
-        onOutput: (chunk: string) => {
-          outputBuffer.push(chunk);
-        },
         cleanup,
         env: execEnv,
       });
-      const cleanedOutput = extractOtelMetrics(
-        outputBuffer.join(''),
-        opts.onOutput,
-      );
-      opts.onOutput(cleanedOutput);
-      return stripOtelBlocks(raw);
+      const cleaned = safeExtractOtelMetrics(raw, opts.onOutput);
+      opts.onOutput(cleaned);
+      return cleaned;
     }
 
     try {
@@ -330,7 +452,7 @@ export class ClaudeAdapter implements CLIAdapter {
         maxBuffer: MAX_BUFFER_BYTES,
         env: execEnv,
       });
-      return extractOtelMetrics(stdout);
+      return safeExtractOtelMetrics(stdout);
     } finally {
       await cleanup();
     }
