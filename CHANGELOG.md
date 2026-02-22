@@ -1,5 +1,13 @@
 # agent-gauntlet
 
+## 0.15.3
+
+### Patch Changes
+
+- [#75](https://github.com/pacaplan/agent-gauntlet/pull/75) Replace CodeScene integration with Biome's built-in clean code lint rules for complexity and style analysis
+
+- [#76](https://github.com/pacaplan/agent-gauntlet/pull/76) Replace OTel regex-based cost extraction with an O(n) line-based scanner for improved performance and reliability
+
 ## 0.15.2
 
 ### Patch Changes
