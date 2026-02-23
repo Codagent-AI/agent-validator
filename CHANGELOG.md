@@ -1,5 +1,13 @@
 # agent-gauntlet
 
+## 0.15.4
+
+### Patch Changes
+
+- [#78](https://github.com/pacaplan/agent-gauntlet/pull/78) Prevent verification mode from reporting false positives by fixing how pass/fail status is determined during verification runs
+
+- [#79](https://github.com/pacaplan/agent-gauntlet/pull/79) Prevent event-loop blocking in review output evaluation by avoiding synchronous processing of large review results
+
 ## 0.15.3
 
 ### Patch Changes
