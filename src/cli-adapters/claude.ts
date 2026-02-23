@@ -58,7 +58,10 @@ export function classifyBlock(block: string): 'metric' | 'log' | 'other' {
   ) {
     return 'metric';
   }
-  if (block.includes('resource:') && /body:\s*'claude_code\.\w+'/.test(block)) {
+  if (
+    block.includes('resource:') &&
+    /body:\s*['"]claude_code\.\w+['"]/.test(block)
+  ) {
     return 'log';
   }
   return 'other';
@@ -167,15 +170,15 @@ function parseOtelMetrics(blocks: string[]): OtelUsage {
 
 // ─── Log Event Parsing ──────────────────────────────────────────────────────
 
-/** Pre-compiled regexes for extracting single-quoted attribute values from OTel log blocks. */
+/** Pre-compiled regexes for extracting quoted attribute values from OTel log blocks. */
 const OTEL_ATTR_RE = {
-  body: /body:\s*'([^']*)'/,
-  tool_result_size_bytes: /tool_result_size_bytes:\s*'([^']*)'/,
-  input_tokens: /input_tokens:\s*'([^']*)'/,
-  output_tokens: /output_tokens:\s*'([^']*)'/,
-  cache_read_tokens: /cache_read_tokens:\s*'([^']*)'/,
-  cache_creation_tokens: /cache_creation_tokens:\s*'([^']*)'/,
-  cost_usd: /cost_usd:\s*'([^']*)'/,
+  body: /body:\s*['"]([^'"]*)['"]/,
+  tool_result_size_bytes: /tool_result_size_bytes:\s*['"]([^'"]*)['"]/,
+  input_tokens: /input_tokens:\s*['"]([^'"]*)['"]/,
+  output_tokens: /output_tokens:\s*['"]([^'"]*)['"]/,
+  cache_read_tokens: /cache_read_tokens:\s*['"]([^'"]*)['"]/,
+  cache_creation_tokens: /cache_creation_tokens:\s*['"]([^'"]*)['"]/,
+  cost_usd: /cost_usd:\s*['"]([^'"]*)['"]/,
 } as const;
 
 /** Maps OTel api_request attribute regexes to OtelUsage fields. */

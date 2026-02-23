@@ -95,6 +95,30 @@ describe('classifyBlock', () => {
 }`;
     expect(classifyBlock(block)).toBe('other');
   });
+
+  it('identifies log blocks with double-quoted body', () => {
+    const block = `{
+  resource: {
+    attributes: {}
+  },
+  body: "claude_code.api_request",
+  attributes: {
+    input_tokens: "500"
+  }
+}`;
+    expect(classifyBlock(block)).toBe('log');
+  });
+
+  it('identifies log blocks with double-quoted tool_result body', () => {
+    const block = `{
+  resource: {},
+  body: "claude_code.tool_result",
+  attributes: {
+    tool_result_size_bytes: "1234"
+  }
+}`;
+    expect(classifyBlock(block)).toBe('log');
+  });
 });
 
 // ─── scanOtelBlocks ─────────────────────────────────────────────────────────
@@ -212,6 +236,45 @@ describe('scanOtelBlocks', () => {
     expect(result.metricBlocks).toHaveLength(2);
     expect(result.cleaned).toBe('');
   });
+
+  it('strips double-quoted OTel log blocks from output', () => {
+    const logBlock = `{
+  resource: {
+    attributes: {}
+  },
+  instrumentationScope: { name: "claude_code" },
+  timestamp: 1771795965895000,
+  body: "claude_code.api_request",
+  attributes: {
+    "input_tokens": "500",
+    "output_tokens": "100",
+    "cost_usd": "0.015"
+  }
+}`;
+    const input = `review result\n${logBlock}\nmore text`;
+    const result = scanOtelBlocks(input);
+    expect(result.logBlocks).toHaveLength(1);
+    expect(result.cleaned).toBe('review result\nmore text');
+  });
+
+  it('strips multiple double-quoted log blocks interleaved with content', () => {
+    const makeLog = (body: string) => `{
+  resource: {},
+  body: "${body}",
+  attributes: { "input_tokens": "100" }
+}`;
+    const input = [
+      'start',
+      makeLog('claude_code.api_request'),
+      'middle',
+      makeLog('claude_code.tool_result'),
+      makeLog('claude_code.user_prompt'),
+      'end',
+    ].join('\n');
+    const result = scanOtelBlocks(input);
+    expect(result.logBlocks).toHaveLength(3);
+    expect(result.cleaned).toBe('start\nmiddle\nend');
+  });
 });
 
 // ─── extractOtelMetrics (end-to-end) ────────────────────────────────────────
@@ -325,6 +388,45 @@ trailing text`;
     extractOtelMetrics(raw, (msg) => logs.push(msg));
     expect(logs.some((l) => l.includes('api_requests=1'))).toBe(true);
     expect(logs.some((l) => l.includes('cost=$0.0100'))).toBe(true);
+  });
+
+  it('accumulates double-quoted api_request log events', () => {
+    const raw = `output
+{
+  resource: {},
+  body: "claude_code.api_request",
+  attributes: {
+    input_tokens: "200",
+    output_tokens: "80",
+    cost_usd: "0.02"
+  }
+}`;
+    const logs: string[] = [];
+    const cleaned = extractOtelMetrics(raw, (msg) => logs.push(msg));
+    expect(cleaned).toBe('output');
+    expect(logs.some((l) => l.includes('api_requests=1'))).toBe(true);
+    expect(logs.some((l) => l.includes('cost=$0.0200'))).toBe(true);
+  });
+
+  it('accumulates double-quoted tool_result log events', () => {
+    const raw = `output
+{
+  descriptor: { name: "claude_code.cost.usage" },
+  dataPointType: 3,
+  dataPoints: [ { value: 0.05 } ]
+}
+{
+  resource: {},
+  body: "claude_code.tool_result",
+  attributes: {
+    tool_result_size_bytes: "3000"
+  }
+}`;
+    const logs: string[] = [];
+    const cleaned = extractOtelMetrics(raw, (msg) => logs.push(msg));
+    expect(cleaned).toBe('output');
+    expect(logs.some((l) => l.includes('tool_calls=1'))).toBe(true);
+    expect(logs.some((l) => l.includes('tool_content_bytes=3000'))).toBe(true);
   });
 
   it('returns raw output when no OTel blocks present', () => {

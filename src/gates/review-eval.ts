@@ -7,12 +7,14 @@ import {
 import { markAdapterUnhealthy } from '../utils/execution-state.js';
 import type { PreviousViolation } from './result.js';
 import { writeJsonResult } from './review-agg.js';
-import type {
-  EvaluationResult,
-  ReviewConfig,
-  ReviewJsonOutput,
-} from './review-types.js';
-import { CHARS_PER_TOKEN, JSON_SYSTEM_INSTRUCTION } from './review-types.js';
+
+export {
+  buildPreviousFailuresSection,
+  buildReviewPrompt,
+} from './review-prompt.js';
+
+import type { EvaluationResult, ReviewJsonOutput } from './review-types.js';
+import { CHARS_PER_TOKEN } from './review-types.js';
 
 const log = getCategoryLogger('gate', 'review');
 
@@ -47,99 +49,10 @@ export function logInputStats(
   adapterLogger(`${msg}\n`);
 }
 
-// ── Prompt Building ─────────────────────────────────────────────────
-
-export function buildReviewPrompt(
-  config: ReviewConfig,
-  previousViolations: PreviousViolation[] = [],
-): string {
-  const baseContent = config.promptContent || '';
-
-  if (previousViolations.length > 0) {
-    return (
-      baseContent +
-      '\n\n' +
-      buildPreviousFailuresSection(previousViolations) +
-      '\n' +
-      JSON_SYSTEM_INSTRUCTION
-    );
-  }
-
-  return `${baseContent}\n${JSON_SYSTEM_INSTRUCTION}`;
-}
-
-export function buildPreviousFailuresSection(
-  violations: PreviousViolation[],
-): string {
-  const toVerify = violations.filter((v) => v.status === 'fixed');
-  const unaddressed = violations.filter((v) => v.status === 'new' || !v.status);
-  const affectedFiles = [...new Set(violations.map((v) => v.file))];
-  const lines: string[] = [];
-
-  lines.push(buildRerunHeader());
-
-  if (toVerify.length === 0) {
-    lines.push('(No violations were marked as FIXED for verification)\n');
-  } else {
-    for (const [i, v] of toVerify.entries()) {
-      lines.push(`${i + 1}. ${v.file}:${v.line} - ${v.issue}`);
-      if (v.fix) lines.push(`   Suggested fix: ${v.fix}`);
-      if (v.result) lines.push(`   Agent result: ${v.result}`);
-      lines.push('');
-    }
-  }
-
-  if (unaddressed.length > 0) {
-    lines.push(buildUnaddressedHeader());
-    for (const [i, v] of unaddressed.entries()) {
-      lines.push(`${i + 1}. ${v.file}:${v.line} - ${v.issue}`);
-    }
-    lines.push('');
-  }
-
-  lines.push(buildRerunInstructions(affectedFiles));
-  return lines.join('\n');
-}
-
-function buildRerunHeader(): string {
-  return `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
-RERUN MODE: VERIFY PREVIOUS FIXES ONLY
-\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
-
-This is a RERUN review. The agent attempted to fix some of the violations listed below.
-Your task is STRICTLY LIMITED to verifying the fixes for violations marked as FIXED.
-
-PREVIOUS VIOLATIONS TO VERIFY:
-`;
-}
-
-function buildUnaddressedHeader(): string {
-  return `UNADDRESSED VIOLATIONS (STILL FAILING):
-The following violations were NOT marked as fixed or skipped and are still active failures:
-`;
-}
-
-function buildRerunInstructions(affectedFiles: string[]): string {
-  return `STRICT INSTRUCTIONS FOR RERUN MODE:
-
-1. VERIFY FIXES: Check if each violation marked as FIXED above has been addressed
-   - For violations that are fixed, confirm they no longer appear
-   - For violations that remain unfixed, include them in your violations array (status: "new")
-
-2. UNADDRESSED VIOLATIONS: You MUST include all UNADDRESSED violations listed above in your output array if they still exist.
-
-3. CHECK FOR REGRESSIONS ONLY: You may ONLY report NEW violations if they:
-   - Are in FILES that were modified to fix the above violations: ${affectedFiles.join(', ')}
-   - Are DIRECTLY caused by the fix changes (e.g., a fix introduced a new bug)
-   - Are in the same function/region that was modified to address a previous violation
-
-4. Return status "pass" ONLY if ALL previous violations (including unaddressed ones) are now fixed AND no regressions were introduced.
-   Otherwise, return status "fail" and list all remaining violations.
-
-\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501`;
-}
-
 // ── Output Evaluation ───────────────────────────────────────────────
+
+/** Max size for heuristic JSON probing — larger outputs skip tryParseLastJson/First. */
+const MAX_OUTPUT_SIZE_FOR_JSON_PROBE = 100_000;
 
 export function evaluateOutput(
   output: string,
@@ -151,15 +64,23 @@ export function evaluateOutput(
     const fromBlock = tryParseJsonBlock(output);
     if (fromBlock) return validateAndReturn(fromBlock, diffRanges);
 
-    const fromLast = tryParseLastJson(output);
-    if (fromLast) return validateAndReturn(fromLast, diffRanges);
+    const fromDirect = tryParseWholeOutput(output);
+    if (fromDirect) return validateAndReturn(fromDirect, diffRanges);
 
-    const fromFirst = tryParseFirstJson(output);
-    if (fromFirst) return validateAndReturn(fromFirst, diffRanges);
+    if (output.length <= MAX_OUTPUT_SIZE_FOR_JSON_PROBE) {
+      const fromLast = tryParseLastJson(output);
+      if (fromLast) return validateAndReturn(fromLast, diffRanges);
+
+      const fromFirst = tryParseFirstJson(output);
+      if (fromFirst) return validateAndReturn(fromFirst, diffRanges);
+    }
 
     return {
       status: 'error',
-      message: 'No valid JSON object found in output',
+      message:
+        output.length > MAX_OUTPUT_SIZE_FOR_JSON_PROBE
+          ? `Output too large (${output.length} bytes) and no JSON found`
+          : 'No valid JSON object found in output',
     };
   } catch (error: unknown) {
     const err = error as { message?: string };
@@ -180,12 +101,27 @@ function tryParseJsonBlock(output: string): ReviewJsonOutput | null {
   }
 }
 
+function tryParseWholeOutput(output: string): ReviewJsonOutput | null {
+  const trimmed = output.trim();
+  if (!(trimmed.startsWith('{') && trimmed.endsWith('}'))) return null;
+  try {
+    const json = JSON.parse(trimmed);
+    if (json.status) return json;
+  } catch {}
+  return null;
+}
+
+/** Max `{` positions to probe before giving up (prevents event-loop blocking). */
+const MAX_JSON_PROBE_ITERATIONS = 50;
+
 function tryParseLastJson(output: string): ReviewJsonOutput | null {
   const end = output.lastIndexOf('}');
   if (end === -1) return null;
 
   let start = output.lastIndexOf('{', end);
-  while (start !== -1) {
+  let iterations = 0;
+  while (start !== -1 && iterations < MAX_JSON_PROBE_ITERATIONS) {
+    iterations++;
     try {
       const json = JSON.parse(output.substring(start, end + 1));
       if (json.status) return json;
