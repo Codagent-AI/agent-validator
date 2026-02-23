@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 0.15.5
+
+### Patch Changes
+
+- [#81](https://github.com/pacaplan/agent-gauntlet/pull/81) Move all ConsoleReporter output from stderr to stdout so agents can see gate results when running `agent-gauntlet` via Bash tool
+
 ## 0.15.4
 
 ### Patch Changes

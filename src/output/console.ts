@@ -90,9 +90,7 @@ async function printIterationHistory(
       `Total: ${totalFixed} fixed, ${totalSkipped} skipped, ${totalFailed} failed${iterationsText}`,
     );
   } catch (err) {
-    console.log(
-      chalk.yellow(`Warning: Failed to reconstruct history: ${err}`),
-    );
+    console.log(chalk.yellow(`Warning: Failed to reconstruct history: ${err}`));
   }
 }
 
