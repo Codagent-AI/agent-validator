@@ -172,7 +172,7 @@ openspec new change "<derived-name>"
 ```
 
 **SHOW:**
-```
+````
 Created: `openspec/changes/<name>/`
 
 The folder structure:
@@ -185,7 +185,7 @@ openspec/changes/<name>/
 ```
 
 Now let's fill in the first artifact—the proposal.
-```
+````
 
 ---
 
@@ -466,6 +466,7 @@ This same rhythm works for any size change—a small fix or a major feature.
 | `/opsx:apply` | Implement tasks from a change |
 | `/opsx:verify` | Verify implementation matches artifacts |
 | `/opsx:archive` | Archive a completed change |
+| `/opsx:sync` | Sync delta specs to main specs |
 
 ---
 
