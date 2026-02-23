@@ -28,15 +28,17 @@ describe("ConsoleReporter", () => {
 	});
 
 	describe("onJobStart", () => {
-		it("should log job start with [START] prefix", () => {
+		// Agents rely on stdout to see gate output via Bash tool
+		it("should write [START] prefix to stdout", () => {
 			const reporter = new ConsoleReporter();
 			const job = { id: "check:test", type: "check" } as Job;
 
 			reporter.onJobStart(job);
 
-			expect(logOutput.length).toBeGreaterThan(0);
-			expect(logOutput.join("")).toContain("[START]");
-			expect(logOutput.join("")).toContain("check:test");
+			const output = stdoutOutput.join("");
+			expect(output).toContain("[START]");
+			expect(output).toContain("check:test");
+			expect(logOutput).toEqual([]);
 		});
 	});
 
@@ -52,11 +54,13 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("[PASS]");
 			expect(output).toContain("check:test");
+			expect(logOutput).toEqual([]);
 		});
 
+		// Agents rely on stdout to see failure details via Bash tool
 		it("should log [FAIL] for failing jobs with log path", () => {
 			const reporter = new ConsoleReporter();
 			const job = { id: "check:test", type: "check" } as Job;
@@ -70,11 +74,12 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("[FAIL]");
 			expect(output).toContain("check:test");
 			expect(output).toContain("Tests failed");
 			expect(output).toContain("gauntlet_logs/check_test.log");
+			expect(logOutput).toEqual([]);
 		});
 
 		it("should log [ERROR] for errored jobs", () => {
@@ -90,16 +95,17 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("[ERROR]");
 			expect(output).toContain("review:test");
 			expect(output).toContain("Failed to complete");
 			expect(output).toContain("gauntlet_logs/review_test.log");
+			expect(logOutput).toEqual([]);
 		});
 	});
 
 	describe("printSummary", () => {
-		it("should log summary with status", async () => {
+		it("should write Passed summary to stdout", async () => {
 			const reporter = new ConsoleReporter();
 			const results: GateResult[] = [
 				{ jobId: "check:test", status: "pass", duration: 100 },
@@ -107,12 +113,13 @@ describe("ConsoleReporter", () => {
 
 			await reporter.printSummary(results);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Passed");
+			expect(logOutput).toEqual([]);
 		});
 
-		it("should show Failed status when jobs fail", async () => {
+		it("should write Failed summary to stdout", async () => {
 			const reporter = new ConsoleReporter();
 			const results: GateResult[] = [
 				{
@@ -125,37 +132,10 @@ describe("ConsoleReporter", () => {
 
 			await reporter.printSummary(results);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
+			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Failed");
-		});
-
-		it("should write plain-text Status line to stdout", async () => {
-			const reporter = new ConsoleReporter();
-			const results: GateResult[] = [
-				{ jobId: "check:test", status: "pass", duration: 100 },
-			];
-
-			await reporter.printSummary(results);
-
-			const output = stdoutOutput.join(" ");
-			expect(output).toContain("Status: Passed");
-		});
-
-		it("should write Failed status to stdout", async () => {
-			const reporter = new ConsoleReporter();
-			const results: GateResult[] = [
-				{
-					jobId: "check:test",
-					status: "fail",
-					duration: 100,
-					message: "Failed",
-				},
-			];
-
-			await reporter.printSummary(results);
-
-			const output = stdoutOutput.join(" ");
-			expect(output).toContain("Status: Failed");
+			expect(logOutput).toEqual([]);
 		});
 	});
 });
