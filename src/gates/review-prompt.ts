@@ -32,28 +32,34 @@ export function buildPreviousFailuresSection(
   const lines: string[] = [];
 
   lines.push(buildRerunHeader());
-
-  if (toVerify.length === 0) {
-    lines.push('(No violations were marked as FIXED for verification)\n');
-  } else {
-    for (const [i, v] of toVerify.entries()) {
-      lines.push(`${i + 1}. ${v.file}:${v.line} - ${v.issue}`);
-      if (v.fix) lines.push(`   Suggested fix: ${v.fix}`);
-      if (v.result) lines.push(`   Agent result: ${v.result}`);
-      lines.push('');
-    }
-  }
-
-  if (unaddressed.length > 0) {
-    lines.push(buildUnaddressedHeader());
-    for (const [i, v] of unaddressed.entries()) {
-      lines.push(`${i + 1}. ${v.file}:${v.line} - ${v.issue}`);
-    }
-    lines.push('');
-  }
-
+  lines.push(...formatVerifySection(toVerify));
+  lines.push(...formatUnaddressedSection(unaddressed));
   lines.push(buildRerunInstructions(affectedFiles));
   return lines.join('\n');
+}
+
+function formatVerifySection(toVerify: PreviousViolation[]): string[] {
+  if (toVerify.length === 0) {
+    return ['(No violations were marked as FIXED for verification)\n'];
+  }
+  const lines: string[] = [];
+  for (const [i, v] of toVerify.entries()) {
+    lines.push(`${i + 1}. ${v.file}:${v.line} - ${v.issue}`);
+    if (v.fix) lines.push(`   Suggested fix: ${v.fix}`);
+    if (v.result) lines.push(`   Agent result: ${v.result}`);
+    lines.push('');
+  }
+  return lines;
+}
+
+function formatUnaddressedSection(unaddressed: PreviousViolation[]): string[] {
+  if (unaddressed.length === 0) return [];
+  const lines: string[] = [buildUnaddressedHeader()];
+  for (const [i, v] of unaddressed.entries()) {
+    lines.push(`${i + 1}. ${v.file}:${v.line} - ${v.issue}`);
+  }
+  lines.push('');
+  return lines;
 }
 
 const RERUN_SEPARATOR = '\u2501'.repeat(46);
