@@ -714,31 +714,24 @@ The system MUST store unhealthy adapter cooldown state in a global state file lo
 - **WHEN** the clean operation completes
 - **THEN** the global unhealthy adapter state file SHALL remain intact
 
-### Requirement: Status Line on stdout
+### Requirement: ConsoleReporter Output on stdout
 
-The `printSummary` method MUST write a plain-text `Status: <status>` line to stdout (via `console.log`) in addition to the existing colorized stderr output. This ensures that agents reading only stdout can detect the terminal status of a gauntlet run.
+All ConsoleReporter output (gate start/complete messages, results summary, status line) MUST be written to stdout via `console.log`. This ensures agents can see gate results through the Bash tool without requiring `2>&1` redirection.
 
-#### Scenario: Passed status written to stdout
-- **GIVEN** all gates have passed
+#### Scenario: Status line on stdout
+- **GIVEN** a gauntlet run completes (all gates executed)
 - **WHEN** `printSummary` renders the results
-- **THEN** `console.log` SHALL output `Status: Passed` (plain text, no ANSI color codes)
-- **AND** `console.error` SHALL continue to output the colorized status line (existing behavior)
+- **THEN** the `Status: <status>` line SHALL be written to stdout via `console.log`
 
-#### Scenario: Failed status written to stdout
-- **GIVEN** one or more gates have failed
-- **WHEN** `printSummary` renders the results
-- **THEN** `console.log` SHALL output `Status: Failed` (plain text)
-- **AND** `console.error` SHALL continue to output the colorized status line
-
-#### Scenario: Passed with warnings status written to stdout
-- **GIVEN** all gates passed but some violations were skipped
-- **WHEN** `printSummary` renders the results
-- **THEN** `console.log` SHALL output `Status: Passed with warnings` (plain text)
-
-#### Scenario: Early-exit statuses do not invoke printSummary
+#### Scenario: Early-exit status on stdout
 - **GIVEN** the run exits early (e.g. "No changes detected", "No applicable gates", "No changes detected — N violation(s) still outstanding")
 - **WHEN** the early-exit path returns a `RunResult`
-- **THEN** `printSummary` SHALL NOT be invoked
-- **AND** the `RunResult.message` field SHALL contain the status description for the caller to log
-- **NOTE** Early-exit statuses are handled by `handleNoChanges` and similar functions that return before reaching `executeAndReport`. The caller (`run.ts`) logs the message via `getStatusMessage()` and the result's message field. The stdout Status line only applies to runs that reach `printSummary`.
+- **THEN** `handleNoChanges` SHALL write a `Status: <status>` line to stdout via `console.log`
+- **NOTE** This ensures agents always see a Status line on stdout regardless of code path.
+
+#### Scenario: App-logger output remains on stderr
+- **GIVEN** the app-logger (console-sink) writes diagnostic messages
+- **WHEN** log messages are emitted
+- **THEN** they SHALL continue to use `console.error` (stderr)
+- **NOTE** The console-sink must remain on stderr to keep stdout clean for the stop-hook JSON protocol.
 

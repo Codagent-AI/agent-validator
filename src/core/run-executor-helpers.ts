@@ -286,7 +286,9 @@ export async function handleNoChanges(
       );
     }
 
+    const statusLabel = status === 'passed' ? 'Passed' : 'Passed with warnings';
     log.info(getStatusMessage(status));
+    console.log(`Status: ${statusLabel}`);
     return { status, message: getStatusMessage(status), gatesRun: 0 };
   }
 
@@ -299,10 +301,12 @@ export async function handleNoChanges(
     }
     const message = `No changes detected — ${totalViolations} violation(s) still outstanding.`;
     log.warn(message);
+    console.log(`Status: Failed`);
     return { status: 'failed', message, gatesRun: 0 };
   }
 
   log.info('No changes detected.');
+  console.log('Status: No changes');
   return {
     status: 'no_changes',
     message: getStatusMessage('no_changes'),
