@@ -263,7 +263,7 @@ export async function processRerunMode(
   return { failuresMap, passedSlotsMap, changeOptions };
 }
 
-async function handleNoChanges(
+export async function handleNoChanges(
   ctx: RunContext,
   failuresMap: Map<string, Map<string, PreviousViolation[]>> | undefined,
 ): Promise<RunResult> {
@@ -288,6 +288,18 @@ async function handleNoChanges(
 
     log.info(getStatusMessage(status));
     return { status, message: getStatusMessage(status), gatesRun: 0 };
+  }
+
+  if (failuresMap && failuresMap.size > 0) {
+    let totalViolations = 0;
+    for (const adapterMap of failuresMap.values()) {
+      for (const violations of adapterMap.values()) {
+        totalViolations += violations.length;
+      }
+    }
+    const message = `No changes detected — ${totalViolations} violation(s) still outstanding.`;
+    log.warn(message);
+    return { status: 'failed', message, gatesRun: 0 };
   }
 
   log.info('No changes detected.');

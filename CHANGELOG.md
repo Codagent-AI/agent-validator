@@ -1,5 +1,27 @@
 # agent-gauntlet
 
+## 0.15.5
+
+### Patch Changes
+
+- [#81](https://github.com/pacaplan/agent-gauntlet/pull/81) Move all ConsoleReporter output from stderr to stdout so agents can see gate results when running `agent-gauntlet` via Bash tool
+
+## 0.15.4
+
+### Patch Changes
+
+- [#78](https://github.com/pacaplan/agent-gauntlet/pull/78) Prevent verification mode from reporting false positives by fixing how pass/fail status is determined during verification runs
+
+- [#79](https://github.com/pacaplan/agent-gauntlet/pull/79) Prevent event-loop blocking in review output evaluation by avoiding synchronous processing of large review results
+
+## 0.15.3
+
+### Patch Changes
+
+- [#75](https://github.com/pacaplan/agent-gauntlet/pull/75) Replace CodeScene integration with Biome's built-in clean code lint rules for complexity and style analysis
+
+- [#76](https://github.com/pacaplan/agent-gauntlet/pull/76) Replace OTel regex-based cost extraction with an O(n) line-based scanner for improved performance and reliability
+
 ## 0.15.2
 
 ### Patch Changes
