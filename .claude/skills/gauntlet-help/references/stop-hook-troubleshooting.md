@@ -19,7 +19,7 @@
 | `invalid_input` | Invalid hook input — could not parse JSON | Stop-hook couldn't parse stdin JSON from the IDE |
 | `lock_conflict` | Another gauntlet run is already in progress | Lock file exists with a live PID |
 | `error` | Stop hook error | Unexpected error during execution |
-| `retry_limit_exceeded` | Retry limit exceeded | Max retries (default 3) exhausted; requires `agent-gauntlet clean` |
+| `retry_limit_exceeded` | Retry limit exceeded | Max retries (default 3) exhausted; requires `bun src/index.ts clean` |
 
 ### Blocking Statuses (stop is prevented)
 
@@ -37,11 +37,11 @@
 2. If `failed`: Read the gate output files listed in `.debug.log` or the latest `console.*.log`
 3. If `pr_push_required`: The agent needs to commit, push, and create a PR
 4. If `ci_pending`: CI is still running; the hook will re-check on next stop attempt
-5. If `ci_failed`: Read CI failure details — run `agent-gauntlet wait-ci` or check `gh pr checks`
+5. If `ci_failed`: Read CI failure details — run `bun src/index.ts wait-ci` or check `gh pr checks`
 
 ### "The hook allowed but shouldn't have"
 1. Check if the status was `no_changes` — verify `base_branch` is correct in `config.yml`
-2. Check if `no_applicable_gates` — run `agent-gauntlet detect` to see which files changed and which gates match
+2. Check if `no_applicable_gates` — run `bun src/index.ts detect` to see which files changed and which gates match
 3. Check if `interval_not_elapsed` — the run was skipped because `run_interval_minutes` hadn't elapsed
 4. Check if `stop_hook_disabled` — verify `stop_hook.enabled` in config and `GAUNTLET_STOP_HOOK_ENABLED` env var
 
@@ -54,7 +54,7 @@ This happens when the iteration counter is inherited from a previous session's f
 
 **Root cause**: The iteration counter persists in `.execution_state` across sessions. If a previous session ended with unresolved failures and hit the retry limit, the counter carries over. The next session enters verification mode and immediately exceeds the limit.
 
-**Fix**: Run `agent-gauntlet clean` to reset the state and iteration counter, then re-run.
+**Fix**: Run `bun src/index.ts clean` to reset the state and iteration counter, then re-run.
 
 **Prevention**: Before starting a new task, check if the previous session left failures behind. If `.debug.log` shows a recent `STOP_HOOK decision=block reason=failed` or `retry_limit_exceeded`, clean state first.
 

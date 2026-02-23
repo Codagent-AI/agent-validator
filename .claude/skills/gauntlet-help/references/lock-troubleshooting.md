@@ -53,7 +53,7 @@ The `allow_parallel` config setting (default: `true`) controls whether gates can
 If a lock is stuck and the process is dead:
 
 ```bash
-agent-gauntlet clean
+bun src/index.ts clean
 ```
 
 This command:
@@ -68,5 +68,5 @@ This command:
 
 1. **Is another run actually in progress?** Check the PID in the lock file.
 2. **Is the process alive?** The gauntlet should auto-clean stale locks on retry.
-3. **Did a crash leave a stale lock?** Run `agent-gauntlet clean` to reset.
+3. **Did a crash leave a stale lock?** Run `bun src/index.ts clean` to reset.
 4. **Is this happening repeatedly?** Check for processes spawning concurrent gauntlet runs (e.g., multiple IDE hooks firing simultaneously).

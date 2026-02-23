@@ -44,11 +44,11 @@ Use these only when passive evidence is insufficient:
 
 | Command | When to Use |
 |---------|-------------|
-| `agent-gauntlet list` | See configured gates and entry points |
-| `agent-gauntlet health` | Check adapter availability and health status |
-| `agent-gauntlet detect` | See which files changed and which gates would apply |
-| `agent-gauntlet validate` | Validate config.yml syntax and schema |
-| `agent-gauntlet clean` | Archive current logs (rotates into `previous/`, `previous.1/`, etc.) — confirm with user first |
+| `bun src/index.ts list` | See configured gates and entry points |
+| `bun src/index.ts health` | Check adapter availability and health status |
+| `bun src/index.ts detect` | See which files changed and which gates would apply |
+| `bun src/index.ts validate` | Validate config.yml syntax and schema |
+| `bun src/index.ts clean` | Archive current logs (rotates into `previous/`, `previous.1/`, etc.) — confirm with user first |
 
 ## Routing Logic
 

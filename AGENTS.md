@@ -28,3 +28,5 @@ The user configures which paths in their repo should trigger which validations â
 The canonical skill source is the `skills/` directory at the repo root. Each skill lives in `skills/gauntlet-<action>/` as static files. `init.ts` copies these into consumer projects via `installSkillsWithChecksums()`.
 
 When updating a skill, edit the files in `skills/gauntlet-<action>/`. The local copy in `.claude/skills/` (used by this project) may differ slightly â€” it is not the distributable source.
+
+**IMPORTANT: Local skills must use `bun src/index.ts` to run from source, NOT `agent-gauntlet`.** The `agent-gauntlet` binary is the globally-installed package for consumer projects. In this repo we develop against source. The distributable skills in `skills/` correctly use `agent-gauntlet`, but `.claude/skills/` must always use `bun src/index.ts`. Never replace `bun src/index.ts` with `agent-gauntlet` in `.claude/skills/`.

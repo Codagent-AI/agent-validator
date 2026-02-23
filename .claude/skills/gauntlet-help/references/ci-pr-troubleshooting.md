@@ -102,7 +102,7 @@ The gauntlet detects CI environments using:
 - The CI wait hit 3 attempts without all checks passing
 - The stop is allowed for manual review
 - Check `<log_dir>/.ci-wait-attempts` for the attempt count
-- After fixing issues and pushing, run `agent-gauntlet clean` to reset the attempt counter
+- After fixing issues and pushing, run `bun src/index.ts clean` to reset the attempt counter
 
 ### PR-Related Issues
 - **No PR for branch**: `gh pr view` returns an error — create a PR first
