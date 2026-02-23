@@ -1,1 +1,0 @@
-- [ ] Skip CLI command and skill (`tasks/skip-command-and-skill.md`)
