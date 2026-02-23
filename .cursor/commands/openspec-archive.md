@@ -1,1 +1,0 @@
-../../.claude/commands/openspec/archive.md
