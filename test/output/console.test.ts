@@ -5,18 +5,26 @@ import { ConsoleReporter } from "../../src/output/console";
 
 describe("ConsoleReporter", () => {
 	let originalConsoleError: typeof console.error;
+	let originalConsoleLog: typeof console.log;
 	let logOutput: string[];
+	let stdoutOutput: string[];
 
 	beforeEach(() => {
 		originalConsoleError = console.error;
+		originalConsoleLog = console.log;
 		logOutput = [];
+		stdoutOutput = [];
 		console.error = (...args: unknown[]) => {
 			logOutput.push(args.map(String).join(" "));
+		};
+		console.log = (...args: unknown[]) => {
+			stdoutOutput.push(args.map(String).join(" "));
 		};
 	});
 
 	afterEach(() => {
 		console.error = originalConsoleError;
+		console.log = originalConsoleLog;
 	});
 
 	describe("onJobStart", () => {
@@ -118,6 +126,35 @@ describe("ConsoleReporter", () => {
 			await reporter.printSummary(results);
 
 			const output = logOutput.join("");
+			expect(output).toContain("Status: Failed");
+		});
+
+		it("should write plain-text Status line to stdout", async () => {
+			const reporter = new ConsoleReporter();
+			const results: GateResult[] = [
+				{ jobId: "check:test", status: "pass", duration: 100 },
+			];
+
+			await reporter.printSummary(results);
+
+			const output = stdoutOutput.join(" ");
+			expect(output).toContain("Status: Passed");
+		});
+
+		it("should write Failed status to stdout", async () => {
+			const reporter = new ConsoleReporter();
+			const results: GateResult[] = [
+				{
+					jobId: "check:test",
+					status: "fail",
+					duration: 100,
+					message: "Failed",
+				},
+			];
+
+			await reporter.printSummary(results);
+
+			const output = stdoutOutput.join(" ");
 			expect(output).toContain("Status: Failed");
 		});
 	});
