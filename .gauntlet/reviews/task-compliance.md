@@ -19,11 +19,11 @@ Only continue to the steps below if a non-empty `.gauntlet/current-task-context.
 
 ---
 
-### 1. Read the Task Context
+## 1. Read the Task Context
 
 Read the task file path from `.gauntlet/current-task-context.md`, then read the task file to get the full task specification (Goal, Background, Spec with requirements and scenarios, Done When).
 
-### 2. Compare Diff Against Task Spec
+## 2. Compare Diff Against Task Spec
 
 Examine the diff and verify against the task's Spec section:
 
@@ -39,7 +39,7 @@ Examine the diff and verify against the task's Spec section:
 
 If a scenario is missing from the diff, report: "Missing scenario: <requirement name> / <scenario name>"
 
-### 3. Output
+## 3. Output
 
 For each issue found, report:
 - **Severity**: high (missing scenario), medium (partial implementation), low (style/minor)
