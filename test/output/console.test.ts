@@ -34,9 +34,20 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobStart(job);
 
-			expect(logOutput.length).toBeGreaterThan(0);
-			expect(logOutput.join("")).toContain("[START]");
-			expect(logOutput.join("")).toContain("check:test");
+			expect(stdoutOutput.length).toBeGreaterThan(0);
+			expect(stdoutOutput.join("")).toContain("[START]");
+			expect(stdoutOutput.join("")).toContain("check:test");
+		});
+
+		it("should write job start to stdout so agents can see it", () => {
+			const reporter = new ConsoleReporter();
+			const job = { id: "check:test", type: "check" } as Job;
+
+			reporter.onJobStart(job);
+
+			const output = stdoutOutput.join("");
+			expect(output).toContain("[START]");
+			expect(output).toContain("check:test");
 		});
 	});
 
@@ -52,7 +63,7 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("[PASS]");
 			expect(output).toContain("check:test");
 		});
@@ -70,7 +81,7 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("[FAIL]");
 			expect(output).toContain("check:test");
 			expect(output).toContain("Tests failed");
@@ -90,11 +101,30 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("[ERROR]");
 			expect(output).toContain("review:test");
 			expect(output).toContain("Failed to complete");
 			expect(output).toContain("gauntlet_logs/review_test.log");
+		});
+
+		it("should write job results to stdout so agents can see them", () => {
+			const reporter = new ConsoleReporter();
+			const job = { id: "check:test", type: "check" } as Job;
+			const result: GateResult = {
+				jobId: "check:test",
+				status: "fail",
+				duration: 1234,
+				message: "Tests failed",
+				logPath: "gauntlet_logs/check_test.log",
+			};
+
+			reporter.onJobComplete(job, result);
+
+			const output = stdoutOutput.join("");
+			expect(output).toContain("[FAIL]");
+			expect(output).toContain("check:test");
+			expect(output).toContain("Tests failed");
 		});
 	});
 
@@ -107,7 +137,7 @@ describe("ConsoleReporter", () => {
 
 			await reporter.printSummary(results);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Passed");
 		});
@@ -125,11 +155,11 @@ describe("ConsoleReporter", () => {
 
 			await reporter.printSummary(results);
 
-			const output = logOutput.join("");
+			const output = stdoutOutput.join("");
 			expect(output).toContain("Status: Failed");
 		});
 
-		it("should write plain-text Status line to stdout", async () => {
+		it("should write full summary to stdout so agents can see it", async () => {
 			const reporter = new ConsoleReporter();
 			const results: GateResult[] = [
 				{ jobId: "check:test", status: "pass", duration: 100 },
@@ -138,10 +168,11 @@ describe("ConsoleReporter", () => {
 			await reporter.printSummary(results);
 
 			const output = stdoutOutput.join(" ");
+			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Passed");
 		});
 
-		it("should write Failed status to stdout", async () => {
+		it("should write Failed summary to stdout", async () => {
 			const reporter = new ConsoleReporter();
 			const results: GateResult[] = [
 				{
@@ -155,6 +186,7 @@ describe("ConsoleReporter", () => {
 			await reporter.printSummary(results);
 
 			const output = stdoutOutput.join(" ");
+			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Failed");
 		});
 	});
