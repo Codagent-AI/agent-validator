@@ -24,6 +24,6 @@ export function registerRunCommand(program: Command): void {
         uncommitted: options.uncommitted,
       });
 
-      process.exit(isSuccessStatus(result.status) ? 0 : 1);
+      process.exitCode = isSuccessStatus(result.status) ? 0 : 1;
     });
 }
