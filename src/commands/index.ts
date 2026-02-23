@@ -8,6 +8,7 @@ export { registerInitCommand } from './init.js';
 export { registerListCommand } from './list.js';
 export { registerReviewCommand } from './review.js';
 export { registerRunCommand } from './run.js';
+export { registerSkipCommand } from './skip.js';
 export { registerStartHookCommand } from './start-hook.js';
 export { registerStatusCommand } from './status.js';
 export { registerStopHookCommand } from './stop-hook.js';

@@ -1,8 +1,8 @@
 # Adapter Troubleshooting
 
-## `agent-gauntlet health` Output
+## `bun src/index.ts health` Output
 
-Run `agent-gauntlet health` to check adapter status. Each adapter reports one of:
+Run `bun src/index.ts health` to check adapter status. Each adapter reports one of:
 
 | Status | Meaning |
 |--------|---------|
@@ -127,11 +127,11 @@ This file is:
 - Written after successful execution
 - Preserved across runs
 - Auto-cleaned when the branch changes or commit is merged
-- Deleted by `agent-gauntlet clean`
+- Deleted by `bun src/index.ts clean`
 
 ## Troubleshooting Checklist
 
-1. **Run `agent-gauntlet health`** to see overall adapter status
+1. **Run `bun src/index.ts health`** to see overall adapter status
 2. **Check `.execution_state`** for cooldown entries
 3. **Verify `cli.default_preference`** includes the adapters you expect
 4. **Try the CLI tool directly** (e.g., `claude --version`) to isolate the issue

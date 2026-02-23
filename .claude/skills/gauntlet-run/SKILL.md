@@ -34,13 +34,13 @@ Execute the autonomous verification suite.
 
 ## Procedure
 
-1. Run `agent-gauntlet clean` to archive any previous log files.
-2. Run `agent-gauntlet run` using `Bash` with `timeout: 300000`. Wait for the complete output. **Verify you can see a `Status:` line in the output before continuing.**
+1. Run `bun src/index.ts clean` to archive any previous log files.
+2. Run `bun src/index.ts run` using `Bash` with `timeout: 300000`. Wait for the complete output. **Verify you can see a `Status:` line in the output before continuing.**
 3. **Check the status line:**
    - `Status: Passed` → Go to step 8.
    - `Status: Passed with warnings` → Go to step 8.
    - `Status: Failed` → Continue to step 4. **You MUST continue — do not stop here.**
-   - `Status: Retry limit exceeded` → Run `agent-gauntlet clean` to archive logs. Go to step 8.
+   - `Status: Retry limit exceeded` → Run `bun src/index.ts clean` to archive logs. Go to step 8.
    - No status line visible → The command may have timed out or failed to run. Re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
 4. **Extract failures** (required when status is Failed):
    - Infer the log directory from the file paths in the console output (e.g., if output references `gauntlet_logs/check_._lint.1.log`, the log directory is `gauntlet_logs/`)
@@ -64,7 +64,7 @@ Execute the autonomous verification suite.
      a. **Task tool** (Claude Code): `Task` with `subagent_type="general-purpose"`, `model="haiku"`, `prompt=` update-prompt content + log directory + decisions list. NEVER use `run_in_background: true`.
      b. **Subagent delegation**: Delegate the update-prompt instructions with the log directory and decisions to a subagent.
      c. **Inline fallback**: Follow the update-prompt instructions yourself to update the review JSON files.
-7. **Re-run verification:** Run `agent-gauntlet run` again with `Bash` and `timeout: 300000`. Do NOT run `agent-gauntlet clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to step 3** to check the status line and repeat.
+7. **Re-run verification:** Run `bun src/index.ts run` again with `Bash` and `timeout: 300000`. Do NOT run `bun src/index.ts clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to step 3** to check the status line and repeat.
 8. **Provide a summary** of the session:
    - Final Status: (Passed / Passed with warnings / Retry limit exceeded)
    - Issues Fixed: (list key fixes)

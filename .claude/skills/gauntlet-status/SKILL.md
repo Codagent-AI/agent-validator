@@ -11,7 +11,7 @@ Show a detailed summary of the most recent gauntlet session.
 ## Step 1: Run the status script
 
 ```bash
-agent-gauntlet status 2>&1
+bun src/index.ts status 2>&1
 ```
 
 The script parses the `.debug.log` for session-level data (run count, gate results, pass/fail status) and lists all log files with their paths and sizes.

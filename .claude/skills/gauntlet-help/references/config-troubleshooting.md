@@ -5,12 +5,12 @@
 The stop hook returns `no_config` when `.gauntlet/config.yml` doesn't exist. This is normal for non-gauntlet projects.
 
 **If it should exist:**
-1. Run `agent-gauntlet init` to create the configuration
+1. Run `bun src/index.ts init` to create the configuration
 2. Or manually create `.gauntlet/config.yml`
 
 ## YAML Syntax and Schema Errors
 
-Run `agent-gauntlet validate` to check config syntax and schema.
+Run `bun src/index.ts validate` to check config syntax and schema.
 
 **Common YAML issues:**
 - Indentation errors (YAML requires consistent indentation)
@@ -82,7 +82,7 @@ The `log_dir` field (default: `gauntlet_logs`) determines where all logs are wri
 **Can't find logs:**
 1. Check `config.yml` for the `log_dir` value
 2. Verify the directory exists (it's created automatically on first run)
-3. Check if a previous `agent-gauntlet clean` archived everything to `previous/`
+3. Check if a previous `bun src/index.ts clean` archived everything to `previous/`
 
 **Permissions:**
 - The gauntlet needs write access to `log_dir`
@@ -115,7 +115,7 @@ Configuration is loaded with this precedence (highest first):
 ## Init Setup Problems
 
 ### "`.gauntlet` directory already exists"
-`agent-gauntlet init` won't overwrite an existing `.gauntlet/` directory. Delete it first or manually edit.
+`bun src/index.ts init` won't overwrite an existing `.gauntlet/` directory. Delete it first or manually edit.
 
 ### Git Not Initialized
 Some features require a git repository. Run `git init` first.
