@@ -38,12 +38,12 @@ entry_points:
       - schema-validate
     reviews:
       - code-quality
-
+      - task-compliance
   - path: "openspec/changes"
     exclude:
       - "openspec/changes/archive"
     checks:
       - openspec-validate
-      - no-orphaned-design-docs
     reviews:
-      - change-review
+      - artifact-review
+

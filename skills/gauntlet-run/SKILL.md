@@ -35,7 +35,7 @@ Execute the autonomous verification suite.
 ## Procedure
 
 1. Run `agent-gauntlet clean` to archive any previous log files.
-2. Run `agent-gauntlet run 2>&1` using `Bash` with `timeout: 300000`. Wait for the complete output. **Verify you can see a `Status:` line in the output before continuing.**
+2. Run `agent-gauntlet run` using `Bash` with `timeout: 300000`. Wait for the complete output. **Verify you can see a `Status:` line in the output before continuing.**
 3. **Check the status line:**
    - `Status: Passed` → Go to step 8.
    - `Status: Passed with warnings` → Go to step 8.
@@ -53,15 +53,21 @@ Execute the autonomous verification suite.
    - CHECK failures with Fix Skill: invoke the named skill
    - CHECK failures with Fix Instructions: follow the instructions
    - REVIEW violations: apply the trust level above, fix or skip
+5b. **Capture noteworthy violations for eval inventory** (if any REVIEW violations were found):
+   - Collect the JSON file paths from the REVIEW failures identified in step 4 (the `.json` file paths)
+   - Read `SKILL.md` from the `capture-eval-issues` skill directory (sibling of this skill's directory)
+   - Follow the capture skill's procedure, passing the JSON file paths
+   - Note the `CAPTURED:` summary line for inclusion in step 8
 6. For REVIEW violations you addressed:
    - Read `update-prompt.md` from this skill's directory
    - **Update review decisions** using the first available strategy (same as step 4):
      a. **Task tool** (Claude Code): `Task` with `subagent_type="general-purpose"`, `model="haiku"`, `prompt=` update-prompt content + log directory + decisions list. NEVER use `run_in_background: true`.
      b. **Subagent delegation**: Delegate the update-prompt instructions with the log directory and decisions to a subagent.
      c. **Inline fallback**: Follow the update-prompt instructions yourself to update the review JSON files.
-7. **Re-run verification:** Run `agent-gauntlet run 2>&1` again with `Bash` and `timeout: 300000`. Do NOT run `agent-gauntlet clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to step 3** to check the status line and repeat.
+7. **Re-run verification:** Run `agent-gauntlet run` again with `Bash` and `timeout: 300000`. Do NOT run `agent-gauntlet clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to step 3** to check the status line and repeat.
 8. **Provide a summary** of the session:
    - Final Status: (Passed / Passed with warnings / Retry limit exceeded)
    - Issues Fixed: (list key fixes)
    - Issues Skipped: (list skipped items and reasons)
+   - Eval Captures: (list captured issue IDs from step 5b, or "none")
    - Outstanding Failures: (if retry limit exceeded, list unverified fixes and remaining issues)
