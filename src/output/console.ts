@@ -372,6 +372,7 @@ export class ConsoleReporter {
       statusOverride,
     );
     console.error(statusColor(`Status: ${overallStatus}`));
+    console.log(`Status: ${overallStatus}`);
     console.error(chalk.bold(`${SEPARATOR}\n`));
   }
 

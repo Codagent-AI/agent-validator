@@ -37,30 +37,30 @@ describe("ChangeDetector fixBase support", () => {
 		fixBaseSpy.mockRestore();
 	});
 
-	it("explicit uncommitted overrides fixBase", async () => {
+	it("fixBase overrides uncommitted when both are set", async () => {
 		const fixBase = "def456";
 		const detector = new ChangeDetector("origin/main", {
 			uncommitted: true,
 			fixBase,
 		});
-		const uncommittedSpy = spyOn(
-			detector as any,
-			"getUncommittedChangedFiles",
-		).mockResolvedValue(["src/baz.ts"]);
 		const fixBaseSpy = spyOn(
 			detector as any,
 			"getDiffWithWorkingTree",
 		).mockResolvedValue(["src/foo.ts"]);
+		const uncommittedSpy = spyOn(
+			detector as any,
+			"getUncommittedChangedFiles",
+		).mockResolvedValue(["src/baz.ts"]);
 
 		const files = await detector.getChangedFiles();
-		expect(uncommittedSpy).toHaveBeenCalled();
-		expect(fixBaseSpy).not.toHaveBeenCalled();
-		expect(files).toEqual(["src/baz.ts"]);
-		uncommittedSpy.mockRestore();
+		expect(fixBaseSpy).toHaveBeenCalledWith(fixBase);
+		expect(uncommittedSpy).not.toHaveBeenCalled();
+		expect(files).toEqual(["src/foo.ts"]);
 		fixBaseSpy.mockRestore();
+		uncommittedSpy.mockRestore();
 	});
 
-	it("priority order: commit > uncommitted > fixBase > default", () => {
+	it("priority order: commit > fixBase > uncommitted > default", () => {
 		const { readFileSync } = require("node:fs");
 		const { join } = require("node:path");
 		const sourceFile = readFileSync(
@@ -69,14 +69,14 @@ describe("ChangeDetector fixBase support", () => {
 		);
 
 		const commitCheck = sourceFile.indexOf("this.options.commit");
-		const uncommittedCheck = sourceFile.indexOf("this.options.uncommitted");
 		const fixBaseCheck = sourceFile.indexOf("this.options.fixBase");
+		const uncommittedCheck = sourceFile.indexOf("this.options.uncommitted");
 
 		expect(commitCheck).toBeGreaterThan(-1);
-		expect(uncommittedCheck).toBeGreaterThan(-1);
 		expect(fixBaseCheck).toBeGreaterThan(-1);
+		expect(uncommittedCheck).toBeGreaterThan(-1);
 
-		expect(commitCheck).toBeLessThan(uncommittedCheck);
-		expect(uncommittedCheck).toBeLessThan(fixBaseCheck);
+		expect(commitCheck).toBeLessThan(fixBaseCheck);
+		expect(fixBaseCheck).toBeLessThan(uncommittedCheck);
 	});
 });

@@ -34,17 +34,17 @@ export class ChangeDetector {
       return this.getCommitChangedFiles(this.options.commit);
     }
 
-    // Priority 2: If uncommitted option is provided, only get uncommitted changes
-    if (this.options.uncommitted) {
-      return this.getUncommittedChangedFiles();
-    }
-
-    // Priority 3: If fixBase is provided, diff against it
+    // Priority 2: If fixBase is provided, diff against it
     if (this.options.fixBase) {
       if (!isValidGitRef(this.options.fixBase)) {
         throw new Error(`Invalid fixBase ref: ${this.options.fixBase}`);
       }
       return this.getFixBaseChangedFiles(this.options.fixBase);
+    }
+
+    // Priority 3: If uncommitted option is provided, only get uncommitted changes
+    if (this.options.uncommitted) {
+      return this.getUncommittedChangedFiles();
     }
 
     // Priority 4: CI detection / local base branch diff

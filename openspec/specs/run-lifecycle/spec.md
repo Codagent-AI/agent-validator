@@ -49,6 +49,16 @@ The `run`, `check`, and `review` commands MUST automatically detect whether to o
 - **AND** if no violations have status "skipped" (all were "fixed"), the command SHALL report "Passed" and exit with code 0, and logs SHALL be archived
 - **NOTE** This handles the edge case where an agent skips all review violations without making code changes. Without this, the rerun would bail out with "No changes detected" and never reach a terminal status, leaving logs unarchived.
 
+#### Scenario: Rerun with no changes and outstanding violations
+- **GIVEN** the log directory contains log files (rerun mode)
+- **AND** previous violations exist that have NOT been resolved (status remains "new" — not set to "fixed" or "skipped" in the review JSON files)
+- **AND** no code changes have been made since the session ref
+- **WHEN** the command executes without explicit diff flags
+- **THEN** the command SHALL report "Failed" with a message indicating the number of outstanding violations (e.g. "No changes detected — 5 violation(s) still outstanding.")
+- **AND** the command SHALL exit with a non-zero exit code
+- **AND** log files SHALL remain in the log directory (no clean)
+- **NOTE** Without this, the system would return "No changes detected" (success exit code 0) even though violations were outstanding, causing agents to believe the run passed. This was the root cause of verification mode false positives where violations were incorrectly reported as "Fixed".
+
 #### Scenario: Explicit --uncommitted with empty log directory
 - **GIVEN** the log directory is empty or does not exist
 - **WHEN** the user passes `--uncommitted`
@@ -128,21 +138,23 @@ When `fixBase` is provided in the change detector options and neither `commit` n
 - **WHEN** the change detector computes changed files
 - **THEN** the diff SHALL be computed for the specified commit (not fixBase)
 
-#### Scenario: Explicit uncommitted overrides fixBase
+#### Scenario: fixBase overrides uncommitted
 
 - **GIVEN** `fixBase` is set in the change detector options
-- **AND** `uncommitted` is explicitly set to true
+- **AND** `uncommitted` is also set to true
 - **WHEN** the change detector computes changed files
-- **THEN** the diff SHALL include only uncommitted changes (not fixBase)
+- **THEN** the diff SHALL be computed against `fixBase` (not uncommitted-only)
+- **NOTE** `fixBase` takes priority because it provides a broader, more accurate diff that includes both committed and working-tree changes since the snapshot. The `uncommitted` flag is a narrower scope intended for explicit CLI use.
 
 #### Scenario: Priority order for change detection mode
 
 - **WHEN** the change detector evaluates its options
 - **THEN** the priority order SHALL be:
   1. `commit` (explicit CLI flag)
-  2. `uncommitted` (explicit CLI flag)
-  3. `fixBase` (from execution state)
+  2. `fixBase` (from execution state)
+  3. `uncommitted` (explicit CLI flag)
   4. CI detection / local base branch diff (default)
+- **NOTE** `fixBase` takes priority over `uncommitted` to ensure the change detector, `computeDiffStats`, and `getDiff` all agree on the same base ref. When both are set (as in verification mode), `fixBase` provides the correct scope.
 
 ### Requirement: Max Retries Enforcement
 
@@ -701,4 +713,32 @@ The system MUST store unhealthy adapter cooldown state in a global state file lo
 - **GIVEN** a project `clean` command runs
 - **WHEN** the clean operation completes
 - **THEN** the global unhealthy adapter state file SHALL remain intact
+
+### Requirement: Status Line on stdout
+
+The `printSummary` method MUST write a plain-text `Status: <status>` line to stdout (via `console.log`) in addition to the existing colorized stderr output. This ensures that agents reading only stdout can detect the terminal status of a gauntlet run.
+
+#### Scenario: Passed status written to stdout
+- **GIVEN** all gates have passed
+- **WHEN** `printSummary` renders the results
+- **THEN** `console.log` SHALL output `Status: Passed` (plain text, no ANSI color codes)
+- **AND** `console.error` SHALL continue to output the colorized status line (existing behavior)
+
+#### Scenario: Failed status written to stdout
+- **GIVEN** one or more gates have failed
+- **WHEN** `printSummary` renders the results
+- **THEN** `console.log` SHALL output `Status: Failed` (plain text)
+- **AND** `console.error` SHALL continue to output the colorized status line
+
+#### Scenario: Passed with warnings status written to stdout
+- **GIVEN** all gates passed but some violations were skipped
+- **WHEN** `printSummary` renders the results
+- **THEN** `console.log` SHALL output `Status: Passed with warnings` (plain text)
+
+#### Scenario: Early-exit statuses do not invoke printSummary
+- **GIVEN** the run exits early (e.g. "No changes detected", "No applicable gates", "No changes detected — N violation(s) still outstanding")
+- **WHEN** the early-exit path returns a `RunResult`
+- **THEN** `printSummary` SHALL NOT be invoked
+- **AND** the `RunResult.message` field SHALL contain the status description for the caller to log
+- **NOTE** Early-exit statuses are handled by `handleNoChanges` and similar functions that return before reaching `executeAndReport`. The caller (`run.ts`) logs the message via `getStatusMessage()` and the result's message field. The stdout Status line only applies to runs that reach `printSummary`.
 
