@@ -41,7 +41,7 @@ Execute the autonomous verification suite.
    - `Status: Passed with warnings` → Go to step 8.
    - `Status: Failed` → Continue to step 4. **You MUST continue — do not stop here.**
    - `Status: Retry limit exceeded` → Run `agent-gauntlet clean` to archive logs. Go to step 8.
-   - No status line visible → The command may have timed out or failed to run. Re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
+   - No status line visible → **Known issue:** Bun can drop all stdout/stderr when LLM review subprocesses run. Read the console log file to get the status: find the latest `console.*.log` in the gauntlet log directory (e.g., `gauntlet_logs/console.1.log`) and look for the `Status:` line there. If no console log is found there, also check `gauntlet_logs/previous/` for logs from the most recent archived run. If no console log exists in either location, the command may have timed out or failed to run — re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
 4. **Extract failures** (required when status is Failed):
    - Infer the log directory from the file paths in the console output (e.g., if output references `gauntlet_logs/check_._lint.1.log`, the log directory is `gauntlet_logs/`)
    - Read `extract-prompt.md` from this skill's directory

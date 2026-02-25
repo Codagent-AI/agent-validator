@@ -5,40 +5,30 @@ import { ConsoleReporter } from "../../src/output/console";
 
 describe("ConsoleReporter", () => {
 	let originalConsoleError: typeof console.error;
-	let originalConsoleLog: typeof console.log;
-	let logOutput: string[];
-	let stdoutOutput: string[];
+	let errorOutput: string[];
 
 	beforeEach(() => {
 		originalConsoleError = console.error;
-		originalConsoleLog = console.log;
-		logOutput = [];
-		stdoutOutput = [];
+		errorOutput = [];
 		console.error = (...args: unknown[]) => {
-			logOutput.push(args.map(String).join(" "));
-		};
-		console.log = (...args: unknown[]) => {
-			stdoutOutput.push(args.map(String).join(" "));
+			errorOutput.push(args.map(String).join(" "));
 		};
 	});
 
 	afterEach(() => {
 		console.error = originalConsoleError;
-		console.log = originalConsoleLog;
 	});
 
 	describe("onJobStart", () => {
-		// Agents rely on stdout to see gate output via Bash tool
-		it("should write [START] prefix to stdout", () => {
+		it("should write [START] prefix to stderr", () => {
 			const reporter = new ConsoleReporter();
 			const job = { id: "check:test", type: "check" } as Job;
 
 			reporter.onJobStart(job);
 
-			const output = stdoutOutput.join("");
+			const output = errorOutput.join("");
 			expect(output).toContain("[START]");
 			expect(output).toContain("check:test");
-			expect(logOutput).toEqual([]);
 		});
 	});
 
@@ -54,13 +44,11 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = stdoutOutput.join("");
+			const output = errorOutput.join("");
 			expect(output).toContain("[PASS]");
 			expect(output).toContain("check:test");
-			expect(logOutput).toEqual([]);
 		});
 
-		// Agents rely on stdout to see failure details via Bash tool
 		it("should log [FAIL] for failing jobs with log path", () => {
 			const reporter = new ConsoleReporter();
 			const job = { id: "check:test", type: "check" } as Job;
@@ -74,12 +62,11 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = stdoutOutput.join("");
+			const output = errorOutput.join("");
 			expect(output).toContain("[FAIL]");
 			expect(output).toContain("check:test");
 			expect(output).toContain("Tests failed");
 			expect(output).toContain("gauntlet_logs/check_test.log");
-			expect(logOutput).toEqual([]);
 		});
 
 		it("should log [ERROR] for errored jobs", () => {
@@ -95,17 +82,16 @@ describe("ConsoleReporter", () => {
 
 			reporter.onJobComplete(job, result);
 
-			const output = stdoutOutput.join("");
+			const output = errorOutput.join("");
 			expect(output).toContain("[ERROR]");
 			expect(output).toContain("review:test");
 			expect(output).toContain("Failed to complete");
 			expect(output).toContain("gauntlet_logs/review_test.log");
-			expect(logOutput).toEqual([]);
 		});
 	});
 
 	describe("printSummary", () => {
-		it("should write Passed summary to stdout", async () => {
+		it("should write Passed summary to stderr", async () => {
 			const reporter = new ConsoleReporter();
 			const results: GateResult[] = [
 				{ jobId: "check:test", status: "pass", duration: 100 },
@@ -113,13 +99,12 @@ describe("ConsoleReporter", () => {
 
 			await reporter.printSummary(results);
 
-			const output = stdoutOutput.join("");
+			const output = errorOutput.join("");
 			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Passed");
-			expect(logOutput).toEqual([]);
 		});
 
-		it("should write Failed summary to stdout", async () => {
+		it("should write Failed summary to stderr", async () => {
 			const reporter = new ConsoleReporter();
 			const results: GateResult[] = [
 				{
@@ -132,10 +117,9 @@ describe("ConsoleReporter", () => {
 
 			await reporter.printSummary(results);
 
-			const output = stdoutOutput.join("");
+			const output = errorOutput.join("");
 			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Failed");
-			expect(logOutput).toEqual([]);
 		});
 	});
 });

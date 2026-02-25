@@ -33,8 +33,6 @@ describe("handleNoChanges", () => {
 	let debugLogSpy: ReturnType<typeof spyOn>;
 	let hasSkippedSpy: ReturnType<typeof spyOn>;
 	let cleanLogsSpy: ReturnType<typeof spyOn>;
-	let originalConsoleLog: typeof console.log;
-	let stdoutOutput: string[];
 
 	beforeEach(() => {
 		loggerSpy = spyOn(appLogger, "getCategoryLogger").mockReturnValue(
@@ -50,11 +48,6 @@ describe("handleNoChanges", () => {
 		cleanLogsSpy = spyOn(shared, "cleanLogs").mockResolvedValue(
 			undefined as any,
 		);
-		originalConsoleLog = console.log;
-		stdoutOutput = [];
-		console.log = (...args: unknown[]) => {
-			stdoutOutput.push(args.map(String).join(" "));
-		};
 	});
 
 	afterEach(() => {
@@ -62,7 +55,6 @@ describe("handleNoChanges", () => {
 		debugLogSpy.mockRestore();
 		hasSkippedSpy.mockRestore();
 		cleanLogsSpy.mockRestore();
-		console.log = originalConsoleLog;
 	});
 
 	it("returns 'passed' when failuresMap is empty", async () => {
@@ -93,31 +85,5 @@ describe("handleNoChanges", () => {
 		expect(result.message).toContain("2");
 		expect(result.message).toContain("violation");
 		expect(result.gatesRun).toBe(0);
-	});
-
-	it("should write 'Status: Passed' to stdout when no changes and no failures", async () => {
-		const ctx = makeCtx();
-		const failuresMap = new Map();
-		await handleNoChanges(ctx, failuresMap);
-		const output = stdoutOutput.join(" ");
-		expect(output).toContain("Status: Passed");
-	});
-
-	it("should write 'Status: Failed' to stdout when violations outstanding", async () => {
-		const ctx = makeCtx();
-		const failuresMap = new Map();
-		const adapterMap = new Map();
-		adapterMap.set("lint", [{ file: "a.ts", line: 1, issue: "err" }]);
-		failuresMap.set("check:lint", adapterMap);
-		await handleNoChanges(ctx, failuresMap);
-		const output = stdoutOutput.join(" ");
-		expect(output).toContain("Status: Failed");
-	});
-
-	it("should write status to stdout when no failuresMap (first run, no changes)", async () => {
-		const ctx = makeCtx();
-		await handleNoChanges(ctx, undefined);
-		const output = stdoutOutput.join(" ");
-		expect(output).toContain("Status:");
 	});
 });

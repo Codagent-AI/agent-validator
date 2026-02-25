@@ -29,7 +29,7 @@ function printSubResult(
 ): void {
   const { color, label } = statusStyle(sub.status);
   const logInfo = sub.status !== 'pass' ? logSuffix(sub.logPath) : '';
-  console.log(
+  console.error(
     color(
       `[${label}]  ${jobId} ${chalk.dim(sub.nameSuffix)} (${duration}) - ${sub.message}${logInfo}`,
     ),
@@ -54,9 +54,9 @@ function printSingleResult(
   }
 
   if (result.status === 'pass') {
-    console.log(color(`[${label}]  ${jobId} (${duration})`));
+    console.error(color(`[${label}]  ${jobId} (${duration})`));
   } else {
-    console.log(
+    console.error(
       color(`[${label}]  ${jobId} (${duration}) - ${message}${logInfo}`),
     );
   }
@@ -83,14 +83,16 @@ async function printIterationHistory(
     );
     const totalFailed = countTotalFailed(results);
 
-    console.log(`\n${chalk.bold(SEPARATOR)}`);
+    console.error(`\n${chalk.bold(SEPARATOR)}`);
     const iterationsText =
       history.length > 1 ? ` after ${history.length} iterations` : '';
-    console.log(
+    console.error(
       `Total: ${totalFixed} fixed, ${totalSkipped} skipped, ${totalFailed} failed${iterationsText}`,
     );
   } catch (err) {
-    console.log(chalk.yellow(`Warning: Failed to reconstruct history: ${err}`));
+    console.warn(
+      chalk.yellow(`Warning: Failed to reconstruct history: ${err}`),
+    );
   }
 }
 
@@ -106,9 +108,9 @@ function printFixedAndSkipped(
   for (const iter of history) {
     if (iter.fixed.length === 0 && iter.skipped.length === 0) continue;
 
-    console.log(`\nIteration ${iter.iteration}:`);
+    console.error(`\nIteration ${iter.iteration}:`);
     for (const f of iter.fixed) {
-      console.log(
+      console.error(
         chalk.green(
           `  ✓ Fixed: ${formatJobLabel(f.jobId, f.adapter)} - ${f.details}`,
         ),
@@ -123,13 +125,13 @@ function printSkippedItems(
   skipped: Awaited<ReturnType<typeof reconstructHistory>>[number]['skipped'],
 ): void {
   for (const s of skipped) {
-    console.log(
+    console.error(
       chalk.yellow(
         `  ⊘ Skipped: ${formatJobLabel(s.jobId, s.adapter)} - ${s.file}:${s.line} ${s.issue}`,
       ),
     );
     if (s.result) {
-      console.log(chalk.dim(`    Reason: ${s.result}`));
+      console.error(chalk.dim(`    Reason: ${s.result}`));
     }
   }
 }
@@ -337,7 +339,7 @@ function parseCheckErrorFallback(logContent: string): string[] {
 
 export class ConsoleReporter {
   onJobStart(job: Job) {
-    console.log(chalk.blue(`[START] ${job.id}`));
+    console.error(chalk.blue(`[START] ${job.id}`));
   }
 
   onJobComplete(job: Job, result: GateResult) {
@@ -357,9 +359,9 @@ export class ConsoleReporter {
     logDir?: string,
     statusOverride?: string,
   ) {
-    console.log(`\n${chalk.bold(SEPARATOR)}`);
-    console.log(chalk.bold('RESULTS SUMMARY'));
-    console.log(chalk.bold(SEPARATOR));
+    console.error(`\n${chalk.bold(SEPARATOR)}`);
+    console.error(chalk.bold('RESULTS SUMMARY'));
+    console.error(chalk.bold(SEPARATOR));
 
     if (logDir) {
       await printIterationHistory(logDir, results);
@@ -369,8 +371,8 @@ export class ConsoleReporter {
       results,
       statusOverride,
     );
-    console.log(statusColor(`Status: ${overallStatus}`));
-    console.log(chalk.bold(`${SEPARATOR}\n`));
+    console.error(statusColor(`Status: ${overallStatus}`));
+    console.error(chalk.bold(`${SEPARATOR}\n`));
   }
 
   /** @internal Public for testing */
