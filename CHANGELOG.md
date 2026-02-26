@@ -1,5 +1,21 @@
 # agent-gauntlet
 
+## 1.0.0
+
+### Major Changes
+
+- [#86](https://github.com/pacaplan/agent-gauntlet/pull/86) Remove the `gauntlet-fix-pr`, `gauntlet-push-pr`, and `wait-ci` commands, streamlining the CLI to focus on core verification functionality
+
+### Minor Changes
+
+- [#83](https://github.com/pacaplan/agent-gauntlet/pull/83) Add `agent-gauntlet skip` command for bypassing specific gates, and upgrade bundled openspec skills to the latest versions
+
+### Patch Changes
+
+- [#84](https://github.com/pacaplan/agent-gauntlet/pull/84) Ensure the stdout Status line is written on all exit paths and remove `2>&1` redirections that were mixing stderr into stdout
+
+- [#85](https://github.com/pacaplan/agent-gauntlet/pull/85) Revert ConsoleReporter output back to stderr and fix a process exit hang caused by pending stdout writes
+
 ## 0.15.5
 
 ### Patch Changes
