@@ -662,10 +662,6 @@ describe("Stop Hook Command", () => {
 				"stop_hook_active",
 				"loop_detected",
 				"invalid_input",
-				"pr_push_required",
-				"ci_pending",
-				"ci_failed",
-				"ci_passed",
 				"validation_required",
 				"stop_hook_disabled",
 			];
@@ -674,7 +670,7 @@ describe("Stop Hook Command", () => {
 				logs = []; // Clear logs for each test
 				outputHookResponse(status);
 				const response = JSON.parse(logs[0]!);
-				const blockingStatuses = ["failed", "pr_push_required", "ci_pending", "ci_failed", "validation_required"];
+				const blockingStatuses = ["failed", "validation_required"];
 				if (blockingStatuses.includes(status)) {
 					expect(response.decision).toBe("block");
 				} else {
@@ -875,83 +871,6 @@ describe("Stop Hook Command", () => {
 			expect(sourceFile).toContain("clearTimeout(selfTimeout)");
 			// The finally block should exist
 			expect(sourceFile).toContain("} finally {");
-		});
-	});
-
-	describe("pr_push_required status", () => {
-		it("isBlockingStatus returns true for pr_push_required", () => {
-			expect(isBlockingStatus("pr_push_required")).toBe(true);
-		});
-
-		it("isBlockingStatus returns true for failed", () => {
-			expect(isBlockingStatus("failed")).toBe(true);
-		});
-
-		it("isBlockingStatus returns false for passed", () => {
-			expect(isBlockingStatus("passed")).toBe(false);
-		});
-
-		it("getStatusMessage returns appropriate message for pr_push_required", () => {
-			const message = getStatusMessage("pr_push_required");
-			expect(message).toContain("Gauntlet passed");
-			expect(message).toContain("PR needs to be created or updated");
-		});
-
-		it("outputHookResponse outputs block decision for pr_push_required", () => {
-			const instructions = "Create a PR";
-			outputHookResponse("pr_push_required", { reason: instructions });
-			expect(logs.length).toBe(1);
-			const response = JSON.parse(logs[0]!);
-			expect(response.decision).toBe("block");
-			expect(response.status).toBe("pr_push_required");
-			expect(response.reason).toBe(instructions);
-		});
-	});
-
-	describe("CI status handling", () => {
-		describe("isBlockingStatus with CI statuses", () => {
-			it("returns true for ci_pending", () => {
-				expect(isBlockingStatus("ci_pending")).toBe(true);
-			});
-
-			it("returns true for ci_failed", () => {
-				expect(isBlockingStatus("ci_failed")).toBe(true);
-			});
-
-			it("returns false for ci_passed", () => {
-				expect(isBlockingStatus("ci_passed")).toBe(false);
-			});
-		});
-
-		describe("isSuccessStatus with CI statuses", () => {
-			it("returns true for ci_passed", () => {
-				expect(isSuccessStatus("ci_passed")).toBe(true);
-			});
-
-			it("returns false for ci_pending", () => {
-				expect(isSuccessStatus("ci_pending")).toBe(false);
-			});
-
-			it("returns false for ci_failed", () => {
-				expect(isSuccessStatus("ci_failed")).toBe(false);
-			});
-		});
-
-		describe("getStatusMessage with CI statuses", () => {
-			it("returns appropriate message for ci_pending", () => {
-				const message = getStatusMessage("ci_pending");
-				expect(message).toContain("CI checks still running");
-			});
-
-			it("returns appropriate message for ci_failed", () => {
-				const message = getStatusMessage("ci_failed");
-				expect(message).toContain("CI failed");
-			});
-
-			it("returns appropriate message for ci_passed", () => {
-				const message = getStatusMessage("ci_passed");
-				expect(message).toContain("CI passed");
-			});
 		});
 	});
 

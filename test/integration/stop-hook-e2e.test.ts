@@ -25,7 +25,6 @@ debug_log:
 stop_hook:
   enabled: true
   run_interval_minutes: 0
-  auto_push_pr: false
 cli:
   default_preference:
     - claude

@@ -12,8 +12,6 @@ import {
 const SKILL_ACTIONS = [
 	"run",
 	"check",
-	"push-pr",
-	"fix-pr",
 	"status",
 	"help",
 	"setup",

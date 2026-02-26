@@ -13,4 +13,3 @@ export { registerStartHookCommand } from './start-hook.js';
 export { registerStatusCommand } from './status.js';
 export { registerStopHookCommand } from './stop-hook.js';
 export { registerValidateCommand } from './validate.js';
-export { registerWaitCICommand } from './wait-ci.js';

@@ -1,7 +1,5 @@
-import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import YAML from 'yaml';
 import { loadGlobalConfig } from '../config/global.js';
 import type { StopHookConfig } from '../config/stop-hook-config.js';
@@ -9,30 +7,19 @@ import { resolveStopHookConfig } from '../config/stop-hook-config.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import type { GauntletStatus } from '../types/gauntlet-status.js';
 import type { DebugLogger } from '../utils/debug-log.js';
-import type {
-  PRStatusResult,
-  StopHookContext,
-  StopHookResult,
-} from './adapters/types.js';
+import type { StopHookContext, StopHookResult } from './adapters/types.js';
 import {
   checkRunInterval,
-  getLastRunStatus,
   hasChangesSinceLastRun,
   hasChangesVsBaseBranch,
   hasFailedRunLogs,
 } from './stop-hook-state.js';
-
-const execFileAsync = promisify(execFile);
 
 interface MinimalConfig {
   log_dir?: string;
   debug_log?: {
     enabled?: boolean;
     max_size_mb?: number;
-  };
-  stop_hook?: {
-    auto_push_pr?: boolean;
-    auto_fix_pr?: boolean;
   };
   base_branch?: string;
 }
@@ -58,14 +45,6 @@ const DEFAULT_LOG_DIR = 'gauntlet_logs';
 const SKILL_INSTRUCTIONS = {
   validation_required:
     'Changes detected, you must use the `gauntlet-run` skill to validate them now.',
-  pr_push_required:
-    'Gauntlet passed. You must use the `gauntlet-push-pr` skill to create or update your pull request.',
-  pr_push_required_with_warnings:
-    'Gauntlet passed with warnings (some issues were skipped). You must use the `gauntlet-push-pr` skill to create or update your pull request. Include a summary of skipped issues in the PR description.',
-  ci_pending:
-    'PR is up to date but CI checks are still running. You must use the `gauntlet-fix-pr` skill to poll CI status until checks complete, then fix any failures.',
-  ci_failed:
-    'PR is up to date but CI checks have failed. You must use the `gauntlet-fix-pr` skill to check which CI checks failed, fix the issues, and push.',
 } as const;
 
 /**
@@ -106,11 +85,6 @@ const STATUS_MESSAGES: Record<string, string> = {
   lock_conflict:
     '⏭ Gauntlet skipped — another gauntlet run is already in progress.',
   failed: '✗ Gauntlet failed — issues must be fixed before stopping.',
-  pr_push_required:
-    '✓ Gauntlet passed — PR needs to be created or updated before stopping.',
-  ci_pending: '⏳ CI checks still running — waiting for completion.',
-  ci_failed: '✗ CI failed or review changes requested — fix issues and push.',
-  ci_passed: '✓ CI passed — all checks completed and no blocking reviews.',
   validation_required:
     '✗ Validation required — changes detected that need validation before stopping.',
   no_config: '○ Not a gauntlet project — no .gauntlet/config.yml found.',
@@ -176,7 +150,7 @@ async function getResolvedStopHookConfig(
     const content = await fs.readFile(configPath, 'utf-8');
     const raw = YAML.parse(content) as { stop_hook?: Record<string, unknown> };
     const projectStopHookConfig = raw?.stop_hook as
-      | { auto_push_pr?: boolean; auto_fix_pr?: boolean }
+      | { enabled?: boolean; run_interval_minutes?: number }
       | undefined;
     const globalConfig = await loadGlobalConfig();
     return resolveStopHookConfig(projectStopHookConfig, globalConfig);
@@ -186,137 +160,11 @@ async function getResolvedStopHookConfig(
 }
 
 /**
- * Check if we should verify PR status after gates pass.
- * Loads stop hook config with 3-tier precedence and checks auto_push_pr.
- */
-async function shouldCheckPR(projectCwd: string): Promise<boolean> {
-  const config = await getResolvedStopHookConfig(projectCwd);
-  return config?.auto_push_pr ?? false;
-}
-
-/**
- * Check PR existence and whether local commits have been pushed.
- *
- * Uses `gh pr view` to get PR info and compares head SHA with local HEAD.
- * Gracefully degrades if `gh` is not installed or any error occurs.
- */
-async function checkPRStatus(cwd: string): Promise<PRStatusResult> {
-  try {
-    // Check if gh CLI is available
-    try {
-      await execFileAsync('gh', ['--version'], { cwd });
-    } catch {
-      return {
-        prExists: false,
-        upToDate: false,
-        error: 'gh CLI not installed',
-      };
-    }
-
-    // Get PR info for current branch
-    let prInfo: { number: number; state: string; headRefOid: string };
-    try {
-      const { stdout } = await execFileAsync(
-        'gh',
-        ['pr', 'view', '--json', 'number,state,headRefOid'],
-        { cwd },
-      );
-      prInfo = JSON.parse(stdout.trim());
-    } catch (e: unknown) {
-      const errMsg = (e as { message?: string }).message ?? 'unknown';
-      // gh pr view exits with code 1 and specific message when no PR exists
-      if (
-        errMsg.includes('no pull requests found') ||
-        errMsg.includes('Could not resolve')
-      ) {
-        return { prExists: false, upToDate: false };
-      }
-      // Other failures (network, auth, etc.) — return error for graceful degradation
-      return {
-        prExists: false,
-        upToDate: false,
-        error: `gh pr view failed: ${errMsg}`,
-      };
-    }
-
-    // Only consider OPEN PRs - closed/merged PRs should not block stop
-    if (prInfo.state !== 'OPEN') {
-      return { prExists: false, upToDate: false };
-    }
-
-    // Get local HEAD SHA
-    const { stdout: localHead } = await execFileAsync(
-      'git',
-      ['rev-parse', 'HEAD'],
-      { cwd },
-    );
-    const localSha = localHead.trim();
-
-    const upToDate = prInfo.headRefOid === localSha;
-    return {
-      prExists: true,
-      upToDate,
-      prNumber: prInfo.number,
-    };
-  } catch (error: unknown) {
-    const errMsg = (error as { message?: string }).message ?? 'unknown';
-    return {
-      prExists: false,
-      upToDate: false,
-      error: `PR status check failed: ${errMsg}`,
-    };
-  }
-}
-
-/**
- * Check CI status for the current branch's PR via a single `gh pr checks` read.
- * No polling loop, no cross-invocation state. Returns status immediately.
- */
-export async function checkCIStatus(cwd: string): Promise<{
-  status: 'passed' | 'pending' | 'failed' | 'error';
-  error?: string;
-}> {
-  try {
-    const { stdout } = await execFileAsync(
-      'gh',
-      ['pr', 'checks', '--json', 'name,state'],
-      { cwd },
-    );
-
-    const checks = JSON.parse(stdout.trim()) as Array<{
-      name: string;
-      state: string;
-    }>;
-
-    if (checks.length === 0) {
-      // No checks configured — treat as passed
-      return { status: 'passed' };
-    }
-
-    const hasFailed = checks.some(
-      (c) => c.state === 'FAILURE' || c.state === 'ERROR',
-    );
-    if (hasFailed) return { status: 'failed' };
-
-    const hasPending = checks.some(
-      (c) => c.state === 'PENDING' || c.state === 'EXPECTED',
-    );
-    if (hasPending) return { status: 'pending' };
-
-    return { status: 'passed' };
-  } catch (e: unknown) {
-    const errMsg = (e as { message?: string }).message ?? 'unknown';
-    return { status: 'error', error: errMsg };
-  }
-}
-
-/**
  * Core stop hook handler that reads state and determines whether to block stop.
  * Protocol-agnostic: works with any adapter that provides a StopHookContext.
  *
- * This handler is stateless — it only READS state (logs, execution state,
- * PR status, CI status) and returns skill instructions. It never executes
- * gates, polls CI, or tracks attempts.
+ * This handler is stateless — it only READS state (logs, execution state)
+ * and returns skill instructions. It never executes gates or polls CI.
  */
 export class StopHookHandler {
   private debugLogger?: DebugLogger;
@@ -378,9 +226,6 @@ export class StopHookHandler {
 
     const changesResult = await this.checkForChanges(hctx);
     if (changesResult) return changesResult;
-
-    const prCiResult = await this.checkPRAndCI(hctx, config);
-    if (prCiResult) return prCiResult;
 
     hctx.log.info('All checks passed — allowing stop');
     return this.allow('passed');
@@ -448,68 +293,6 @@ export class StopHookHandler {
     return null;
   }
 
-  /**
-   * Check PR existence/push status and CI status.
-   * Returns a StopHookResult if action is needed, null to continue.
-   */
-  private async checkPRAndCI(
-    hctx: HandlerCtx,
-    config: StopHookConfig | null,
-  ): Promise<StopHookResult | null> {
-    if (!config?.auto_push_pr) return null;
-
-    const prStatus = await checkPRStatus(hctx.cwd);
-    if (prStatus.error) {
-      hctx.log.warn(
-        `PR status check failed: ${prStatus.error} — allowing stop`,
-      );
-      return null;
-    }
-    if (!(prStatus.prExists && prStatus.upToDate)) {
-      hctx.log.info('PR missing or outdated — blocking with pr_push_required');
-      return this.blockForPR(hctx);
-    }
-    if (!config?.auto_fix_pr) return null;
-
-    return this.checkCI(hctx);
-  }
-
-  /**
-   * Block with PR push required, selecting the appropriate instruction
-   * based on whether the last run had warnings.
-   */
-  private async blockForPR(hctx: HandlerCtx): Promise<StopHookResult> {
-    const lastStatus = await getLastRunStatus(hctx.logDir);
-    const instruction =
-      lastStatus === 'passed_with_warnings'
-        ? SKILL_INSTRUCTIONS.pr_push_required_with_warnings
-        : SKILL_INSTRUCTIONS.pr_push_required;
-    return this.block('pr_push_required', instruction);
-  }
-
-  /**
-   * Check CI status and return block/allow result.
-   */
-  private async checkCI(hctx: HandlerCtx): Promise<StopHookResult | null> {
-    const ciResult = await checkCIStatus(hctx.cwd);
-    if (ciResult.status === 'error') {
-      hctx.log.warn(
-        `CI status check failed: ${ciResult.error} — allowing stop`,
-      );
-      return null;
-    }
-    if (ciResult.status === 'pending') {
-      hctx.log.info('CI pending — blocking');
-      return this.block('ci_pending', SKILL_INSTRUCTIONS.ci_pending);
-    }
-    if (ciResult.status === 'failed') {
-      hctx.log.info('CI failed — blocking');
-      return this.block('ci_failed', SKILL_INSTRUCTIONS.ci_failed);
-    }
-    hctx.log.info('CI passed — allowing stop');
-    return this.allow('ci_passed');
-  }
-
   /** Create a blocking result */
   private async block(
     status: GauntletStatus,
@@ -538,7 +321,3 @@ export class StopHookHandler {
     };
   }
 }
-
-// Re-export types and functions for backward compatibility
-export type { PRStatusResult };
-export { checkPRStatus, shouldCheckPR };

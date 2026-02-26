@@ -12,11 +12,6 @@ export type GauntletStatus =
   | 'retry_limit_exceeded' // Max retries reached
   | 'lock_conflict' // Another run in progress
   | 'error' // Unexpected error (includes config errors)
-  | 'pr_push_required' // Gates passed but PR needs to be created/updated
-  // CI workflow statuses (after PR is pushed)
-  | 'ci_pending' // CI checks still running
-  | 'ci_failed' // CI checks failed or review changes requested
-  | 'ci_passed' // CI checks passed, no blocking reviews
   // Stop-hook pre-checks (before running executor)
   | 'validation_required' // Changes need validation or previous run has unresolved failures
   | 'no_config' // No .gauntlet/config.yml found
@@ -58,13 +53,7 @@ export interface RunResult {
  * Determine if a status should block the stop hook.
  */
 export function isBlockingStatus(status: GauntletStatus): boolean {
-  return (
-    status === 'failed' ||
-    status === 'validation_required' ||
-    status === 'pr_push_required' ||
-    status === 'ci_pending' ||
-    status === 'ci_failed'
-  );
+  return status === 'failed' || status === 'validation_required';
 }
 
 /**
@@ -75,7 +64,6 @@ export function isSuccessStatus(status: GauntletStatus): boolean {
     status === 'passed' ||
     status === 'passed_with_warnings' ||
     status === 'no_applicable_gates' ||
-    status === 'no_changes' ||
-    status === 'ci_passed'
+    status === 'no_changes'
   );
 }

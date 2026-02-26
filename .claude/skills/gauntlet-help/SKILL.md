@@ -61,7 +61,6 @@ Based on the user's question, load the appropriate reference file for detailed g
 | Check failures, review failures, no_changes, no_applicable_gates, rerun mode | `references/gate-troubleshooting.md` |
 | Lock conflict, stale locks, parallel runs, cleanup | `references/lock-troubleshooting.md` |
 | Adapter health, missing tools, usage limits, cooldown | `references/adapter-troubleshooting.md` |
-| PR push, CI status, auto_push_pr, auto_fix_pr, CI wait | `references/ci-pr-troubleshooting.md` |
 
 If the question spans multiple domains, load each relevant reference.
 

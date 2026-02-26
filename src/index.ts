@@ -17,7 +17,6 @@ import {
   registerStatusCommand,
   registerStopHookCommand,
   registerValidateCommand,
-  registerWaitCICommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -42,7 +41,6 @@ registerSkipCommand(program);
 registerStartHookCommand(program);
 registerStatusCommand(program);
 registerStopHookCommand(program);
-registerWaitCICommand(program);
 registerHelpCommand(program);
 
 // Default action: help

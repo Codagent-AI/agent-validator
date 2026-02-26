@@ -1155,7 +1155,7 @@ describe("Skills Installation for Claude", () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const skillsDir = path.join(TEST_DIR, ".claude", "skills");
-		const actions = ["run", "check", "push-pr", "fix-pr", "status", "help", "setup"];
+		const actions = ["run", "check", "status", "help", "setup"];
 
 		for (const action of actions) {
 			const skillPath = path.join(skillsDir, `gauntlet-${action}`, "SKILL.md");
@@ -1191,7 +1191,7 @@ describe("Skills Installation for Claude", () => {
 
 		const skillsBase = path.join(TEST_DIR, ".claude", "skills");
 
-		for (const action of ["check", "push-pr", "fix-pr", "status"]) {
+		for (const action of ["check", "status"]) {
 			const content = await fs.readFile(
 				path.join(skillsBase, `gauntlet-${action}`, "SKILL.md"),
 				"utf-8",
@@ -1242,7 +1242,7 @@ describe("Skills Installation for Claude", () => {
 		expect(content).toContain("Output Contract");
 	});
 
-	it("should install all 6 reference files for gauntlet-help", async () => {
+	it("should install all 5 reference files for gauntlet-help", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const refsDir = path.join(
@@ -1258,7 +1258,6 @@ describe("Skills Installation for Claude", () => {
 			"gate-troubleshooting.md",
 			"lock-troubleshooting.md",
 			"adapter-troubleshooting.md",
-			"ci-pr-troubleshooting.md",
 		];
 
 		const files = await fs.readdir(refsDir);
@@ -1271,7 +1270,7 @@ describe("Skills Installation for Claude", () => {
 			const content = await fs.readFile(filePath, "utf-8");
 			expect(content.length).toBeGreaterThan(100);
 		}
-		expect(files.length).toBe(6);
+		expect(files.length).toBe(5);
 	});
 
 	it("should install gauntlet-setup SKILL.md for Claude", async () => {

@@ -23,14 +23,10 @@ const globalConfigSchema = z.object({
     .object({
       enabled: z.boolean().default(false),
       run_interval_minutes: z.number().default(5),
-      auto_push_pr: z.boolean().default(false),
-      auto_fix_pr: z.boolean().default(false),
     })
     .default({
       enabled: false,
       run_interval_minutes: 5,
-      auto_push_pr: false,
-      auto_fix_pr: false,
     }),
   debug_log: debugLogConfigSchema.default({ enabled: false, max_size_mb: 10 }),
 });
@@ -41,8 +37,6 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   stop_hook: {
     enabled: false,
     run_interval_minutes: 5,
-    auto_push_pr: false,
-    auto_fix_pr: false,
   },
   debug_log: {
     enabled: false,

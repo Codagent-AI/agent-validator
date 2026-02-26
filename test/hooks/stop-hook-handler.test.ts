@@ -36,13 +36,6 @@ describe("StopHookHandler", () => {
 			);
 		});
 
-		it("should return appropriate message for pr_push_required status", () => {
-			const message = getStatusMessage("pr_push_required");
-			expect(message).toBe(
-				"✓ Gauntlet passed — PR needs to be created or updated before stopping.",
-			);
-		});
-
 		it("should return appropriate message for retry_limit_exceeded status", () => {
 			const message = getStatusMessage("retry_limit_exceeded");
 			expect(message).toContain("retry limit exceeded");
@@ -91,28 +84,6 @@ describe("StopHookHandler", () => {
 		it("should return appropriate message for validation_required status", () => {
 			const message = getStatusMessage("validation_required");
 			expect(message).toContain("changes detected");
-		});
-
-		it("should return appropriate message for ci_pending status", () => {
-			const message = getStatusMessage("ci_pending");
-			expect(message).toContain("CI checks still running");
-		});
-
-		it("should return appropriate message for ci_failed status", () => {
-			const message = getStatusMessage("ci_failed");
-			expect(message).toContain("CI failed");
-		});
-
-		it("should return appropriate message for ci_passed status", () => {
-			const message = getStatusMessage("ci_passed");
-			expect(message).toContain("CI passed");
-		});
-	});
-
-	describe("checkCIStatus()", () => {
-		it("should be importable from stop-hook-handler", async () => {
-			const { checkCIStatus } = await import("../../src/hooks/stop-hook-handler.js");
-			expect(typeof checkCIStatus).toBe("function");
 		});
 	});
 });

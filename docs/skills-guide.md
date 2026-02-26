@@ -9,8 +9,6 @@ Agent Gauntlet installs **skills** that let you invoke gauntlet workflows direct
 | Setup | `/gauntlet-setup` | Scan project and configure checks and reviews |
 | Run | `/gauntlet-run` | Run the full verification suite (checks + reviews) |
 | Check | `/gauntlet-check` | Run checks only (no AI reviews) |
-| Push PR | `/gauntlet-push-pr` | Commit, push, and create/update a pull request |
-| Fix PR | `/gauntlet-fix-pr` | Address review comments and fix CI failures |
 | Status | `/gauntlet-status` | Show a summary of the most recent gauntlet session |
 | Help | `/gauntlet-help` | Diagnose and explain gauntlet behavior (diagnosis-only) |
 
@@ -34,8 +32,6 @@ Skills are installed as directory-based `SKILL.md` files:
     project-structure.md
   gauntlet-run/SKILL.md
   gauntlet-check/SKILL.md
-  gauntlet-push-pr/SKILL.md
-  gauntlet-fix-pr/SKILL.md
   gauntlet-status/SKILL.md
   gauntlet-help/SKILL.md
   gauntlet-help/references/
@@ -44,7 +40,6 @@ Skills are installed as directory-based `SKILL.md` files:
     gate-troubleshooting.md
     lock-troubleshooting.md
     adapter-troubleshooting.md
-    ci-pr-troubleshooting.md
 ```
 
 For **non-native CLI agents** (Codex, Gemini, etc.), `init` prints `@file_path` references so you can point your agent at the skill files directly (e.g., `@.claude/skills/gauntlet-run/SKILL.md`).
@@ -87,14 +82,6 @@ The primary skill. Runs the full gauntlet (checks + reviews) and iterates on fai
 ### /gauntlet-check
 
 Same iterative workflow as `/gauntlet-run` but skips AI reviews. Useful for quickly validating that linting, tests, and other deterministic checks pass.
-
-### /gauntlet-push-pr
-
-Commits all changes, pushes to the remote, and creates or updates a pull request. Verifies the PR exists after creation.
-
-### /gauntlet-fix-pr
-
-Checks CI status and review comments on the current PR, fixes issues, commits, and pushes.
 
 ### /gauntlet-status
 
