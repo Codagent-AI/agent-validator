@@ -134,7 +134,8 @@ The system SHALL store canonical skill files under `.gauntlet/skills/gauntlet-<a
 #### Scenario: Skill frontmatter format
 - **WHEN** a skill `SKILL.md` file is created
 - **THEN** it SHALL contain YAML frontmatter with `name`, `description`, and `allowed-tools` fields
-- **AND** all gauntlet skills (`gauntlet-run`, `gauntlet-check`, `gauntlet-status`) SHALL set `disable-model-invocation: true`
+- **AND** non-auto-invoked gauntlet skills (`gauntlet-check`, `gauntlet-status`) SHALL set `disable-model-invocation: true`
+- **AND** `gauntlet-run` SHALL set `disable-model-invocation: false` for auto-invocation
 
 #### Scenario: Hyphenated skill invocation
 - **GIVEN** a skill at `.claude/skills/gauntlet-run/SKILL.md`
