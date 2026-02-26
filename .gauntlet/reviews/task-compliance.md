@@ -1,5 +1,5 @@
 ---
-num_reviews: 2
+num_reviews: 1
 ---
 
 # Task Compliance Review
