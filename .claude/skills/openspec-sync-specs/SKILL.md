@@ -6,7 +6,7 @@ compatibility: Requires openspec CLI.
 metadata:
   author: openspec
   version: "1.0"
-  generatedBy: "1.1.1"
+  generatedBy: "1.2.0"
 ---
 
 Sync delta specs from a change to main specs.
@@ -114,7 +114,7 @@ Unlike programmatic merging, you can apply **partial updates**:
 
 **Output On Success**
 
-```text
+```
 ## Specs Synced: <change-name>
 
 Updated main specs:
