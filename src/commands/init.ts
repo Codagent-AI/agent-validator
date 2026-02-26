@@ -43,21 +43,11 @@ const SKILLS_SOURCE_DIR = (() => {
   }
 })();
 
-const SKILL_ACTIONS = [
-  'run',
-  'check',
-  'push-pr',
-  'fix-pr',
-  'status',
-  'help',
-  'setup',
-] as const;
+const SKILL_ACTIONS = ['run', 'check', 'status', 'help', 'setup'] as const;
 
 const SKILL_DESCRIPTIONS: Record<(typeof SKILL_ACTIONS)[number], string> = {
   run: 'Run the verification suite',
   check: 'Run checks only (no reviews)',
-  'push-pr': 'Commit, push, and create a PR',
-  'fix-pr': 'Fix PR review comments and CI failures',
   status: 'Show gauntlet status',
   help: 'Diagnose and explain gauntlet behavior',
   setup: 'Configure checks and reviews interactively',
@@ -328,13 +318,10 @@ entry_points: []
 
 # Stop hook — auto-run gauntlet when the agent stops
 # Precedence: env vars > project config > global config (~/.config/agent-gauntlet/config.yml)
-# Env overrides: GAUNTLET_STOP_HOOK_ENABLED, GAUNTLET_STOP_HOOK_INTERVAL_MINUTES,
-#                GAUNTLET_AUTO_PUSH_PR, GAUNTLET_AUTO_FIX_PR
+# Env overrides: GAUNTLET_STOP_HOOK_ENABLED, GAUNTLET_STOP_HOOK_INTERVAL_MINUTES
 # stop_hook:
 #   enabled: false
 #   run_interval_minutes: 5       # Minimum minutes between runs (0 = always run)
-#   auto_push_pr: false           # Check/create PR after gates pass
-#   auto_fix_pr: false            # Wait for CI checks after PR (requires auto_push_pr)
 
 # Debug log — persistent debug logging to .debug.log
 # debug_log:

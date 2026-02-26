@@ -8,8 +8,6 @@ import type { stopHookConfigSchema } from './schema.js';
 export const GAUNTLET_STOP_HOOK_ENABLED = 'GAUNTLET_STOP_HOOK_ENABLED';
 export const GAUNTLET_STOP_HOOK_INTERVAL_MINUTES =
   'GAUNTLET_STOP_HOOK_INTERVAL_MINUTES';
-export const GAUNTLET_AUTO_PUSH_PR = 'GAUNTLET_AUTO_PUSH_PR';
-export const GAUNTLET_AUTO_FIX_PR = 'GAUNTLET_AUTO_FIX_PR';
 
 /**
  * Resolved stop hook configuration.
@@ -17,8 +15,6 @@ export const GAUNTLET_AUTO_FIX_PR = 'GAUNTLET_AUTO_FIX_PR';
 export interface StopHookConfig {
   enabled: boolean;
   run_interval_minutes: number;
-  auto_push_pr: boolean;
-  auto_fix_pr: boolean;
 }
 
 type ProjectStopHookConfig = z.infer<typeof stopHookConfigSchema> | undefined;
@@ -56,16 +52,12 @@ function parseIntegerEnv(envVar: string | undefined): number | undefined {
 export function parseStopHookEnvVars(): {
   enabled?: boolean;
   run_interval_minutes?: number;
-  auto_push_pr?: boolean;
-  auto_fix_pr?: boolean;
 } {
   return {
     enabled: parseBooleanEnv(process.env[GAUNTLET_STOP_HOOK_ENABLED]),
     run_interval_minutes: parseIntegerEnv(
       process.env[GAUNTLET_STOP_HOOK_INTERVAL_MINUTES],
     ),
-    auto_push_pr: parseBooleanEnv(process.env[GAUNTLET_AUTO_PUSH_PR]),
-    auto_fix_pr: parseBooleanEnv(process.env[GAUNTLET_AUTO_FIX_PR]),
   };
 }
 
@@ -107,24 +99,6 @@ export function resolveStopHookConfig(
     projectConfig?.run_interval_minutes,
     globalStop.run_interval_minutes,
   );
-  const auto_push_pr = resolveField(
-    envVars.auto_push_pr,
-    projectConfig?.auto_push_pr,
-    globalStop.auto_push_pr,
-  );
-  let auto_fix_pr = resolveField(
-    envVars.auto_fix_pr,
-    projectConfig?.auto_fix_pr,
-    globalStop.auto_fix_pr,
-  );
 
-  // Validation: auto_fix_pr requires auto_push_pr
-  if (auto_fix_pr && !auto_push_pr) {
-    console.error(
-      '[gauntlet] Warning: auto_fix_pr=true requires auto_push_pr=true. Treating auto_fix_pr as false.',
-    );
-    auto_fix_pr = false;
-  }
-
-  return { enabled, run_interval_minutes, auto_push_pr, auto_fix_pr };
+  return { enabled, run_interval_minutes };
 }

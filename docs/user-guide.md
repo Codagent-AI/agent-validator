@@ -291,38 +291,6 @@ Internal command used by the CI workflow to discover which jobs to run.
 - Expands entry points based on file patterns
 - Outputs a JSON object defining the job matrix and service configurations
 
-### `agent-gauntlet wait-ci`
-
-Waits for CI checks to complete and checks for blocking reviews on the current PR.
-
-This command is primarily used internally by the stop hook when `auto_fix_pr` is enabled, but can also be run manually to check CI status.
-
-#### Options
-
-- `--timeout <seconds>` (default: `270`): Maximum time to wait for CI checks to complete
-- `--poll-interval <seconds>` (default: `15`): Time between CI status checks
-
-#### Output
-
-Returns JSON with:
-- `ci_status`: One of `passed`, `failed`, `pending`, or `error`
-- `pr_number`: The PR number (if found)
-- `pr_url`: The PR URL (if found)
-- `failed_checks`: Array of failed check details
-- `review_comments`: Array of blocking review comments (REQUEST_CHANGES only)
-- `elapsed_seconds`: Time spent waiting
-- `error_message`: Error details (if status is `error`)
-
-#### Exit codes
-
-- `0`: All checks passed, no blocking reviews
-- `1`: Failed checks, blocking reviews, error, or no PR found
-- `2`: Timeout (checks still pending)
-
-#### Requirements
-
-Requires the GitHub CLI (`gh`) to be installed and authenticated.
-
 ### `agent-gauntlet help`
 
 Shows help information, including an overview of Agent Gauntlet and all available commands. This is the default command when no command is provided.

@@ -10,7 +10,6 @@
 | `passed_with_warnings` | Passed with warnings (some issues were skipped) | Gates ran but some review violations were skipped rather than fixed |
 | `no_applicable_gates` | No applicable gates matched current changes | Changed files didn't match any configured entry point |
 | `no_changes` | No changes detected | No files changed relative to `base_branch` |
-| `ci_passed` | CI passed — all checks completed and no blocking reviews | GitHub CI checks succeeded and no `CHANGES_REQUESTED` reviews |
 | `no_config` | Not a gauntlet project — no `.gauntlet/config.yml` found | No gauntlet configuration in this repo |
 | `stop_hook_active` | Stop hook cycle detected — allowing stop to prevent infinite loop | Recursion prevention triggered |
 | `stop_hook_disabled` | *(silent — no message displayed)* | `stop_hook.enabled: false` in config or `GAUNTLET_STOP_HOOK_ENABLED=false` |
@@ -25,18 +24,12 @@
 | Status | Message | Meaning |
 |--------|---------|---------|
 | `failed` | Issues must be fixed before stopping | One or more gates failed; agent must fix and re-run |
-| `pr_push_required` | PR needs to be created or updated before stopping | Gates passed but `auto_push_pr` is enabled and PR hasn't been pushed |
-| `ci_pending` | CI checks still running — waiting for completion | Waiting for GitHub CI to finish |
-| `ci_failed` | CI failed or review changes requested | GitHub CI checks failed or a reviewer requested changes |
 
 ## Common Scenarios
 
 ### "The hook blocked my stop"
 1. Check the status in `.debug.log` — search for `status:` entries
 2. If `failed`: Read the gate output files listed in `.debug.log` or the latest `console.*.log`
-3. If `pr_push_required`: The agent needs to commit, push, and create a PR
-4. If `ci_pending`: CI is still running; the hook will re-check on next stop attempt
-5. If `ci_failed`: Read CI failure details — run `agent-gauntlet wait-ci` or check `gh pr checks`
 
 ### "The hook allowed but shouldn't have"
 1. Check if the status was `no_changes` — verify `base_branch` is correct in `config.yml`
@@ -102,8 +95,6 @@ These override project config values (env > project config > global config):
 |----------|------|--------|
 | `GAUNTLET_STOP_HOOK_ENABLED` | `true`/`1`/`false`/`0` | Enable or disable the stop hook entirely |
 | `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` | Integer >= 0 | Minutes between runs (0 = always run) |
-| `GAUNTLET_AUTO_PUSH_PR` | `true`/`1`/`false`/`0` | Check PR status after gates pass |
-| `GAUNTLET_AUTO_FIX_PR` | `true`/`1`/`false`/`0` | Enable CI wait workflow after PR created |
 
 ## Diagnosing `stop_hook_disabled`
 

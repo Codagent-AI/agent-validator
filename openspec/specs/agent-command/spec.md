@@ -90,46 +90,6 @@ The command template SHALL NOT include a hardcoded retry limit. Instead, the tem
 - **AND** the agent SHALL NOT retry after cleaning (clean is for archival, not for resetting the retry count)
 - **AND** the agent SHALL report any unverified fixes in its session summary under "Outstanding Failures"
 
-### Requirement: Push PR Template Command
-
-The system SHALL provide a `/gauntlet-push-pr` skill (migrated from `push_pr.md`) that instructs the agent to commit changes and create or update a pull request.
-
-#### Scenario: Template prioritizes project-level instructions
-- **GIVEN** the `/gauntlet-push-pr` skill is invoked
-- **WHEN** the agent reads the instructions
-- **THEN** it SHALL first look for project-level commit/PR instructions or skills (e.g., a `/commit` command, `/push-pr` skill, project CONTRIBUTING.md)
-
-#### Scenario: Template includes minimal fallback
-- **GIVEN** the `/gauntlet-push-pr` skill is invoked
-- **AND** no project-level commit/PR instructions are found
-- **WHEN** the agent follows the template
-- **THEN** it SHALL use the minimal fallback steps: stage changes, commit with descriptive message, push to remote, and create PR via `gh pr create`
-
-#### Scenario: Skill installed during init
-- **GIVEN** a user runs `agent-gauntlet init`
-- **WHEN** the init command completes
-- **THEN** `.gauntlet/skills/gauntlet-push-pr/SKILL.md` SHALL be created from the template
-
-### Requirement: Fix PR Template Command
-
-The system SHALL provide a `/gauntlet-fix-pr` skill (migrated from `fix_pr.md`) that instructs the agent to address review comments and CI failures on a pull request.
-
-#### Scenario: Template prioritizes project-level instructions
-- **GIVEN** the `/gauntlet-fix-pr` skill is invoked
-- **WHEN** the agent reads the instructions
-- **THEN** it SHALL first look for project-level instructions or skills for addressing PR feedback (e.g., a `/fix-pr` skill, `.claude/commands/fix-pr.md`)
-
-#### Scenario: Template includes minimal fallback
-- **GIVEN** the `/gauntlet-fix-pr` skill is invoked
-- **AND** no project-level fix-pr instructions are found
-- **WHEN** the agent follows the template
-- **THEN** it SHALL use minimal fallback steps: check CI status, read failure logs, fetch review comments, fix issues, and push
-
-#### Scenario: Skill installed during init
-- **GIVEN** a user runs `agent-gauntlet init`
-- **WHEN** the init command completes
-- **THEN** `.gauntlet/skills/gauntlet-fix-pr/SKILL.md` SHALL be created from the template
-
 ### Requirement: Gauntlet Help Diagnostic Skill
 The system SHALL provide a `/gauntlet-help` skill for evidence-based diagnosis of gauntlet behavior. The skill SHALL be diagnosis-only (no auto-fix behavior) and SHALL operate without requiring source code access.
 
@@ -155,7 +115,7 @@ The `gauntlet-help` skill SHALL use a multi-file structure with `SKILL.md` conta
 - **THEN** `SKILL.md` SHALL route to `references/config-troubleshooting.md`
 
 ### Requirement: Comprehensive Diagnostic Playbooks
-The `gauntlet-help` skill SHALL provide situation-based troubleshooting references that cover all gauntlet stop-hook statuses, config issues, gate failures, lock conflicts, adapter health, and CI/PR integration, and SHALL use dynamic evidence acquisition to gather only the additional signals needed for diagnosis.
+The `gauntlet-help` skill SHALL provide situation-based troubleshooting references that cover all gauntlet stop-hook statuses, config issues, gate failures, lock conflicts, and adapter health, and SHALL use dynamic evidence acquisition to gather only the additional signals needed for diagnosis.
 
 #### Scenario: Explain any stop-hook outcome with targeted evidence gathering
 - **GIVEN** a user asks why the stop hook allowed or blocked
@@ -168,13 +128,13 @@ The system SHALL store canonical skill files under `.gauntlet/skills/gauntlet-<a
 
 #### Scenario: Canonical skill files created during init
 - **WHEN** `agent-gauntlet init` creates the gauntlet configuration
-- **THEN** skill directories SHALL be created under `.gauntlet/skills/` for each action: `gauntlet-run`, `gauntlet-check`, `gauntlet-push-pr`, `gauntlet-fix-pr`, `gauntlet-status`
+- **THEN** skill directories SHALL be created under `.gauntlet/skills/` for each action: `gauntlet-run`, `gauntlet-check`, `gauntlet-status`
 - **AND** each directory SHALL contain a `SKILL.md` file with YAML frontmatter
 
 #### Scenario: Skill frontmatter format
 - **WHEN** a skill `SKILL.md` file is created
 - **THEN** it SHALL contain YAML frontmatter with `name`, `description`, and `allowed-tools` fields
-- **AND** all gauntlet skills (`gauntlet-run`, `gauntlet-check`, `gauntlet-push-pr`, `gauntlet-fix-pr`, `gauntlet-status`) SHALL set `disable-model-invocation: true`
+- **AND** all gauntlet skills (`gauntlet-run`, `gauntlet-check`, `gauntlet-status`) SHALL set `disable-model-invocation: true`
 
 #### Scenario: Hyphenated skill invocation
 - **GIVEN** a skill at `.claude/skills/gauntlet-run/SKILL.md`
@@ -267,7 +227,7 @@ All gauntlet skills SHALL use a flat `gauntlet-<action>/` directory structure wi
 
 ### Requirement: Setup Skill Installation
 
-The `init` command SHALL install the `/gauntlet-setup` skill alongside existing skills (run, check, push-pr, fix-pr, status, help). The setup skill SHALL be installed as a multi-file skill with a SKILL.md and a references directory.
+The `init` command SHALL install the `/gauntlet-setup` skill alongside existing skills (run, check, status, help). The setup skill SHALL be installed as a multi-file skill with a SKILL.md and a references directory.
 
 #### Scenario: Setup skill installed during init
 - **GIVEN** a user runs `agent-gauntlet init`

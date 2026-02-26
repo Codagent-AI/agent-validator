@@ -52,7 +52,7 @@ The agent will:
 1. Write the plan (`docs/plans/YYYY-MM-DD-<name>.plan.md`)
 2. Execute all tasks via fresh subagents with automated spec + quality reviews
 3. Run `gauntlet-run` skill to validate
-4. Run `push-pr` skill to create a pull request against main
+4. Create a pull request against main
 
 **Note:** `docs/plans/` and `docs/design/` are gitignored — plan and design docs are scratch artifacts, not permanent documentation.
 

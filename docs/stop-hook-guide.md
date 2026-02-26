@@ -7,11 +7,11 @@ The stop hook integrates Agent Gauntlet with AI coding assistants, automatically
 
 ## Overview
 
-The stop hook acts as a **stateless coordinator** — it reads observable state and directs the agent to the appropriate skill. It never runs gates or polls CI itself.
+The stop hook acts as a **stateless coordinator** — it reads observable state and directs the agent to the appropriate skill. It never runs gates itself.
 
 When an AI agent attempts to stop (e.g., by saying "I'm done"), the stop hook:
-1. Reads the current state (failed logs, execution state, PR/CI status)
-2. If work is needed, blocks the stop and directs the agent to use the appropriate skill (`gauntlet-run`, `gauntlet-push-pr`, or `gauntlet-fix-pr`)
+1. Reads the current state (failed logs, execution state)
+2. If work is needed, blocks the stop and directs the agent to use the `gauntlet-run` skill
 3. If no work is needed, allows the agent to stop
 
 The agent drives the workflow: it runs `agent-gauntlet run` via the skill, sees output in real time, understands what failed and why, and fixes issues with full conversational context. The stop hook only enforces that this work gets done.
@@ -127,8 +127,6 @@ Override all config levels using environment variables:
 |----------|--------|-------------|
 | `GAUNTLET_STOP_HOOK_ENABLED` | `true`, `1`, `false`, `0` | Override whether stop hook is enabled |
 | `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` | Non-negative integer | Override run interval (0 = always run) |
-| `GAUNTLET_AUTO_PUSH_PR` | `true`, `1`, `false`, `0` | Override whether auto PR push check is enabled |
-| `GAUNTLET_AUTO_FIX_PR` | `true`, `1`, `false`, `0` | Override whether auto CI fix check is enabled |
 
 Example:
 ```bash
@@ -142,8 +140,6 @@ GAUNTLET_STOP_HOOK_ENABLED=false claude
 |---------|---------|-------------|
 | `stop_hook.enabled` | `false` | Whether stop hook validation runs. Set to `true` to enable. |
 | `stop_hook.run_interval_minutes` | `5` | Minimum minutes between gauntlet runs. Set to `0` to always run. Prevents excessive re-runs during active development. |
-| `stop_hook.auto_push_pr` | `false` | When enabled, blocks the stop if no PR exists or PR is not up to date after gates pass. |
-| `stop_hook.auto_fix_pr` | `false` | When enabled (requires `auto_push_pr`), blocks the stop if CI checks are pending or failing. Directs the agent to use the `gauntlet-fix-pr` skill. |
 
 ## How It Works
 
@@ -159,37 +155,15 @@ The stop hook evaluates state fresh on each stop attempt:
 
 4. **Changes since last pass?** Compares the current working tree against `working_tree_ref` from `.execution_state`. If changes exist since the last passing run, the hook blocks with: "use `gauntlet-run` skill."
 
-5. **PR status** (if `auto_push_pr` enabled): Checks `gh pr view` to verify a PR exists and is up to date. If not, blocks with: "use `gauntlet-push-pr` skill."
+5. **Allow stop**: All checks passed.
 
-6. **CI status** (if `auto_fix_pr` enabled): Single read of `gh pr checks` — no polling. If CI is pending or failed, blocks with: "use `gauntlet-fix-pr` skill."
-
-7. **Allow stop**: All checks passed.
-
-Steps 2-4 determine "has validation passed for the current state?" Steps 5-6 handle post-validation workflows. Each step is a read operation — file system for logs/execution state, `gh` CLI for PR/CI.
+Steps 2-4 determine "has validation passed for the current state?" Each step is a read operation — file system for logs/execution state.
 
 ### Edge Cases
 
 - **No execution state** (first invocation): Falls through to change detection vs base branch. If changes exist, blocks. If not, allows.
 - **Retry limit exceeded**: The runner auto-archives logs on retry limit. No logs remain, so the stop hook sees a clean state and checks for changes. Since `working_tree_ref` was updated and the agent hasn't made new changes, it allows the stop.
 - **Interval + failed state**: Failed log detection (step 2) happens before the interval check (step 3). If failed logs exist, always block regardless of interval.
-
-### Auto Push PR
-
-When `stop_hook.auto_push_pr` is enabled, an additional check runs after gates pass:
-
-1. Uses `gh pr view` to check whether a PR exists for the current branch
-2. Compares the PR's head SHA against the local `HEAD` to verify all commits are pushed
-3. If no PR exists or the PR is out of date, the stop is blocked with instructions to use the `gauntlet-push-pr` skill
-4. If `gh` CLI is unavailable or any error occurs, the check is skipped gracefully (does not block)
-
-### Auto Fix PR
-
-When `stop_hook.auto_fix_pr` is enabled (requires `auto_push_pr`), CI status is checked after the PR is verified:
-
-1. Runs a single `gh pr checks` read — no polling loop
-2. If CI checks are pending or failing, the stop is blocked with instructions to use the `gauntlet-fix-pr` skill
-3. The skill owns the wait/fix/push loop, not the stop hook
-4. On the next stop attempt, the stop hook checks CI status again
 
 ### Adapter Health and Cooldown
 
@@ -298,10 +272,6 @@ Example entries:
 | `stop_hook_active` | allow | Recursive hook prevention triggered |
 | `interval_not_elapsed` | allow | Run interval not yet passed |
 | `invalid_input` | allow | Invalid input to stop-hook |
-| `pr_push_required` | block | Gates passed but PR needs creation or update |
-| `ci_pending` | block | CI checks still running |
-| `ci_failed` | block | CI checks failed or review changes requested |
-| `ci_passed` | allow | CI checks passed, no blocking reviews |
 | `stop_hook_disabled` | allow | Stop hook disabled via configuration |
 
 ### RUN_START with Diff Statistics

@@ -124,23 +124,7 @@ describe("CursorStopHookAdapter", () => {
 			expect(output.followup_message).toBe("Fix the issues");
 		});
 
-		it("should output followup_message for pr_push_required status", () => {
-			const result = createResult({
-				status: "pr_push_required",
-				shouldBlock: true,
-				message: "✓ Gauntlet passed — PR needed",
-				reason: "Create a PR",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.followup_message).toBe("Create a PR");
-		});
-
 		it.each([
-			{ status: "ci_failed" as GauntletStatus, reason: "Fix the CI failures" },
-			{
-				status: "ci_pending" as GauntletStatus,
-				reason: "Wait for CI to complete",
-			},
 			{
 				status: "validation_required" as GauntletStatus,
 				reason: "Use gauntlet-run skill",
@@ -165,16 +149,6 @@ describe("CursorStopHookAdapter", () => {
 			});
 			const output = JSON.parse(adapter.formatOutput(result));
 			expect(output.followup_message).toBe(expectedFollowup ?? reason);
-		});
-
-		it("should output systemMessage for ci_passed status", () => {
-			const result = createResult({
-				status: "ci_passed",
-				message: "✓ CI passed",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.systemMessage).toBe("✓ CI passed");
-			expect(output.followup_message).toBeUndefined();
 		});
 
 		it("should output single-line JSON", () => {

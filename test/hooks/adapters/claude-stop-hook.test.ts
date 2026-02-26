@@ -96,15 +96,6 @@ describe("ClaudeStopHookAdapter", () => {
 
 		it.each([
 			{ status: "failed" as GauntletStatus, reason: "Fix the issues" },
-			{
-				status: "pr_push_required" as GauntletStatus,
-				reason: "Create a PR",
-			},
-			{ status: "ci_failed" as GauntletStatus, reason: "Fix the CI failures" },
-			{
-				status: "ci_pending" as GauntletStatus,
-				reason: "Wait for CI to complete",
-			},
 		])("should output block decision for $status status", ({
 			status,
 			reason,
@@ -119,16 +110,6 @@ describe("ClaudeStopHookAdapter", () => {
 			expect(output.status).toBe(status);
 			expect(output.reason).toBe(reason);
 			expect(output.stopReason).toBe(reason);
-		});
-
-		it("should output approve decision for ci_passed status", () => {
-			const result = createResult({
-				status: "ci_passed",
-				message: "✓ CI passed",
-			});
-			const output = JSON.parse(adapter.formatOutput(result));
-			expect(output.decision).toBe("approve");
-			expect(output.status).toBe("ci_passed");
 		});
 
 		it("should output block decision for validation_required status", () => {

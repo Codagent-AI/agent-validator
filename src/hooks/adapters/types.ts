@@ -35,20 +35,6 @@ export interface StopHookResult {
 }
 
 /**
- * Result from PR status check.
- */
-export interface PRStatusResult {
-  /** Whether a PR exists for the current branch */
-  prExists: boolean;
-  /** Whether the PR is up to date with local HEAD */
-  upToDate: boolean;
-  /** Error message if check failed (graceful degradation) */
-  error?: string;
-  /** PR number if it exists */
-  prNumber?: number;
-}
-
-/**
  * Adapter interface for protocol-specific stop hook handling.
  * Each adapter handles input parsing, output formatting, and protocol-specific behavior.
  */

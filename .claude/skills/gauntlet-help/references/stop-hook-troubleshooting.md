@@ -10,8 +10,6 @@
 | `passed_with_warnings` | Passed with warnings (some issues were skipped) | Gates ran but some review violations were skipped rather than fixed |
 | `no_applicable_gates` | No applicable gates matched current changes | Changed files didn't match any configured entry point |
 | `no_changes` | No changes detected | No files changed relative to `base_branch` |
-| `ci_passed` | CI passed — all checks completed and no blocking reviews | GitHub CI checks succeeded and no `CHANGES_REQUESTED` reviews |
-| `ci_timeout` | CI wait exhausted — max attempts reached | CI polling hit 3 attempts; allows stop for manual review |
 | `no_config` | Not a gauntlet project — no `.gauntlet/config.yml` found | No gauntlet configuration in this repo |
 | `stop_hook_active` | Stop hook cycle detected — allowing stop to prevent infinite loop | Recursion prevention triggered |
 | `stop_hook_disabled` | *(silent — no message displayed)* | `stop_hook.enabled: false` in config or `GAUNTLET_STOP_HOOK_ENABLED=false` |
@@ -26,9 +24,6 @@
 | Status | Message | Meaning |
 |--------|---------|---------|
 | `failed` | Issues must be fixed before stopping | One or more gates failed; agent must fix and re-run |
-| `pr_push_required` | PR needs to be created or updated before stopping | Gates passed but `auto_push_pr` is enabled and PR hasn't been pushed |
-| `ci_pending` | CI checks still running — waiting for completion | Waiting for GitHub CI to finish |
-| `ci_failed` | CI failed or review changes requested | GitHub CI checks failed or a reviewer requested changes |
 
 ## Common Scenarios
 

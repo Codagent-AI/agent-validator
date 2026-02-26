@@ -50,8 +50,7 @@
     "detect": "bun src/index.ts detect",
     "list": "bun src/index.ts list",
     "health": "bun src/index.ts health",
-    "validate": "bun src/index.ts validate",
-    "wait-ci": "bun src/index.ts wait-ci"
+    "validate": "bun src/index.ts validate"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.3",
