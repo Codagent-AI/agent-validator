@@ -1,4 +1,7 @@
 import { exec } from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import { getCategoryLogger } from '../output/app-logger.js';
 
@@ -7,6 +10,7 @@ const log = getCategoryLogger('gate', 'review');
 const execAsync = promisify(exec);
 
 import { MAX_BUFFER_BYTES } from '../constants.js';
+import { getStashUntrackedFiles } from '../core/diff-stats.js';
 
 // ── Diff Utilities ──────────────────────────────────────────────────
 
@@ -105,6 +109,110 @@ export async function getDiff(
 
 // ── Fix-base diff ───────────────────────────────────────────────────
 
+/** Check if a file's content has changed compared to a stash's untracked tree. */
+async function hasFileChangedSinceStash(
+  file: string,
+  fixBase: string,
+): Promise<boolean> {
+  const [{ stdout: oldHashOut }, { stdout: newHashOut }] = await Promise.all([
+    execAsync(`git rev-parse ${quoteArg(`${fixBase}^3:${file}`)}`, {
+      maxBuffer: MAX_BUFFER_BYTES,
+    }),
+    execAsync(`git hash-object -- ${quoteArg(file)}`, {
+      maxBuffer: MAX_BUFFER_BYTES,
+    }),
+  ]);
+  return oldHashOut.trim() !== newHashOut.trim();
+}
+
+/** Write the old stash version of a file to a temp path for diffing. */
+async function writeStashFileToTemp(
+  file: string,
+  fixBase: string,
+  tmpDir: string,
+  counter: number,
+): Promise<string> {
+  // Use encoding: 'buffer' to preserve binary file integrity
+  const { stdout: oldContent } = await execAsync(
+    `git show ${quoteArg(`${fixBase}^3:${file}`)}`,
+    { maxBuffer: MAX_BUFFER_BYTES, encoding: 'buffer' },
+  );
+  const tmpFile = path.join(tmpDir, `${counter}-${path.basename(file)}`);
+  await fs.writeFile(tmpFile, oldContent);
+  return tmpFile;
+}
+
+/** Generate a placeholder diff entry when all diff strategies fail for a file. */
+function placeholderDiff(file: string): string {
+  return `diff --git a/${file} b/${file}\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1 @@\n+[gauntlet: diff unavailable for this file]`;
+}
+
+/**
+ * Compute diffs for untracked files that existed in a stash's untracked tree.
+ * Compares each file against its version in the stash, showing only changes.
+ * Files that are unchanged produce no diff and are excluded.
+ */
+export async function collectStashUntrackedDiffs(
+  files: string[],
+  fixBase: string,
+): Promise<string[]> {
+  if (files.length === 0) return [];
+
+  const diffs: string[] = [];
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gauntlet-'));
+
+  try {
+    let counter = 0;
+    for (const file of files) {
+      const d = await diffSingleStashFile(file, fixBase, tmpDir, counter++);
+      if (d) diffs.push(d);
+    }
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+
+  return diffs;
+}
+
+/** Compute diff for a single file against its stash version, with fallbacks. */
+async function diffSingleStashFile(
+  file: string,
+  fixBase: string,
+  tmpDir: string,
+  counter: number,
+): Promise<string | null> {
+  try {
+    if (!(await hasFileChangedSinceStash(file, fixBase))) {
+      return null; // File unchanged since stash, exclude from diff
+    }
+    const tmpFile = await writeStashFileToTemp(file, fixBase, tmpDir, counter);
+    const d = await execDiff(
+      `git diff --no-index -- ${quoteArg(tmpFile)} ${quoteArg(file)}`,
+    );
+    return d.trim() || null;
+  } catch (outerErr) {
+    log.debug(
+      `Stash diff failed for ${file}, falling back to full diff: ${outerErr instanceof Error ? outerErr.message : outerErr}`,
+    );
+    return diffFallbackToDevNull(file);
+  }
+}
+
+/** Fall back to diffing a file against /dev/null (full content). */
+async function diffFallbackToDevNull(file: string): Promise<string | null> {
+  try {
+    const d = await execDiff(
+      `git diff --no-index -- /dev/null ${quoteArg(file)}`,
+    );
+    return d.trim() || null;
+  } catch (innerErr) {
+    log.warn(
+      `Failed to compute any diff for ${file}: ${innerErr instanceof Error ? innerErr.message : innerErr}`,
+    );
+    return placeholderDiff(file);
+  }
+}
+
 async function getFixBaseDiff(
   entryPointPath: string,
   fixBase: string,
@@ -115,28 +223,59 @@ async function getFixBaseDiff(
 
   const pArg = pathArg(entryPointPath);
   try {
+    // Tracked file changes since fixBase
     const diff = await execDiff(`git diff ${fixBase}${pArg}`);
 
+    // Current untracked files
     const { stdout: untrackedStdout } = await execAsync(
       `git ls-files --others --exclude-standard${pArg}`,
       { maxBuffer: MAX_BUFFER_BYTES },
     );
     const currentUntracked = new Set(parseLines(untrackedStdout));
 
+    // Files in fixBase's main tree (tracked files)
     const { stdout: snapshotFilesStdout } = await execAsync(
       `git ls-tree -r --name-only ${fixBase}${pArg}`,
       { maxBuffer: MAX_BUFFER_BYTES },
     );
-    const snapshotFiles = new Set(parseLines(snapshotFilesStdout));
+    const snapshotTrackedFiles = new Set(parseLines(snapshotFilesStdout));
 
-    const newUntracked = [...currentUntracked].filter(
-      (f) => !snapshotFiles.has(f),
+    // Files in fixBase's untracked tree (stash ^3 parent)
+    const snapshotUntrackedFiles = await getStashUntrackedFiles(
+      fixBase,
+      entryPointPath,
     );
+
+    // Combine all snapshot files
+    const allSnapshotFiles = new Set([
+      ...snapshotTrackedFiles,
+      ...snapshotUntrackedFiles,
+    ]);
+
+    // Truly new files: not in any snapshot tree
+    const newUntracked = [...currentUntracked].filter(
+      (f) => !allSnapshotFiles.has(f),
+    );
+
+    // Known untracked: existed in stash's untracked tree and still untracked
+    const knownUntracked = [...currentUntracked].filter((f) =>
+      snapshotUntrackedFiles.has(f),
+    );
+
+    // Diffs for truly new files (full content against /dev/null)
     const newUntrackedDiffs = await collectUntrackedDiffs(newUntracked);
 
-    const scopedDiff = [diff, ...newUntrackedDiffs].filter(Boolean).join('\n');
+    // Diffs for known untracked files (only changes since stash)
+    const knownUntrackedDiffs = await collectStashUntrackedDiffs(
+      knownUntracked,
+      fixBase,
+    );
+
+    const scopedDiff = [diff, ...newUntrackedDiffs, ...knownUntrackedDiffs]
+      .filter(Boolean)
+      .join('\n');
     log.debug(
-      `Scoped diff via fixBase: ${scopedDiff.split('\n').length} lines`,
+      `Scoped diff via fixBase: ${scopedDiff.split('\n').length} lines (${newUntracked.length} new, ${knownUntracked.length} known untracked)`,
     );
     return scopedDiff;
   } catch (error) {

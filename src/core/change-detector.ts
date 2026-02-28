@@ -1,7 +1,8 @@
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** Validate that a string is a safe git ref (hex SHA or branch-like name). */
 function isValidGitRef(ref: string): boolean {
@@ -114,8 +115,56 @@ export class ChangeDetector {
     return Array.from(files);
   }
 
+  /**
+   * Resolve base branch to whichever of local or origin/<branch> is more up-to-date.
+   * Uses commit-ahead counts to pick the ref with more recent history.
+   */
+  private async resolveLocalBaseBranch(): Promise<string> {
+    const base = this.baseBranch;
+    if (base.startsWith('origin/')) return base;
+    const remoteRef = `origin/${base}`;
+
+    const [localExists, remoteExists] = await Promise.all([
+      execFileAsync('git', ['rev-parse', '--verify', base]).then(
+        () => true,
+        () => false,
+      ),
+      execFileAsync('git', ['rev-parse', '--verify', remoteRef]).then(
+        () => true,
+        () => false,
+      ),
+    ]);
+
+    if (!remoteExists) return base;
+    if (!localExists) return remoteRef;
+
+    try {
+      const [{ stdout: remoteAhead }, { stdout: localAhead }] =
+        await Promise.all([
+          execFileAsync('git', [
+            'rev-list',
+            '--count',
+            `${base}..${remoteRef}`,
+          ]),
+          execFileAsync('git', [
+            'rev-list',
+            '--count',
+            `${remoteRef}..${base}`,
+          ]),
+        ]);
+
+      return parseInt(localAhead.trim(), 10) > parseInt(remoteAhead.trim(), 10)
+        ? base
+        : remoteRef;
+    } catch {
+      // Shallow clone or unreachable history — fall back to remote ref
+      return remoteRef;
+    }
+  }
+
   private async getLocalChangedFiles(): Promise<string[]> {
-    return this.getDiffWithWorkingTree(this.baseBranch);
+    const resolvedBase = await this.resolveLocalBaseBranch();
+    return this.getDiffWithWorkingTree(resolvedBase);
   }
 
   private async getCommitChangedFiles(commit: string): Promise<string[]> {

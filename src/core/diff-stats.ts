@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { MAX_BUFFER_BYTES } from '../constants.js';
 
 const execFileAsyncOriginal = promisify(execFile);
 export let execFileAsync = execFileAsyncOriginal;
@@ -12,7 +13,9 @@ export function setExecFileAsync(fn: typeof execFileAsyncOriginal) {
  * Run a git command safely using execFile (no shell interpolation).
  */
 async function gitExec(args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args);
+  const { stdout } = await execFileAsync('git', args, {
+    maxBuffer: MAX_BUFFER_BYTES,
+  });
   return stdout;
 }
 
@@ -141,7 +144,8 @@ async function computeUncommittedDiffStats(): Promise<DiffStats> {
   ]);
   const untrackedFiles = untrackedList
     .split('\n')
-    .filter((f) => f.trim().length > 0);
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0);
 
   return {
     baseRef: 'uncommitted',
@@ -160,14 +164,69 @@ async function computeUncommittedDiffStats(): Promise<DiffStats> {
 }
 
 /**
+ * Get untracked files from a stash commit's ^3 parent.
+ * `git stash create --include-untracked` stores untracked files in the 3rd parent.
+ * Returns empty set if fixBase is not a stash or has no untracked tree.
+ *
+ * @param pathFilter — optional path prefix to scope results (e.g. "src/")
+ */
+export async function getStashUntrackedFiles(
+  fixBase: string,
+  pathFilter?: string,
+): Promise<Set<string>> {
+  try {
+    const args = ['ls-tree', '-r', '--name-only', `${fixBase}^3`];
+    if (pathFilter) {
+      args.push('--', pathFilter);
+    }
+    const treeFiles = await gitExec(args);
+    return new Set(
+      treeFiles
+        .split('\n')
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Count how many known-untracked files have actually changed since the stash.
+ * Compares blob hashes between stash ^3 tree and current working tree.
+ */
+async function countChangedStashUntracked(
+  files: string[],
+  fixBase: string,
+): Promise<number> {
+  let changed = 0;
+  for (const file of files) {
+    try {
+      const [oldHash, newHash] = await Promise.all([
+        gitExec(['rev-parse', `${fixBase}^3:${file}`]),
+        gitExec(['hash-object', '--', file]),
+      ]);
+      if (oldHash.trim() !== newHash.trim()) {
+        changed++;
+      }
+    } catch {
+      // If comparison fails, count as changed (conservative)
+      changed++;
+    }
+  }
+  return changed;
+}
+
+/**
  * Compute diff stats from a fixBase ref (stash or commit) to current working tree.
  * Used in verification mode to show only NEW changes since the snapshot.
  * This includes staged changes, unstaged changes, and new untracked files.
+ * For stash refs, also checks the ^3 parent to properly handle files that were
+ * untracked when the stash was created.
  */
 async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
   try {
     // Get line stats for tracked file changes since fixBase
-    // We need to diff against working tree (staged + unstaged changes)
     const numstat = await gitExec(['diff', '--numstat', fixBase]);
     const lineStats = parseNumstat(numstat);
 
@@ -175,16 +234,16 @@ async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
     const nameStatus = await gitExec(['diff', '--name-status', fixBase]);
     const fileStats = parseNameStatus(nameStatus);
 
-    // Handle untracked files: only count NEW untracked files that weren't in fixBase
     // Current untracked files
     const currentUntracked = (
       await gitExec(['ls-files', '--others', '--exclude-standard'])
     )
       .split('\n')
-      .filter((f) => f.trim().length > 0);
+      .map((f) => f.trim())
+      .filter((f) => f.length > 0);
 
-    // Files that existed in fixBase
-    let fixBaseFiles: Set<string>;
+    // Files in fixBase's main tree (tracked files)
+    let fixBaseTrackedFiles: Set<string>;
     try {
       const treeFiles = await gitExec([
         'ls-tree',
@@ -192,24 +251,46 @@ async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
         '--name-only',
         fixBase,
       ]);
-      fixBaseFiles = new Set(
-        treeFiles.split('\n').filter((f) => f.trim().length > 0),
+      fixBaseTrackedFiles = new Set(
+        treeFiles
+          .split('\n')
+          .map((f) => f.trim())
+          .filter((f) => f.length > 0),
       );
     } catch {
-      // If fixBase is invalid or has no tree, assume empty
-      fixBaseFiles = new Set();
+      fixBaseTrackedFiles = new Set();
     }
 
-    // New untracked files = current untracked - files that existed in fixBase
+    // Files in fixBase's untracked tree (stash ^3 parent)
+    const fixBaseUntrackedFiles = await getStashUntrackedFiles(fixBase);
+
+    // Combine all snapshot files
+    const allSnapshotFiles = new Set([
+      ...fixBaseTrackedFiles,
+      ...fixBaseUntrackedFiles,
+    ]);
+
+    // Truly new untracked files (not in any snapshot tree)
     const newUntrackedFiles = currentUntracked.filter(
-      (f) => !fixBaseFiles.has(f),
+      (f) => !allSnapshotFiles.has(f),
+    );
+
+    // Known untracked: existed in stash's untracked tree and still untracked
+    const knownUntrackedFiles = currentUntracked.filter((f) =>
+      fixBaseUntrackedFiles.has(f),
+    );
+
+    // Count how many known-untracked files actually changed
+    const changedKnownUntracked = await countChangedStashUntracked(
+      knownUntrackedFiles,
+      fixBase,
     );
 
     return {
       baseRef: fixBase,
-      total: fileStats.total + newUntrackedFiles.length,
+      total: fileStats.total + newUntrackedFiles.length + changedKnownUntracked,
       newFiles: fileStats.newFiles + newUntrackedFiles.length,
-      modifiedFiles: fileStats.modifiedFiles,
+      modifiedFiles: fileStats.modifiedFiles + changedKnownUntracked,
       deletedFiles: fileStats.deletedFiles,
       linesAdded: lineStats.linesAdded,
       linesRemoved: lineStats.linesRemoved,
@@ -303,7 +384,8 @@ async function computeLocalDiffStats(baseBranch: string): Promise<DiffStats> {
   ]);
   const untrackedFiles = untrackedList
     .split('\n')
-    .filter((f) => f.trim().length > 0);
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0);
 
   // Combine counts (with overlap detection)
   const totalNew =
