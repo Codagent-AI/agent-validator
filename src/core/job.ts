@@ -27,7 +27,10 @@ function shouldRunGate(
 }
 
 export class JobGenerator {
-  constructor(private config: LoadedConfig) {}
+  constructor(
+    private config: LoadedConfig,
+    private enableReviews: Set<string> = new Set(),
+  ) {}
 
   generateJobs(expandedEntryPoints: ExpandedEntryPoint[]): Job[] {
     const jobs: Job[] = [];
@@ -99,6 +102,10 @@ export class JobGenerator {
       }
 
       if (!shouldRunGate(reviewConfig, isCI)) continue;
+
+      // Skip disabled reviews unless explicitly enabled via CLI override
+      if (!(reviewConfig.enabled || this.enableReviews.has(reviewName)))
+        continue;
 
       jobs.push({
         id: `review:${ep.path}:${reviewName}`,

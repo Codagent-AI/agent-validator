@@ -15,5 +15,16 @@ export function registerReviewCommand(program: Command): void {
       '-u, --uncommitted',
       'Use diff for current uncommitted changes (staged and unstaged)',
     )
-    .action((options) => executeGateCommand('review', options));
+    .option(
+      '-e, --enable-review <name>',
+      'Activate a disabled review for this run (repeatable)',
+      (value: string, prev: string[] = []) => [...prev, value],
+      [] as string[],
+    )
+    .action((options) =>
+      executeGateCommand('review', {
+        ...options,
+        enableReviews: new Set<string>(options.enableReview ?? []),
+      }),
+    );
 }

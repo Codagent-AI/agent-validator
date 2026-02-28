@@ -1,0 +1,2 @@
+- [x] Implement enabled field config and CLI override (`tasks/enabled-field-and-cli.md`)
+- [x] Update gauntlet-run skills and task-compliance config (`tasks/skill-and-config-updates.md`)
