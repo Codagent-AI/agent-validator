@@ -58,6 +58,13 @@ The `gauntlet-issue` skill SHALL show the user a full preview of the issue befor
 - **AND** the user declines to file
 - **THEN** the skill SHALL exit without creating an issue
 
+#### Scenario: Auto-file mode bypasses confirmation
+
+- **WHEN** the skill is invoked with `--auto-file`
+- **THEN** the skill SHALL show the draft issue (title and body)
+- **AND** SHALL file the issue without waiting for interactive confirmation
+- **AND** SHALL report the created issue URL
+
 ---
 
 ### Requirement: Issue Structure

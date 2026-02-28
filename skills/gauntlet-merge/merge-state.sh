@@ -24,19 +24,23 @@ if [[ -z "$SOURCE_DIR" ]]; then
   exit 1
 fi
 
+# Read log_dir from a config file; returns "gauntlet_logs" if absent or key not found
+read_log_dir() {
+  local config_path="$1"
+  local parsed=""
+  if [[ -f "$config_path" ]]; then
+    parsed="$(grep '^log_dir:' "$config_path" | head -n1 | sed 's/^log_dir:[[:space:]]*//' | tr -d '[:space:]')" || true
+  fi
+  printf '%s' "${parsed:-gauntlet_logs}"
+}
+
 # Read source log_dir from source worktree config (default: gauntlet_logs)
 SOURCE_CONFIG="$SOURCE_DIR/.gauntlet/config.yml"
-if [[ -f "$SOURCE_CONFIG" ]]; then
-  SOURCE_LOG_DIR=$(grep '^log_dir:' "$SOURCE_CONFIG" | sed 's/^log_dir:[[:space:]]*//' | tr -d '[:space:]')
-fi
-SOURCE_LOG_DIR="${SOURCE_LOG_DIR:-gauntlet_logs}"
+SOURCE_LOG_DIR="$(read_log_dir "$SOURCE_CONFIG")"
 
 # Read destination log_dir from current directory config (default: gauntlet_logs)
 DEST_CONFIG=".gauntlet/config.yml"
-if [[ -f "$DEST_CONFIG" ]]; then
-  DEST_LOG_DIR=$(grep '^log_dir:' "$DEST_CONFIG" | sed 's/^log_dir:[[:space:]]*//' | tr -d '[:space:]')
-fi
-DEST_LOG_DIR="${DEST_LOG_DIR:-gauntlet_logs}"
+DEST_LOG_DIR="$(read_log_dir "$DEST_CONFIG")"
 
 # Verify source execution state exists before merging (fail fast, no partial state)
 SOURCE_STATE="$SOURCE_DIR/$SOURCE_LOG_DIR/.execution_state"

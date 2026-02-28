@@ -57,14 +57,16 @@ Draft a GitHub issue with the following structure:
 
 ## Evidence
 
+> **Before including evidence, redact sensitive values**: remove or replace tokens, API keys, email addresses, and absolute local paths that may appear in config, logs, or state. Replace them with `[REDACTED]` or a generic placeholder.
+
 **Config (`.gauntlet/config.yml`):**
-<Paste relevant config values, or note "File not found">
+<Paste only relevant, non-sensitive config values. Redact tokens, emails, and absolute paths. Note "File not found" if absent.>
 
 **Debug log (last 50 lines of `<log_dir>/.debug.log`):**
-<Paste log excerpt, or note "File not found">
+<Paste minimal relevant excerpt with sensitive values redacted. Note "File not found" if absent.>
 
 **Execution state (`<log_dir>/.execution_state`):**
-<Paste full contents, or note "File not found">
+<Paste only fields needed to diagnose the bug; redact sensitive values. Note "File not found" if absent.>
 
 **Absent files:** <List any files that were not found, or "None">
 ```
