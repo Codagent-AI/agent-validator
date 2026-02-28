@@ -1,5 +1,21 @@
 # agent-gauntlet
 
+## 1.1.0
+
+### Minor Changes
+
+- [#91](https://github.com/pacaplan/agent-gauntlet/pull/91) Add per-review `enabled` flag and `--enable-review` CLI override to selectively activate individual reviews without modifying config files
+
+- [#92](https://github.com/pacaplan/agent-gauntlet/pull/92) Add `skill-quality` reviewer that evaluates skill prompt adherence, and fix stale base branch detection to prevent false diff scope misses
+
+- [#93](https://github.com/pacaplan/agent-gauntlet/pull/93) Add `gauntlet-commit`, `gauntlet-merge`, and `gauntlet-issue` skills for streamlined commit, merge, and issue management workflows
+
+### Patch Changes
+
+- [#88](https://github.com/pacaplan/agent-gauntlet/pull/88) Remove trust level configuration, redesign failure output for better readability, and clean up obsolete code
+
+- [#90](https://github.com/pacaplan/agent-gauntlet/pull/90) Fix stash `^3` parent check to correctly detect untracked files when scoping diffs for rerun commands
+
 ## 1.0.0
 
 ### Major Changes
