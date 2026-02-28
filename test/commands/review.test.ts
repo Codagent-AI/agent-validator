@@ -28,4 +28,19 @@ describe("Review Command", () => {
 			true,
 		);
 	});
+
+	it("should have --enable-review option", () => {
+		const reviewCmd = program.commands.find((cmd) => cmd.name() === "review");
+		expect(
+			reviewCmd?.options.some((opt) => opt.long === "--enable-review"),
+		).toBe(true);
+	});
+
+	it("should have -e short option for --enable-review", () => {
+		const reviewCmd = program.commands.find((cmd) => cmd.name() === "review");
+		const enableReviewOpt = reviewCmd?.options.find(
+			(opt) => opt.long === "--enable-review",
+		);
+		expect(enableReviewOpt?.short).toBe("-e");
+	});
 });

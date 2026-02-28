@@ -196,6 +196,7 @@ async function loadMarkdownReview(
     run_in_ci: parsedFrontmatter.run_in_ci,
     run_locally: parsedFrontmatter.run_locally,
     timeout: parsedFrontmatter.timeout,
+    enabled: parsedFrontmatter.enabled,
   };
 
   // If prompt_file is specified, override the markdown body
@@ -237,6 +238,7 @@ async function loadYamlReview(
     run_in_ci: parsed.run_in_ci,
     run_locally: parsed.run_locally,
     timeout: parsed.timeout,
+    enabled: parsed.enabled,
   };
 
   if (parsed.prompt_file) {

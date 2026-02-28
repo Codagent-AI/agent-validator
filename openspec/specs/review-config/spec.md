@@ -8,6 +8,8 @@ The system MUST load review configurations from both `.md` and `.yml`/`.yaml` fi
 
 YAML review files MUST specify exactly one of `prompt_file`, `skill_name`, or `builtin`. These three attributes are mutually exclusive. When `builtin` is specified, the prompt content MUST be loaded from the package's built-in review registry.
 
+All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `enabled` boolean attribute that defaults to `true`. When `enabled` is `false`, the review is opt-in and SHALL only run when explicitly activated via the `--enable-review` CLI option.
+
 #### Scenario: YAML review with prompt_file
 - **GIVEN** a file `.gauntlet/reviews/security.yml` with content:
   ```yaml
@@ -49,6 +51,7 @@ YAML review files MUST specify exactly one of `prompt_file`, `skill_name`, or `b
 - **AND** `parallel` defaults to true
 - **AND** `run_in_ci` defaults to true
 - **AND** `run_locally` defaults to true
+- **AND** `enabled` defaults to true
 
 #### Scenario: YAML review must specify exactly one prompt source
 - **GIVEN** a file `.gauntlet/reviews/invalid.yml` with both `prompt_file` and `skill_name`
@@ -82,6 +85,20 @@ YAML review files MUST specify exactly one of `prompt_file`, `skill_name`, or `b
 - **GIVEN** both `.gauntlet/reviews/security.md` and `.gauntlet/reviews/security.yml` exist
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a duplicate name error
+
+#### Scenario: YAML review with enabled false
+- **GIVEN** a file `.gauntlet/reviews/task-compliance.yml` with content:
+  ```yaml
+  builtin: code-quality
+  enabled: false
+  ```
+- **WHEN** the configuration is loaded
+- **THEN** the review "task-compliance" is available with `enabled` set to `false`
+
+#### Scenario: Markdown review with enabled false in frontmatter
+- **GIVEN** a file `.gauntlet/reviews/task-compliance.md` with frontmatter containing `enabled: false`
+- **WHEN** the configuration is loaded
+- **THEN** the review "task-compliance" is available with `enabled` set to `false`
 
 ### Requirement: Markdown reviews support prompt_file and skill_name in frontmatter
 Existing `.md` review files MUST support optional `prompt_file` or `skill_name` fields in their YAML frontmatter. These fields are mutually exclusive. When `prompt_file` is specified, the file content MUST override the markdown body. When `skill_name` is specified, the markdown body MUST be ignored and the skill MUST be used instead.
