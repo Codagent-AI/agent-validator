@@ -155,10 +155,12 @@ export async function createWorkingTreeRef(): Promise<string> {
  */
 export async function writeExecutionState(logDir: string): Promise<void> {
   const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-  const [branch, commit, workingTreeRef, rawState] = await Promise.all([
+  // createWorkingTreeRef runs first (sequentially) to avoid git index lock
+  // contention between stash push/pop and the parallel rev-parse calls below.
+  const workingTreeRef = await createWorkingTreeRef();
+  const [branch, commit, rawState] = await Promise.all([
     getCurrentBranch(),
     getCurrentCommit(),
-    createWorkingTreeRef(),
     readRawState(statePath),
   ]);
   const existingUnhealthy = extractUnhealthyAdapters(rawState);
