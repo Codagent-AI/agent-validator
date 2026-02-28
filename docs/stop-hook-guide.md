@@ -206,7 +206,7 @@ When the stop hook blocks, it returns a JSON response with the following fields:
 | `status` | string | Machine-readable status code (e.g. `passed`, `failed`, `validation_required`) |
 | `message` | string | Human-friendly explanation of the decision |
 
-The `reason` field contains a concise directive pointing the agent to the appropriate skill (e.g., "use the `gauntlet-run` skill"). The skills themselves contain full workflow logic including trust level, violation handling, and termination conditions.
+The `reason` field contains a concise directive pointing the agent to the appropriate skill (e.g., "use the `gauntlet-run` skill"). The skills themselves contain full workflow logic including violation handling and termination conditions.
 
 To manually inspect gate logs:
 ```bash

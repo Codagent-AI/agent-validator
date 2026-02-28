@@ -5,21 +5,10 @@ description: >-
 disable-model-invocation: false
 allowed-tools: Bash, Task
 ---
-<!--
-  REVIEW TRUST LEVEL
-  Controls how aggressively the agent acts on AI reviewer feedback.
-  Change the trust_level value below to one of: high, medium, low
-
-  - high:   Fix all issues unless you strongly disagree or have low confidence the human wants the change.
-  - medium: Fix issues you reasonably agree with or believe the human wants fixed. (DEFAULT)
-  - low:    Fix only issues you strongly agree with or are confident the human wants fixed.
--->
-<!-- trust_level: medium -->
-
 # /gauntlet-run
 Execute the autonomous verification suite.
 
-**Review trust level: medium** — Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
+Fix issues you reasonably agree with or believe the human wants fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
 
 
 ## Procedure
@@ -57,10 +46,10 @@ Print the compact failure summary returned from Step 4.
 
 ### Step 6 - Fix and Capture
 
-**a. Fix phase** — Apply the trust level above to each failure and fix accordingly:
+**a. Fix phase** — Apply the review guidance above to each failure and fix accordingly:
 - CHECK failures with Fix Skill: invoke the named skill
 - CHECK failures with Fix Instructions: follow the instructions
-- REVIEW violations: apply the fix
+- REVIEW violations: fix or skip per the review guidance above
 
 **b. Capture noteworthy violations for eval inventory** (if any REVIEW violations were found):
 - Collect the JSON file paths from the `Review:` lines in the console log (e.g., `gauntlet_logs/review_._code-quality_codex@1.1.json`)

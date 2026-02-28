@@ -313,7 +313,7 @@ When the stop-hook blocks the agent, the `reason` message SHALL be a concise ins
 - **GIVEN** the stop hook detects changes that need validation (failed logs exist or working tree changed)
 - **WHEN** the stop-hook outputs a blocking response
 - **THEN** the `reason` SHALL instruct the agent to use the `gauntlet-run` skill
-- **AND** the `reason` SHALL NOT include log file paths, trust level guidance, or violation handling procedures
+- **AND** the `reason` SHALL NOT include log file paths or violation handling procedures
 
 ### Requirement: Structured JSON Response for All Outcomes
 
