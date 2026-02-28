@@ -1,10 +1,58 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { getDebugLogger } from './debug-log.js';
 
 const EXECUTION_STATE_FILENAME = '.execution_state';
 const SESSION_REF_FILENAME = '.session_ref';
+
+function getStatePath(logDir: string): string {
+  return path.join(logDir, EXECUTION_STATE_FILENAME);
+}
+
+/**
+ * Run a git command via spawn, returning trimmed stdout.
+ * Rejects with an error if the process exits non-zero or errors.
+ */
+function spawnGit(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    // StringDecoder correctly handles multi-byte UTF-8 characters split across
+    // chunk boundaries. Both pipes are consumed to prevent OS buffer deadlock (~64 KB).
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += typeof chunk === 'string' ? chunk : stdoutDecoder.write(chunk);
+    });
+
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : stderrDecoder.write(chunk);
+    });
+
+    child.on('close', (code) => {
+      // Flush decoders to emit any bytes buffered at stream end.
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
+      if (code === 0) resolve(stdout.trim());
+      else {
+        const detail = stderr.trim();
+        reject(
+          new Error(
+            detail
+              ? `git ${args.join(' ')} failed with code ${code}: ${detail}`
+              : `git ${args.join(' ')} failed with code ${code}`,
+          ),
+        );
+      }
+    });
+
+    child.on('error', reject);
+  });
+}
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   // Use loose equality to check both null and undefined in one comparison
@@ -58,7 +106,7 @@ export async function readExecutionState(
   logDir: string,
 ): Promise<ExecutionState | null> {
   try {
-    const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+    const statePath = getStatePath(logDir);
     const content = await fs.readFile(statePath, 'utf-8');
     const data = JSON.parse(content) as unknown;
 
@@ -92,43 +140,69 @@ export async function readExecutionState(
 
 /**
  * Create a stash SHA that captures the current working tree state.
- * Uses `git stash create --include-untracked` which creates a stash commit
- * without modifying the working tree.
- * Returns the stash SHA, or HEAD SHA if working tree is clean.
+ * Uses `git stash push --include-untracked` which creates a proper 3-parent stash,
+ * then immediately pops it to restore the working tree.
+ * Returns the stash SHA, or HEAD SHA if working tree is clean or on error.
  */
-/** Resolve a stash create result: use stash SHA, or fall back to HEAD. */
-async function resolveStashResult(
-  code: number | null,
-  stdout: string,
-): Promise<string> {
-  if (code === 0) {
-    const sha = stdout.trim();
-    if (sha) return sha;
+export async function createWorkingTreeRef(): Promise<string> {
+  const hasChanges = await hasWorkingTreeChanges();
+  if (!hasChanges) {
     return getCurrentCommit();
   }
-  // Non-zero exit: try HEAD as fallback
-  return getCurrentCommit().catch(() => {
-    throw new Error(`git stash create failed with code ${code}`);
-  });
-}
 
-export async function createWorkingTreeRef(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['stash', 'create', '--include-untracked'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+  // Returns trimmed stdout, or rejects on git error.
+  const runGit = (args: string[]) =>
+    new Promise<string>((resolve, reject) => {
+      execFile('git', args, (error, stdout) => {
+        if (error) reject(error);
+        else resolve(stdout.trim());
+      });
     });
 
-    let stdout = '';
-    child.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
+  // Snapshot the pre-push stash top (empty string = no stash).
+  // If stash@{0} is unchanged after push, git stashed nothing and we must
+  // NOT pop — that would silently discard the user's pre-existing stash entry.
+  const prevTop = await runGit(['rev-parse', '--verify', 'stash@{0}']).catch(
+    () => '',
+  );
 
-    child.on('close', (code) => {
-      resolveStashResult(code, stdout).then(resolve, reject);
-    });
+  try {
+    await runGit([
+      'stash',
+      'push',
+      '--include-untracked',
+      '-m',
+      'gauntlet-snapshot',
+    ]);
+  } catch {
+    return getCurrentCommit();
+  }
 
-    child.on('error', reject);
-  });
+  const newTop = await runGit(['rev-parse', 'stash@{0}']).catch(() => '');
+  // A new stash was created if newTop is non-empty and differs from prevTop.
+  const createdStash = !!newTop && newTop !== prevTop;
+
+  if (!createdStash) {
+    // Push was a no-op or post-push rev-parse failed unexpectedly. If there was
+    // a pre-existing stash (prevTop) but newTop is missing, we can't confirm the
+    // push state — avoid destructive pop of an unrelated user stash.
+    if (prevTop && !newTop) {
+      console.error(
+        'gauntlet: unable to verify stash snapshot; leaving stash untouched. Run `git stash pop` manually if needed.',
+      );
+    }
+    return getCurrentCommit();
+  }
+
+  try {
+    await runGit(['stash', 'pop']);
+  } catch {
+    console.error(
+      'gauntlet: stash pop failed — run `git stash pop` manually to restore your working tree',
+    );
+  }
+
+  return newTop;
 }
 
 /**
@@ -137,11 +211,13 @@ export async function createWorkingTreeRef(): Promise<string> {
  * Also cleans up legacy .session_ref file if it exists.
  */
 export async function writeExecutionState(logDir: string): Promise<void> {
-  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
-  const [branch, commit, workingTreeRef, rawState] = await Promise.all([
+  const statePath = getStatePath(logDir);
+  // createWorkingTreeRef runs first (sequentially) to avoid git index lock
+  // contention between stash push/pop and the parallel rev-parse calls below.
+  const workingTreeRef = await createWorkingTreeRef();
+  const [branch, commit, rawState] = await Promise.all([
     getCurrentBranch(),
     getCurrentCommit(),
-    createWorkingTreeRef(),
     readRawState(statePath),
   ]);
   const existingUnhealthy = extractUnhealthyAdapters(rawState);
@@ -190,53 +266,15 @@ export async function writeExecutionState(logDir: string): Promise<void> {
 /**
  * Get the current git branch name.
  */
-export async function getCurrentBranch(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let stdout = '';
-    child.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve(stdout.trim());
-      } else {
-        reject(new Error(`git rev-parse failed with code ${code}`));
-      }
-    });
-
-    child.on('error', reject);
-  });
+export function getCurrentBranch(): Promise<string> {
+  return spawnGit(['rev-parse', '--abbrev-ref', 'HEAD']);
 }
 
 /**
  * Get the current HEAD commit SHA.
  */
-export async function getCurrentCommit(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['rev-parse', 'HEAD'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let stdout = '';
-    child.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve(stdout.trim());
-      } else {
-        reject(new Error(`git rev-parse failed with code ${code}`));
-      }
-    });
-
-    child.on('error', reject);
-  });
+export function getCurrentCommit(): Promise<string> {
+  return spawnGit(['rev-parse', 'HEAD']);
 }
 
 /**
@@ -244,26 +282,14 @@ export async function getCurrentCommit(): Promise<string> {
  * Uses `git merge-base --is-ancestor`.
  * Returns true if commit is reachable from branch.
  */
-export async function isCommitInBranch(
+export function isCommitInBranch(
   commit: string,
   branch: string,
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn(
-      'git',
-      ['merge-base', '--is-ancestor', commit, branch],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-
-    child.on('close', (code) => {
-      // Exit 0 = is ancestor (merged), exit 1 = not ancestor
-      resolve(code === 0);
-    });
-
-    child.on('error', () => {
-      resolve(false);
-    });
-  });
+  // Exit 0 = is ancestor (merged), exit 1 = not ancestor
+  return spawnGit(['merge-base', '--is-ancestor', commit, branch])
+    .then(() => true)
+    .catch(() => false);
 }
 
 /**
@@ -278,50 +304,21 @@ export function getExecutionStateFilename(): string {
  * Uses `git status --porcelain` which correctly reports all change types,
  * unlike `git stash create --include-untracked` which returns empty for untracked-only changes.
  */
-export async function hasWorkingTreeChanges(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn('git', ['status', '--porcelain'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let stdout = '';
-    child.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve(stdout.trim().length > 0);
-      } else {
-        // If git status fails, assume changes exist to prevent accidental state deletion
-        resolve(true);
-      }
-    });
-
-    child.on('error', () => {
-      resolve(true);
-    });
-  });
+export function hasWorkingTreeChanges(): Promise<boolean> {
+  // Conservative default: assume changes on error to prevent accidental state deletion.
+  return spawnGit(['status', '--porcelain'])
+    .then((out) => out.length > 0)
+    .catch(() => true);
 }
 
 /**
  * Check if a git object (commit, tree, blob, etc.) exists in the repository.
  * Uses `git cat-file -t <sha>` to check object type.
  */
-export async function gitObjectExists(sha: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn('git', ['cat-file', '-t', sha], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    child.on('close', (code) => {
-      resolve(code === 0);
-    });
-
-    child.on('error', () => {
-      resolve(false);
-    });
-  });
+export function gitObjectExists(sha: string): Promise<boolean> {
+  return spawnGit(['cat-file', '-t', sha])
+    .then(() => true)
+    .catch(() => false);
 }
 
 /**
@@ -407,7 +404,7 @@ export function isAdapterCoolingDown(entry: UnhealthyAdapter): boolean {
 export async function getUnhealthyAdapters(
   logDir: string,
 ): Promise<Record<string, UnhealthyAdapter>> {
-  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+  const statePath = getStatePath(logDir);
   const rawState = await readRawState(statePath);
   return extractUnhealthyAdapters(rawState) ?? {};
 }
@@ -438,7 +435,7 @@ export async function markAdapterUnhealthy(
 ): Promise<void> {
   await getDebugLogger()?.logAdapterHealthChange(adapterName, false, reason);
 
-  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+  const statePath = getStatePath(logDir);
   const rawData = (await readRawState(statePath)) ?? {};
 
   const adapters =
@@ -463,7 +460,7 @@ export async function markAdapterHealthy(
 ): Promise<void> {
   await getDebugLogger()?.logAdapterHealthChange(adapterName, true);
 
-  const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+  const statePath = getStatePath(logDir);
   const rawData = await readRawState(statePath);
   if (!rawData) return;
 
@@ -489,7 +486,7 @@ export async function markAdapterHealthy(
 export async function deleteExecutionState(logDir: string): Promise<void> {
   try {
     await getDebugLogger()?.logStateDelete();
-    const statePath = path.join(logDir, EXECUTION_STATE_FILENAME);
+    const statePath = getStatePath(logDir);
     await fs.rm(statePath, { force: true });
   } catch {
     // Ignore errors
