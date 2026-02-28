@@ -192,6 +192,8 @@ YAML review files must specify exactly one of `prompt_file`, `skill_name`, or `b
 
 ### Schema (frontmatter for `.md`, top-level for `.yml`)
 
+- **enabled**: boolean (default: `true`)
+  Whether this review runs by default. Set to `false` to make the review opt-in — it will be skipped unless explicitly activated at runtime via `--enable-review <name>`. Useful for reviews that are only meaningful in specific contexts (e.g. task-compliance reviews that require an active task context).
 - **cli_preference**: string[] (optional)
   Ordered list of review CLI tools to try (e.g. `gemini`, `codex`, `claude`, `github-copilot`). If omitted, the project-level `cli.default_preference` is used.
 - **num_reviews**: number (default: `1`)
@@ -236,6 +238,21 @@ timeout: 120
 
 Review the diff for code quality issues. Focus on readability and maintainability.
 ```
+
+**Markdown review disabled by default (opt-in):**
+
+```markdown
+---
+num_reviews: 1
+enabled: false
+---
+
+# Task compliance review
+
+Review the diff against the task requirements in the provided context.
+```
+
+To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-gauntlet-run)).
 
 **Markdown review with external prompt file:**
 
