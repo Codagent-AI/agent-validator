@@ -45,6 +45,8 @@ export interface ExecuteRunOptions {
    * If interval hasn't elapsed, returns { status: "interval_not_elapsed", ... }.
    */
   checkInterval?: boolean;
+  /** Set of review names to activate even if their config has enabled: false */
+  enableReviews?: Set<string>;
 }
 
 /** Initialize app logger and debug logger, returning a RunContext. */

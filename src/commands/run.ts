@@ -16,12 +16,19 @@ export function registerRunCommand(program: Command): void {
       '-u, --uncommitted',
       'Use diff for current uncommitted changes (staged and unstaged)',
     )
+    .option(
+      '-e, --enable-review <name>',
+      'Activate a disabled review for this run (repeatable)',
+      (value: string, prev: string[] = []) => [...prev, value],
+      [] as string[],
+    )
     .action(async (options) => {
       const result = await executeRun({
         baseBranch: options.baseBranch,
         gate: options.gate,
         commit: options.commit,
         uncommitted: options.uncommitted,
+        enableReviews: new Set<string>(options.enableReview ?? []),
       });
 
       const code = isSuccessStatus(result.status) ? 0 : 1;

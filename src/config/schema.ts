@@ -62,6 +62,7 @@ export const reviewGateSchema = z.object({
   run_in_ci: z.boolean().default(true),
   run_locally: z.boolean().default(true),
   timeout: z.number().optional(),
+  enabled: z.boolean().default(true),
 });
 
 export const reviewPromptFrontmatterSchema = z
@@ -75,6 +76,7 @@ export const reviewPromptFrontmatterSchema = z
     timeout: z.number().optional(),
     prompt_file: z.string().optional(),
     skill_name: z.string().optional(),
+    enabled: z.boolean().default(true),
   })
   .refine((data) => !(data.prompt_file && data.skill_name), {
     message:
@@ -93,6 +95,7 @@ export const reviewYamlSchema = z
     prompt_file: z.string().optional(),
     skill_name: z.string().optional(),
     builtin: z.string().optional(),
+    enabled: z.boolean().default(true),
   })
   .superRefine((data, ctx) => {
     const sources = [data.prompt_file, data.skill_name, data.builtin].filter(

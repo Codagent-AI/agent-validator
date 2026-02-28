@@ -318,13 +318,48 @@ The setup skill SHALL include a `references/check-catalog.md` file that document
 - **AND** the review YAML schema including built-in reviewer reference
 - **AND** the config entry_points schema
 
+### Requirement: Enable-review CLI option on run and review commands
+The `run` and `review` commands SHALL accept a repeatable `--enable-review <name>` option (short: `-e`) that activates disabled reviews for that invocation. The option SHALL collect multiple review names into an array and pass them to the run executor as `enableReviews`.
+
+#### Scenario: Single review enabled via CLI
+- **GIVEN** a configured review named `task-compliance` exists and its config has `enabled: false`
+- **WHEN** `agent-gauntlet run --enable-review task-compliance` is invoked
+- **THEN** the `task-compliance` review SHALL be activated for that run even if its config has `enabled: false`
+
+#### Scenario: Multiple reviews enabled via repeated flag
+- **GIVEN** `task-compliance` and `security` reviews are configured in the project
+- **WHEN** `agent-gauntlet run --enable-review task-compliance --enable-review security` is invoked
+- **THEN** both `task-compliance` and `security` reviews SHALL be activated for that run
+
+#### Scenario: Enable-review on review command
+- **GIVEN** a configured review named `task-compliance` exists in the project
+- **WHEN** `agent-gauntlet review --enable-review task-compliance` is invoked
+- **THEN** the `task-compliance` review SHALL be activated for that review-only run
+
+#### Scenario: Enable-review with unknown name is silently ignored
+- **GIVEN** no review named `nonexistent` is configured in the project
+- **WHEN** `agent-gauntlet run --enable-review nonexistent` is invoked
+- **THEN** the run SHALL proceed normally without error
+
 ### Requirement: Gauntlet-Run Skill Auto-Invocation
-The gauntlet-run skill SHALL have auto-invocation enabled so that Claude's skill invocation logic can trigger it automatically when the agent completes a coding task.
+The gauntlet-run skill SHALL have auto-invocation enabled so that Claude's skill invocation logic can trigger it automatically when the agent completes a coding task. The skill content is stored as static files under `skills/gauntlet-run/` and installed to `.claude/skills/gauntlet-run/` during init.
+
+The gauntlet-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review.
 
 #### Scenario: Gauntlet-run skill auto-invocation enabled
-- **GIVEN** the gauntlet-run skill template is defined in `buildGauntletSkillContent()`
-- **WHEN** `agent-gauntlet init` generates the gauntlet-run skill content
+- **GIVEN** the gauntlet-run skill is installed at `.claude/skills/gauntlet-run/SKILL.md`
+- **WHEN** a user views the skill frontmatter
 - **THEN** the skill frontmatter SHALL set `disable-model-invocation: false`
 - **AND** the `description` field SHALL contain the phrase "final step after completing a coding task"
 - **AND** the `description` field SHALL contain the phrase "before committing, pushing, or creating PRs"
+
+#### Scenario: Gauntlet-run skill passes caller-requested reviews
+- **GIVEN** the gauntlet-run skill is installed and configured
+- **WHEN** the caller requests a specific review to be enabled
+- **THEN** the run command SHALL include `--enable-review <name>` for each requested review
+
+#### Scenario: Gauntlet-run skill omits flag when no reviews requested
+- **GIVEN** the gauntlet-run skill is installed and configured
+- **WHEN** the gauntlet-run skill is executed without any review requests from the caller
+- **THEN** the run command SHALL NOT include any `--enable-review` flags
 
