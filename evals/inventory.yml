@@ -39,3 +39,32 @@ issues:
     difficulty: medium
     priority: high
     source: 2026-02-16 reviewer-model-resolution.agent-gauntlet
+  - id: shell-injection-via-exec-async-interpolation
+    file: src/core/change-detector.ts
+    line_range:
+      - 108
+      - 109
+    description: >
+      The getDiffWithWorkingTree method (and several other execAsync calls in the file) interpolates
+      a baseRef value directly into a shell command string using a template literal: `git diff
+      --name-only ${baseRef}...HEAD`. While isValidGitRef() validates the ref with a regex before
+      use, the file still relies on shell=true execution for all these calls. If the regex were ever
+      relaxed or bypassed (e.g. via a different code path that skips validation), arbitrary shell
+      commands could be injected. More critically, using execAsync (shell=true) for git commands
+      that accept user-controlled refs is an inherently unsafe pattern — execFileAsync with argument
+      arrays would eliminate the risk entirely without needing regex validation as a guard.
+    code_snippet: |
+      private async getDiffWithWorkingTree(baseRef: string): Promise<string[]> {
+        const { stdout: committed } = await execAsync(
+          `git diff --name-only ${baseRef}...HEAD`,
+        );
+        const files = new Set([
+          ...this.parseOutput(committed),
+          ...(await this.getWorkingTreeFiles()),
+        ]);
+        return Array.from(files);
+      }
+    category: security
+    difficulty: medium
+    priority: high
+    source: 2026-02-28 skill-review.agent-gauntlet
