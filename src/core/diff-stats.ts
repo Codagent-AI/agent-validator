@@ -204,7 +204,7 @@ async function countChangedStashUntracked(
     try {
       const [oldHash, newHash] = await Promise.all([
         gitExec(['rev-parse', `${fixBase}^3:${file}`]),
-        gitExec(['hash-object', file]),
+        gitExec(['hash-object', '--', file]),
       ]);
       if (oldHash.trim() !== newHash.trim()) {
         changed++;

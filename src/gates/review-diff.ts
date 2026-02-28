@@ -118,7 +118,7 @@ async function hasFileChangedSinceStash(
     execAsync(`git rev-parse ${quoteArg(`${fixBase}^3:${file}`)}`, {
       maxBuffer: MAX_BUFFER_BYTES,
     }),
-    execAsync(`git hash-object ${quoteArg(file)}`, {
+    execAsync(`git hash-object -- ${quoteArg(file)}`, {
       maxBuffer: MAX_BUFFER_BYTES,
     }),
   ]);
