@@ -87,3 +87,12 @@ Downgrade confidence when:
 
 ### Next Steps
 Actionable recommendations for the user. If confidence is not high, suggest what additional evidence would confirm the diagnosis.
+
+## Bug Filing
+
+After completing your diagnosis, apply the following routing logic to determine whether to file a GitHub issue:
+
+- **High confidence + bug indicated** (evidence points to a defect in agent-gauntlet, not a configuration issue, user error, or expected behavior): Automatically invoke `gauntlet-issue` with `--auto-file <diagnosis summary>` as arguments. This passes the diagnosis summary as the bug description and skips the interactive confirmation — the issue is filed immediately after showing the draft.
+- **High confidence + not a bug** (diagnosis concludes configuration issue, user error, or expected behavior): Do nothing. Do not invoke `gauntlet-issue`.
+- **Medium confidence + possible bug** (evidence suggests a possible gauntlet defect but is not conclusive): Ask the user: "This may be a gauntlet bug. Want me to file a GitHub issue?" If the user confirms, invoke `gauntlet-issue` with the diagnosis summary as the bug description. If the user declines, exit without filing.
+- **Low confidence**: Do nothing. Do not prompt the user and do not invoke `gauntlet-issue`.

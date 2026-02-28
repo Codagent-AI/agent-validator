@@ -9,8 +9,12 @@ Agent Gauntlet installs **skills** that let you invoke gauntlet workflows direct
 | Setup | `/gauntlet-setup` | Scan project and configure checks and reviews |
 | Run | `/gauntlet-run` | Run the full verification suite (checks + reviews) |
 | Check | `/gauntlet-check` | Run checks only (no AI reviews) |
+| Skip | `/gauntlet-skip` | Advance execution state baseline without running gates |
 | Status | `/gauntlet-status` | Show a summary of the most recent gauntlet session |
 | Help | `/gauntlet-help` | Diagnose and explain gauntlet behavior (diagnosis-only) |
+| Commit | `/gauntlet-commit` | Gate a commit behind optional validation (detect → validate → commit) |
+| Merge | `/gauntlet-merge <branch>` | Merge a branch and propagate its validated execution state |
+| Issue | `/gauntlet-issue` | Collect diagnostic evidence and file a GitHub bug report |
 
 ## Installation
 
@@ -90,6 +94,51 @@ The skill follows a structured diagnostic workflow:
 4. Returns a structured response with **Diagnosis**, **Evidence**, **Confidence**, and **Next Steps**
 
 Reference files under `references/` provide detailed troubleshooting guidance organized by domain: stop-hook, config, gates, locks, adapters, and CI/PR.
+
+After diagnosis, the skill applies confidence-based bug-filing routing:
+- **High confidence + bug**: automatically invokes `/gauntlet-issue`
+- **Medium confidence + possible bug**: asks "Want me to file a GitHub issue?"
+- **Low confidence**: no action
+
+### /gauntlet-commit
+
+Gate a commit behind optional gauntlet validation.
+
+**Workflow:**
+1. Runs `agent-gauntlet detect` — if no changes found, commits immediately (no validation)
+2. Parses inline intent from arguments: "run"/"full" → `/gauntlet-run`; "check"/"checks" → `/gauntlet-check`; "skip" → `agent-gauntlet skip`; unclear → prompts user to choose
+3. Runs the chosen validation skill; if it fails, asks "Ready to commit?" before proceeding
+4. Commits using an available commit skill if found, otherwise stages and commits directly
+
+**Usage:** `/gauntlet-commit` or `/gauntlet-commit run` / `/gauntlet-commit checks` / `/gauntlet-commit skip`
+
+### /gauntlet-merge
+
+Merge a branch and propagate its validated execution state, eliminating redundant re-validation.
+
+**Workflow:**
+1. Locates the worktree (or main clone) where `<branch>` is checked out via `git worktree list`
+2. Reads `log_dir` from each worktree's `.gauntlet/config.yml` (default: `gauntlet_logs`)
+3. Verifies the source `.execution_state` exists before merging (fails fast if missing)
+4. Runs `git merge <branch>`
+5. Copies `.execution_state` from the source worktree to the current directory
+
+The branch must be checked out in some worktree — if it was deleted after merging, the execution state is gone and the skill reports an error.
+
+**Usage:** `/gauntlet-merge <branch-name>`
+
+### /gauntlet-issue
+
+Collect runtime diagnostic evidence and file a structured GitHub issue on `pacaplan/agent-gauntlet`. Requires the `gh` CLI.
+
+**Workflow:**
+1. Reads bug description from arguments (or prompts if empty)
+2. Collects evidence: last 50 lines of `.debug.log`, full `.execution_state`, `.gauntlet/config.yml` — notes absent files
+3. Drafts a structured issue (Problem, Steps to Reproduce, Expected vs Actual, Evidence) with redaction guidance for sensitive values
+4. Shows full preview and asks for confirmation (unless invoked with `--auto-file`)
+5. Files via `gh issue create --repo pacaplan/agent-gauntlet`
+
+**Usage:** `/gauntlet-issue` or `/gauntlet-issue <description of the bug>`
 
 ## Customization
 
