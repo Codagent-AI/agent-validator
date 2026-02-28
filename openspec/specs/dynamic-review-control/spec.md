@@ -30,20 +30,18 @@ The system SHALL skip reviews with `enabled: false` during job generation unless
 - **WHEN** `--enable-review task-compliance --enable-review security` is passed
 - **THEN** both `task-compliance` and `security` reviews SHALL be activated even if their configs have `enabled: false`
 
-### Requirement: Gauntlet-run skill conditionally enables task-compliance
-Both copies of the gauntlet-run skill SHALL pass `--enable-review task-compliance` when a task context file exists at `.gauntlet/current-task-context.md`.
+### Requirement: Gauntlet-run skill passes caller-requested reviews
+Both copies of the gauntlet-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review. The skill does not hardcode any specific review names.
 
-#### Scenario: Task context present activates task-compliance
+#### Scenario: Caller requests specific reviews to be enabled
 - **GIVEN** the gauntlet-run skill is installed in the project
-- **WHEN** the gauntlet-run skill is invoked
-- **AND** `.gauntlet/current-task-context.md` exists
-- **THEN** the run command SHALL include `--enable-review task-compliance`
+- **WHEN** the caller requests a specific review to be enabled
+- **THEN** the run command SHALL include `--enable-review <name>` for each requested review
 
-#### Scenario: No task context omits the flag
+#### Scenario: No reviews requested by caller
 - **GIVEN** the gauntlet-run skill is installed in the project
-- **WHEN** the gauntlet-run skill is invoked
-- **AND** `.gauntlet/current-task-context.md` does not exist
-- **THEN** the run command SHALL NOT include `--enable-review task-compliance`
+- **WHEN** the gauntlet-run skill is invoked without any review requests from the caller
+- **THEN** the run command SHALL NOT include any `--enable-review` flags
 
 ### Requirement: Task-compliance review defaults to disabled
 The `task-compliance` review SHALL be configured as opt-in in this project, so it does not execute unless explicitly activated.

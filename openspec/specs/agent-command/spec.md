@@ -380,13 +380,12 @@ The `run` and `review` commands SHALL accept a repeatable `--enable-review <name
 #### Scenario: Enable-review with unknown name is silently ignored
 - **GIVEN** no review named `nonexistent` is configured in the project
 - **WHEN** `agent-gauntlet run --enable-review nonexistent` is invoked
-- **AND** no review named `nonexistent` is configured
 - **THEN** the run SHALL proceed normally without error
 
 ### Requirement: Gauntlet-Run Skill Auto-Invocation
 The gauntlet-run skill SHALL have auto-invocation enabled so that Claude's skill invocation logic can trigger it automatically when the agent completes a coding task. The skill content is stored as static files under `skills/gauntlet-run/` and installed to `.claude/skills/gauntlet-run/` during init.
 
-The gauntlet-run skill SHALL conditionally pass `--enable-review task-compliance` when `.gauntlet/current-task-context.md` exists, activating the task-compliance review for task-driven runs.
+The gauntlet-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review.
 
 #### Scenario: Gauntlet-run skill auto-invocation enabled
 - **GIVEN** the gauntlet-run skill is installed at `.claude/skills/gauntlet-run/SKILL.md`
@@ -395,15 +394,13 @@ The gauntlet-run skill SHALL conditionally pass `--enable-review task-compliance
 - **AND** the `description` field SHALL contain the phrase "final step after completing a coding task"
 - **AND** the `description` field SHALL contain the phrase "before committing, pushing, or creating PRs"
 
-#### Scenario: Gauntlet-run skill activates task-compliance when task context exists
+#### Scenario: Gauntlet-run skill passes caller-requested reviews
 - **GIVEN** the gauntlet-run skill is installed and configured
-- **WHEN** the gauntlet-run skill is executed
-- **AND** `.gauntlet/current-task-context.md` exists
-- **THEN** the run command SHALL include `--enable-review task-compliance`
+- **WHEN** the caller requests a specific review to be enabled
+- **THEN** the run command SHALL include `--enable-review <name>` for each requested review
 
-#### Scenario: Gauntlet-run skill omits flag when no task context
+#### Scenario: Gauntlet-run skill omits flag when no reviews requested
 - **GIVEN** the gauntlet-run skill is installed and configured
-- **WHEN** the gauntlet-run skill is executed
-- **AND** `.gauntlet/current-task-context.md` does not exist
-- **THEN** the run command SHALL NOT include `--enable-review task-compliance`
+- **WHEN** the gauntlet-run skill is executed without any review requests from the caller
+- **THEN** the run command SHALL NOT include any `--enable-review` flags
 
