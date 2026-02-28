@@ -70,4 +70,4 @@ Report the command output to the user, then go to Step 4.
 Check whether you have a skill for committing git changes available.
 
 - **If a commit skill is found** → invoke that skill to perform the commit
-- **If no commit skill is found** → stage all tracked changespropose a commit message following the conventional commits format (`<type>: <description>`), then run `git commit -m "<message>"`
+- **If no commit skill is found** → stage all tracked changes, propose a commit message following the conventional commits format (`<type>: <description>`), then run `git commit -m "<message>"`

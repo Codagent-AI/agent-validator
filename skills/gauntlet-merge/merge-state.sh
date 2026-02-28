@@ -20,7 +20,7 @@ while IFS= read -r line; do
 done < <(git worktree list --porcelain)
 
 if [[ -z "$SOURCE_DIR" ]]; then
-  echo "Error: No worktree found with branch '$BRANCH' checked out — cannot copy execution state."
+  echo "Error: No worktree found with branch '$BRANCH' checked out — cannot copy execution state." >&2
   exit 1
 fi
 
