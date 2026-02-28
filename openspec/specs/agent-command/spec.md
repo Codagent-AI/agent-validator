@@ -363,18 +363,22 @@ The setup skill SHALL include a `references/check-catalog.md` file that document
 The `run` and `review` commands SHALL accept a repeatable `--enable-review <name>` option (short: `-e`) that activates disabled reviews for that invocation. The option SHALL collect multiple review names into an array and pass them to the run executor as `enableReviews`.
 
 #### Scenario: Single review enabled via CLI
+- **GIVEN** a configured review named `task-compliance` exists and its config has `enabled: false`
 - **WHEN** `agent-gauntlet run --enable-review task-compliance` is invoked
 - **THEN** the `task-compliance` review SHALL be activated for that run even if its config has `enabled: false`
 
 #### Scenario: Multiple reviews enabled via repeated flag
+- **GIVEN** `task-compliance` and `security` reviews are configured in the project
 - **WHEN** `agent-gauntlet run --enable-review task-compliance --enable-review security` is invoked
 - **THEN** both `task-compliance` and `security` reviews SHALL be activated for that run
 
 #### Scenario: Enable-review on review command
+- **GIVEN** a configured review named `task-compliance` exists in the project
 - **WHEN** `agent-gauntlet review --enable-review task-compliance` is invoked
 - **THEN** the `task-compliance` review SHALL be activated for that review-only run
 
 #### Scenario: Enable-review with unknown name is silently ignored
+- **GIVEN** no review named `nonexistent` is configured in the project
 - **WHEN** `agent-gauntlet run --enable-review nonexistent` is invoked
 - **AND** no review named `nonexistent` is configured
 - **THEN** the run SHALL proceed normally without error
@@ -392,11 +396,13 @@ The gauntlet-run skill SHALL conditionally pass `--enable-review task-compliance
 - **AND** the `description` field SHALL contain the phrase "before committing, pushing, or creating PRs"
 
 #### Scenario: Gauntlet-run skill activates task-compliance when task context exists
+- **GIVEN** the gauntlet-run skill is installed and configured
 - **WHEN** the gauntlet-run skill is executed
 - **AND** `.gauntlet/current-task-context.md` exists
 - **THEN** the run command SHALL include `--enable-review task-compliance`
 
 #### Scenario: Gauntlet-run skill omits flag when no task context
+- **GIVEN** the gauntlet-run skill is installed and configured
 - **WHEN** the gauntlet-run skill is executed
 - **AND** `.gauntlet/current-task-context.md` does not exist
 - **THEN** the run command SHALL NOT include `--enable-review task-compliance`

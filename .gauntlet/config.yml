@@ -1,5 +1,5 @@
 name: agent-gauntlet
-base_branch: dev
+base_branch: main
 log_dir: gauntlet_logs
 debug_log:
   enabled: true
