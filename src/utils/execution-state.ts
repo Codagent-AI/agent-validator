@@ -185,13 +185,11 @@ export async function createWorkingTreeRef(): Promise<string> {
   if (!createdStash) {
     // Push was a no-op or post-push rev-parse failed unexpectedly. If there was
     // a pre-existing stash (prevTop) but newTop is missing, we can't confirm the
-    // push state — defensively pop to avoid leaving the user's tree stashed.
+    // push state — avoid destructive pop of an unrelated user stash.
     if (prevTop && !newTop) {
-      try {
-        await runGit(['stash', 'pop']);
-      } catch {
-        // Ignore — we're in an uncertain state; user can recover manually.
-      }
+      console.error(
+        'gauntlet: unable to verify stash snapshot; leaving stash untouched. Run `git stash pop` manually if needed.',
+      );
     }
     return getCurrentCommit();
   }
