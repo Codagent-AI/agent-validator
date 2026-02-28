@@ -34,11 +34,12 @@ const TEST_DIR = path.join(import.meta.dir, "../../.test-execution-state");
 // Helper to create a mock spawn process
 function createMockSpawn(stdout: string, exitCode: number) {
 	const mockProcess = new EventEmitter() as EventEmitter & {
-		stdout: EventEmitter;
-		stderr: EventEmitter;
+		stdout: EventEmitter & { setEncoding: (enc: string) => void };
+		stderr: EventEmitter & { setEncoding: (enc: string) => void };
 	};
-	mockProcess.stdout = new EventEmitter();
-	mockProcess.stderr = new EventEmitter();
+	// setEncoding is a no-op in mocks: data is already emitted as string/buffer.
+	mockProcess.stdout = Object.assign(new EventEmitter(), { setEncoding: () => {} });
+	mockProcess.stderr = Object.assign(new EventEmitter(), { setEncoding: () => {} });
 
 	// Schedule the events to fire asynchronously
 	setImmediate(() => {
@@ -196,7 +197,7 @@ describe("Execution State Git Operations (mocked)", () => {
 			});
 
 			await expect(getCurrentBranch()).rejects.toThrow(
-				"git rev-parse failed with code 128",
+				"git rev-parse --abbrev-ref HEAD failed with code 128",
 			);
 		});
 	});
@@ -227,7 +228,7 @@ describe("Execution State Git Operations (mocked)", () => {
 			});
 
 			await expect(getCurrentCommit()).rejects.toThrow(
-				"git rev-parse failed with code 128",
+				"git rev-parse HEAD failed with code 128",
 			);
 		});
 	});
@@ -259,11 +260,11 @@ describe("Execution State Git Operations (mocked)", () => {
 		it("returns false on error", async () => {
 			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() => {
 				const mockProcess = new EventEmitter() as EventEmitter & {
-					stdout: EventEmitter;
-					stderr: EventEmitter;
+					stdout: EventEmitter & { setEncoding: (enc: string) => void };
+					stderr: EventEmitter & { setEncoding: (enc: string) => void };
 				};
-				mockProcess.stdout = new EventEmitter();
-				mockProcess.stderr = new EventEmitter();
+				mockProcess.stdout = Object.assign(new EventEmitter(), { setEncoding: () => {} });
+				mockProcess.stderr = Object.assign(new EventEmitter(), { setEncoding: () => {} });
 				setImmediate(() => {
 					mockProcess.emit("error", new Error("spawn failed"));
 				});
@@ -306,11 +307,11 @@ describe("Execution State Git Operations (mocked)", () => {
 		it("returns false on error", async () => {
 			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() => {
 				const mockProcess = new EventEmitter() as EventEmitter & {
-					stdout: EventEmitter;
-					stderr: EventEmitter;
+					stdout: EventEmitter & { setEncoding: (enc: string) => void };
+					stderr: EventEmitter & { setEncoding: (enc: string) => void };
 				};
-				mockProcess.stdout = new EventEmitter();
-				mockProcess.stderr = new EventEmitter();
+				mockProcess.stdout = Object.assign(new EventEmitter(), { setEncoding: () => {} });
+				mockProcess.stderr = Object.assign(new EventEmitter(), { setEncoding: () => {} });
 				setImmediate(() => {
 					mockProcess.emit("error", new Error("spawn failed"));
 				});
