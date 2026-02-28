@@ -132,6 +132,7 @@ describe("computeDiffStats", () => {
 			expect(mockExec).toHaveBeenCalledWith(
 				"git",
 				expect.arrayContaining(["origin/main...HEAD"]),
+				expect.anything(),
 			);
 		});
 	});
@@ -163,6 +164,7 @@ describe("computeDiffStats", () => {
 			expect(mockExec).toHaveBeenCalledWith(
 				"git",
 				expect.arrayContaining([`origin/main...${process.env.GITHUB_SHA}`]),
+				expect.anything(),
 			);
 		});
 	});
@@ -280,6 +282,105 @@ describe("computeDiffStats", () => {
 			});
 
 			expect(result.baseRef).toBe(headRef);
+		});
+
+		it("excludes unchanged untracked files from stash ^3 parent", async () => {
+			const stashSha = "abc123";
+			mockExec.mockImplementation((_file: string, args: string[]) => {
+				// Current untracked files
+				if (args.includes("ls-files")) return createMockOutput("file1.md");
+				// Main tree (tracked) — empty, file was untracked
+				if (args.includes("ls-tree") && args.includes(stashSha))
+					return createMockOutput("");
+				// Stash ^3 tree (untracked files captured by stash)
+				if (args.includes("ls-tree") && args.includes(`${stashSha}^3`))
+					return createMockOutput("file1.md");
+				// Hash comparison: same hash = unchanged
+				if (args.includes("rev-parse")) return createMockOutput("deadbeef");
+				if (args.includes("hash-object")) return createMockOutput("deadbeef");
+				return createMockOutput("");
+			});
+
+			const result = await computeDiffStats("origin/main", {
+				fixBase: stashSha,
+			});
+
+			// File is unchanged, should be excluded entirely
+			expect(result.newFiles).toBe(0);
+			expect(result.modifiedFiles).toBe(0);
+			expect(result.total).toBe(0);
+		});
+
+		it("counts changed stash untracked files as modified, not new", async () => {
+			const stashSha = "abc123";
+			mockExec.mockImplementation((_file: string, args: string[]) => {
+				if (args.includes("ls-files")) return createMockOutput("file1.md");
+				if (args.includes("ls-tree") && args.includes(stashSha))
+					return createMockOutput("");
+				if (args.includes("ls-tree") && args.includes(`${stashSha}^3`))
+					return createMockOutput("file1.md");
+				// Hash comparison: different hash = changed
+				if (args.includes("rev-parse")) return createMockOutput("oldhash");
+				if (args.includes("hash-object")) return createMockOutput("newhash");
+				return createMockOutput("");
+			});
+
+			const result = await computeDiffStats("origin/main", {
+				fixBase: stashSha,
+			});
+
+			// Changed file should be counted as modified, not new
+			expect(result.newFiles).toBe(0);
+			expect(result.modifiedFiles).toBe(1);
+			expect(result.total).toBe(1);
+		});
+
+		it("handles mix of new and known untracked files from stash", async () => {
+			const stashSha = "abc123";
+			mockExec.mockImplementation((_file: string, args: string[]) => {
+				if (args.includes("ls-files"))
+					return createMockOutput("known.md\nnew.md");
+				if (args.includes("ls-tree") && args.includes(stashSha))
+					return createMockOutput("");
+				if (args.includes("ls-tree") && args.includes(`${stashSha}^3`))
+					return createMockOutput("known.md");
+				// Hash comparison for known.md: changed
+				if (args.includes("rev-parse")) return createMockOutput("old");
+				if (args.includes("hash-object")) return createMockOutput("new");
+				return createMockOutput("");
+			});
+
+			const result = await computeDiffStats("origin/main", {
+				fixBase: stashSha,
+			});
+
+			// new.md is truly new, known.md is modified
+			expect(result.newFiles).toBe(1);
+			expect(result.modifiedFiles).toBe(1);
+			expect(result.total).toBe(2);
+		});
+
+		it("falls back gracefully when stash ^3 does not exist", async () => {
+			const commitSha = "abc123";
+			mockExec.mockImplementation((_file: string, args: string[]) => {
+				if (args.includes("ls-files"))
+					return createMockOutput("file1.md");
+				// Main tree returns empty
+				if (args.includes("ls-tree") && args.includes(commitSha))
+					return createMockOutput("");
+				// ^3 doesn't exist (not a stash) — throw error
+				if (args.includes("ls-tree") && args.includes(`${commitSha}^3`))
+					return Promise.reject(new Error("Not a valid object name"));
+				return createMockOutput("");
+			});
+
+			const result = await computeDiffStats("origin/main", {
+				fixBase: commitSha,
+			});
+
+			// Without ^3, file1.md is counted as new (original behavior)
+			expect(result.newFiles).toBe(1);
+			expect(result.total).toBe(1);
 		});
 	});
 });
