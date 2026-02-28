@@ -132,6 +132,7 @@ describe("computeDiffStats", () => {
 			expect(mockExec).toHaveBeenCalledWith(
 				"git",
 				expect.arrayContaining(["origin/main...HEAD"]),
+				expect.anything(),
 			);
 		});
 	});
@@ -163,6 +164,7 @@ describe("computeDiffStats", () => {
 			expect(mockExec).toHaveBeenCalledWith(
 				"git",
 				expect.arrayContaining([`origin/main...${process.env.GITHUB_SHA}`]),
+				expect.anything(),
 			);
 		});
 	});

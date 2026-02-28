@@ -10,6 +10,7 @@ const log = getCategoryLogger('gate', 'review');
 const execAsync = promisify(exec);
 
 import { MAX_BUFFER_BYTES } from '../constants.js';
+import { getStashUntrackedFiles } from '../core/diff-stats.js';
 
 // ── Diff Utilities ──────────────────────────────────────────────────
 
@@ -107,26 +108,6 @@ export async function getDiff(
 }
 
 // ── Fix-base diff ───────────────────────────────────────────────────
-
-/**
- * Get untracked files from a stash commit's ^3 parent.
- * `git stash create --include-untracked` stores untracked files in the 3rd parent.
- * Returns empty set if fixBase is not a stash or has no untracked tree.
- */
-export async function getStashUntrackedFiles(
-  fixBase: string,
-  pArg: string,
-): Promise<Set<string>> {
-  try {
-    const { stdout } = await execAsync(
-      `git ls-tree -r --name-only ${quoteArg(`${fixBase}^3`)}${pArg}`,
-      { maxBuffer: MAX_BUFFER_BYTES },
-    );
-    return new Set(parseLines(stdout));
-  } catch {
-    return new Set();
-  }
-}
 
 /** Check if a file's content has changed compared to a stash's untracked tree. */
 async function hasFileChangedSinceStash(
@@ -260,7 +241,10 @@ async function getFixBaseDiff(
     const snapshotTrackedFiles = new Set(parseLines(snapshotFilesStdout));
 
     // Files in fixBase's untracked tree (stash ^3 parent)
-    const snapshotUntrackedFiles = await getStashUntrackedFiles(fixBase, pArg);
+    const snapshotUntrackedFiles = await getStashUntrackedFiles(
+      fixBase,
+      entryPointPath,
+    );
 
     // Combine all snapshot files
     const allSnapshotFiles = new Set([

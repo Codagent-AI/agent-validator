@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { MAX_BUFFER_BYTES } from '../constants.js';
 
 const execFileAsyncOriginal = promisify(execFile);
 export let execFileAsync = execFileAsyncOriginal;
@@ -12,7 +13,9 @@ export function setExecFileAsync(fn: typeof execFileAsyncOriginal) {
  * Run a git command safely using execFile (no shell interpolation).
  */
 async function gitExec(args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args);
+  const { stdout } = await execFileAsync('git', args, {
+    maxBuffer: MAX_BUFFER_BYTES,
+  });
   return stdout;
 }
 
@@ -141,7 +144,8 @@ async function computeUncommittedDiffStats(): Promise<DiffStats> {
   ]);
   const untrackedFiles = untrackedList
     .split('\n')
-    .filter((f) => f.trim().length > 0);
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0);
 
   return {
     baseRef: 'uncommitted',
@@ -163,18 +167,25 @@ async function computeUncommittedDiffStats(): Promise<DiffStats> {
  * Get untracked files from a stash commit's ^3 parent.
  * `git stash create --include-untracked` stores untracked files in the 3rd parent.
  * Returns empty set if fixBase is not a stash or has no untracked tree.
+ *
+ * @param pathFilter — optional path prefix to scope results (e.g. "src/")
  */
-async function getStashUntrackedFilesForStats(
+export async function getStashUntrackedFiles(
   fixBase: string,
+  pathFilter?: string,
 ): Promise<Set<string>> {
   try {
-    const treeFiles = await gitExec([
-      'ls-tree',
-      '-r',
-      '--name-only',
-      `${fixBase}^3`,
-    ]);
-    return new Set(treeFiles.split('\n').filter((f) => f.trim().length > 0));
+    const args = ['ls-tree', '-r', '--name-only', `${fixBase}^3`];
+    if (pathFilter) {
+      args.push('--', pathFilter);
+    }
+    const treeFiles = await gitExec(args);
+    return new Set(
+      treeFiles
+        .split('\n')
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0),
+    );
   } catch {
     return new Set();
   }
@@ -228,7 +239,8 @@ async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
       await gitExec(['ls-files', '--others', '--exclude-standard'])
     )
       .split('\n')
-      .filter((f) => f.trim().length > 0);
+      .map((f) => f.trim())
+      .filter((f) => f.length > 0);
 
     // Files in fixBase's main tree (tracked files)
     let fixBaseTrackedFiles: Set<string>;
@@ -240,14 +252,17 @@ async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
         fixBase,
       ]);
       fixBaseTrackedFiles = new Set(
-        treeFiles.split('\n').filter((f) => f.trim().length > 0),
+        treeFiles
+          .split('\n')
+          .map((f) => f.trim())
+          .filter((f) => f.length > 0),
       );
     } catch {
       fixBaseTrackedFiles = new Set();
     }
 
     // Files in fixBase's untracked tree (stash ^3 parent)
-    const fixBaseUntrackedFiles = await getStashUntrackedFilesForStats(fixBase);
+    const fixBaseUntrackedFiles = await getStashUntrackedFiles(fixBase);
 
     // Combine all snapshot files
     const allSnapshotFiles = new Set([
@@ -369,7 +384,8 @@ async function computeLocalDiffStats(baseBranch: string): Promise<DiffStats> {
   ]);
   const untrackedFiles = untrackedList
     .split('\n')
-    .filter((f) => f.trim().length > 0);
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0);
 
   // Combine counts (with overlap detection)
   const totalNew =
