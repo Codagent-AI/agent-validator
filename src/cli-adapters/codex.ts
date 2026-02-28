@@ -10,6 +10,9 @@ import { CODEX_REASONING_EFFORT } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
 
+// Module-level counter for unique tmp file names across parallel invocations
+let _tmpCounter = 0;
+
 interface CodexUsage {
   inputTokens?: number;
   cachedInputTokens?: number;
@@ -253,7 +256,13 @@ export class CodexAdapter implements CLIAdapter {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
     const tmpDir = os.tmpdir();
-    const tmpFile = path.join(tmpDir, `gauntlet-codex-${Date.now()}.txt`);
+    // Include process.pid and a counter for uniqueness across concurrent invocations
+    // in the same process (parallel review gates can call execute() within the same
+    // millisecond, causing Date.now() collisions and tmp file overwrites).
+    const tmpFile = path.join(
+      tmpDir,
+      `gauntlet-codex-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+    );
     await fs.writeFile(tmpFile, fullContent);
 
     const args = this.buildArgs(opts.allowToolUse, opts.thinkingBudget);

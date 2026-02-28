@@ -13,6 +13,9 @@ import { type CLIAdapter, runStreamingCommand } from './shared.js';
 
 const execAsync = promisify(exec);
 
+// Module-level counter for unique tmp file names across parallel invocations
+let _tmpCounter = 0;
+
 const log = getCategoryLogger('github-copilot');
 
 /**
@@ -145,10 +148,12 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
     const tmpDir = os.tmpdir();
-    // Include process.pid for uniqueness across concurrent processes
+    // Include process.pid and a counter for uniqueness across concurrent invocations
+    // in the same process (parallel review gates can call execute() within the same
+    // millisecond, causing Date.now() collisions and tmp file overwrites).
     const tmpFile = path.join(
       tmpDir,
-      `gauntlet-copilot-${process.pid}-${Date.now()}.txt`,
+      `gauntlet-copilot-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
     );
     await fs.writeFile(tmpFile, fullContent);
 
