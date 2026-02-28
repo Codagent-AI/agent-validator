@@ -45,6 +45,7 @@ export interface RunContext {
     uncommitted?: boolean;
     cwd?: string;
     checkInterval?: boolean;
+    enableReviews?: Set<string>;
   };
   config: LoadedConfig;
   loggerInitializedHere: boolean;
@@ -329,7 +330,7 @@ export async function detectAndPrepareChanges(
     effectiveChangeOptions,
   );
   const expander = new EntryPointExpander();
-  const jobGen = new JobGenerator(ctx.config);
+  const jobGen = new JobGenerator(ctx.config, ctx.options.enableReviews);
 
   log.debug('Detecting changes...');
   const changes = await changeDetector.getChangedFiles();

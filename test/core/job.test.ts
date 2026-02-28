@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type {
 	LoadedCheckGateConfig,
 	LoadedConfig,
+	LoadedReviewGateConfig,
 } from "../../src/config/types.js";
 import type { ExpandedEntryPoint } from "../../src/core/entry-point.js";
 import { JobGenerator } from "../../src/core/job.js";
@@ -15,6 +16,21 @@ function makeCheckConfig(
 		parallel: true,
 		run_locally: true,
 		run_in_ci: true,
+		...overrides,
+	};
+}
+
+function makeReviewConfig(
+	overrides: Partial<LoadedReviewGateConfig> = {},
+): LoadedReviewGateConfig {
+	return {
+		name: "test-review",
+		prompt: "review.md",
+		num_reviews: 1,
+		parallel: true,
+		run_in_ci: true,
+		run_locally: true,
+		enabled: true,
 		...overrides,
 	};
 }
@@ -291,14 +307,10 @@ describe("JobGenerator", () => {
 			const config = makeConfig(
 				{},
 				{
-					"code-quality": {
+					"code-quality": makeReviewConfig({
 						name: "code-quality",
 						prompt: "review.md",
-						num_reviews: 1,
-						parallel: true,
-						run_in_ci: true,
-						run_locally: true,
-					},
+					}),
 				},
 			);
 
@@ -315,6 +327,144 @@ describe("JobGenerator", () => {
 			expect(jobs).toHaveLength(1);
 			expect(jobs[0].workingDirectory).toBe("src");
 			expect(jobs[0].id).toBe("review:src:code-quality");
+		});
+	});
+
+	describe("enabled filtering", () => {
+		it("should skip disabled review when no enable-review override provided", () => {
+			const config = makeConfig(
+				{},
+				{
+					"task-compliance": makeReviewConfig({
+						name: "task-compliance",
+						prompt: "task-compliance.md",
+						enabled: false,
+					}),
+				},
+			);
+
+			const generator = new JobGenerator(config);
+			const entryPoints: ExpandedEntryPoint[] = [
+				{
+					path: "src",
+					config: { path: "src", reviews: ["task-compliance"] },
+				},
+			];
+
+			const jobs = generator.generateJobs(entryPoints);
+			expect(jobs).toHaveLength(0);
+		});
+
+		it("should activate disabled review when its name appears in enableReviews", () => {
+			const config = makeConfig(
+				{},
+				{
+					"task-compliance": makeReviewConfig({
+						name: "task-compliance",
+						prompt: "task-compliance.md",
+						enabled: false,
+					}),
+				},
+			);
+
+			const generator = new JobGenerator(config, new Set(["task-compliance"]));
+			const entryPoints: ExpandedEntryPoint[] = [
+				{
+					path: "src",
+					config: { path: "src", reviews: ["task-compliance"] },
+				},
+			];
+
+			const jobs = generator.generateJobs(entryPoints);
+			expect(jobs).toHaveLength(1);
+			expect(jobs[0].name).toBe("task-compliance");
+		});
+
+		it("should not affect enabled reviews when enableReviews is set for another review", () => {
+			const config = makeConfig(
+				{},
+				{
+					"code-quality": makeReviewConfig({
+						name: "code-quality",
+						prompt: "code-quality.md",
+						enabled: true,
+					}),
+				},
+			);
+
+			const generator = new JobGenerator(config, new Set(["other-review"]));
+			const entryPoints: ExpandedEntryPoint[] = [
+				{
+					path: "src",
+					config: { path: "src", reviews: ["code-quality"] },
+				},
+			];
+
+			const jobs = generator.generateJobs(entryPoints);
+			expect(jobs).toHaveLength(1);
+			expect(jobs[0].name).toBe("code-quality");
+		});
+
+		it("should activate multiple disabled reviews via enableReviews set", () => {
+			const config = makeConfig(
+				{},
+				{
+					"task-compliance": makeReviewConfig({
+						name: "task-compliance",
+						prompt: "task-compliance.md",
+						enabled: false,
+					}),
+					security: makeReviewConfig({
+						name: "security",
+						prompt: "security.md",
+						enabled: false,
+					}),
+				},
+			);
+
+			const generator = new JobGenerator(
+				config,
+				new Set(["task-compliance", "security"]),
+			);
+			const entryPoints: ExpandedEntryPoint[] = [
+				{
+					path: "src",
+					config: {
+						path: "src",
+						reviews: ["task-compliance", "security"],
+					},
+				},
+			];
+
+			const jobs = generator.generateJobs(entryPoints);
+			expect(jobs).toHaveLength(2);
+			const names = jobs.map((j) => j.name).sort();
+			expect(names).toEqual(["security", "task-compliance"]);
+		});
+
+		it("should silently ignore enableReviews names that do not match any configured review", () => {
+			const config = makeConfig(
+				{},
+				{
+					"code-quality": makeReviewConfig({
+						name: "code-quality",
+						prompt: "code-quality.md",
+						enabled: true,
+					}),
+				},
+			);
+
+			const generator = new JobGenerator(config, new Set(["nonexistent"]));
+			const entryPoints: ExpandedEntryPoint[] = [
+				{
+					path: "src",
+					config: { path: "src", reviews: ["code-quality"] },
+				},
+			];
+
+			const jobs = generator.generateJobs(entryPoints);
+			expect(jobs).toHaveLength(1);
+			expect(jobs[0].name).toBe("code-quality");
 		});
 	});
 });

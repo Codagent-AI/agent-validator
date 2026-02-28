@@ -44,6 +44,7 @@ interface GateCommandOptions {
   gate?: string;
   commit?: string;
   uncommitted?: boolean;
+  enableReviews?: Set<string>;
 }
 
 interface ChangeOptions {
@@ -239,7 +240,7 @@ async function detectChangesAndGenerateJobs(
     },
   );
   const expander = new EntryPointExpander();
-  const jobGen = new JobGenerator(config);
+  const jobGen = new JobGenerator(config, options.enableReviews);
 
   console.log(chalk.dim('Detecting changes...'));
   const changes = await changeDetector.getChangedFiles();

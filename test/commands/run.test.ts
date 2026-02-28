@@ -24,4 +24,19 @@ describe("Run Command", () => {
 			true,
 		);
 	});
+
+	it("should have --enable-review option", () => {
+		const runCmd = program.commands.find((cmd) => cmd.name() === "run");
+		expect(
+			runCmd?.options.some((opt) => opt.long === "--enable-review"),
+		).toBe(true);
+	});
+
+	it("should have -e short option for --enable-review", () => {
+		const runCmd = program.commands.find((cmd) => cmd.name() === "run");
+		const enableReviewOpt = runCmd?.options.find(
+			(opt) => opt.long === "--enable-review",
+		);
+		expect(enableReviewOpt?.short).toBe("-e");
+	});
 });

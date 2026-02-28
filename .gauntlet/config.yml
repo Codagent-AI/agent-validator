@@ -1,5 +1,5 @@
 name: agent-gauntlet
-base_branch: origin/main
+base_branch: dev
 log_dir: gauntlet_logs
 debug_log:
   enabled: true
@@ -27,7 +27,9 @@ stop_hook:
 entry_points:
   - path: "."
     exclude:
+      - .gauntlet
       - evals/results
+      - openspec
     checks:
       - build
       - lint

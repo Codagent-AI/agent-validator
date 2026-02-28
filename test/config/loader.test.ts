@@ -393,4 +393,64 @@ entry_points:
 			/reserved "built-in:" prefix/,
 		);
 	});
+
+	it("should default enabled to true for YAML review with only builtin", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - code-quality
+`,
+			{
+				"code-quality.yml": `builtin: code-quality\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+		expect(config.reviews["code-quality"]!.enabled).toBe(true);
+	});
+
+	it("should propagate enabled: false from YAML review", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - task-compliance
+`,
+			{
+				"task-compliance.yml": `builtin: code-quality\nenabled: false\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+		expect(config.reviews["task-compliance"]!.enabled).toBe(false);
+	});
+
+	it("should propagate enabled: false from markdown review frontmatter", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - task-compliance
+`,
+			{
+				"task-compliance.md": `---\nenabled: false\n---\n\n# Task Compliance\nCheck task adherence.\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+		expect(config.reviews["task-compliance"]!.enabled).toBe(false);
+	});
 });

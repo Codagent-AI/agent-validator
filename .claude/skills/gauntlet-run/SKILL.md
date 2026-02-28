@@ -30,7 +30,9 @@ Run `bun src/index.ts clean` to archive any previous log files.
 
 ### Step 2 - Run Gauntlet
 
-Run `bun src/index.ts run` using `Bash` with `timeout: 300000`. **ALWAYS wait for and read the full command output** before proceeding — the command typically takes 1-2 minutes. **Verify you can see a `Status:` line in the output before continuing.**
+Before running, check if `.gauntlet/current-task-context.md` exists. If it does, append `--enable-review task-compliance` to the run command.
+
+Run `bun src/index.ts run` (or `bun src/index.ts run --enable-review task-compliance` if the task context file exists) using `Bash` with `timeout: 300000`. **ALWAYS wait for and read the full command output** before proceeding — the command typically takes 1-2 minutes. **Verify you can see a `Status:` line in the output before continuing.**
 
 ### Step 3 - Check Status
 
@@ -79,7 +81,7 @@ For REVIEW violations you addressed:
 
 ### Step 8 - Re-run Verification
 
-**NEVER skip this step** — if the run failed, you MUST fix and re-run. Run `bun src/index.ts run` again with `Bash` and `timeout: 300000`. Do NOT run `bun src/index.ts clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to Step 3** to check the status line and repeat.
+**NEVER skip this step** — if the run failed, you MUST fix and re-run. Run `bun src/index.ts run` (or `bun src/index.ts run --enable-review task-compliance` if `.gauntlet/current-task-context.md` exists) again with `Bash` and `timeout: 300000`. Do NOT run `bun src/index.ts clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to Step 3** to check the status line and repeat.
 
 ### Step 9 - Summarize Session
 
