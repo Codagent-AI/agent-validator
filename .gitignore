@@ -28,6 +28,8 @@ gauntlet_logs
 .cache
 *.tsbuildinfo
 
+.gemini
+
 # IntelliJ based IDEs
 .idea
 

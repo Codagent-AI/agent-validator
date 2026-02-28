@@ -6,6 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/pacaplan/agent-gauntlet)](https://coderabbit.ai)
+[![OpenSpec](https://raw.githubusercontent.com/pacaplan/flokay/gh-pages/badges/number_of_specs.svg)](https://github.com/pacaplan/flokay)
 
 > Don't just review the agent's code — put it through the gauntlet.
 
