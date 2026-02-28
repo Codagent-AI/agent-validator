@@ -40,7 +40,7 @@ Two synchronous subagent calls per retry cycle using the Task tool:
    c. Fix code based on compact summary
       - Check failures with Fix Skill: invoke the skill
       - Check failures with Fix Instructions: follow them
-      - Review violations: apply trust level, fix or skip
+      - Review violations: apply review guidance, fix or skip
    d. Spawn UPDATE subagent (haiku, general-purpose, synchronous)
 4. bun src/index.ts run (no clean)
 5. Repeat 3-4 until pass/warnings/retry-limit

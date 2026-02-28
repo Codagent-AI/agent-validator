@@ -1,0 +1,17 @@
+name: OpenSpec Badge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: weAretechnative/openspec-badge-action@0ee70666841d4c08d3ec8a95b5546b91abc6125c # main
+        with:
+          metric_types: number_of_specs,number_of_requirements,tasks_status,open_changes
+          badge_style: flat

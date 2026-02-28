@@ -71,14 +71,6 @@ The primary skill. Runs the full gauntlet (checks + reviews) and iterates on fai
 4. Repeats until all gates pass, warnings only remain, or retry limit is reached (logs auto-archived)
 5. Provides a session summary
 
-**Trust level:** The run skill includes a configurable trust level (default: `medium`) that controls how aggressively the agent acts on AI reviewer feedback. Edit the `<!-- trust_level: medium -->` comment in the SKILL.md to change it:
-
-| Level | Behavior |
-|-------|----------|
-| `high` | Fix all issues unless you strongly disagree |
-| `medium` | Fix issues you reasonably agree with (default) |
-| `low` | Fix only issues you strongly agree with |
-
 ### /gauntlet-check
 
 Same iterative workflow as `/gauntlet-run` but skips AI reviews. Useful for quickly validating that linting, tests, and other deterministic checks pass.

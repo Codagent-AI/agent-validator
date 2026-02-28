@@ -16,7 +16,7 @@
 
 ## Issues Skipped
 
-<!-- Violations skipped per trust level, with reasons. If none, state "None." -->
+<!-- Violations skipped, with reasons. If none, state "None." -->
 
 ## Issues Remaining
 
