@@ -159,6 +159,7 @@ describe("Execution State Utilities", () => {
 
 describe("Execution State Git Operations (mocked)", () => {
 	let spawnSpy: ReturnType<typeof spyOn>;
+	let execFileSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(async () => {
 		await fs.rm(TEST_DIR, { recursive: true, force: true });
@@ -322,36 +323,68 @@ describe("Execution State Git Operations (mocked)", () => {
 	});
 
 	describe("createWorkingTreeRef", () => {
+		// Helper: mock execFile callback-style
+		function mockExecFile(
+			handler: (
+				args: string[],
+				callback: (
+					err: null | Error,
+					stdout: string,
+					stderr: string,
+				) => void,
+			) => void,
+		) {
+			return spyOn(childProcess, "execFile").mockImplementation(
+				((_file: unknown, args: unknown, callback: unknown) => {
+					const cb = callback as (
+						err: null | Error,
+						stdout: string,
+						stderr: string,
+					) => void;
+					handler(args as string[], cb);
+					return {} as ReturnType<typeof childProcess.execFile>;
+				}) as typeof childProcess.execFile,
+			);
+		}
+
 		it("returns stash SHA when working tree is dirty", async () => {
 			const stashSha = "stash123456789012345678901234567890abcd";
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() => {
-				return createMockSpawn(`${stashSha}\n`, 0) as ReturnType<
+
+			// hasWorkingTreeChanges → dirty
+			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() =>
+				createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
 					typeof childProcess.spawn
-				>;
+				>,
+			);
+
+			// stash push → ok, rev-parse stash@{0} → stashSha, stash pop → ok
+			execFileSpy = mockExecFile((args, cb) => {
+				setImmediate(() => {
+					if (args.includes("rev-parse")) {
+						cb(null, `${stashSha}\n`, "");
+					} else {
+						cb(null, "", "");
+					}
+				});
 			});
 
 			const ref = await createWorkingTreeRef();
 			expect(ref).toBe(stashSha);
-			expect(spawnSpy).toHaveBeenCalledWith(
-				"git",
-				["stash", "create", "--include-untracked"],
-				expect.any(Object),
-			);
 		});
 
 		it("returns HEAD SHA when working tree is clean", async () => {
 			const headSha = "head1234567890123456789012345678901234ab";
-			let callCount = 0;
+
 			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(cmd, args) => {
-					callCount++;
-					if (callCount === 1) {
-						// First call: git stash create returns empty (clean tree)
+				(_cmd, args) => {
+					const cmdArgs = args as string[];
+					if (cmdArgs.includes("--porcelain")) {
+						// clean tree
 						return createMockSpawn("", 0) as ReturnType<
 							typeof childProcess.spawn
 						>;
 					}
-					// Second call: git rev-parse HEAD
+					// getCurrentCommit: rev-parse HEAD
 					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
 						typeof childProcess.spawn
 					>;
@@ -361,6 +394,62 @@ describe("Execution State Git Operations (mocked)", () => {
 			const ref = await createWorkingTreeRef();
 			expect(ref).toBe(headSha);
 		});
+
+		it("falls back to HEAD SHA when stash push fails", async () => {
+			const headSha = "head1234567890123456789012345678901234ab";
+
+			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
+				(_cmd, args) => {
+					const cmdArgs = args as string[];
+					if (cmdArgs.includes("--porcelain")) {
+						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
+							typeof childProcess.spawn
+						>;
+					}
+					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
+						typeof childProcess.spawn
+					>;
+				},
+			);
+
+			execFileSpy = mockExecFile((_args, cb) => {
+				setImmediate(() => cb(new Error("stash push failed"), "", ""));
+			});
+
+			const ref = await createWorkingTreeRef();
+			expect(ref).toBe(headSha);
+		});
+
+		it("returns stash SHA and warns when stash pop fails", async () => {
+			const stashSha = "stash123456789012345678901234567890abcd";
+
+			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() =>
+				createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
+					typeof childProcess.spawn
+				>,
+			);
+
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+			execFileSpy = mockExecFile((args, cb) => {
+				setImmediate(() => {
+					if (args.includes("pop")) {
+						cb(new Error("stash pop failed"), "", "");
+					} else if (args.includes("rev-parse")) {
+						cb(null, `${stashSha}\n`, "");
+					} else {
+						cb(null, "", "");
+					}
+				});
+			});
+
+			const ref = await createWorkingTreeRef();
+			expect(ref).toBe(stashSha);
+			expect(errorSpy).toHaveBeenCalledWith(
+				expect.stringContaining("stash pop"),
+			);
+			errorSpy.mockRestore();
+		});
 	});
 
 	describe("writeExecutionState", () => {
@@ -369,18 +458,17 @@ describe("Execution State Git Operations (mocked)", () => {
 			const mockCommit = "commit123456789012345678901234567890ab";
 			const mockStash = "stash1234567890123456789012345678901234";
 
-			let callCount = 0;
 			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(cmd, args) => {
-					callCount++;
+				(_cmd, args) => {
 					const argsArray = args as string[];
 					if (argsArray.includes("--abbrev-ref")) {
 						return createMockSpawn(`${mockBranch}\n`, 0) as ReturnType<
 							typeof childProcess.spawn
 						>;
 					}
-					if (argsArray.includes("stash")) {
-						return createMockSpawn(`${mockStash}\n`, 0) as ReturnType<
+					if (argsArray.includes("--porcelain")) {
+						// dirty tree so createWorkingTreeRef proceeds to stash
+						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
 							typeof childProcess.spawn
 						>;
 					}
@@ -389,6 +477,25 @@ describe("Execution State Git Operations (mocked)", () => {
 						typeof childProcess.spawn
 					>;
 				},
+			);
+
+			execFileSpy = spyOn(childProcess, "execFile").mockImplementation(
+				((_file: unknown, args: unknown, callback: unknown) => {
+					const cmdArgs = args as string[];
+					const cb = callback as (
+						err: null | Error,
+						stdout: string,
+						stderr: string,
+					) => void;
+					setImmediate(() => {
+						if (cmdArgs.includes("rev-parse")) {
+							cb(null, `${mockStash}\n`, "");
+						} else {
+							cb(null, "", "");
+						}
+					});
+					return {} as ReturnType<typeof childProcess.execFile>;
+				}) as typeof childProcess.execFile,
 			);
 
 			await writeExecutionState(TEST_DIR);
@@ -417,6 +524,18 @@ describe("Execution State Git Operations (mocked)", () => {
 					typeof childProcess.spawn
 				>;
 			});
+
+			execFileSpy = spyOn(childProcess, "execFile").mockImplementation(
+				((_file: unknown, _args: unknown, callback: unknown) => {
+					const cb = callback as (
+						err: null | Error,
+						stdout: string,
+						stderr: string,
+					) => void;
+					setImmediate(() => cb(null, "mock-stash-sha\n", ""));
+					return {} as ReturnType<typeof childProcess.execFile>;
+				}) as typeof childProcess.execFile,
+			);
 
 			await writeExecutionState(TEST_DIR);
 

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getDebugLogger } from './debug-log.js';
@@ -92,43 +92,60 @@ export async function readExecutionState(
 
 /**
  * Create a stash SHA that captures the current working tree state.
- * Uses `git stash create --include-untracked` which creates a stash commit
- * without modifying the working tree.
- * Returns the stash SHA, or HEAD SHA if working tree is clean.
+ * Uses `git stash push --include-untracked` which creates a proper 3-parent stash,
+ * then immediately pops it to restore the working tree.
+ * Returns the stash SHA, or HEAD SHA if working tree is clean or on error.
  */
-/** Resolve a stash create result: use stash SHA, or fall back to HEAD. */
-async function resolveStashResult(
-  code: number | null,
-  stdout: string,
-): Promise<string> {
-  if (code === 0) {
-    const sha = stdout.trim();
-    if (sha) return sha;
+export async function createWorkingTreeRef(): Promise<string> {
+  const hasChanges = await hasWorkingTreeChanges();
+  if (!hasChanges) {
     return getCurrentCommit();
   }
-  // Non-zero exit: try HEAD as fallback
-  return getCurrentCommit().catch(() => {
-    throw new Error(`git stash create failed with code ${code}`);
-  });
-}
 
-export async function createWorkingTreeRef(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['stash', 'create', '--include-untracked'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const runGit = (args: string[]) =>
+    new Promise<{ stdout: string }>((resolve, reject) => {
+      execFile('git', args, (error, stdout) => {
+        if (error) reject(error);
+        else resolve({ stdout });
+      });
     });
 
-    let stdout = '';
-    child.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
+  try {
+    await runGit([
+      'stash',
+      'push',
+      '--include-untracked',
+      '-m',
+      'gauntlet-snapshot',
+    ]);
+  } catch {
+    return getCurrentCommit();
+  }
 
-    child.on('close', (code) => {
-      resolveStashResult(code, stdout).then(resolve, reject);
-    });
+  let stashSha: string;
+  try {
+    const { stdout } = await runGit(['rev-parse', 'stash@{0}']);
+    stashSha = stdout.trim();
+  } catch {
+    try {
+      await runGit(['stash', 'pop']);
+    } catch {
+      console.error(
+        'gauntlet: stash pop failed — run `git stash pop` manually to restore your working tree',
+      );
+    }
+    return getCurrentCommit();
+  }
 
-    child.on('error', reject);
-  });
+  try {
+    await runGit(['stash', 'pop']);
+  } catch {
+    console.error(
+      'gauntlet: stash pop failed — run `git stash pop` manually to restore your working tree',
+    );
+  }
+
+  return stashSha;
 }
 
 /**
