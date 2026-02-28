@@ -28,6 +28,8 @@ entry_points:
   - path: "."
     exclude:
       - evals/results
+      - skills
+      - .claude/skills
     checks:
       - build
       - lint
@@ -39,6 +41,12 @@ entry_points:
     reviews:
       - code-quality
       - task-compliance
+  - path: "skills"
+    reviews:
+      - skill-quality
+  - path: ".claude/skills"
+    reviews:
+      - skill-quality
   - path: "openspec/changes"
     exclude:
       - "openspec/changes/archive"
