@@ -455,6 +455,51 @@ describe("Execution State Git Operations (mocked)", () => {
 			errorSpy.mockRestore();
 		});
 
+		it("returns HEAD SHA and warns when post-push rev-parse fails with pre-existing stash", async () => {
+			const headSha = "head1234567890123456789012345678901234ab";
+			const prevStash = "prev567890123456789012345678901234567890";
+
+			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
+				(_cmd, args) => {
+					const cmdArgs = args as string[];
+					if (cmdArgs.includes("--porcelain")) {
+						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
+							typeof childProcess.spawn
+						>;
+					}
+					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
+						typeof childProcess.spawn
+					>;
+				},
+			);
+
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+			// pre-push rev-parse --verify → prevStash (pre-existing stash)
+			// push → ok
+			// post-push rev-parse stash@{0} → fails (uncertain state)
+			execFileSpy = mockExecFile((args, cb) => {
+				setImmediate(() => {
+					if (args.includes("--verify")) {
+						cb(null, `${prevStash}\n`, "");
+					} else if (args.includes("push")) {
+						cb(null, "", "");
+					} else {
+						// post-push rev-parse fails
+						cb(new Error("no such ref"), "", "");
+					}
+				});
+			});
+
+			const ref = await createWorkingTreeRef();
+			expect(ref).toBe(headSha);
+			// Should warn (not destructively pop) in uncertain state
+			expect(errorSpy).toHaveBeenCalledWith(
+				expect.stringContaining("leaving stash untouched"),
+			);
+			errorSpy.mockRestore();
+		});
+
 		it("returns HEAD SHA when working tree is clean", async () => {
 			const headSha = "head1234567890123456789012345678901234ab";
 

@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { getDebugLogger } from './debug-log.js';
 
 const EXECUTION_STATE_FILENAME = '.execution_state';
@@ -18,21 +19,24 @@ function spawnGit(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
-    // setEncoding ensures multi-byte UTF-8 characters are not split across chunks.
-    // Both pipes are consumed to prevent deadlock if git fills the OS buffer (~64 KB).
+    // StringDecoder correctly handles multi-byte UTF-8 characters split across
+    // chunk boundaries. Both pipes are consumed to prevent OS buffer deadlock (~64 KB).
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
     let stdout = '';
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += typeof chunk === 'string' ? chunk : stdoutDecoder.write(chunk);
     });
 
     let stderr = '';
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk: string) => {
-      stderr += chunk;
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : stderrDecoder.write(chunk);
     });
 
     child.on('close', (code) => {
+      // Flush decoders to emit any bytes buffered at stream end.
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
       if (code === 0) resolve(stdout.trim());
       else {
         const detail = stderr.trim();
@@ -181,13 +185,11 @@ export async function createWorkingTreeRef(): Promise<string> {
   if (!createdStash) {
     // Push was a no-op or post-push rev-parse failed unexpectedly. If there was
     // a pre-existing stash (prevTop) but newTop is missing, we can't confirm the
-    // push state — defensively pop to avoid leaving the user's tree stashed.
+    // push state — avoid destructive pop of an unrelated user stash.
     if (prevTop && !newTop) {
-      try {
-        await runGit(['stash', 'pop']);
-      } catch {
-        // Ignore — we're in an uncertain state; user can recover manually.
-      }
+      console.error(
+        'gauntlet: unable to verify stash snapshot; leaving stash untouched. Run `git stash pop` manually if needed.',
+      );
     }
     return getCurrentCommit();
   }
