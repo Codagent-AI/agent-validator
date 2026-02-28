@@ -62,7 +62,8 @@
       "!**/node_modules",
       "!**/dist",
       "!**/out",
-      "!**/bin"
+      "!**/bin",
+      "!test-*/**"
     ]
   }
 }

@@ -21,17 +21,18 @@ Return a plain-text summary using EXACTLY this format:
 For check failures:
 ```text
 CHECKS:
-- <gate_label> | FAIL | <log_file_path>
-  Errors: <concise error description>
-  Fix Instructions: <extracted text if present, otherwise omit this line>
-  Fix Skill: <skill name if present, otherwise omit this line>
+[fail] <gate_label>
+<concise error description>
+Fix Instructions: <extracted text if present, otherwise omit this line>
+Fix Skill: <skill name if present, otherwise omit this line>
 ```
 
 For review failures:
 ```text
 REVIEWS:
-- <gate_label> | FAIL | <json_file_path>
-  [<priority>] <file>:<line> — <issue summary> (fix: <fix suggestion>)
+[<priority>] <gate_label>
+<file>:<line> - <issue summary>
+Fix: <fix suggestion>
 ```
 
 If there are no failures of a type, omit that section entirely.
@@ -102,13 +103,14 @@ Replace all `var` declarations with `const` or `let`.
 
 ```text
 CHECKS:
-- check:src:lint | FAIL | gauntlet_logs/check_src_lint.2.log
-  Errors: src/helpers.ts:3:5 - error: Unexpected var, use let or const instead
-  Fix Instructions: Replace all `var` declarations with `const` or `let`.
+[fail] check:src:lint
+src/helpers.ts:3:5 - error: Unexpected var, use let or const instead
+Fix Instructions: Replace all `var` declarations with `const` or `let`.
 
 REVIEWS:
-- review:src:code-quality (claude@1) | FAIL | gauntlet_logs/review_src_code-quality_claude@1.2.json
-  [high] src/main.ts:45 — Missing error handling for async database call (fix: Wrap in try-catch block)
+[high] review:src:code-quality (claude@1)
+src/main.ts:45 - Missing error handling for async database call
+Fix: Wrap in try-catch block
 ```
 
 Note: The `src/utils.ts:10` violation was omitted because its status is `"fixed"`, not `"new"`.
@@ -117,5 +119,5 @@ Note: The `src/utils.ts:10` violation was omitted because its status is `"fixed"
 
 - Do NOT summarize or editorialize — copy error details verbatim where possible
 - Do NOT skip any `[FAIL]` entries
-- Keep the output compact — one line per check error, one line per review violation
+- Keep the output compact — one entry per check failure, one entry per review violation (3 lines each)
 - For review violations, only include those with `status: "new"` — skip `"fixed"` and `"skipped"`
