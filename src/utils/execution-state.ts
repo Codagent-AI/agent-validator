@@ -110,6 +110,14 @@ export async function createWorkingTreeRef(): Promise<string> {
       });
     });
 
+  // Capture the current top-of-stash SHA before pushing, so we can detect
+  // whether the push was a no-op (e.g. git decided nothing to stash).
+  // If it's a no-op, stash@{0} after push equals prevStashSha — we must NOT
+  // pop or we'd discard the user's unrelated stash entry.
+  const prevStashSha = await runGit(['rev-parse', '--verify', 'stash@{0}'])
+    .then(({ stdout }) => stdout.trim() || null)
+    .catch(() => null);
+
   try {
     await runGit([
       'stash',
@@ -126,7 +134,16 @@ export async function createWorkingTreeRef(): Promise<string> {
   try {
     const { stdout } = await runGit(['rev-parse', 'stash@{0}']);
     stashSha = stdout.trim();
+    // Push was a no-op — don't pop the user's pre-existing stash
+    if (stashSha === prevStashSha) {
+      return getCurrentCommit();
+    }
   } catch {
+    // If there was no pre-existing stash (prevStashSha === null) and rev-parse
+    // failed, the push was a no-op — nothing was stashed, nothing to pop.
+    if (prevStashSha === null) {
+      return getCurrentCommit();
+    }
     try {
       await runGit(['stash', 'pop']);
     } catch {
