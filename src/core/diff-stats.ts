@@ -160,14 +160,62 @@ async function computeUncommittedDiffStats(): Promise<DiffStats> {
 }
 
 /**
+ * Get untracked files from a stash commit's ^3 parent.
+ * `git stash create --include-untracked` stores untracked files in the 3rd parent.
+ * Returns empty set if fixBase is not a stash or has no untracked tree.
+ */
+async function getStashUntrackedFilesForStats(
+  fixBase: string,
+): Promise<Set<string>> {
+  try {
+    const treeFiles = await gitExec([
+      'ls-tree',
+      '-r',
+      '--name-only',
+      `${fixBase}^3`,
+    ]);
+    return new Set(treeFiles.split('\n').filter((f) => f.trim().length > 0));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Count how many known-untracked files have actually changed since the stash.
+ * Compares blob hashes between stash ^3 tree and current working tree.
+ */
+async function countChangedStashUntracked(
+  files: string[],
+  fixBase: string,
+): Promise<number> {
+  let changed = 0;
+  for (const file of files) {
+    try {
+      const [oldHash, newHash] = await Promise.all([
+        gitExec(['rev-parse', `${fixBase}^3:${file}`]),
+        gitExec(['hash-object', file]),
+      ]);
+      if (oldHash.trim() !== newHash.trim()) {
+        changed++;
+      }
+    } catch {
+      // If comparison fails, count as changed (conservative)
+      changed++;
+    }
+  }
+  return changed;
+}
+
+/**
  * Compute diff stats from a fixBase ref (stash or commit) to current working tree.
  * Used in verification mode to show only NEW changes since the snapshot.
  * This includes staged changes, unstaged changes, and new untracked files.
+ * For stash refs, also checks the ^3 parent to properly handle files that were
+ * untracked when the stash was created.
  */
 async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
   try {
     // Get line stats for tracked file changes since fixBase
-    // We need to diff against working tree (staged + unstaged changes)
     const numstat = await gitExec(['diff', '--numstat', fixBase]);
     const lineStats = parseNumstat(numstat);
 
@@ -175,7 +223,6 @@ async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
     const nameStatus = await gitExec(['diff', '--name-status', fixBase]);
     const fileStats = parseNameStatus(nameStatus);
 
-    // Handle untracked files: only count NEW untracked files that weren't in fixBase
     // Current untracked files
     const currentUntracked = (
       await gitExec(['ls-files', '--others', '--exclude-standard'])
@@ -183,8 +230,8 @@ async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
       .split('\n')
       .filter((f) => f.trim().length > 0);
 
-    // Files that existed in fixBase
-    let fixBaseFiles: Set<string>;
+    // Files in fixBase's main tree (tracked files)
+    let fixBaseTrackedFiles: Set<string>;
     try {
       const treeFiles = await gitExec([
         'ls-tree',
@@ -192,24 +239,43 @@ async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
         '--name-only',
         fixBase,
       ]);
-      fixBaseFiles = new Set(
+      fixBaseTrackedFiles = new Set(
         treeFiles.split('\n').filter((f) => f.trim().length > 0),
       );
     } catch {
-      // If fixBase is invalid or has no tree, assume empty
-      fixBaseFiles = new Set();
+      fixBaseTrackedFiles = new Set();
     }
 
-    // New untracked files = current untracked - files that existed in fixBase
+    // Files in fixBase's untracked tree (stash ^3 parent)
+    const fixBaseUntrackedFiles = await getStashUntrackedFilesForStats(fixBase);
+
+    // Combine all snapshot files
+    const allSnapshotFiles = new Set([
+      ...fixBaseTrackedFiles,
+      ...fixBaseUntrackedFiles,
+    ]);
+
+    // Truly new untracked files (not in any snapshot tree)
     const newUntrackedFiles = currentUntracked.filter(
-      (f) => !fixBaseFiles.has(f),
+      (f) => !allSnapshotFiles.has(f),
+    );
+
+    // Known untracked: existed in stash's untracked tree and still untracked
+    const knownUntrackedFiles = currentUntracked.filter((f) =>
+      fixBaseUntrackedFiles.has(f),
+    );
+
+    // Count how many known-untracked files actually changed
+    const changedKnownUntracked = await countChangedStashUntracked(
+      knownUntrackedFiles,
+      fixBase,
     );
 
     return {
       baseRef: fixBase,
-      total: fileStats.total + newUntrackedFiles.length,
+      total: fileStats.total + newUntrackedFiles.length + changedKnownUntracked,
       newFiles: fileStats.newFiles + newUntrackedFiles.length,
-      modifiedFiles: fileStats.modifiedFiles,
+      modifiedFiles: fileStats.modifiedFiles + changedKnownUntracked,
       deletedFiles: fileStats.deletedFiles,
       linesAdded: lineStats.linesAdded,
       linesRemoved: lineStats.linesRemoved,
