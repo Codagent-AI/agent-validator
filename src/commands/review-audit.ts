@@ -6,7 +6,8 @@ export function registerReviewAuditCommand(program: Command): void {
     .command('review-audit')
     .description('Audit review execution for a given date from the debug log')
     .option('--date <YYYY-MM-DD>', 'Date to filter (default: today)')
-    .action(async (opts: { date?: string }) => {
-      await main(opts.date);
+    .option('--since <YYYY-MM-DD>', 'Include all runs from this date onwards')
+    .action(async (opts: { date?: string; since?: string }) => {
+      await main(opts.date, opts.since);
     });
 }
