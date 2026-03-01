@@ -211,6 +211,28 @@ Runs only applicable reviews for detected changes. Checks are skipped.
 
 Uses the same options as `run` (see above), including `--enable-review`. When using `--gate <name>`, filters to a single review gate name.
 
+### `agent-gauntlet review-audit`
+
+Parses the debug log and produces a structured audit report of review gate execution for a given date.
+
+```bash
+agent-gauntlet review-audit [--date YYYY-MM-DD]
+```
+
+#### Options
+
+- `--date <YYYY-MM-DD>`: Date to filter (default: today's local date)
+
+#### Output
+
+Prints five sections:
+
+- **Run Counts** — cross-tab of gate executions: rows = review type, columns = CLI adapter + Total
+- **Timing** — average gate duration per cell, plus per-100-diff-lines rate (excluding zero-diff runs)
+- **Violations** — average violations per run per cell
+- **Token Usage** — input/output/cache token totals and API request counts per adapter
+- **Fix / Skip** — gauntlet run outcomes: fixed, skipped, failed violations; prior-pass skips
+
 ### `agent-gauntlet clean`
 
 Archives logs using configurable N-deep rotation. Current `.log` and `.json` files are moved into `previous/`, while existing `previous/` archives shift to `previous.1/`, `previous.2/`, etc. The oldest archive beyond `max_previous_logs` (default: 3) is evicted. Execution state is preserved.

@@ -7,6 +7,7 @@ export { registerHelpCommand } from './help.js';
 export { registerInitCommand } from './init.js';
 export { registerListCommand } from './list.js';
 export { registerReviewCommand } from './review.js';
+export { registerReviewAuditCommand } from './review-audit.js';
 export { registerRunCommand } from './run.js';
 export { registerSkipCommand } from './skip.js';
 export { registerStartHookCommand } from './start-hook.js';

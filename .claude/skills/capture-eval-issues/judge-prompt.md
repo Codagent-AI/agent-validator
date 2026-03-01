@@ -37,7 +37,6 @@ A violation is capture-worthy ONLY if it meets ALL THREE:
 2. **Critical or high priority** — the `priority` field is `"critical"` or `"high"`
 3. **Non-obvious catch** — it is NOT something a linter or formatter would flag. It IS one of:
    - Logic errors, race conditions, security flaws, architectural problems
-   - The fix requires understanding context beyond the immediate line
    - A junior developer would likely miss it
 
 If ANY criterion fails, skip the violation. Examples:
