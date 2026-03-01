@@ -70,11 +70,8 @@ interface TokenStats {
 
 function parseKeyValue(text: string): Record<string, string> {
   const result: Record<string, string> = {};
-  for (const match of text.matchAll(/(\w+)=(\S+)/g)) {
-    const key = match[1];
-    const value = match[2];
+  for (const [, key, value] of text.matchAll(/(\w+)=(\S+)/g))
     if (key && value) result[key] = value;
-  }
   return result;
 }
 const parseTimestamp = (line: string): string =>
@@ -171,88 +168,90 @@ function addGate(s: GateStat, g: ReviewGate): void {
   s.totalViolations += g.violations;
 }
 function getOrCreate<V>(map: Map<string, V>, key: string, init: () => V): V {
-  const v = map.get(key);
-  if (v !== undefined) return v;
-  const nv = init();
-  map.set(key, nv);
-  return nv;
+  if (!map.has(key)) map.set(key, init());
+  return map.get(key) as V;
 }
 
 const REVIEW_TYPES = ['code-quality', 'task-compliance', 'artifact-review'];
 
-export function buildCrossTab(blocks: RunBlock[]): CrossTab {
-  const cells = new Map<string, Map<string, GateStat>>();
-  const cliTotals = new Map<string, GateStat>();
-  const typeTotals = new Map<string, GateStat>();
-  const per100 = new Map<string, { dur: number; diff: number }>();
-  const grandTotal = emptyStat();
-
-  for (const block of blocks) {
-    for (const g of block.reviewGates) {
-      const inner = cells.get(g.reviewType) ?? new Map<string, GateStat>();
-      cells.set(g.reviewType, inner);
-      addGate(getOrCreate(inner, g.cli, emptyStat), g);
-      addGate(getOrCreate(cliTotals, g.cli, emptyStat), g);
-      addGate(getOrCreate(typeTotals, g.reviewType, emptyStat), g);
-      addGate(grandTotal, g);
-    }
-    const diff = block.linesAdded + block.linesRemoved;
-    if (diff > 0) {
-      for (const cli of new Set(block.reviewGates.map((g) => g.cli))) {
-        const dur = block.reviewGates
-          .filter((g) => g.cli === cli)
-          .reduce((s, g) => s + g.durationS, 0);
-        const p = getOrCreate(per100, cli, () => ({ dur: 0, diff: 0 }));
-        p.dur += dur;
-        p.diff += diff;
-      }
-    }
+type CrossTabAccum = Pick<
+  CrossTab,
+  'cells' | 'cliTotals' | 'typeTotals' | 'grandTotal' | 'per100'
+>;
+function accumulateBlock(block: RunBlock, a: CrossTabAccum): void {
+  for (const g of block.reviewGates) {
+    const inner = getOrCreate(
+      a.cells,
+      g.reviewType,
+      () => new Map<string, GateStat>(),
+    );
+    addGate(getOrCreate(inner, g.cli, emptyStat), g);
+    addGate(getOrCreate(a.cliTotals, g.cli, emptyStat), g);
+    addGate(getOrCreate(a.typeTotals, g.reviewType, emptyStat), g);
+    addGate(a.grandTotal, g);
   }
-  const allTypes = [
-    ...REVIEW_TYPES.filter((t) => typeTotals.has(t)),
-    ...[...typeTotals.keys()].filter((t) => !REVIEW_TYPES.includes(t)),
-  ];
-  return {
-    cells,
-    cliTotals,
-    typeTotals,
-    grandTotal,
-    allTypes,
-    allClis: [...cliTotals.keys()],
-    per100,
+  const diff = block.linesAdded + block.linesRemoved;
+  if (diff <= 0) return;
+  for (const cli of new Set(block.reviewGates.map((g) => g.cli))) {
+    const dur = block.reviewGates
+      .filter((g) => g.cli === cli)
+      .reduce((s, g) => s + g.durationS, 0);
+    const p = getOrCreate(a.per100, cli, () => ({ dur: 0, diff: 0 }));
+    p.dur += dur;
+    p.diff += diff;
+  }
+}
+
+export function buildCrossTab(blocks: RunBlock[]): CrossTab {
+  const a: CrossTabAccum = {
+    cells: new Map(),
+    cliTotals: new Map(),
+    typeTotals: new Map(),
+    per100: new Map(),
+    grandTotal: emptyStat(),
   };
+  for (const block of blocks) accumulateBlock(block, a);
+  const allTypes = [
+    ...REVIEW_TYPES.filter((t) => a.typeTotals.has(t)),
+    ...[...a.typeTotals.keys()].filter((t) => !REVIEW_TYPES.includes(t)),
+  ];
+  return { ...a, allTypes, allClis: [...a.cliTotals.keys()] };
+}
+
+const emptyTokenStats = (adapter: string): TokenStats => ({
+  adapter,
+  inTokens: 0,
+  cacheTokens: 0,
+  outTokens: 0,
+  thoughtTokens: 0,
+  toolTokens: 0,
+  apiRequests: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  runsWithTelemetry: 0,
+});
+
+function accumulateTelemetryEntry(
+  t: TelemetryEntry,
+  statsMap: Map<string, TokenStats>,
+): void {
+  const s = statsMap.get(t.adapter) ?? emptyTokenStats(t.adapter);
+  statsMap.set(t.adapter, s);
+  s.inTokens += t.inTokens;
+  s.cacheTokens += t.cacheTokens;
+  s.outTokens += t.outTokens;
+  s.thoughtTokens += t.thoughtTokens;
+  s.toolTokens += t.toolTokens;
+  s.apiRequests += t.apiRequests;
+  s.cacheRead += t.cacheRead;
+  s.cacheWrite += t.cacheWrite;
 }
 
 export function aggregateTokenStats(blocks: RunBlock[]): TokenStats[] {
   const statsMap = new Map<string, TokenStats>();
   for (const block of blocks) {
     const adaptersInBlock = new Set(block.telemetry.map((t) => t.adapter));
-    for (const t of block.telemetry) {
-      let s = statsMap.get(t.adapter);
-      if (!s) {
-        s = {
-          adapter: t.adapter,
-          inTokens: 0,
-          cacheTokens: 0,
-          outTokens: 0,
-          thoughtTokens: 0,
-          toolTokens: 0,
-          apiRequests: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          runsWithTelemetry: 0,
-        };
-        statsMap.set(t.adapter, s);
-      }
-      s.inTokens += t.inTokens;
-      s.cacheTokens += t.cacheTokens;
-      s.outTokens += t.outTokens;
-      s.thoughtTokens += t.thoughtTokens;
-      s.toolTokens += t.toolTokens;
-      s.apiRequests += t.apiRequests;
-      s.cacheRead += t.cacheRead;
-      s.cacheWrite += t.cacheWrite;
-    }
+    for (const t of block.telemetry) accumulateTelemetryEntry(t, statsMap);
     for (const adapter of adaptersInBlock) {
       const s = statsMap.get(adapter);
       if (s) s.runsWithTelemetry++;
