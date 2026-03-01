@@ -43,27 +43,13 @@ const SKILLS_SOURCE_DIR = (() => {
   }
 })();
 
-const SKILL_ACTIONS = [
-  'run',
-  'check',
-  'status',
-  'help',
-  'setup',
-  'commit',
-  'merge',
-  'issue',
-] as const;
-
-const SKILL_DESCRIPTIONS: Record<(typeof SKILL_ACTIONS)[number], string> = {
-  run: 'Run the verification suite',
-  check: 'Run checks only (no reviews)',
-  status: 'Show gauntlet status',
-  help: 'Diagnose and explain gauntlet behavior',
-  setup: 'Configure checks and reviews interactively',
-  commit: 'Commit changes after verification',
-  merge: 'Merge a pull request',
-  issue: 'Create a GitHub issue',
-};
+async function getSkillDirNames(): Promise<string[]> {
+  const entries = await fs.readdir(SKILLS_SOURCE_DIR, { withFileTypes: true });
+  return entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+}
 
 const CLI_PREFERENCE_ORDER = [
   'codex',
@@ -168,7 +154,7 @@ async function runInit(options: InitOptions): Promise<void> {
 
   await installExternalFiles(projectRoot, hookAdapters, skipPrompts);
   await addToGitignore(projectRoot, 'gauntlet_logs');
-  printPostInitInstructions(instructionCLINames);
+  await printPostInitInstructions(instructionCLINames);
 }
 
 function printNoCLIsMessage(): void {
@@ -226,8 +212,7 @@ async function installSkillsWithChecksums(
   skipPrompts: boolean,
 ): Promise<void> {
   const skillsDir = path.join(projectRoot, '.claude', 'skills');
-  for (const action of SKILL_ACTIONS) {
-    const dirName = `gauntlet-${action}`;
+  for (const dirName of await getSkillDirNames()) {
     const sourceDir = path.join(SKILLS_SOURCE_DIR, dirName);
     const targetDir = path.join(skillsDir, dirName);
     const relativeDir = `${path.relative(projectRoot, targetDir)}/`;
@@ -260,7 +245,7 @@ async function installExternalFiles(
   await installHooksForAdapters(projectRoot, devAdapters, skipPrompts);
 }
 
-function printPostInitInstructions(devCLINames: string[]): void {
+async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
   const hasNative = devCLINames.some((name) => NATIVE_CLIS.has(name));
   const nonNativeNames = devCLINames.filter((name) => !NATIVE_CLIS.has(name));
   const hasNonNative = nonNativeNames.length > 0;
@@ -281,10 +266,8 @@ function printPostInitInstructions(devCLINames: string[]): void {
     );
     console.log();
     console.log('Available skills:');
-    for (const action of SKILL_ACTIONS) {
-      console.log(
-        `  @.claude/skills/gauntlet-${action}/SKILL.md — ${SKILL_DESCRIPTIONS[action]}`,
-      );
+    for (const dirName of await getSkillDirNames()) {
+      console.log(`  @.claude/skills/${dirName}/SKILL.md`);
     }
   }
 }
