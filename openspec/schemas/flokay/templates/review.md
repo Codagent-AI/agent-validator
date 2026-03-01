@@ -1,6 +1,7 @@
 <!--
-  REVIEW TEMPLATE
-  This file summarizes the results of running the gauntlet-run skill.
+  REVIEW TEMPLATE — Pre-Implementation Change Review
+  This reviews the DESIGN ARTIFACTS (proposal, design, specs, tasks), NOT implementation code.
+  There is no code to verify at this stage — the gauntlet validates artifact quality and coherence.
   Fill in each section after the gauntlet reaches a terminal status.
 -->
 
@@ -16,7 +17,7 @@
 
 ## Issues Skipped
 
-<!-- Violations skipped, with reasons. If none, state "None." -->
+<!-- Violations skipped per trust level, with reasons. If none, state "None." -->
 
 ## Issues Remaining
 

@@ -8,8 +8,8 @@ allow_parallel: true
 cli:
   default_preference:
     - codex
+    - claude
     - gemini
-    - claude # trying to save tokens
   adapters:
     claude:
       allow_tool_use: false

@@ -1,0 +1,3 @@
+- [x] gauntlet-commit skill (`tasks/gauntlet-commit-skill.md`)
+- [x] gauntlet-merge skill + script (`tasks/gauntlet-merge-skill.md`)
+- [x] gauntlet-issue skill + gauntlet-help bug-filing update (`tasks/gauntlet-issue-skill.md`)
