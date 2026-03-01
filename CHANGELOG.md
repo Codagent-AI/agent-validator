@@ -1,5 +1,15 @@
 # agent-gauntlet
 
+## 1.2.0
+
+### Minor Changes
+
+- [#95](https://github.com/pacaplan/agent-gauntlet/pull/95) Add `review-audit` command that aggregates AI review results across tabs with a cross-tab breakdown for easier analysis
+
+### Patch Changes
+
+- [#96](https://github.com/pacaplan/agent-gauntlet/pull/96) Fix skill installation in the `init` command by dynamically discovering skills from the `skills/` directory instead of using a hardcoded list
+
 ## 1.1.0
 
 ### Minor Changes
