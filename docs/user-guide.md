@@ -172,6 +172,17 @@ Runs applicable gates for detected changes.
 
 Filters to a single gate name (check or review). If multiple entry points would run the same gate, it runs for each matching entry point.
 
+#### `--enable-review <name>` / `-e <name>`
+
+Activates a review that has `enabled: false` in its config for this run. Can be repeated to activate multiple reviews:
+
+```bash
+agent-gauntlet run --enable-review task-compliance
+agent-gauntlet run --enable-review task-compliance --enable-review security
+```
+
+Reviews with `enabled: true` (the default) are unaffected by this flag. If the name doesn't match any configured review, the flag is silently ignored.
+
 #### `--commit <sha>`
 
 Uses diff for a specific commit instead of the default change detection logic. The diff is computed as `commit^..commit`.
@@ -198,7 +209,29 @@ Runs only applicable reviews for detected changes. Checks are skipped.
 - Expands entry points that match those changes
 - Runs only review gates for those active entry points
 
-Uses the same options as `run` (see above). When using `--gate <name>`, filters to a single review gate name.
+Uses the same options as `run` (see above), including `--enable-review`. When using `--gate <name>`, filters to a single review gate name.
+
+### `agent-gauntlet review-audit`
+
+Parses the debug log and produces a structured audit report of review gate execution for a given date.
+
+```bash
+agent-gauntlet review-audit [--date YYYY-MM-DD]
+```
+
+#### Options
+
+- `--date <YYYY-MM-DD>`: Date to filter (default: today's local date)
+
+#### Output
+
+Prints five sections:
+
+- **Run Counts** — cross-tab of gate executions: rows = review type, columns = CLI adapter + Total
+- **Timing** — average gate duration per cell, plus per-100-diff-lines rate (excluding zero-diff runs)
+- **Violations** — average violations per run per cell
+- **Token Usage** — input/output/cache token totals and API request counts per adapter
+- **Fix / Skip** — gauntlet run outcomes: fixed, skipped, failed violations; prior-pass skips
 
 ### `agent-gauntlet clean`
 
