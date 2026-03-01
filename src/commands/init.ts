@@ -43,7 +43,16 @@ const SKILLS_SOURCE_DIR = (() => {
   }
 })();
 
-const SKILL_ACTIONS = ['run', 'check', 'status', 'help', 'setup'] as const;
+const SKILL_ACTIONS = [
+  'run',
+  'check',
+  'status',
+  'help',
+  'setup',
+  'commit',
+  'merge',
+  'issue',
+] as const;
 
 const SKILL_DESCRIPTIONS: Record<(typeof SKILL_ACTIONS)[number], string> = {
   run: 'Run the verification suite',
@@ -51,6 +60,9 @@ const SKILL_DESCRIPTIONS: Record<(typeof SKILL_ACTIONS)[number], string> = {
   status: 'Show gauntlet status',
   help: 'Diagnose and explain gauntlet behavior',
   setup: 'Configure checks and reviews interactively',
+  commit: 'Commit changes after verification',
+  merge: 'Merge a pull request',
+  issue: 'Create a GitHub issue',
 };
 
 const CLI_PREFERENCE_ORDER = [
