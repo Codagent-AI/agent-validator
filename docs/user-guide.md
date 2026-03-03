@@ -213,15 +213,16 @@ Uses the same options as `run` (see above), including `--enable-review`. When us
 
 ### `agent-gauntlet review-audit`
 
-Parses the debug log and produces a structured audit report of review gate execution for a given date.
+Parses the debug log and produces a structured audit report of review gate execution for a given date or date range.
 
 ```bash
-agent-gauntlet review-audit [--date YYYY-MM-DD]
+agent-gauntlet review-audit [--date YYYY-MM-DD] [--since YYYY-MM-DD]
 ```
 
 #### Options
 
-- `--date <YYYY-MM-DD>`: Date to filter (default: today's local date)
+- `--date <YYYY-MM-DD>`: Filter to a single date (default: today's local date)
+- `--since <YYYY-MM-DD>`: Include all runs from this date through today
 
 #### Output
 

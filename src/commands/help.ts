@@ -14,18 +14,38 @@ export function registerHelpCommand(program: Command): void {
         'of your repo that changed, based on a configurable set of entry points.\n',
       );
       console.log(chalk.bold('Commands:\n'));
-      console.log('  run      Run gates for detected changes');
-      console.log('  check    Run only applicable checks');
-      console.log('  review   Run only applicable reviews');
-      console.log('  clean    Archive logs (move current logs into previous/)');
+      console.log('  run           Run gates for detected changes');
+      console.log('  check         Run only applicable checks');
+      console.log('  review        Run only applicable reviews');
       console.log(
-        '  detect   Show what gates would run (without executing them)',
+        '  clean         Archive logs (move current logs into previous/)',
       );
-      console.log('  list     List configured gates');
-      console.log('  health   Check CLI tool availability');
-      console.log('  init     Initialize .gauntlet configuration');
-      console.log('  ci       CI integration commands (init, list-jobs)');
-      console.log('  help     Show this help message\n');
+      console.log(
+        '  detect        Show what gates would run (without executing them)',
+      );
+      console.log('  list          List configured gates');
+      console.log('  health        Check CLI tool availability');
+      console.log('  init          Initialize .gauntlet configuration');
+      console.log(
+        '  validate      Validate .gauntlet/ config files against schemas',
+      );
+      console.log(
+        '  skip          Advance execution state baseline without running gates',
+      );
+      console.log(
+        '  status        Show a summary of the most recent gauntlet session',
+      );
+      console.log(
+        '  review-audit  Audit review execution from the debug log (--date or --since)',
+      );
+      console.log('  ci            CI integration commands (init, list-jobs)');
+      console.log(
+        '  start-hook    Session start hook (primes agent with verification instructions)',
+      );
+      console.log(
+        '  stop-hook     Claude Code stop hook (validates gauntlet completion)',
+      );
+      console.log('  help          Show this help message\n');
       console.log(
         'For more information, see: https://github.com/your-repo/agent-gauntlet',
       );

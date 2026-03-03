@@ -19,6 +19,14 @@ async function gitExec(args: string[]): Promise<string> {
   return stdout;
 }
 
+/** Split newline-delimited git output into a non-empty string array. */
+function splitLines(output: string): string[] {
+  return output
+    .split('\n')
+    .map((f) => f.replace(/\r$/, ''))
+    .filter((f) => f.length > 0);
+}
+
 export interface DiffStats {
   baseRef: string; // e.g., "origin/main", "abc123", "uncommitted"
   total: number; // Total files changed
@@ -142,10 +150,7 @@ async function computeUncommittedDiffStats(): Promise<DiffStats> {
     '--others',
     '--exclude-standard',
   ]);
-  const untrackedFiles = untrackedList
-    .split('\n')
-    .map((f) => f.trim())
-    .filter((f) => f.length > 0);
+  const untrackedFiles = splitLines(untrackedList);
 
   return {
     baseRef: 'uncommitted',
@@ -180,116 +185,109 @@ export async function getStashUntrackedFiles(
       args.push('--', pathFilter);
     }
     const treeFiles = await gitExec(args);
-    return new Set(
-      treeFiles
-        .split('\n')
-        .map((f) => f.trim())
-        .filter((f) => f.length > 0),
-    );
+    return new Set(splitLines(treeFiles));
   } catch {
     return new Set();
   }
 }
 
 /**
- * Count how many known-untracked files have actually changed since the stash.
- * Compares blob hashes between stash ^3 tree and current working tree.
+ * Return files from `fixBaseUntrackedFiles` that were committed (not in `currentUntracked`)
+ * without content changes since the stash. These appear spuriously in `git diff <fixBase>`
+ * as "A" (added) and must be excluded.
  */
-async function countChangedStashUntracked(
-  files: string[],
+async function getUnchangedCommittedFromStash(
+  fixBaseUntrackedFiles: Set<string>,
+  currentUntrackedSet: Set<string>,
   fixBase: string,
-): Promise<number> {
-  let changed = 0;
-  for (const file of files) {
+): Promise<Set<string>> {
+  const committed = [...fixBaseUntrackedFiles].filter(
+    (f) => !currentUntrackedSet.has(f),
+  );
+  if (committed.length === 0) return new Set();
+
+  const unchanged = new Set<string>();
+  for (const file of committed) {
     try {
       const [oldHash, newHash] = await Promise.all([
         gitExec(['rev-parse', `${fixBase}^3:${file}`]),
         gitExec(['hash-object', '--', file]),
       ]);
-      if (oldHash.trim() !== newHash.trim()) {
-        changed++;
-      }
+      if (oldHash.trim() === newHash.trim()) unchanged.add(file);
     } catch {
-      // If comparison fails, count as changed (conservative)
-      changed++;
+      // Conservative: include on comparison failure
     }
   }
-  return changed;
+  return unchanged;
 }
 
 /**
- * Compute diff stats from a fixBase ref (stash or commit) to current working tree.
- * Used in verification mode to show only NEW changes since the snapshot.
- * This includes staged changes, unstaged changes, and new untracked files.
- * For stash refs, also checks the ^3 parent to properly handle files that were
- * untracked when the stash was created.
+ * Compute diff stats from a fixBase ref to current working tree.
+ * Files captured in stash ^3 and committed without content changes are excluded.
  */
 async function computeFixBaseDiffStats(fixBase: string): Promise<DiffStats> {
   try {
-    // Get line stats for tracked file changes since fixBase
-    const numstat = await gitExec(['diff', '--numstat', fixBase]);
-    const lineStats = parseNumstat(numstat);
+    const [numstatRaw, nameStatusRaw] = await Promise.all([
+      gitExec(['diff', '--numstat', fixBase]),
+      gitExec(['diff', '--name-status', fixBase]),
+    ]);
 
-    // Get file categorization for tracked file changes
-    const nameStatus = await gitExec(['diff', '--name-status', fixBase]);
-    const fileStats = parseNameStatus(nameStatus);
+    // Current untracked files (also needed for committed-from-stash detection)
+    const raw = await gitExec(['ls-files', '--others', '--exclude-standard']);
+    const currentUntrackedList = splitLines(raw);
+    const currentUntrackedSet = new Set(currentUntrackedList);
 
-    // Current untracked files
-    const currentUntracked = (
-      await gitExec(['ls-files', '--others', '--exclude-standard'])
-    )
-      .split('\n')
-      .map((f) => f.trim())
-      .filter((f) => f.length > 0);
-
-    // Files in fixBase's main tree (tracked files)
+    // Snapshot trees: fixBase main tree and stash ^3
     let fixBaseTrackedFiles: Set<string>;
     try {
-      const treeFiles = await gitExec([
-        'ls-tree',
-        '-r',
-        '--name-only',
-        fixBase,
-      ]);
-      fixBaseTrackedFiles = new Set(
-        treeFiles
-          .split('\n')
-          .map((f) => f.trim())
-          .filter((f) => f.length > 0),
-      );
+      const t = await gitExec(['ls-tree', '-r', '--name-only', fixBase]);
+      fixBaseTrackedFiles = new Set(splitLines(t));
     } catch {
       fixBaseTrackedFiles = new Set();
     }
-
-    // Files in fixBase's untracked tree (stash ^3 parent)
     const fixBaseUntrackedFiles = await getStashUntrackedFiles(fixBase);
 
-    // Combine all snapshot files
+    // Identify files committed from stash without changes — exclude from tracked diff
+    const unchangedCommittedFromStash = await getUnchangedCommittedFromStash(
+      fixBaseUntrackedFiles,
+      currentUntrackedSet,
+      fixBase,
+    );
+
+    const fileStats = parseNameStatus(
+      nameStatusRaw,
+      unchangedCommittedFromStash,
+    );
+    const lineStats = parseNumstat(numstatRaw, unchangedCommittedFromStash);
+
+    // Categorise current untracked: new vs known (was in stash ^3)
     const allSnapshotFiles = new Set([
       ...fixBaseTrackedFiles,
       ...fixBaseUntrackedFiles,
     ]);
-
-    // Truly new untracked files (not in any snapshot tree)
-    const newUntrackedFiles = currentUntracked.filter(
+    const newUntrackedCount = currentUntrackedList.filter(
       (f) => !allSnapshotFiles.has(f),
-    );
-
-    // Known untracked: existed in stash's untracked tree and still untracked
-    const knownUntrackedFiles = currentUntracked.filter((f) =>
+    ).length;
+    const knownUntracked = currentUntrackedList.filter((f) =>
       fixBaseUntrackedFiles.has(f),
     );
-
-    // Count how many known-untracked files actually changed
-    const changedKnownUntracked = await countChangedStashUntracked(
-      knownUntrackedFiles,
-      fixBase,
-    );
+    let changedKnownUntracked = 0;
+    for (const file of knownUntracked) {
+      try {
+        const [o, n] = await Promise.all([
+          gitExec(['rev-parse', `${fixBase}^3:${file}`]),
+          gitExec(['hash-object', '--', file]),
+        ]);
+        if (o.trim() !== n.trim()) changedKnownUntracked++;
+      } catch {
+        changedKnownUntracked++; // conservative
+      }
+    }
 
     return {
       baseRef: fixBase,
-      total: fileStats.total + newUntrackedFiles.length + changedKnownUntracked,
-      newFiles: fileStats.newFiles + newUntrackedFiles.length,
+      total: fileStats.total + newUntrackedCount + changedKnownUntracked,
+      newFiles: fileStats.newFiles + newUntrackedCount,
       modifiedFiles: fileStats.modifiedFiles + changedKnownUntracked,
       deletedFiles: fileStats.deletedFiles,
       linesAdded: lineStats.linesAdded,
@@ -382,10 +380,7 @@ async function computeLocalDiffStats(baseBranch: string): Promise<DiffStats> {
     '--others',
     '--exclude-standard',
   ]);
-  const untrackedFiles = untrackedList
-    .split('\n')
-    .map((f) => f.trim())
-    .filter((f) => f.length > 0);
+  const untrackedFiles = splitLines(untrackedList);
 
   // Combine counts (with overlap detection)
   const totalNew =
@@ -406,12 +401,23 @@ async function computeLocalDiffStats(baseBranch: string): Promise<DiffStats> {
   };
 }
 
+/** Parse a single numstat value field: returns 0 for binary ("-") or non-numeric values. */
+function parseNumstatValue(val: string | undefined): number {
+  if (!val || val === '-') return 0;
+  return parseInt(val, 10) || 0;
+}
+
 /**
  * Parse git diff --numstat output for line counts.
  * Format: <added>\t<removed>\t<file>
  * Binary files show as "-\t-\t<file>"
+ *
+ * @param excludeFiles - optional set of file paths to skip (e.g. unchanged committed-from-stash)
  */
-function parseNumstat(output: string): {
+function parseNumstat(
+  output: string,
+  excludeFiles?: Set<string>,
+): {
   linesAdded: number;
   linesRemoved: number;
 } {
@@ -423,15 +429,11 @@ function parseNumstat(output: string): {
     const parts = line.split('\t');
     if (parts.length < 3) continue;
 
-    const added = parts[0];
-    const removed = parts[1];
-    // Binary files show as "-"
-    if (added && added !== '-') {
-      linesAdded += parseInt(added, 10) || 0;
-    }
-    if (removed && removed !== '-') {
-      linesRemoved += parseInt(removed, 10) || 0;
-    }
+    const file = parts[2];
+    if (excludeFiles && file && excludeFiles.has(file.trim())) continue;
+
+    linesAdded += parseNumstatValue(parts[0]);
+    linesRemoved += parseNumstatValue(parts[1]);
   }
 
   return { linesAdded, linesRemoved };
@@ -441,8 +443,13 @@ function parseNumstat(output: string): {
  * Parse git diff --name-status output for file categorization.
  * Format: <status>\t<file> (and optionally \t<new-file> for renames)
  * Status codes: A=added, M=modified, D=deleted, R=renamed, C=copied, T=type-change
+ *
+ * @param excludeFiles - optional set of file paths to skip (e.g. unchanged committed-from-stash)
  */
-function parseNameStatus(output: string): {
+function parseNameStatus(
+  output: string,
+  excludeFiles?: Set<string>,
+): {
   total: number;
   newFiles: number;
   modifiedFiles: number;
@@ -454,7 +461,11 @@ function parseNameStatus(output: string): {
 
   for (const line of output.split('\n')) {
     if (!line.trim()) continue;
-    const status = line[0];
+    const parts = line.split('\t');
+    const status = parts[0]?.[0];
+    const file = parts[1]?.trim();
+
+    if (excludeFiles && file && excludeFiles.has(file)) continue;
 
     switch (status) {
       case 'A':

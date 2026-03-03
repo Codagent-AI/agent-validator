@@ -7,52 +7,7 @@ interface ReviewGate {
   cli: string;
   durationS: number;
   violations: number;
-}
-
-interface TelemetryEntry {
-  adapter: string;
-  inTokens: number;
-  cacheTokens: number;
-  outTokens: number;
-  thoughtTokens: number;
-  toolTokens: number;
-  apiRequests: number;
-  cacheRead: number;
-  cacheWrite: number;
-}
-
-interface RunEndInfo {
-  status: string;
-  fixed: number;
-  skipped: number;
-  failed: number;
-}
-
-interface RunBlock {
-  timestamp: string;
-  mode: string;
-  linesAdded: number;
-  linesRemoved: number;
-  reviewGates: ReviewGate[];
-  priorPassSkips: number;
-  telemetry: TelemetryEntry[];
-  end?: RunEndInfo;
-}
-
-interface GateStat {
-  count: number;
-  totalDuration: number;
-  totalViolations: number;
-}
-
-interface CrossTab {
-  cells: Map<string, Map<string, GateStat>>;
-  cliTotals: Map<string, GateStat>;
-  typeTotals: Map<string, GateStat>;
-  grandTotal: GateStat;
-  allTypes: string[];
-  allClis: string[];
-  per100: Map<string, { dur: number; diff: number }>;
+  violationsFixed: number;
 }
 
 interface TokenStats {
@@ -66,6 +21,36 @@ interface TokenStats {
   cacheRead: number;
   cacheWrite: number;
   runsWithTelemetry: number;
+}
+
+type TelemetryEntry = Omit<TokenStats, 'runsWithTelemetry'>;
+
+interface RunBlock {
+  timestamp: string;
+  mode: string;
+  linesAdded: number;
+  linesRemoved: number;
+  reviewGates: ReviewGate[];
+  priorPassSkips: number;
+  telemetry: TelemetryEntry[];
+  end?: { status: string; failed: number };
+}
+
+interface GateStat {
+  count: number;
+  totalDuration: number;
+  totalViolations: number;
+  totalViolationsFixed: number;
+}
+
+interface CrossTab {
+  cells: Map<string, Map<string, GateStat>>;
+  cliTotals: Map<string, GateStat>;
+  typeTotals: Map<string, GateStat>;
+  grandTotal: GateStat;
+  allTypes: string[];
+  allClis: string[];
+  per100: Map<string, { dur: number; diff: number }>;
 }
 
 function parseKeyValue(text: string): Record<string, string> {
@@ -93,14 +78,11 @@ const parseDuration = (d: string): number => {
 };
 
 function getLogDir(cwd: string): string {
-  const configPath = path.join(cwd, '.gauntlet', 'config.yml');
   try {
-    const content = fs.readFileSync(configPath, 'utf-8');
-    const match = content.match(/^log_dir:\s*(.+)$/m);
-    if (match?.[1]) return match[1].trim();
-  } catch {
-    // Config not found — use default
-  }
+    const cfg = path.join(cwd, '.gauntlet', 'config.yml');
+    const m = fs.readFileSync(cfg, 'utf-8').match(/^log_dir:\s*(.+)$/m);
+    if (m?.[1]) return m[1].trim().replace(/^["']|["']$/g, '');
+  } catch {}
   return 'gauntlet_logs';
 }
 
@@ -117,8 +99,7 @@ function handleRunStart(ts: string, body: string): RunBlock {
   };
 }
 function handleGateResult(current: RunBlock, body: string): void {
-  const gateIdMatch = body.match(/^(\S+)/);
-  const gateId = gateIdMatch?.[1] ?? '';
+  const gateId = body.match(/^(\S+)/)?.[1] ?? '';
   if (!gateId.startsWith('review:')) return;
   const kv = parseKeyValue(body);
   if (kv.cli) {
@@ -127,6 +108,7 @@ function handleGateResult(current: RunBlock, body: string): void {
       cli: kv.cli,
       durationS: parseDuration(kv.duration ?? '0s'),
       violations: safeNum(kv.violations),
+      violationsFixed: 0,
     });
   } else {
     current.priorPassSkips++;
@@ -149,23 +131,20 @@ function handleTelemetry(current: RunBlock, body: string): void {
 }
 function handleRunEnd(current: RunBlock, body: string): void {
   const kv = parseKeyValue(body);
-  current.end = {
-    status: kv.status ?? 'unknown',
-    fixed: safeNum(kv.fixed),
-    skipped: safeNum(kv.skipped),
-    failed: safeNum(kv.failed),
-  };
+  current.end = { status: kv.status ?? 'unknown', failed: safeNum(kv.failed) };
 }
 
 const emptyStat = (): GateStat => ({
   count: 0,
   totalDuration: 0,
   totalViolations: 0,
+  totalViolationsFixed: 0,
 });
 function addGate(s: GateStat, g: ReviewGate): void {
   s.count++;
   s.totalDuration += g.durationS;
   s.totalViolations += g.violations;
+  s.totalViolationsFixed += g.violationsFixed;
 }
 function getOrCreate<V>(map: Map<string, V>, key: string, init: () => V): V {
   if (!map.has(key)) map.set(key, init());
@@ -180,11 +159,8 @@ type CrossTabAccum = Pick<
 >;
 function accumulateBlock(block: RunBlock, a: CrossTabAccum): void {
   for (const g of block.reviewGates) {
-    const inner = getOrCreate(
-      a.cells,
-      g.reviewType,
-      () => new Map<string, GateStat>(),
-    );
+    const inner = a.cells.get(g.reviewType) ?? new Map<string, GateStat>();
+    a.cells.set(g.reviewType, inner);
     addGate(getOrCreate(inner, g.cli, emptyStat), g);
     addGate(getOrCreate(a.cliTotals, g.cli, emptyStat), g);
     addGate(getOrCreate(a.typeTotals, g.reviewType, emptyStat), g);
@@ -279,20 +255,19 @@ function formatCrossTable(
   grandTotal: string,
 ): string[] {
   const rlW = Math.max(17, ...rowLabels.map((r) => fmtType(r).length)) + 2;
-  const cW = 12;
   const hdr =
     padRight('', rlW) +
-    colLabels.map((c) => padRight(capitalize(c), cW)).join('') +
+    colLabels.map((c) => padRight(capitalize(c), 12)).join('') +
     'Total';
   const rows = rowLabels.map(
     (r) =>
       padRight(fmtType(r), rlW) +
-      colLabels.map((c) => padRight(cell(r, c), cW)).join('') +
+      colLabels.map((c) => padRight(cell(r, c), 12)).join('') +
       rowTotal(r),
   );
   const totalRow =
     padRight('Total', rlW) +
-    colLabels.map((c) => padRight(colTotal(c), cW)).join('') +
+    colLabels.map((c) => padRight(colTotal(c), 12)).join('') +
     grandTotal;
   return [title, hdr, ...rows, totalRow, ''];
 }
@@ -351,7 +326,19 @@ function formatViolations(ct: CrossTab): string[] {
     avg(ct.grandTotal),
   );
 }
-
+function formatViolationsFixed(ct: CrossTab): string[] {
+  const avg = (s: GateStat | undefined): string =>
+    s && s.count > 0 ? (s.totalViolationsFixed / s.count).toFixed(2) : 'n/a';
+  return formatCrossTable(
+    '=== Violations Fixed (avg per run) ===',
+    ct.allTypes,
+    ct.allClis,
+    (t, c) => avg(ct.cells.get(t)?.get(c)),
+    (t) => avg(ct.typeTotals.get(t)),
+    (c) => avg(ct.cliTotals.get(c)),
+    avg(ct.grandTotal),
+  );
+}
 function formatTokenEntry(t: TokenStats, totalRuns: number): string[] {
   const out: string[] = [
     `${capitalize(t.adapter)} (${t.runsWithTelemetry} of ${totalRuns} runs had telemetry):`,
@@ -396,34 +383,34 @@ function formatTokenUsage(ts: TokenStats[], m: Map<string, number>): string[] {
   ];
 }
 
-function formatFixSkip(blocks: RunBlock[]): string[] {
-  const withEnd = blocks.filter((b) => b.end);
-  const total = withEnd.length;
-  const passed = withEnd.filter((b) => b.end?.status === 'pass').length;
-  const fixed = withEnd.reduce((s, b) => s + (b.end?.fixed ?? 0), 0);
-  const skipped = withEnd.reduce((s, b) => s + (b.end?.skipped ?? 0), 0);
-  const failed = withEnd.reduce((s, b) => s + (b.end?.failed ?? 0), 0);
-  const priorPass = blocks.reduce((s, b) => s + b.priorPassSkips, 0);
-  const lines = [
-    '=== Fix / Skip ===',
-    `Gauntlet runs: ${total} total  (${passed} passed, ${total - passed} failed)`,
-    `  Violations fixed:   ${fixed}`,
-    `  Violations skipped: ${skipped}`,
-    `  Gates failed:       ${failed}`,
-    `  Review gates skipped (prior pass): ${priorPass}`,
+function formatSummary(
+  blocks: RunBlock[],
+  ct: CrossTab,
+  totalFixed: number,
+): string[] {
+  const total = blocks.filter((b) => b.end).length;
+  return [
+    '=== Summary ===',
+    `Gauntlet rounds: ${total}`,
+    `  Total gate executions: ${ct.grandTotal.count}`,
+    `  Total review issues fixed: ${totalFixed}`,
   ];
-  const totalFixedSkipped = fixed + skipped;
-  if (totalFixedSkipped > 0) {
-    const fp = ((fixed / totalFixedSkipped) * 100).toFixed(1);
-    const sp = ((skipped / totalFixedSkipped) * 100).toFixed(1);
-    lines.push(`  (fixed: ${fp}% | skipped: ${sp}% of fixed+skipped)`);
-  }
-  return lines;
 }
-
+function computeViolationsFixed(blocks: RunBlock[]): void {
+  blocks.slice(1).forEach((cur, j) => {
+    for (const g of cur.reviewGates) {
+      const p = blocks[j]?.reviewGates.find(
+        (pg) => pg.reviewType === g.reviewType && pg.cli === g.cli,
+      );
+      if (p && p.violations > g.violations)
+        g.violationsFixed = p.violations - g.violations;
+    }
+  });
+}
 export function formatAuditReport(blocks: RunBlock[], date: string): string {
   if (blocks.length === 0)
     return `Review Execution Audit — ${date}\n\nNo gauntlet runs found for this date.`;
+  computeViolationsFixed(blocks);
   const ct = buildCrossTab(blocks);
   const tokenStats = aggregateTokenStats(blocks);
   const cliBlockCount = new Map<string, number>();
@@ -437,29 +424,30 @@ export function formatAuditReport(blocks: RunBlock[], date: string): string {
     ...formatRunCounts(ct),
     ...formatTiming(ct),
     ...formatViolations(ct),
+    ...formatViolationsFixed(ct),
     ...formatTokenUsage(tokenStats, cliBlockCount),
-    ...formatFixSkip(blocks),
+    ...formatSummary(blocks, ct, ct.grandTotal.totalViolationsFixed),
   ].join('\n');
 }
 
 function todayLocalDate(): string {
   const now = new Date();
-  const y = now.getFullYear();
   const mo = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${d}`;
+  const dy = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${mo}-${dy}`;
 }
 
-async function readBlocks(filePath: string, date: string): Promise<RunBlock[]> {
-  const rl = readline.createInterface({
-    input: fs.createReadStream(filePath),
-  });
+async function readBlocks(
+  filePath: string,
+  matchDate: (d: string) => boolean,
+): Promise<RunBlock[]> {
+  const rl = readline.createInterface({ input: fs.createReadStream(filePath) });
   const blocks: RunBlock[] = [];
   let current: RunBlock | null = null;
   for await (const line of rl) {
     if (!line.trim()) continue;
     const ts = parseTimestamp(line);
-    if (!ts.startsWith(date)) continue;
+    if (!matchDate(ts.slice(0, 10))) continue;
     const event = parseEventType(line);
     const body = parseEventBody(line);
     if (event === 'RUN_START') {
@@ -474,20 +462,34 @@ async function readBlocks(filePath: string, date: string): Promise<RunBlock[]> {
   }
   return blocks;
 }
-export async function main(date?: string): Promise<void> {
+export async function main(date?: string, since?: string): Promise<void> {
   const cwd = process.cwd();
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (date && since) {
+    console.error('Use either --date or --since, not both.');
+    process.exit(1);
+  }
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (date && !dateRe.test(date)) {
     console.error('Invalid --date. Expected YYYY-MM-DD');
     process.exit(1);
   }
-  const targetDate = date ?? todayLocalDate();
-  const debugLogPath = path.join(cwd, getLogDir(cwd), '.debug.log');
+  if (since && !dateRe.test(since)) {
+    console.error('Invalid --since. Expected YYYY-MM-DD');
+    process.exit(1);
+  }
+  const logDir = getLogDir(cwd);
+  const debugLogPath = path.join(cwd, logDir, '.debug.log');
   if (!fs.existsSync(debugLogPath)) {
-    console.log(`No debug log found. (looked in ${getLogDir(cwd)}/.debug.log)`);
+    console.log(`No debug log found. (looked in ${logDir}/.debug.log)`);
     process.exit(0);
   }
-  const blocks = await readBlocks(debugLogPath, targetDate);
-  console.log(formatAuditReport(blocks, targetDate));
+  const targetDate = since ?? date ?? todayLocalDate();
+  const matchDate: (d: string) => boolean = since
+    ? (d) => d >= since
+    : (d) => d === targetDate;
+  const label = since ? `${since} – ${todayLocalDate()}` : targetDate;
+  const blocks = await readBlocks(debugLogPath, matchDate);
+  console.log(formatAuditReport(blocks, label));
 }
 
 const isDirectRun =

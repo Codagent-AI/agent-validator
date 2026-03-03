@@ -210,12 +210,14 @@ The Runner (which backs the `run`, `check`, and `review` commands) MUST enforce 
 
 On run completion (success or failure), the system SHALL capture the working tree state in the unified `.execution_state` file. The separate `.session_ref` file is deprecated and SHALL be removed if present. On re-runs with existing logs, the system uses `working_tree_ref` from execution state as the diff base. Session ref scoping applies to review gates only; check gates are unaffected as they do not use diff-based violation filtering.
 
+When computing the diff against a stash-based `working_tree_ref`, the system MUST account for files that were untracked at stash time (stored in the stash's `^3` parent) but have since been committed (now tracked). Such files MUST NOT appear as "new files" in the diff output if their content is unchanged since the stash snapshot.
+
 #### Scenario: Session ref created on first run with violations
 - **GIVEN** a first run completes (no existing logs before this run)
 - **AND** one or more review gates report violations
 - **WHEN** the run finishes writing log files
 - **THEN** the system SHALL write `working_tree_ref` to `.execution_state` in the log directory
-- **AND** the `working_tree_ref` SHALL contain a git commit SHA (from `git stash create --include-untracked`) representing the full working tree state (tracked and untracked files) at that moment
+- **AND** the `working_tree_ref` SHALL contain a git stash SHA (from `git stash push --include-untracked`) representing the full working tree state (tracked and untracked files) at that moment
 - **AND** no separate `.session_ref` file SHALL be created
 
 #### Scenario: Session ref not created when all gates pass
@@ -242,6 +244,20 @@ On run completion (success or failure), the system SHALL capture the working tre
 - **GIVEN** a `.session_ref` file exists from a previous version
 - **WHEN** the system writes execution state
 - **THEN** the `.session_ref` file SHALL be deleted
+
+#### Scenario: Untracked file committed between stash and next diff
+- **GIVEN** a stash-based `working_tree_ref` was created when file `foo.ts` was untracked (stored in stash `^3` parent)
+- **AND** `foo.ts` has since been committed (now tracked in HEAD) without content changes
+- **WHEN** the system computes the diff against `working_tree_ref`
+- **THEN** `foo.ts` SHALL NOT appear in the diff output
+- **AND** the diff file count SHALL NOT include `foo.ts`
+
+#### Scenario: Untracked file committed and modified between stash and next diff
+- **GIVEN** a stash-based `working_tree_ref` was created when file `foo.ts` was untracked (stored in stash `^3` parent)
+- **AND** `foo.ts` has since been committed and further modified (content differs from stash `^3` blob)
+- **WHEN** the system computes the diff against `working_tree_ref`
+- **THEN** `foo.ts` SHALL appear in the diff output as a new file showing its full current content
+- **NOTE** Because the file was not in the stash's main tree, `git diff` shows it as entirely new. This is acceptable for the rare modified-after-commit case — the file genuinely changed and a full-content diff is a conservative, correct approach.
 
 ### Requirement: Re-run Violation Priority Filter
 When operating in rerun mode (i.e., previous failures are loaded from log files), the system SHALL discard violations below the configured priority threshold to prevent infinite review loops. The threshold is controlled by the project-level `rerun_new_issue_threshold` setting (default: `"high"`). Only violations at or above the threshold SHALL be accepted.
@@ -431,24 +447,29 @@ The execution state file (`.execution_state`) MUST include a `working_tree_ref` 
 #### Scenario: Working tree ref creation with tracked changes
 - **GIVEN** the working tree has staged or unstaged changes to tracked files
 - **WHEN** a run completes (success or failure)
-- **THEN** the system SHALL execute `git stash create --include-untracked`
-- **AND** the command SHALL return a stash SHA
+- **THEN** the system SHALL execute `git stash push --include-untracked` and immediately pop to restore
+- **AND** the stash SHA SHALL reference a 3-parent stash (parent 3 = untracked files tree)
+- **AND** the system SHALL store this SHA as `working_tree_ref`
+
+#### Scenario: Working tree ref creation with tracked and untracked changes
+- **GIVEN** the working tree has both tracked modifications and untracked files
+- **WHEN** a run completes (success or failure)
+- **THEN** the system SHALL execute `git stash push --include-untracked` and immediately pop to restore
+- **AND** the stash SHA SHALL reference a 3-parent stash
+- **AND** the `^3` parent tree SHALL contain the untracked files
 - **AND** the system SHALL store this SHA as `working_tree_ref`
 
 #### Scenario: Working tree ref creation with untracked-only changes
 - **GIVEN** the working tree has ONLY untracked files (no staged or modified tracked files)
 - **WHEN** a run completes (success or failure)
-- **THEN** the system SHALL execute `git stash create --include-untracked`
-- **AND** the command SHALL return empty (known git limitation: `git stash create --include-untracked` does not produce a stash when only untracked files exist)
-- **AND** the system SHALL fall back to storing the current HEAD SHA as `working_tree_ref`
-- **NOTE** This means `working_tree_ref` will equal `commit` even though the tree is dirty. Auto-clean logic MUST NOT rely on `working_tree_ref !== commit` to detect a dirty tree.
+- **THEN** the system SHALL execute `git stash push --include-untracked` and immediately pop to restore
+- **AND** if the stash push was a no-op (no stash created), the system SHALL fall back to storing the current HEAD SHA as `working_tree_ref`
 
 #### Scenario: Working tree ref creation with clean working tree
 - **GIVEN** the working tree has no uncommitted changes
 - **WHEN** a run completes (success or failure)
-- **THEN** the system SHALL execute `git stash create --include-untracked`
-- **AND** the command SHALL return empty (no output)
-- **AND** the system SHALL store the current HEAD SHA as `working_tree_ref`
+- **THEN** the system SHALL store the current HEAD SHA as `working_tree_ref`
+- **AND** no stash operation SHALL be attempted
 
 #### Scenario: Working tree ref captures uncommitted changes
 - **GIVEN** the working tree has uncommitted changes (staged or unstaged)

@@ -213,6 +213,74 @@ async function diffFallbackToDevNull(file: string): Promise<string | null> {
   }
 }
 
+/**
+ * Filter a unified diff string to exclude patches for specific file paths.
+ * Parses `diff --git a/<file> b/<file>` headers and drops entire patch hunks
+ * for files in the exclude set.
+ */
+function filterDiffByExcludeSet(
+  diff: string,
+  excludeFiles: Set<string>,
+): string {
+  if (excludeFiles.size === 0) return diff;
+
+  const lines = diff.split('\n');
+  const kept: string[] = [];
+  let skip = false;
+
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      // Extract filename — handles both plain and quoted paths
+      const match =
+        /^diff --git (?:"a\/(.+?)"|a\/(\S+)) (?:"b\/.*?"|b\/\S+)$/.exec(line);
+      const file = match?.[1] ?? match?.[2];
+      skip = file !== undefined && excludeFiles.has(file);
+    }
+    if (!skip) {
+      kept.push(line);
+    }
+  }
+
+  // Remove trailing empty lines introduced by exclusion
+  while (kept.length > 0 && kept[kept.length - 1] === '') {
+    kept.pop();
+  }
+
+  return kept.join('\n');
+}
+
+/**
+ * Identify files that were in a stash's ^3 parent and have since been committed
+ * without content changes. These appear spuriously in `git diff <fixBase>` as added files.
+ */
+async function getUnchangedCommittedFromStashForDiff(
+  snapshotUntrackedFiles: Set<string>,
+  currentUntracked: Set<string>,
+  fixBase: string,
+): Promise<Set<string>> {
+  // Files that were in stash ^3 but are no longer untracked (they were committed)
+  const committedFromStash = [...snapshotUntrackedFiles].filter(
+    (f) => !currentUntracked.has(f),
+  );
+
+  if (committedFromStash.length === 0) {
+    return new Set();
+  }
+
+  const unchanged = new Set<string>();
+  for (const file of committedFromStash) {
+    try {
+      const unchanged_ = !(await hasFileChangedSinceStash(file, fixBase));
+      if (unchanged_) {
+        unchanged.add(file);
+      }
+    } catch {
+      // If comparison fails, include the file (conservative — it may have changed)
+    }
+  }
+  return unchanged;
+}
+
 async function getFixBaseDiff(
   entryPointPath: string,
   fixBase: string,
@@ -224,7 +292,7 @@ async function getFixBaseDiff(
   const pArg = pathArg(entryPointPath);
   try {
     // Tracked file changes since fixBase
-    const diff = await execDiff(`git diff ${fixBase}${pArg}`);
+    const rawDiff = await execDiff(`git diff ${fixBase}${pArg}`);
 
     // Current untracked files
     const { stdout: untrackedStdout } = await execAsync(
@@ -245,6 +313,17 @@ async function getFixBaseDiff(
       fixBase,
       entryPointPath,
     );
+
+    // Identify files committed from stash without content changes — exclude from tracked diff
+    const unchangedCommittedFromStash =
+      await getUnchangedCommittedFromStashForDiff(
+        snapshotUntrackedFiles,
+        currentUntracked,
+        fixBase,
+      );
+
+    // Filter the tracked diff to remove spurious entries for unchanged committed-from-stash files
+    const diff = filterDiffByExcludeSet(rawDiff, unchangedCommittedFromStash);
 
     // Combine all snapshot files
     const allSnapshotFiles = new Set([
@@ -275,7 +354,7 @@ async function getFixBaseDiff(
       .filter(Boolean)
       .join('\n');
     log.debug(
-      `Scoped diff via fixBase: ${scopedDiff.split('\n').length} lines (${newUntracked.length} new, ${knownUntracked.length} known untracked)`,
+      `Scoped diff via fixBase: ${scopedDiff.split('\n').length} lines (${newUntracked.length} new, ${knownUntracked.length} known untracked, ${unchangedCommittedFromStash.size} committed-from-stash excluded)`,
     );
     return scopedDiff;
   } catch (error) {
