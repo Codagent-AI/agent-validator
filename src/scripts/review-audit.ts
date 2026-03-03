@@ -10,7 +10,7 @@ interface ReviewGate {
   violationsFixed: number;
 }
 
-interface TelemetryEntry {
+interface TokenStats {
   adapter: string;
   inTokens: number;
   cacheTokens: number;
@@ -20,12 +20,10 @@ interface TelemetryEntry {
   apiRequests: number;
   cacheRead: number;
   cacheWrite: number;
+  runsWithTelemetry: number;
 }
 
-interface RunEndInfo {
-  status: string;
-  failed: number;
-}
+type TelemetryEntry = Omit<TokenStats, 'runsWithTelemetry'>;
 
 interface RunBlock {
   timestamp: string;
@@ -35,7 +33,7 @@ interface RunBlock {
   reviewGates: ReviewGate[];
   priorPassSkips: number;
   telemetry: TelemetryEntry[];
-  end?: RunEndInfo;
+  end?: { status: string; failed: number };
 }
 
 interface GateStat {
@@ -53,19 +51,6 @@ interface CrossTab {
   allTypes: string[];
   allClis: string[];
   per100: Map<string, { dur: number; diff: number }>;
-}
-
-interface TokenStats {
-  adapter: string;
-  inTokens: number;
-  cacheTokens: number;
-  outTokens: number;
-  thoughtTokens: number;
-  toolTokens: number;
-  apiRequests: number;
-  cacheRead: number;
-  cacheWrite: number;
-  runsWithTelemetry: number;
 }
 
 function parseKeyValue(text: string): Record<string, string> {
@@ -398,9 +383,12 @@ function formatTokenUsage(ts: TokenStats[], m: Map<string, number>): string[] {
   ];
 }
 
-function formatSummary(blocks: RunBlock[], ct: CrossTab, totalFixed: number): string[] {
-  const withEnd = blocks.filter((b) => b.end);
-  const total = withEnd.length;
+function formatSummary(
+  blocks: RunBlock[],
+  ct: CrossTab,
+  totalFixed: number,
+): string[] {
+  const total = blocks.filter((b) => b.end).length;
   return [
     '=== Summary ===',
     `Gauntlet rounds: ${total}`,

@@ -382,5 +382,69 @@ describe("computeDiffStats", () => {
 			expect(result.newFiles).toBe(1);
 			expect(result.total).toBe(1);
 		});
+
+		it("excludes unchanged file committed from stash (was in ^3, now tracked, unchanged content)", async () => {
+			// This is the "committed from stash" bug scenario:
+			// - foo.ts was untracked when stash was created, stored in stash ^3
+			// - foo.ts has since been committed to HEAD (no longer untracked)
+			// - foo.ts content is UNCHANGED from what was in stash ^3
+			// - git diff --name-status ${stashSha} shows "A\tfoo.ts" (wrong - spurious!)
+			// - Expected: foo.ts should NOT appear in stats
+			const stashSha = "abc123";
+			mockExec.mockImplementation((_file: string, args: string[]) => {
+				// No current untracked files (foo.ts was committed)
+				if (args.includes("ls-files")) return createMockOutput("");
+				// Stash main tree: foo.ts was NOT in it (was untracked)
+				if (args.includes("ls-tree") && args.includes(stashSha) && !args.some(a => a.includes("^3")))
+					return createMockOutput("");
+				// Stash ^3 tree: foo.ts was untracked at stash time
+				if (args.includes("ls-tree") && args.some(a => a.includes(`${stashSha}^3`)))
+					return createMockOutput("foo.ts");
+				// git diff --name-status shows foo.ts as "A" (spurious addition)
+				if (args.includes("--name-status")) return createMockOutput("A\tfoo.ts");
+				// git diff --numstat shows foo.ts as added (spurious)
+				if (args.includes("--numstat")) return createMockOutput("5\t0\tfoo.ts");
+				// Content is UNCHANGED: same blob hash in stash ^3 and current working tree
+				if (args.includes("rev-parse")) return createMockOutput("sameblob");
+				if (args.includes("hash-object")) return createMockOutput("sameblob");
+				return createMockOutput("");
+			});
+
+			const result = await computeDiffStats("origin/main", {
+				fixBase: stashSha,
+			});
+
+			// foo.ts should NOT appear in stats — it was committed unchanged from stash
+			expect(result.newFiles).toBe(0);
+			expect(result.modifiedFiles).toBe(0);
+			expect(result.total).toBe(0);
+		});
+
+		it("includes file committed from stash when content changed", async () => {
+			// foo.ts was in stash ^3, committed, but content CHANGED since stash
+			// The spec says: full content diff is acceptable for this case
+			const stashSha = "abc123";
+			mockExec.mockImplementation((_file: string, args: string[]) => {
+				if (args.includes("ls-files")) return createMockOutput("");
+				if (args.includes("ls-tree") && args.includes(stashSha) && !args.some(a => a.includes("^3")))
+					return createMockOutput("");
+				if (args.includes("ls-tree") && args.some(a => a.includes(`${stashSha}^3`)))
+					return createMockOutput("foo.ts");
+				if (args.includes("--name-status")) return createMockOutput("A\tfoo.ts");
+				if (args.includes("--numstat")) return createMockOutput("10\t0\tfoo.ts");
+				// Content CHANGED: different blob hash
+				if (args.includes("rev-parse")) return createMockOutput("oldhash");
+				if (args.includes("hash-object")) return createMockOutput("newhash");
+				return createMockOutput("");
+			});
+
+			const result = await computeDiffStats("origin/main", {
+				fixBase: stashSha,
+			});
+
+			// foo.ts was modified after commit — should appear in stats
+			expect(result.newFiles).toBe(1);
+			expect(result.total).toBe(1);
+		});
 	});
 });

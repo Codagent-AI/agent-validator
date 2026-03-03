@@ -1,1 +1,1 @@
-- [ ] Fix stash untracked-to-tracked diff and add E2E tests (`tasks/fix-committed-from-stash-diff.md`)
+- [x] Fix stash untracked-to-tracked diff and add E2E tests (`tasks/fix-committed-from-stash-diff.md`)
