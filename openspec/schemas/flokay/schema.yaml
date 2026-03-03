@@ -42,7 +42,8 @@ artifacts:
       Read all spec files in the change's specs/ directory before starting.
       Create this artifact using the specs as settled requirements and the proposal as motivation and context.
       See comments in the template for section details and guidance.
-      When done, tell the user the relative path of the design file created.
+      When done, commit all changes with a message describing the design artifact created.
+      Then tell the user the relative path of the design file created and that changes were committed.
 
   - id: tasks
     requires: [design]
@@ -52,7 +53,8 @@ artifacts:
     instruction: |
       IMPORTANT: You MUST use the `flokay:plan-tasks` skill for this step.
       Create this artifact following the plan-tasks skill protocol.
-      When done, tell the user the relative path of tasks.md and all individual task files created.
+      When done, commit all changes with a message describing the tasks artifact created.
+      Then tell the user the relative path of tasks.md and all individual task files created, and that changes were committed.
 
   - id: review
     requires: [tasks]
@@ -69,22 +71,27 @@ artifacts:
       The gauntlet-run skill handles the full verification loop. Follow its protocol completely.
       After the gauntlet reaches a terminal status, write review.md summarizing the results.
       See comments in the template for section details.
-      When done, tell the user the relative path of the review file created.
+      When done, commit all changes with a message describing the review artifact created.
+      Then tell the user the relative path of the review file created and that changes were committed.
 
 apply:
   requires: [review]
   tracks: tasks.md
   instruction: |
-    First, read the change's proposal.md, design.md, and all specs/ files so you have full context.
-    IMPORTANT: You MUST use the `flokay:implement-task` skill for this step.
-    Follow the `flokay:implement-task` skill to dispatch subagents and execute the pending tasks.
-    Read tasks.md for context. For each unchecked task (`- [ ]`),
-    the implement-task skill will handle dispatching a subagent to implement
-    the work and marking it complete (`- [x]`) in tasks.md.
-    Pause if you hit blockers or need clarification.
-    Once ALL tasks are complete, run `agent-gauntlet detect` and check the output.
-    If the only unverified file is a task-tracking file (e.g. tasks.md checkbox edits), run the `gauntlet-skip` skill instead of a full gauntlet run.
-    If there are additional unverified file changes beyond task-tracking, run the gauntlet and fix issues before proceeding.
-    Then invoke the `openspec-archive-change` skill to archive the change. When archiving, always sync delta specs to main specs automatically — do not prompt the user about syncing.
+    IMPORTANT: This is a fully autonomous flow. Execute all steps below without pausing for
+    user confirmation. Do NOT ask "would you like me to..." or "should I proceed with..." between
+    steps. Only pause if you hit a blocker that genuinely requires human input.
 
-    After archiving, invoke the `flokay:finalize-pr` skill to push the PR, wait for CI, and fix any failures — it handles the full push → wait → fix loop with automatic retry and termination rules.
+    Create a task list to track progress through these steps:
+
+    1. Read context — Read the change's proposal.md, design.md, and all specs/ files for full context.
+    2. Implement tasks — Use the `flokay:implement-task` skill. Read tasks.md, then for each unchecked
+       task (`- [ ]`), the skill dispatches a subagent to implement the work and marks it
+       complete (`- [x]`) in tasks.md.
+    3. Run gauntlet — Run `agent-gauntlet detect` and check the output. If the only unverified file
+       is a task-tracking file (e.g. tasks.md checkbox edits), run the `gauntlet-skip` skill.
+       Otherwise, run the full gauntlet and fix issues before proceeding.
+    4. Archive change — Invoke the `openspec-archive-change` skill. Always sync delta specs to main
+       specs automatically — do not prompt the user about syncing.
+    5. Finalize PR — Invoke the `flokay:finalize-pr` skill to push the PR, wait for CI, and fix any
+       failures. It handles the full push → wait → fix loop with automatic retry and termination rules.
