@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 1.2.2
+
+### Patch Changes
+
+- [#100](https://github.com/pacaplan/agent-gauntlet/pull/100) Use exit codes for the `detect` command and update `gauntlet-commit` skill to handle unexpected detect exit codes
+
 ## 1.2.1
 
 ### Patch Changes
