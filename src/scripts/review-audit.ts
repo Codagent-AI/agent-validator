@@ -81,7 +81,7 @@ function getLogDir(cwd: string): string {
   try {
     const cfg = path.join(cwd, '.gauntlet', 'config.yml');
     const m = fs.readFileSync(cfg, 'utf-8').match(/^log_dir:\s*(.+)$/m);
-    if (m?.[1]) return m[1].trim();
+    if (m?.[1]) return m[1].trim().replace(/^["']|["']$/g, '');
   } catch {}
   return 'gauntlet_logs';
 }
@@ -392,7 +392,7 @@ function formatSummary(
   return [
     '=== Summary ===',
     `Gauntlet rounds: ${total}`,
-    `  Total runs:      ${ct.grandTotal.count}`,
+    `  Total gate executions: ${ct.grandTotal.count}`,
     `  Total review issues fixed: ${totalFixed}`,
   ];
 }
@@ -464,6 +464,10 @@ async function readBlocks(
 }
 export async function main(date?: string, since?: string): Promise<void> {
   const cwd = process.cwd();
+  if (date && since) {
+    console.error('Use either --date or --since, not both.');
+    process.exit(1);
+  }
   const dateRe = /^\d{4}-\d{2}-\d{2}$/;
   if (date && !dateRe.test(date)) {
     console.error('Invalid --date. Expected YYYY-MM-DD');
@@ -473,21 +477,17 @@ export async function main(date?: string, since?: string): Promise<void> {
     console.error('Invalid --since. Expected YYYY-MM-DD');
     process.exit(1);
   }
-  const debugLogPath = path.join(cwd, getLogDir(cwd), '.debug.log');
+  const logDir = getLogDir(cwd);
+  const debugLogPath = path.join(cwd, logDir, '.debug.log');
   if (!fs.existsSync(debugLogPath)) {
-    console.log(`No debug log found. (looked in ${getLogDir(cwd)}/.debug.log)`);
+    console.log(`No debug log found. (looked in ${logDir}/.debug.log)`);
     process.exit(0);
   }
-  let matchDate: (d: string) => boolean;
-  let label: string;
-  if (since) {
-    matchDate = (d) => d >= since;
-    label = `${since} – ${todayLocalDate()}`;
-  } else {
-    const targetDate = date ?? todayLocalDate();
-    matchDate = (d) => d === targetDate;
-    label = targetDate;
-  }
+  const targetDate = since ?? date ?? todayLocalDate();
+  const matchDate: (d: string) => boolean = since
+    ? (d) => d >= since
+    : (d) => d === targetDate;
+  const label = since ? `${since} – ${todayLocalDate()}` : targetDate;
   const blocks = await readBlocks(debugLogPath, matchDate);
   console.log(formatAuditReport(blocks, label));
 }

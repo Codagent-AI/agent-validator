@@ -19,11 +19,11 @@ async function gitExec(args: string[]): Promise<string> {
   return stdout;
 }
 
-/** Split newline-delimited git output into a trimmed, non-empty string array. */
+/** Split newline-delimited git output into a non-empty string array. */
 function splitLines(output: string): string[] {
   return output
     .split('\n')
-    .map((f) => f.trim())
+    .map((f) => f.replace(/\r$/, ''))
     .filter((f) => f.length > 0);
 }
 

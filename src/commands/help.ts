@@ -36,7 +36,7 @@ export function registerHelpCommand(program: Command): void {
         '  status        Show a summary of the most recent gauntlet session',
       );
       console.log(
-        '  review-audit  Audit review execution for a given date from the debug log',
+        '  review-audit  Audit review execution from the debug log (--date or --since)',
       );
       console.log('  ci            CI integration commands (init, list-jobs)');
       console.log(

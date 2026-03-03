@@ -230,9 +230,10 @@ function filterDiffByExcludeSet(
 
   for (const line of lines) {
     if (line.startsWith('diff --git ')) {
-      // Extract filename from "diff --git a/<file> b/<file>"
-      const match = /^diff --git a\/(.+) b\/.+$/.exec(line);
-      const file = match?.[1];
+      // Extract filename — handles both plain and quoted paths
+      const match =
+        /^diff --git (?:"a\/(.+?)"|a\/(\S+)) (?:"b\/.*?"|b\/\S+)$/.exec(line);
+      const file = match?.[1] ?? match?.[2];
       skip = file !== undefined && excludeFiles.has(file);
     }
     if (!skip) {
