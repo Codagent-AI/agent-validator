@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 1.2.1
+
+### Patch Changes
+
+- [#98](https://github.com/pacaplan/agent-gauntlet/pull/98) Fix stash untracked-to-tracked diff handling so `fixBase` correctly applies when files transition from untracked to tracked, with E2E test coverage for the code path
+
 ## 1.2.0
 
 ### Minor Changes
