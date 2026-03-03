@@ -260,10 +260,11 @@ entry_points:
 					"export const x = 999;\n",
 				);
 
-				// Step 4: Run gauntlet again with --uncommitted to force diff computation
-				// (using --uncommitted to avoid fixBase path for simplicity; the key test
-				// is that the commit from stash doesn't appear as spurious in diff)
-				await spawnGauntlet(["run", "--uncommitted"], {
+				// Step 4: Run gauntlet again — this exercises the fixBase code path
+				// because execution state exists from the first run. The diff is
+				// computed against the stash ref, which exercises getFixBaseDiff
+				// and the committed-from-stash exclusion logic.
+				await spawnGauntlet(["run"], {
 					cwd: tempDir,
 					timeoutMs: TIMEOUT_MS,
 				});
@@ -274,10 +275,6 @@ entry_points:
 
 				// Verify working_tree_ref was updated after the second run
 				expect(secondState?.working_tree_ref).not.toBeUndefined();
-
-				// The key behavior being tested (exclusion of committed-from-stash files)
-				// is validated by the unit tests in test/core/diff-stats.test.ts
-				// This E2E test validates the overall lifecycle runs without error
 			},
 			{ timeout: TIMEOUT_MS * 2 },
 		);
