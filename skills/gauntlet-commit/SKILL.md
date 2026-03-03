@@ -24,6 +24,7 @@ Check the exit code from the `DETECT_EXIT:` line:
 - **Exit 0** → gates would run, continue to Step 2
 - **Exit 2** → no gates would run (no changes or no applicable gates), **skip to Step 4** (commit directly)
 - **Exit 1** → error, report the error to the user and stop
+- **Any other exit code** → treat as error, report output to the user, and stop
 
 ## Step 2 - Determine Validation Intent
 
