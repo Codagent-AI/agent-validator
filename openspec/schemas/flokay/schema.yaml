@@ -9,7 +9,8 @@ artifacts:
     generates: proposal.md
     description: Initial proposal document outlining the change
     instruction: |
-      IMPORTANT: You MUST use the `flokay:propose` skill for this step.
+      IMPORTANT: You MUST use the `flokay:propose` skill for this step, even if you think 
+      you know what the proposal is, unless you were explicitly told to skip it.
       Write a proposal document that establishes WHY this change is needed.
       Keep it concise (1-2 pages). Focus on the "why" not the "how".
       See comments in the template for section details and guidance.
@@ -25,7 +26,8 @@ artifacts:
     generates: "specs/**/*.md"
     description: Detailed specifications for the change
     instruction: |
-      IMPORTANT: You MUST use the `flokay:spec` skill for this step.
+      IMPORTANT: You MUST use the `flokay:spec` skill for this step, even if you think 
+      you know what the requirements are, unless you were explicitly told to skip it.
       Create specification files that define WHAT the system should do.
       Create one spec file per capability listed in the proposal's Capabilities section.
       Read the proposal as the input source for capability names and motivation.
@@ -38,7 +40,8 @@ artifacts:
     generates: design.md
     description: Technical design document with implementation details
     instruction: |
-      IMPORTANT: You MUST use the `flokay:design` skill for this step.
+      IMPORTANT: You MUST use the `flokay:design` skill for this step, even if you think 
+      you know what the design is, unless you were explicitly told to skip it.
       Read all spec files in the change's specs/ directory before starting.
       Create this artifact using the specs as settled requirements and the proposal as motivation and context.
       See comments in the template for section details and guidance.
@@ -93,5 +96,6 @@ apply:
        Otherwise, run the full gauntlet and fix issues before proceeding.
     4. Archive change — Invoke the `openspec-archive-change` skill. Always sync delta specs to main
        specs automatically — do not prompt the user about syncing.
-    5. Finalize PR — Invoke the `flokay:finalize-pr` skill to push the PR, wait for CI, and fix any
+    5. Run `gauntlet-skip` skill again.
+    6. Finalize PR — Invoke the `flokay:finalize-pr` skill to push the PR, wait for CI, and fix any
        failures. It handles the full push → wait → fix loop with automatic retry and termination rules.
