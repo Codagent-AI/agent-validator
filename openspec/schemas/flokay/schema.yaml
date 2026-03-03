@@ -1,6 +1,6 @@
 name: flokay
 version: 1
-description: Flokay workflow - proposal → design → specs → tasks → review
+description: Flokay workflow - proposal → specs → design → tasks → review
 
 artifacts:
   - id: proposal
@@ -19,31 +19,33 @@ artifacts:
       directory and write proposal.md after the user confirms they want to go ahead.
       When done, tell the user the relative path of the proposal file created.
 
-  - id: design
+  - id: specs
     requires: [proposal]
+    template: spec.md
+    generates: "specs/**/*.md"
+    description: Detailed specifications for the change
+    instruction: |
+      IMPORTANT: You MUST use the `flokay:spec` skill for this step.
+      Create specification files that define WHAT the system should do.
+      Create one spec file per capability listed in the proposal's Capabilities section.
+      Read the proposal as the input source for capability names and motivation.
+      See comments in the template for formatting rules, delta operations, and guidance.
+      When done, tell the user the relative path of each spec file created.
+
+  - id: design
+    requires: [specs]
     template: design.md
     generates: design.md
     description: Technical design document with implementation details
     instruction: |
       IMPORTANT: You MUST use the `flokay:design` skill for this step.
-      Create this artifact using the proposal as the source of motivation and context.
+      Read all spec files in the change's specs/ directory before starting.
+      Create this artifact using the specs as settled requirements and the proposal as motivation and context.
       See comments in the template for section details and guidance.
       When done, tell the user the relative path of the design file created.
 
-  - id: specs
-    requires: [design]
-    template: spec.md
-    generates: "specs/**/*.md"
-    description: Detailed specifications for the change
-    instruction: |
-      Create specification files that define WHAT the system should do.
-      Create one spec file per capability listed in the proposal's Capabilities section.
-      Read both the proposal and design as input sources.
-      See comments in the template for formatting rules, delta operations, and guidance.
-      When done, tell the user the relative path of each spec file created.
-
   - id: tasks
-    requires: [specs]
+    requires: [design]
     template: tasks.md
     generates: tasks.md
     description: Implementation checklist with trackable tasks
@@ -80,7 +82,9 @@ apply:
     the implement-task skill will handle dispatching a subagent to implement
     the work and marking it complete (`- [x]`) in tasks.md.
     Pause if you hit blockers or need clarification.
-    Once ALL tasks are complete, run `agent-gauntlet detect` and, if unverified changes exist, run the gauntlet and fix issues before proceeding.
+    Once ALL tasks are complete, run `agent-gauntlet detect` and check the output.
+    If the only unverified file is a task-tracking file (e.g. tasks.md checkbox edits), run the `gauntlet-skip` skill instead of a full gauntlet run.
+    If there are additional unverified file changes beyond task-tracking, run the gauntlet and fix issues before proceeding.
     Then invoke the `openspec-archive-change` skill to archive the change. When archiving, always sync delta specs to main specs automatically — do not prompt the user about syncing.
 
     After archiving, invoke the `flokay:finalize-pr` skill to push the PR, wait for CI, and fix any failures — it handles the full push → wait → fix loop with automatic retry and termination rules.
