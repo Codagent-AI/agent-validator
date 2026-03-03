@@ -16,11 +16,14 @@ Commit with optional gauntlet validation. Runs `agent-gauntlet detect` first, va
 Run `agent-gauntlet detect` using `Bash`:
 
 ```bash
-agent-gauntlet detect 2>&1
+agent-gauntlet detect 2>&1; echo "DETECT_EXIT:$?"
 ```
 
-- If no changed files are reported → **skip to Step 4** (commit directly, no validation needed)
-- If changed files are reported → continue to Step 2
+Check the exit code from the `DETECT_EXIT:` line:
+
+- **Exit 0** → gates would run, continue to Step 2
+- **Exit 2** → no gates would run (no changes or no applicable gates), **skip to Step 4** (commit directly)
+- **Exit 1** → error, report the error to the user and stop
 
 ## Step 2 - Determine Validation Intent
 

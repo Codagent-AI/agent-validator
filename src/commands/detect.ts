@@ -119,7 +119,7 @@ export function registerDetectCommand(program: Command): void {
 
         if (changes.length === 0) {
           console.log(chalk.green('No changes detected.'));
-          return;
+          process.exit(2);
         }
 
         console.log(chalk.dim(`Found ${changes.length} changed files:`));
@@ -136,7 +136,7 @@ export function registerDetectCommand(program: Command): void {
 
         if (jobs.length === 0) {
           console.log(chalk.yellow('No applicable gates for these changes.'));
-          return;
+          process.exit(2);
         }
 
         console.log(chalk.bold(`Would run ${jobs.length} gate(s):\n`));
