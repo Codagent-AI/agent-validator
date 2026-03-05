@@ -9,6 +9,7 @@ import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
 import { computeSkillChecksum } from './init-checksums.js';
 import { installHooksForAdapters } from './init-hooks.js';
 import {
+  type OverwriteChoice,
   promptDevCLIs,
   promptFileOverwrite,
   promptNumReviews,
@@ -207,11 +208,17 @@ async function copyDirRecursive(opts: {
   }
 }
 
+interface UpdateAllState {
+  updateAll: boolean;
+}
+
 async function installSkillsWithChecksums(
   projectRoot: string,
+  targetBaseDir: string,
   skipPrompts: boolean,
+  updateAllState: UpdateAllState,
 ): Promise<void> {
-  const skillsDir = path.join(projectRoot, '.claude', 'skills');
+  const skillsDir = path.join(projectRoot, targetBaseDir);
   for (const dirName of await getSkillDirNames()) {
     const sourceDir = path.join(SKILLS_SOURCE_DIR, dirName);
     const targetDir = path.join(skillsDir, dirName);
@@ -227,8 +234,16 @@ async function installSkillsWithChecksums(
     const targetChecksum = await computeSkillChecksum(targetDir);
     if (sourceChecksum === targetChecksum) continue;
 
-    const shouldOverwrite = await promptFileOverwrite(dirName, skipPrompts);
-    if (!shouldOverwrite) continue;
+    let choice: OverwriteChoice;
+    if (skipPrompts || updateAllState.updateAll) {
+      choice = 'yes';
+    } else {
+      choice = await promptFileOverwrite(dirName, skipPrompts);
+      if (choice === 'all') {
+        updateAllState.updateAll = true;
+      }
+    }
+    if (choice === 'no') continue;
 
     await fs.rm(targetDir, { recursive: true, force: true });
     await copyDirRecursive({ src: sourceDir, dest: targetDir });
@@ -241,14 +256,37 @@ async function installExternalFiles(
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
 ): Promise<void> {
-  await installSkillsWithChecksums(projectRoot, skipPrompts);
+  const updateAllState: UpdateAllState = { updateAll: false };
+  const claudeSkillsDir = path.join('.claude', 'skills');
+  await installSkillsWithChecksums(
+    projectRoot,
+    claudeSkillsDir,
+    skipPrompts,
+    updateAllState,
+  );
+  const seen = new Set([claudeSkillsDir]);
+  for (const adapter of devAdapters) {
+    const dir = adapter.getProjectSkillDir();
+    if (dir && !seen.has(dir)) {
+      seen.add(dir);
+      await installSkillsWithChecksums(
+        projectRoot,
+        dir,
+        skipPrompts,
+        updateAllState,
+      );
+    }
+  }
   await installHooksForAdapters(projectRoot, devAdapters, skipPrompts);
 }
 
 async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
   const hasNative = devCLINames.some((name) => NATIVE_CLIS.has(name));
-  const nonNativeNames = devCLINames.filter((name) => !NATIVE_CLIS.has(name));
-  const hasNonNative = nonNativeNames.length > 0;
+  const hasCodex = devCLINames.includes('codex');
+  const otherNonNativeNames = devCLINames.filter(
+    (name) => !NATIVE_CLIS.has(name) && name !== 'codex',
+  );
+  const hasOtherNonNative = otherNonNativeNames.length > 0;
 
   console.log();
   if (hasNative) {
@@ -258,7 +296,19 @@ async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
       ),
     );
   }
-  if (hasNonNative) {
+  if (hasCodex) {
+    console.log(
+      chalk.bold(
+        'To complete setup in Codex, reference the setup skill: .agents/skills/gauntlet-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run.',
+      ),
+    );
+    console.log();
+    console.log('Available Codex skills:');
+    for (const dirName of await getSkillDirNames()) {
+      console.log(`  .agents/skills/${dirName}/SKILL.md`);
+    }
+  }
+  if (hasOtherNonNative) {
     console.log(
       chalk.bold(
         'To complete setup, reference the setup skill in your CLI: @.claude/skills/gauntlet-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run.',

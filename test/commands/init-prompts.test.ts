@@ -5,6 +5,7 @@ mock.module("@inquirer/prompts", () => ({
 	checkbox: async () => ["claude", "codex"],
 	number: async () => 2,
 	confirm: async () => true,
+	select: async () => "yes",
 }));
 
 const {
@@ -57,14 +58,14 @@ describe("promptNumReviews", () => {
 });
 
 describe("promptFileOverwrite", () => {
-	it("should return true when skipPrompts is true", async () => {
+	it("should return 'yes' when skipPrompts is true", async () => {
 		const result = await promptFileOverwrite("gauntlet-run", true);
-		expect(result).toBe(true);
+		expect(result).toBe("yes");
 	});
 
-	it("should call confirm when skipPrompts is false", async () => {
+	it("should call select when skipPrompts is false", async () => {
 		const result = await promptFileOverwrite("gauntlet-run", false);
-		expect(result).toBe(true); // mocked to return true
+		expect(result).toBe("yes"); // mocked select returns "yes"
 	});
 });
 
