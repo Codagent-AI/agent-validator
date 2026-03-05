@@ -23,11 +23,12 @@ agent-gauntlet init
 This walks you through an interactive setup:
 
 1. **Detects available CLIs** on your system
-2. **Prompts for development CLIs** — the tools you work in (hooks are installed for these)
-3. **Prompts for review CLIs** — the tools used for AI code reviews (sets `cli.default_preference`)
-4. **Creates `.gauntlet/`** with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout))
-5. **Installs skills and hooks** using checksum-based comparison for safe re-runs
-6. **Prints next steps** with context-aware instructions for your selected CLIs
+2. **Prompts for development CLIs** — the tools you work in
+3. **Prompts for install scope** — local (project) or global (user) installation
+4. **Prompts for review CLIs** — the tools used for AI code reviews (sets `cli.default_preference`)
+5. **Creates `.gauntlet/`** with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout))
+6. **Installs skills and hooks** — for Claude Code, installs as a Claude Code plugin (skills and hooks delivered via plugin). For Codex, copies skill files to `.agents/skills/`. For Cursor, writes hooks to `.cursor/hooks.json`.
+7. **Prints next steps** with context-aware instructions for your selected CLIs
 
 Use `--yes` to skip all prompts (selects all detected CLIs, overwrites changed files).
 
@@ -214,32 +215,26 @@ Your local check definitions (`.gauntlet/checks/`) are automatically used in CI.
 
 The stop hook automatically runs the gauntlet when an AI agent tries to stop working, ensuring all gates pass before completion.
 
-**Automatic setup:** Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) when they are selected as **development CLIs**. No manual configuration is needed.
-
-**Manual setup for Claude Code** (if not using `init`):
-
-Add this to your Claude Code settings (`.claude/settings.json` or via `claude settings`):
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": ["agent-gauntlet stop-hook"]
-      }
-    ]
-  }
-}
-```
+**Automatic setup:** For Claude Code, hooks are delivered as part of the agent-gauntlet plugin — `agent-gauntlet init` installs the plugin, and hooks are served from the plugin's `hooks/hooks.json`. No manual settings.json configuration is needed. For Cursor, hooks are written to `.cursor/hooks.json` during init.
 
 When the agent tries to stop, the hook runs the gauntlet. If gates fail, the agent is directed to fix issues before stopping.
 
 For detailed configuration options, troubleshooting, and advanced usage, see the [Stop Hook Guide](stop-hook-guide.md).
 
+## Updating
+
+To update Agent Gauntlet after upgrading the npm package:
+
+```bash
+agent-gauntlet update
+```
+
+This updates the Claude Code plugin (via marketplace) and refreshes Codex skills if installed. The command auto-detects where the plugin is installed (project or user scope).
+
 ## Further Reading
 - [User Guide](user-guide.md) — full usage details
 - [Skills Guide](skills-guide.md) — gauntlet skills for AI agents
+- [Plugin & Update Guide](plugin-guide.md) — Claude Code plugin delivery and updating
 - [Configuration Reference](config-reference.md) — all configuration fields + defaults
 - [CLI Invocation Details](cli-invocation-details.md) — how we securely invoke AI CLIs
 - [Stop Hook Guide](stop-hook-guide.md) — stop hook configuration and troubleshooting

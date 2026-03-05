@@ -35,37 +35,17 @@ The stop hook automatically detects which IDE is calling it based on the input f
 
 ### Claude Code Configuration
 
-Add the stop hook to your Claude Code settings:
+When you run `agent-gauntlet init` with Claude Code selected, the stop hook is delivered automatically as part of the agent-gauntlet Claude Code plugin. The plugin's `hooks/hooks.json` contains both the stop hook and the session start hook — no manual settings.json configuration is needed.
 
-**Option 1: Project-level settings** (`.claude/settings.json`):
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": ["agent-gauntlet stop-hook"]
-      }
-    ]
-  }
-}
+**Manual setup** (if not using `init`):
+
+```bash
+# Register the marketplace and install the plugin
+claude plugin marketplace add pcaplan/agent-gauntlet
+claude plugin install agent-gauntlet --scope project
 ```
 
-**Option 2: Global settings** (via `claude settings`):
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": ["agent-gauntlet stop-hook"]
-      }
-    ]
-  }
-}
-```
-
-The empty `matcher` means the hook runs for all projects. Use a path pattern like `"/path/to/project/*"` to limit to specific projects.
+The plugin includes a `hooks/hooks.json` that configures the stop hook with a 300-second timeout and a session start hook for priming agent sessions.
 
 ### Cursor IDE Configuration
 

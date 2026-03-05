@@ -68,7 +68,8 @@ Run `/release` from the project root. The command will:
 2. Query all PRs merged to `main` since that tag
 3. Generate a changeset file for each PR (bump type derived from conventional commit prefix)
 4. Run `changeset version` to update `CHANGELOG.md` and bump `package.json`
-5. Create a release PR (e.g., `chore: release v1.0.0`)
+5. Sync the version to `.claude-plugin/plugin.json` (keeps plugin manifest in sync with package.json)
+6. Create a release PR (e.g., `chore: release v1.0.0`)
 
 ### Publishing
 
