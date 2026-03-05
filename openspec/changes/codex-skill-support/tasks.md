@@ -1,0 +1,1 @@
+- [ ] Add Codex skill installation and update-all prompt (`tasks/codex-skill-install.md`)
