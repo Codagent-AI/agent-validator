@@ -99,6 +99,19 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **WHEN** Phase 5 runs
 - **THEN** the file SHALL be overwritten without prompting
 
+### Requirement: Phase 4 scaffold skips when .gauntlet/ exists
+
+When `.gauntlet/` already exists, Phase 4 SHALL skip entirely without modifying any files inside the directory.
+
+#### Scenario: Re-run skips .gauntlet/ scaffolding
+- **GIVEN** the user runs `agent-gauntlet init`
+- **AND** `.gauntlet/` directory already exists
+- **WHEN** Phase 4 runs
+- **THEN** no files inside `.gauntlet/` SHALL be created or modified
+- **AND** init SHALL delegate to update logic (not run Phase 5 directly)
+
+## ADDED Requirements
+
 ### Requirement: Init installs Claude plugin instead of copying skills
 
 When Claude is a selected development CLI, init SHALL install the agent-gauntlet Claude plugin instead of copying skill files to `.claude/skills/`.
@@ -170,10 +183,11 @@ CLIs that are not Claude or Codex SHALL continue using the existing skill-copy i
 - **WHEN** Phase 5 runs
 - **THEN** skills SHALL be copied to `.claude/skills/` with `@file_path` references (existing behavior)
 
-#### Scenario: Cursor selected copies skills to .claude/skills/
+#### Scenario: Cursor selected copies skills only (no hooks)
 - **GIVEN** the user selects `cursor` as a development CLI
 - **WHEN** Phase 5 runs
 - **THEN** skills SHALL be installed using the existing Cursor adapter behavior
+- **AND** no Cursor hook configuration SHALL be performed (Cursor hook support is deferred)
 
 ## REMOVED Requirements
 

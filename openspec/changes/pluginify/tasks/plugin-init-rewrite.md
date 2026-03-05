@@ -37,7 +37,7 @@ Changes needed:
 - **Phase 5 (Claude):** Instead of copying skills to `.claude/skills/`, run `claude plugin marketplace add pcaplan/agent-gauntlet` then `claude plugin install agent-gauntlet --scope <scope>`. If either command fails, warn the user, print manual installation instructions (`claude plugin marketplace add pcaplan/agent-gauntlet` and `claude plugin install agent-gauntlet --scope <scope>`), and continue with remaining init steps. Do NOT write any hook entries to `settings.local.json` — hooks are now in the plugin's `hooks/hooks.json`.
 - **Phase 5 (Codex):** When local scope is selected, install to `.agents/skills/<skill-name>/` (same as today). When global scope is selected, install to `$HOME/.agents/skills/<skill-name>/` instead. Use the existing `installSkillsWithChecksums` function but pass the appropriate base directory.
 - **Phase 5 (Other CLIs):** Gemini, Cursor, GitHub Copilot keep existing skill-copy behavior (copy to `.claude/skills/` with `@file_path` references).
-- **Re-run case:** When `.gauntlet/` already exists, skip phases 2-4 and delegate to update logic. For this task, implement a simple inline version: re-run plugin install for Claude (detect scope from `claude plugin list --json` or default to user) and refresh Codex skills. The full shared update module comes in the next task.
+- **Re-run case:** When `.gauntlet/` already exists, skip phases 2-4 and delegate to update logic. Implement a simple inline version: re-run plugin install for Claude (detect scope from `claude plugin list --json` or default to user) and refresh Codex skills.
 
 **Init prompts (`src/commands/init-prompts.ts`):** Add a `promptInstallScope` function that returns `'user' | 'project'`. With `skipPrompts`, return `'project'` (local default).
 

@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Hook delivery via plugin
 
@@ -54,3 +54,7 @@ Claude Code hooks SHALL be delivered as part of the agent-gauntlet plugin via `h
 ### Requirement: Init installs gauntlet-help for Claude
 **Reason**: Skills are now delivered via the plugin, not copied during init.
 **Migration**: Re-run `agent-gauntlet init` to install the plugin.
+
+### Requirement: Re-run skips interactive phases
+**Reason**: Re-run behavior moved to init-config spec as "Re-run delegates to update".
+**Migration**: Re-run now delegates to update logic instead of running Phase 5 directly.
