@@ -15,7 +15,8 @@ Claude Code hooks SHALL be delivered as part of the agent-gauntlet plugin via `h
 - **AND** init SHALL NOT write hook entries to `.claude/settings.local.json`
 
 #### Scenario: Plugin hooks.json contains start and stop hooks
-- **WHEN** the agent-gauntlet plugin is installed
+- **GIVEN** the agent-gauntlet plugin is installed
+- **WHEN** hook configuration is evaluated
 - **THEN** the plugin's `hooks/hooks.json` SHALL contain a stop hook for `agent-gauntlet stop-hook`
 - **AND** SHALL contain a start hook for `agent-gauntlet start-hook`
 - **AND** the stop hook timeout SHALL be 300 seconds

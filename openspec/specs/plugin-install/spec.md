@@ -8,11 +8,13 @@ Plugin installation during `agent-gauntlet init`. Covers Claude plugin marketpla
 The `init` command SHALL run `claude plugin marketplace add pcaplan/agent-gauntlet` before attempting plugin installation. The command SHALL be run unconditionally (no pre-check).
 
 #### Scenario: Marketplace add succeeds
+- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
 - **WHEN** `init` runs the marketplace add command
 - **AND** the command succeeds
 - **THEN** init SHALL proceed to plugin installation
 
 #### Scenario: Marketplace add fails
+- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
 - **WHEN** `init` runs the marketplace add command
 - **AND** the command fails
 - **THEN** init SHALL warn the user that plugin installation failed
@@ -24,18 +26,22 @@ The `init` command SHALL run `claude plugin marketplace add pcaplan/agent-gauntl
 The `init` command SHALL install the agent-gauntlet Claude plugin using `claude plugin install agent-gauntlet --scope <scope>`, where scope is `user` (global) or `project` (local) based on the user's selection.
 
 #### Scenario: User selects local scope
+- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
 - **WHEN** the user selects local/project installation
 - **THEN** init SHALL run `claude plugin install agent-gauntlet --scope project`
 
 #### Scenario: User selects global scope
+- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
 - **WHEN** the user selects global installation
 - **THEN** init SHALL run `claude plugin install agent-gauntlet --scope user`
 
 #### Scenario: Plugin already installed at different scope
-- **WHEN** the plugin is already installed at a different scope
+- **GIVEN** the agent-gauntlet plugin is already installed at a different scope
+- **WHEN** the user runs `agent-gauntlet init`
 - **THEN** init SHALL install at the requested scope regardless (both installations coexist)
 
 #### Scenario: Plugin install command fails
+- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
 - **WHEN** `claude plugin install` fails
 - **THEN** init SHALL warn the user that plugin installation failed
 - **AND** SHALL print manual installation instructions
@@ -46,6 +52,7 @@ The `init` command SHALL install the agent-gauntlet Claude plugin using `claude 
 The npm package SHALL include a `.claude-plugin/plugin.json` manifest so the package can be discovered as a Claude Code plugin.
 
 #### Scenario: Plugin manifest contents
+- **GIVEN** the agent-gauntlet npm package is built
 - **WHEN** the package is published
 - **THEN** `.claude-plugin/plugin.json` SHALL contain `name`, `version`, `description`, and `license` fields
 - **AND** the `version` field SHALL match the version in `package.json`

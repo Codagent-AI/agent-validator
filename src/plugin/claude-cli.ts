@@ -16,6 +16,7 @@ function runClaudeCommand(args: string[]): ClaudeCommandResult {
     const stdout = execFileSync('claude', args, {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 60_000,
     }) as string;
     return { success: true, stdout };
   } catch (error: unknown) {

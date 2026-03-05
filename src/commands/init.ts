@@ -90,6 +90,29 @@ export function registerInitCommand(program: Command): void {
     });
 }
 
+async function handleRerun(
+  projectRoot: string,
+  availableAdapters: CLIAdapter[],
+  skipPrompts: boolean,
+): Promise<void> {
+  try {
+    await runPluginUpdate({ skipPrompts });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('Claude plugin is not installed')) throw error;
+    console.log(
+      chalk.yellow('Plugin not installed yet, running fresh install...'),
+    );
+    const installScope = await promptInstallScope(skipPrompts);
+    await installExternalFiles(
+      projectRoot,
+      availableAdapters,
+      skipPrompts,
+      installScope,
+    );
+  }
+}
+
 async function runInit(options: InitOptions): Promise<void> {
   const projectRoot = process.cwd();
   const targetDir = path.join(projectRoot, '.gauntlet');
@@ -113,7 +136,7 @@ async function runInit(options: InitOptions): Promise<void> {
   if (gauntletExists) {
     console.log(chalk.dim('.gauntlet/ already exists, skipping scaffolding'));
     instructionCLINames = detectedNames;
-    await runPluginUpdate({ skipPrompts });
+    await handleRerun(projectRoot, availableAdapters, skipPrompts);
   } else {
     const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
     installScope = await promptInstallScope(skipPrompts);
