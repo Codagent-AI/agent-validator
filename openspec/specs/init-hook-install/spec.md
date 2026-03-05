@@ -1,7 +1,7 @@
 # init-hook-install Specification
 
 ## Purpose
-TBD - created by archiving change add-stop-hook. Update Purpose after archive.
+Hook installation during `agent-gauntlet init`. Covers plugin-based hook delivery for Claude and checksum computation for skills.
 ## Requirements
 ### Requirement: Hook delivery via plugin
 

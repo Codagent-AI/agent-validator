@@ -21,7 +21,7 @@ const updateMarketplaceMock = mock(async () => ({ success: true }));
 const updatePluginMock = mock(async () => ({ success: true }));
 
 const addMarketplaceMock = mock(async () => ({ success: true }));
-const installPluginMock = mock(async () => ({ success: true }));
+const installPluginMock = mock(async (_scope: string) => ({ success: true }));
 
 mock.module("../../src/plugin/claude-cli.js", () => ({
 	addMarketplace: () => addMarketplaceMock(),
