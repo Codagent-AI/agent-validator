@@ -71,6 +71,18 @@ const mockAdapters = [
 		supportsHooks: () => true,
 	},
 	{
+		name: "codex",
+		isAvailable: async () => true,
+		getProjectCommandDir: () => null,
+		getUserCommandDir: () => null,
+		getProjectSkillDir: () => ".agents/skills",
+		getUserSkillDir: () => null,
+		getCommandExtension: () => ".md",
+		canUseSymlink: () => true,
+		transformCommand: (content: string) => content,
+		supportsHooks: () => false,
+	},
+	{
 		name: "mock-cli-2",
 		isAvailable: async () => false, // Not available
 		getProjectCommandDir: () => ".mock2",
@@ -168,7 +180,7 @@ describe("Init Command", () => {
 			"utf-8",
 		);
 		expect(reviewContent).toContain("builtin: code-quality");
-		expect(reviewContent).toContain("num_reviews: 2");
+		expect(reviewContent).toContain("num_reviews: 3");
 
 		// Verify entry_points configuration
 		expect(configContent).toContain("entry_points: []");
@@ -248,13 +260,13 @@ describe("Init Command", () => {
 		expect(claudeBlock).not.toContain("model:");
 	});
 
-	it("should create reviews/code-quality.yml with num_reviews: 2", async () => {
+	it("should create reviews/code-quality.yml with num_reviews: 3", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 		const reviewContent = await fs.readFile(
 			path.join(TEST_DIR, ".gauntlet", "reviews", "code-quality.yml"),
 			"utf-8",
 		);
-		expect(reviewContent).toContain("num_reviews: 2");
+		expect(reviewContent).toContain("num_reviews: 3");
 		expect(reviewContent).toContain("builtin: code-quality");
 	});
 
@@ -342,8 +354,8 @@ describe("Init Command", () => {
 			path.join(TEST_DIR, ".gauntlet", "reviews", "code-quality.yml"),
 			"utf-8",
 		);
-		// With --yes and 2 detected CLIs, promptNumReviews returns count (2)
-		expect(reviewContent).toContain("num_reviews: 2");
+		// With --yes and 3 detected CLIs, promptNumReviews returns count (3)
+		expect(reviewContent).toContain("num_reviews: 3");
 	});
 
 	it("should update skill when checksum differs and --yes is passed", async () => {
@@ -1397,5 +1409,110 @@ describe("Skills Installation for Claude", () => {
 		);
 		expect(runContent).toContain("extract-prompt.md");
 		expect(runContent).toContain("update-prompt.md");
+	});
+});
+
+describe("Skills Installation for Codex", () => {
+	const originalConsoleLog = console.log;
+	const originalCwd = process.cwd();
+	let logs: string[];
+	let program: Command;
+
+	beforeAll(async () => {
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	beforeEach(() => {
+		program = new Command();
+		registerInitCommand(program);
+		logs = [];
+		console.log = (...args: unknown[]) => {
+			logs.push(args.join(" "));
+		};
+		process.chdir(TEST_DIR);
+	});
+
+	afterEach(() =>
+		cleanupTestEnv(originalConsoleLog, originalCwd, [
+			path.join(TEST_DIR, ".gauntlet"),
+			path.join(TEST_DIR, ".claude"),
+			path.join(TEST_DIR, ".cursor"),
+			path.join(TEST_DIR, ".agents"),
+		]),
+	);
+
+	it("should install skills to .agents/skills/ when codex is a dev CLI", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const agentsSkillsDir = path.join(TEST_DIR, ".agents", "skills");
+		const stat = await fs.stat(agentsSkillsDir);
+		expect(stat.isDirectory()).toBe(true);
+	});
+
+	it("should install all skill directories with SKILL.md to .agents/skills/", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const actions = ["run", "check", "status", "help", "setup"];
+		for (const action of actions) {
+			const skillPath = path.join(
+				TEST_DIR,
+				".agents",
+				"skills",
+				`gauntlet-${action}`,
+				"SKILL.md",
+			);
+			const stat = await fs.stat(skillPath);
+			expect(stat.isFile()).toBe(true);
+		}
+	});
+
+	it("should install identical content to .agents/skills/ and .claude/skills/", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const actions = ["run", "check", "status", "help", "setup"];
+		for (const action of actions) {
+			const claudeContent = await fs.readFile(
+				path.join(TEST_DIR, ".claude", "skills", `gauntlet-${action}`, "SKILL.md"),
+				"utf-8",
+			);
+			const codexContent = await fs.readFile(
+				path.join(TEST_DIR, ".agents", "skills", `gauntlet-${action}`, "SKILL.md"),
+				"utf-8",
+			);
+			expect(codexContent).toBe(claudeContent);
+		}
+	});
+
+	it("should skip .agents/skills/ with matching checksums on re-run", async () => {
+		// First run installs all skills
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		// Second run should skip skills with matching checksums
+		logs = [];
+		await fs.rm(path.join(TEST_DIR, ".gauntlet"), {
+			recursive: true,
+			force: true,
+		});
+		await fs.mkdir(path.join(TEST_DIR, ".gauntlet"), { recursive: true });
+
+		program = new Command();
+		registerInitCommand(program);
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const output = logs.join("\n");
+		expect(output).not.toContain("Created .agents/skills/gauntlet-run/");
+		expect(output).not.toContain("Updated .agents/skills/gauntlet-run/");
+	});
+
+	it("should log Created messages for .agents/skills/ on first install", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const output = logs.join("\n");
+		expect(output).toContain("Created .agents/skills/gauntlet-run/");
+		expect(output).toContain("Created .agents/skills/gauntlet-check/");
 	});
 });
