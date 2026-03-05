@@ -139,6 +139,7 @@ describe("Init Command", () => {
 			path.join(TEST_DIR, ".gauntlet"),
 			path.join(TEST_DIR, ".claude"),
 			path.join(TEST_DIR, ".cursor"),
+			path.join(TEST_DIR, ".agents"),
 			path.join(TEST_DIR, ".gitignore"),
 		]),
 	);
@@ -1118,6 +1119,7 @@ describe("Skills Migration", () => {
 			path.join(TEST_DIR, ".gauntlet"),
 			path.join(TEST_DIR, ".claude"),
 			path.join(TEST_DIR, ".cursor"),
+			path.join(TEST_DIR, ".agents"),
 		]),
 	);
 
@@ -1160,6 +1162,7 @@ describe("Skills Installation for Claude", () => {
 			path.join(TEST_DIR, ".gauntlet"),
 			path.join(TEST_DIR, ".claude"),
 			path.join(TEST_DIR, ".cursor"),
+			path.join(TEST_DIR, ".agents"),
 		]),
 	);
 
