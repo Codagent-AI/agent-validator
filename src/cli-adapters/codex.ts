@@ -198,7 +198,7 @@ export class CodexAdapter implements CLIAdapter {
   }
 
   getProjectSkillDir(): string | null {
-    return null;
+    return '.agents/skills';
   }
 
   getUserSkillDir(): string | null {

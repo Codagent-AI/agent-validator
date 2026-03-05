@@ -1,4 +1,4 @@
-import { checkbox, confirm, number } from '@inquirer/prompts';
+import { checkbox, confirm, number, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 
 export async function promptDevCLIs(
@@ -57,15 +57,21 @@ export async function promptNumReviews(
   return result ?? 1;
 }
 
+export type OverwriteChoice = 'yes' | 'no' | 'all';
+
 export async function promptFileOverwrite(
   name: string,
   skipPrompts: boolean,
-): Promise<boolean> {
-  if (skipPrompts) return true;
+): Promise<OverwriteChoice> {
+  if (skipPrompts) return 'yes';
 
-  return confirm({
+  return select({
     message: `Skill \`${name}\` has changed, update it?`,
-    default: true,
+    choices: [
+      { name: 'Yes', value: 'yes' as const },
+      { name: 'No', value: 'no' as const },
+      { name: 'Yes to all remaining', value: 'all' as const },
+    ],
   });
 }
 
