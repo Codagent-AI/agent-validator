@@ -7,24 +7,20 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
 import { computeSkillChecksum } from './init-checksums.js';
-import { installHooksForAdapters } from './init-hooks.js';
+import {
+  getCodexSkillsBaseDir,
+  installClaudePluginWithFallback,
+} from './init-plugin.js';
 import {
   type OverwriteChoice,
   promptDevCLIs,
   promptFileOverwrite,
+  promptInstallScope,
   promptNumReviews,
   promptReviewCLIs,
 } from './init-prompts.js';
+import { runPluginUpdate } from './plugin-update.js';
 import { exists } from './shared.js';
-
-// Re-export hook utilities for external consumers
-export {
-  installCursorStartHook,
-  installCursorStopHook,
-  installStartHook,
-  installStopHook,
-  mergeHookConfig,
-} from './init-hooks.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -110,20 +106,20 @@ async function runInit(options: InitOptions): Promise<void> {
   const detectedNames = availableAdapters.map((a) => a.name);
   const gauntletExists = await exists(targetDir);
 
-  let hookAdapters: CLIAdapter[];
+  let devAdapters: CLIAdapter[];
   let instructionCLINames: string[];
+  let installScope: 'user' | 'project' = 'project';
 
   if (gauntletExists) {
     console.log(chalk.dim('.gauntlet/ already exists, skipping scaffolding'));
-    hookAdapters = availableAdapters;
     instructionCLINames = detectedNames;
+    await runPluginUpdate({ skipPrompts });
   } else {
     const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
-    hookAdapters = availableAdapters.filter((a) =>
-      devCLINames.includes(a.name),
-    );
+    installScope = await promptInstallScope(skipPrompts);
+    devAdapters = availableAdapters.filter((a) => devCLINames.includes(a.name));
 
-    for (const adapter of hookAdapters) {
+    for (const adapter of devAdapters) {
       if (!adapter.supportsHooks()) {
         console.log(
           chalk.yellow(
@@ -151,9 +147,13 @@ async function runInit(options: InitOptions): Promise<void> {
       numReviews,
     );
     instructionCLINames = devCLINames;
+    await installExternalFiles(
+      projectRoot,
+      devAdapters,
+      skipPrompts,
+      installScope,
+    );
   }
-
-  await installExternalFiles(projectRoot, hookAdapters, skipPrompts);
   await addToGitignore(projectRoot, 'gauntlet_logs');
   await printPostInitInstructions(instructionCLINames);
 }
@@ -218,7 +218,9 @@ async function installSkillsWithChecksums(
   skipPrompts: boolean,
   updateAllState: UpdateAllState,
 ): Promise<void> {
-  const skillsDir = path.join(projectRoot, targetBaseDir);
+  const skillsDir = path.isAbsolute(targetBaseDir)
+    ? targetBaseDir
+    : path.join(projectRoot, targetBaseDir);
   for (const dirName of await getSkillDirNames()) {
     const sourceDir = path.join(SKILLS_SOURCE_DIR, dirName);
     const targetDir = path.join(skillsDir, dirName);
@@ -255,17 +257,29 @@ async function installExternalFiles(
   projectRoot: string,
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
+  installScope: 'user' | 'project',
 ): Promise<void> {
   const updateAllState: UpdateAllState = { updateAll: false };
-  const claudeSkillsDir = path.join('.claude', 'skills');
-  await installSkillsWithChecksums(
-    projectRoot,
-    claudeSkillsDir,
-    skipPrompts,
-    updateAllState,
-  );
-  const seen = new Set([claudeSkillsDir]);
+  const devAdapterNames = new Set(devAdapters.map((adapter) => adapter.name));
+
+  if (devAdapterNames.has('claude')) {
+    await installClaudePluginWithFallback(installScope);
+  }
+  if (devAdapterNames.has('codex')) {
+    const codexBaseDir = getCodexSkillsBaseDir(installScope);
+    await installSkillsWithChecksums(
+      projectRoot,
+      codexBaseDir,
+      skipPrompts,
+      updateAllState,
+    );
+  }
+
+  const seen = new Set<string>();
   for (const adapter of devAdapters) {
+    if (adapter.name === 'claude' || adapter.name === 'codex') {
+      continue;
+    }
     const dir = adapter.getProjectSkillDir();
     if (dir && !seen.has(dir)) {
       seen.add(dir);
@@ -277,7 +291,6 @@ async function installExternalFiles(
       );
     }
   }
-  await installHooksForAdapters(projectRoot, devAdapters, skipPrompts);
 }
 
 async function printPostInitInstructions(devCLINames: string[]): Promise<void> {

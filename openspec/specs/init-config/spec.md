@@ -86,7 +86,7 @@ The `init` command SHALL generate a `config.yml` with an empty `entry_points` ar
 
 ### Requirement: Init uses non-interactive config defaults
 
-The `init` command SHALL present interactive prompts for development CLI selection, review CLI selection, and `num_reviews` configuration. All other config values (base branch, log directory, lint/test commands) SHALL remain non-interactive with auto-detected defaults.
+The `init` command SHALL present interactive prompts for development CLI selection, installation scope (local vs global), review CLI selection, and `num_reviews` configuration. All other config values SHALL remain non-interactive with auto-detected defaults.
 
 #### Scenario: Development CLI multi-select prompt
 - **GIVEN** the user runs `agent-gauntlet init`
@@ -96,10 +96,15 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **AND** the prompt SHALL include the explanation: "Select your development CLI(s). These are the main tools you work in."
 - **AND** at least one CLI must be selected to proceed
 
+#### Scenario: Installation scope prompt
+- **GIVEN** the user runs `agent-gauntlet init`
+- **WHEN** the user has selected development CLIs in Phase 2
+- **THEN** the user SHALL be prompted to choose installation scope: local (project) or global (user)
+
 #### Scenario: Development CLI with hook support
 - **GIVEN** the user selects `claude` as a development CLI
 - **WHEN** Phase 2 completes
-- **THEN** `claude` SHALL be marked for hook installation in Phase 5
+- **THEN** `claude` SHALL be marked for plugin installation (hooks are now part of the plugin)
 
 #### Scenario: Development CLI without hook support
 - **GIVEN** the user selects `codex` as a development CLI
@@ -160,6 +165,11 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **WHEN** Phase 2 runs
 - **THEN** all detected CLIs SHALL be selected as development CLIs without prompting
 
+#### Scenario: --yes defaults to local scope
+- **GIVEN** the user runs `agent-gauntlet init --yes`
+- **WHEN** Phase 2 runs
+- **THEN** installation scope SHALL default to local (project) without prompting
+
 #### Scenario: --yes selects all detected CLIs as review CLIs
 - **GIVEN** the user runs `agent-gauntlet init --yes`
 - **AND** CLIs `claude`, `codex`, and `gemini` are detected
@@ -169,7 +179,7 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 
 #### Scenario: --yes overwrites changed files without asking
 - **GIVEN** the user runs `agent-gauntlet init --yes`
-- **AND** a skill file exists with a different checksum
+- **AND** a Codex skill file exists with a different checksum
 - **WHEN** Phase 5 runs
 - **THEN** the file SHALL be overwritten without prompting
 
@@ -188,39 +198,52 @@ When `.gauntlet/` already exists, Phase 4 SHALL skip entirely without modifying 
 - **AND** `.gauntlet/` directory already exists
 - **WHEN** Phase 4 runs
 - **THEN** no files inside `.gauntlet/` SHALL be created or modified
-- **AND** Phase 5 SHALL still run for external files (skills, hooks)
+- **AND** init SHALL delegate to update logic (not run Phase 5 directly)
 
-### Requirement: Init installs skills to Codex skill directory
+### Requirement: Init installs Claude plugin instead of copying skills
 
-When codex is selected as a development CLI, `init` SHALL install gauntlet skills to `.agents/skills/` in addition to `.claude/skills/`. The same source skills, checksum logic, and overwrite prompts SHALL apply to both directories.
+When Claude is a selected development CLI, init SHALL install the agent-gauntlet Claude plugin instead of copying skill files to `.claude/skills/`.
 
-#### Scenario: Codex selected as dev CLI installs skills to .agents/skills/
-- **GIVEN** the user runs `agent-gauntlet init`
-- **WHEN** the user selects `codex` as a development CLI
-- **AND** init reaches the skill installation phase
-- **THEN** all gauntlet skills SHALL be copied to `.agents/skills/<skill-name>/`
-- **AND** each skill directory SHALL contain the same files as the `.claude/skills/` copy
+#### Scenario: Claude selected installs plugin at local scope
+- **GIVEN** the user selects `claude` as a development CLI
+- **AND** the user selects local scope
+- **WHEN** Phase 5 runs
+- **THEN** init SHALL run `claude plugin marketplace add pcaplan/agent-gauntlet`
+- **AND** init SHALL run `claude plugin install agent-gauntlet --scope project`
+- **AND** no skill files SHALL be copied to `.claude/skills/`
 
-#### Scenario: Codex not selected skips .agents/skills/ installation
-- **GIVEN** the user runs `agent-gauntlet init`
-- **WHEN** the user does not select `codex` as a development CLI
-- **THEN** no `.agents/skills/` directory SHALL be created
+#### Scenario: Claude selected installs plugin at global scope
+- **GIVEN** the user selects `claude` as a development CLI
+- **AND** the user selects global scope
+- **WHEN** Phase 5 runs
+- **THEN** init SHALL run `claude plugin install agent-gauntlet --scope user`
+- **AND** no skill files SHALL be copied to `.claude/skills/`
+
+### Requirement: Init installs Codex skills based on scope
+
+When Codex is a selected development CLI, init SHALL install skills to the appropriate directory based on the selected scope.
+
+#### Scenario: Codex selected with local scope
+- **GIVEN** the user selects `codex` as a development CLI
+- **AND** the user selects local scope
+- **WHEN** Phase 5 runs
+- **THEN** gauntlet skills SHALL be copied to `.agents/skills/<skill-name>/`
+
+#### Scenario: Codex selected with global scope
+- **GIVEN** the user selects `codex` as a development CLI
+- **AND** the user selects global scope
+- **WHEN** Phase 5 runs
+- **THEN** gauntlet skills SHALL be copied to `$HOME/.agents/skills/<skill-name>/`
 
 #### Scenario: Codex skill checksum matches skips update
-- **GIVEN** a skill already exists in `.agents/skills/<skill-name>/`
+- **GIVEN** a skill already exists at the target Codex skill location
 - **WHEN** its checksum matches the source skill
 - **THEN** the skill SHALL be skipped without prompting
 
 #### Scenario: Codex skill checksum differs prompts for overwrite
-- **GIVEN** a skill already exists in `.agents/skills/<skill-name>/`
+- **GIVEN** a skill already exists at the target Codex skill location
 - **WHEN** its checksum differs from the source skill
 - **THEN** the user SHALL be prompted to overwrite (unless `--yes` is passed)
-
-#### Scenario: --yes flag overwrites changed Codex skills without asking
-- **GIVEN** the user runs `agent-gauntlet init --yes`
-- **AND** a Codex skill exists with a different checksum
-- **WHEN** Phase 5 runs
-- **THEN** the skill SHALL be overwritten without prompting
 
 ### Requirement: CodexAdapter reports project skill directory
 
@@ -231,24 +254,35 @@ When codex is selected as a development CLI, `init` SHALL install gauntlet skill
 - **WHEN** `getProjectSkillDir()` is called
 - **THEN** it SHALL return `.agents/skills`
 
-### Requirement: Skill overwrite prompt supports update-all option
+### Requirement: Re-run delegates to update
 
-The skill overwrite prompt SHALL offer an "update all" option that accepts all remaining skill updates without further prompting. This applies across all skill directories in a single init run.
+When `.gauntlet/` already exists, the init command SHALL skip interactive phases and delegate to the update logic.
 
-#### Scenario: User selects update-all on first changed skill
-- **GIVEN** multiple skills have changed checksums
-- **WHEN** the user selects "update all" on the first overwrite prompt
-- **THEN** all remaining changed skills SHALL be overwritten without further prompts
+#### Scenario: Re-run skips prompts and calls update
+- **GIVEN** a user runs `agent-gauntlet init`
+- **AND** the `.gauntlet/` directory already exists
+- **WHEN** Phase 1 completes CLI detection
+- **THEN** Phases 2-4 SHALL be skipped
+- **AND** init SHALL execute the same logic as `agent-gauntlet update`
 
-#### Scenario: User answers individually then selects update-all
-- **GIVEN** the user answers "yes" or "no" to individual skill prompts
-- **WHEN** the user selects "update all" on a subsequent prompt
-- **THEN** all remaining changed skills after that point SHALL be overwritten without further prompts
+#### Scenario: Re-run with --yes flag
+- **GIVEN** `.gauntlet/` already exists
+- **WHEN** `agent-gauntlet init --yes` runs
+- **THEN** Phases 2-4 SHALL be skipped
+- **AND** update logic SHALL run with changed files overwritten without prompting
 
-#### Scenario: Update-all carries across skill directories
-- **GIVEN** the user selects "update all" during `.claude/skills/` installation
-- **AND** codex is selected with `.agents/skills/` installation pending
-- **WHEN** the init skill installation continues to the next directory
-- **THEN** the update-all state SHALL carry forward to the `.agents/skills/` directory
-- **AND** no further overwrite prompts SHALL be shown
+### Requirement: Non-Claude non-Codex CLIs keep current behavior
+
+CLIs that are not Claude or Codex SHALL continue using the existing skill-copy installation approach during init.
+
+#### Scenario: Gemini selected copies skills to .claude/skills/
+- **GIVEN** the user selects `gemini` as a development CLI
+- **WHEN** Phase 5 runs
+- **THEN** skills SHALL be copied to `.claude/skills/` with `@file_path` references (existing behavior)
+
+#### Scenario: Cursor selected copies skills only (no hooks)
+- **GIVEN** the user selects `cursor` as a development CLI
+- **WHEN** Phase 5 runs
+- **THEN** skills SHALL be installed using the existing Cursor adapter behavior
+- **AND** no Cursor hook configuration SHALL be performed (Cursor hook support is deferred)
 

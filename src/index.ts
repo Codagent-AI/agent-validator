@@ -17,6 +17,7 @@ import {
   registerStartHookCommand,
   registerStatusCommand,
   registerStopHookCommand,
+  registerUpdateCommand,
   registerValidateCommand,
 } from './commands/index.js';
 
@@ -38,6 +39,7 @@ registerDetectCommand(program);
 registerListCommand(program);
 registerHealthCommand(program);
 registerInitCommand(program);
+registerUpdateCommand(program);
 registerValidateCommand(program);
 registerSkipCommand(program);
 registerStartHookCommand(program);

@@ -287,12 +287,9 @@ export async function installHooksForAdapters(
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
 ): Promise<void> {
-  for (const adapter of devAdapters) {
-    if (!adapter.supportsHooks()) continue;
-    if (adapter.name !== 'claude' && adapter.name !== 'cursor') continue;
-    for (const kind of ['stop', 'start'] as const) {
-      const target: HookTarget = { projectRoot, variant: adapter.name, kind };
-      await installHookWithChecksums(target, skipPrompts);
-    }
-  }
+  // Claude hooks are delivered via plugin hooks/hooks.json and
+  // Cursor hook installation is currently deferred.
+  void projectRoot;
+  void devAdapters;
+  void skipPrompts;
 }
