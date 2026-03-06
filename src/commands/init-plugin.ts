@@ -2,7 +2,11 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import chalk from 'chalk';
-import { addMarketplace, installPlugin } from '../plugin/claude-cli.js';
+import {
+  addMarketplace,
+  installPlugin,
+  listPlugins,
+} from '../plugin/claude-cli.js';
 
 export function getCodexSkillsBaseDir(scope: 'user' | 'project'): string {
   if (scope === 'project') {
@@ -10,6 +14,41 @@ export function getCodexSkillsBaseDir(scope: 'user' | 'project'): string {
   }
   const homeDir = process.env.HOME?.trim() || os.homedir();
   return path.join(homeDir, '.agents', 'skills');
+}
+
+export async function detectInstalledPlugin(
+  projectRoot: string,
+): Promise<'user' | 'project' | null> {
+  try {
+    const entries = await listPlugins();
+    const pluginEntries = entries.filter((entry) => {
+      const name = (entry as { name?: unknown })?.name;
+      return name === 'agent-gauntlet';
+    });
+    const resolved = path.resolve(projectRoot);
+    if (
+      pluginEntries.some((entry) => {
+        const e = entry as { scope?: unknown; projectPath?: unknown };
+        return (
+          e.scope === 'project' &&
+          typeof e.projectPath === 'string' &&
+          path.resolve(e.projectPath) === resolved
+        );
+      })
+    ) {
+      return 'project';
+    }
+    if (
+      pluginEntries.some(
+        (entry) => (entry as { scope?: unknown }).scope === 'user',
+      )
+    ) {
+      return 'user';
+    }
+  } catch {
+    // Claude CLI not available or plugin list failed
+  }
+  return null;
 }
 
 export function detectClaudePluginScope(): 'user' | 'project' {

@@ -35,10 +35,14 @@ The `init` command SHALL install the agent-gauntlet Claude plugin using `claude 
 - **WHEN** the user selects global installation
 - **THEN** init SHALL run `claude plugin install agent-gauntlet --scope user`
 
-#### Scenario: Plugin already installed at different scope
-- **GIVEN** the agent-gauntlet plugin is already installed at a different scope
+#### Scenario: Plugin already installed
+- **GIVEN** the agent-gauntlet plugin is already installed at user or project scope
 - **WHEN** the user runs `agent-gauntlet init`
-- **THEN** init SHALL install at the requested scope regardless (both installations coexist)
+- **THEN** init SHALL detect the existing installation
+- **AND** SHALL inform the user that the plugin is already installed and at which scope
+- **AND** SHALL skip the install scope prompt
+- **AND** SHALL skip the plugin install step
+- **AND** SHALL use the existing scope for Codex skill installation
 
 #### Scenario: Plugin install command fails
 - **GIVEN** the user runs `agent-gauntlet init` with Claude selected

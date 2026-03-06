@@ -146,9 +146,7 @@ describe("init command plugin installation", () => {
 		addMarketplaceMock.mockClear();
 		installPluginMock.mockClear();
 		listPluginsMock.mockClear();
-		listPluginsMock.mockImplementation(async () => [
-			{ name: "agent-gauntlet", scope: "project", projectPath: testDir },
-		]);
+		listPluginsMock.mockImplementation(async () => []);
 		updateMarketplaceMock.mockClear();
 		updatePluginMock.mockClear();
 	});
@@ -165,7 +163,8 @@ describe("init command plugin installation", () => {
 		await fs.rm(testDir, { recursive: true, force: true });
 	});
 
-	it("uses project scope with --yes and installs Claude plugin", async () => {
+	it("uses project scope with --yes and installs Claude plugin when not already installed", async () => {
+		listPluginsMock.mockImplementation(async () => []);
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		expect(addMarketplaceMock).toHaveBeenCalledTimes(1);
@@ -284,8 +283,27 @@ describe("init command plugin installation", () => {
 		expect((await fs.stat(skill).catch(() => null))?.isFile()).toBe(true);
 	});
 
+	it("skips scope prompt and install when plugin already installed at user scope", async () => {
+		listPluginsMock.mockImplementation(async () => [
+			{ name: "agent-gauntlet", scope: "user" },
+		]);
+		selectedDevCliNames = ["claude"];
+		selectedReviewCliNames = ["claude"];
+		selectedNumReviews = 1;
+
+		await program.parseAsync(["node", "test", "init"]);
+
+		const output = logs.join("\n");
+		expect(output).toContain("already installed at user scope");
+		expect(addMarketplaceMock).not.toHaveBeenCalled();
+		expect(installPluginMock).not.toHaveBeenCalled();
+	});
+
 	it("on re-run with existing .gauntlet, delegates to plugin update logic", async () => {
 		await fs.mkdir(path.join(testDir, ".gauntlet"), { recursive: true });
+		listPluginsMock.mockImplementation(async () => [
+			{ name: "agent-gauntlet", scope: "project", projectPath: testDir },
+		]);
 
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 

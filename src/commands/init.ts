@@ -8,6 +8,7 @@ import type { Command } from 'commander';
 import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
 import { computeSkillChecksum } from './init-checksums.js';
 import {
+  detectInstalledPlugin,
   getCodexSkillsBaseDir,
   installClaudePluginWithFallback,
 } from './init-plugin.js';
@@ -139,8 +140,21 @@ async function runInit(options: InitOptions): Promise<void> {
     await handleRerun(projectRoot, availableAdapters, skipPrompts);
   } else {
     const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
-    installScope = await promptInstallScope(skipPrompts);
     devAdapters = availableAdapters.filter((a) => devCLINames.includes(a.name));
+
+    const existingPluginScope = devCLINames.includes('claude')
+      ? await detectInstalledPlugin(projectRoot)
+      : null;
+    if (existingPluginScope) {
+      console.log(
+        chalk.dim(
+          `Claude plugin already installed at ${existingPluginScope} scope, skipping install`,
+        ),
+      );
+      installScope = existingPluginScope;
+    } else {
+      installScope = await promptInstallScope(skipPrompts);
+    }
 
     for (const adapter of devAdapters) {
       if (!adapter.supportsHooks()) {
@@ -175,6 +189,7 @@ async function runInit(options: InitOptions): Promise<void> {
       devAdapters,
       skipPrompts,
       installScope,
+      existingPluginScope !== null,
     );
   }
   await addToGitignore(projectRoot, 'gauntlet_logs');
@@ -281,11 +296,12 @@ async function installExternalFiles(
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
   installScope: 'user' | 'project',
+  skipClaudePlugin = false,
 ): Promise<void> {
   const updateAllState: UpdateAllState = { updateAll: false };
   const devAdapterNames = new Set(devAdapters.map((adapter) => adapter.name));
 
-  if (devAdapterNames.has('claude')) {
+  if (devAdapterNames.has('claude') && !skipClaudePlugin) {
     await installClaudePluginWithFallback(installScope);
   }
   if (devAdapterNames.has('codex')) {
