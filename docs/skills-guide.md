@@ -18,7 +18,20 @@ Agent Gauntlet installs **skills** that let you invoke gauntlet workflows direct
 
 ## Installation
 
-Skills are installed during `agent-gauntlet init` into the project's `.claude/skills/` directory. Installation uses **checksum-based comparison**:
+### Claude Code (Plugin Delivery)
+
+For Claude Code, skills and hooks are delivered as part of the **agent-gauntlet Claude Code plugin**. When you run `agent-gauntlet init` with Claude selected, it registers the marketplace and installs the plugin via:
+
+```bash
+claude plugin marketplace add pcaplan/agent-gauntlet
+claude plugin install agent-gauntlet --scope <project|user>
+```
+
+The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. No manual file management is needed — updates are delivered via `agent-gauntlet update`, or manually with `claude plugin marketplace update agent-gauntlet` followed by `claude plugin update agent-gauntlet@pcaplan/agent-gauntlet`.
+
+### Codex (File Copy)
+
+For Codex, skills are copied to `.agents/skills/` (local scope) or `$HOME/.agents/skills/` (global scope) during init. Installation uses **checksum-based comparison**:
 
 - **Missing skills** are created silently
 - **Unchanged skills** (checksum matches) are skipped silently
@@ -26,7 +39,9 @@ Skills are installed during `agent-gauntlet init` into the project's `.claude/sk
 
 With `--yes`, changed files are overwritten without prompting.
 
-Skills are installed as directory-based `SKILL.md` files:
+### Skill File Structure
+
+Skills are directory-based `SKILL.md` files:
 
 ```text
 .claude/skills/
@@ -46,7 +61,7 @@ Skills are installed as directory-based `SKILL.md` files:
     adapter-troubleshooting.md
 ```
 
-For **non-native CLI agents** (Codex, Gemini, etc.), `init` prints `@file_path` references so you can point your agent at the skill files directly (e.g., `@.claude/skills/gauntlet-run/SKILL.md`).
+For **non-native CLI agents** (Gemini, etc.), `init` prints `@file_path` references so you can point your agent at the skill files directly (e.g., `@.claude/skills/gauntlet-run/SKILL.md`).
 
 ## Usage
 
@@ -157,6 +172,12 @@ allowed-tools: Bash
 - `user-invocable: false` hides the skill from the `/` autocomplete menu entirely.
 - `allowed-tools` restricts which tools the agent can use during execution
 
-## Re-installing Skills
+## Updating Skills
 
-To update skills after upgrading Agent Gauntlet, re-run `agent-gauntlet init`. The checksum-based comparison detects changed skills and prompts you to update them. Use `--yes` to overwrite all changed skills without prompting.
+To update skills after upgrading Agent Gauntlet:
+
+```bash
+agent-gauntlet update
+```
+
+For Claude Code, this updates the plugin via marketplace. For Codex, it refreshes skill files using checksum comparison. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.

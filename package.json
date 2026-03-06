@@ -22,6 +22,8 @@
   "files": [
     "dist",
     "skills",
+    ".claude-plugin",
+    "hooks",
     "README.md",
     "LICENSE"
   ],

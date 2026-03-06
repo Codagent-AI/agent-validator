@@ -1,15 +1,18 @@
-import { describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+
+let selectValue = "yes";
 
 // Mock @inquirer/prompts before importing our module
 mock.module("@inquirer/prompts", () => ({
 	checkbox: async () => ["claude", "codex"],
 	number: async () => 2,
 	confirm: async () => true,
-	select: async () => "yes",
+	select: async () => selectValue,
 }));
 
 const {
 	promptDevCLIs,
+	promptInstallScope,
 	promptReviewCLIs,
 	promptNumReviews,
 	promptFileOverwrite,
@@ -25,6 +28,23 @@ describe("promptDevCLIs", () => {
 	it("should call checkbox when skipPrompts is false", async () => {
 		const result = await promptDevCLIs(["claude", "codex", "gemini"], false);
 		expect(result).toEqual(["claude", "codex"]); // mocked return
+	});
+});
+
+describe("promptInstallScope", () => {
+	beforeEach(() => {
+		selectValue = "project";
+	});
+
+	it("returns project scope when skipPrompts is true", async () => {
+		const result = await promptInstallScope(true);
+		expect(result).toBe("project");
+	});
+
+	it("returns selected scope when prompting", async () => {
+		selectValue = "user";
+		const result = await promptInstallScope(false);
+		expect(result).toBe("user");
 	});
 });
 
@@ -58,6 +78,10 @@ describe("promptNumReviews", () => {
 });
 
 describe("promptFileOverwrite", () => {
+	beforeEach(() => {
+		selectValue = "yes";
+	});
+
 	it("should return 'yes' when skipPrompts is true", async () => {
 		const result = await promptFileOverwrite("gauntlet-run", true);
 		expect(result).toBe("yes");

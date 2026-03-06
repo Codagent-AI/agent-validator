@@ -1,88 +1,4 @@
-# init-config Specification
-
-## Purpose
-Configuration generation during `agent-gauntlet init`. Covers config file creation, review config setup, and post-init guidance.
-## Requirements
-### Requirement: Init generates YAML review config with built-in reference
-The `init` command SHALL generate a `.gauntlet/reviews/code-quality.yml` file that references the built-in code-quality review prompt.
-
-#### Scenario: Default init creates YAML review config
-- **GIVEN** a user runs `agent-gauntlet init`
-- **WHEN** the `.gauntlet/` directory is scaffolded
-- **THEN** `.gauntlet/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
-- **AND** the YAML file SHALL include default settings (`num_reviews: 1`)
-
-#### Scenario: Init with --yes flag creates YAML review config
-- **GIVEN** a user runs `agent-gauntlet init --yes`
-- **WHEN** the `.gauntlet/` directory is scaffolded
-- **THEN** `.gauntlet/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
-- **AND** the YAML file SHALL include default settings (`num_reviews: 1`)
-
-#### Scenario: Init re-run preserves existing review config
-- **GIVEN** `.gauntlet/reviews/code-quality.yml` already exists
-- **WHEN** the user runs `agent-gauntlet init`
-- **THEN** the existing review config SHALL be preserved (not overwritten)
-
-### Requirement: Init outputs next-step message
-
-After completing setup, `init` SHALL print context-aware instructions based on the selected development CLIs. Native CLI users (Claude Code, Cursor) SHALL receive `/gauntlet-setup` slash-command instructions. Non-native CLI users SHALL receive `@file_path` reference instructions. Codex users SHALL receive Codex-native `.agents/skills/` path references.
-
-#### Scenario: Claude Code user instructions
-- **GIVEN** the user selected `claude` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/gauntlet-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run."
-
-#### Scenario: Cursor user instructions
-- **GIVEN** the user selected `cursor` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/gauntlet-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run."
-
-#### Scenario: Codex user instructions
-- **GIVEN** the user selected `codex` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL reference skills using `.agents/skills/` paths
-- **AND** the output SHALL list all available skills with `.agents/skills/<skill-name>/SKILL.md` syntax
-
-#### Scenario: Non-native non-codex CLI user instructions
-- **GIVEN** the user selected a non-native, non-codex CLI (e.g., `gemini`) as a development CLI
-- **AND** the user did NOT select `claude`, `cursor`, or `codex`
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include `@.claude/skills/` path references (existing behavior)
-
-#### Scenario: Mixed CLI selection instructions
-- **GIVEN** the user selected both `claude` and `codex` as development CLIs
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include BOTH the `/gauntlet-setup` instructions AND the Codex `.agents/skills/` instructions
-- **AND** the instructions SHALL be grouped by CLI type
-
-#### Scenario: --yes flag still shows instructions
-- **GIVEN** the user runs `agent-gauntlet init --yes`
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the post-init instructions SHALL still be displayed (instructions are never skipped)
-
-### Requirement: Init config skeleton with empty entry_points
-
-The `init` command SHALL generate a `config.yml` with an empty `entry_points` array and `cli.default_preference` populated from review CLI selection. Entry point configuration SHALL be delegated to the `/gauntlet-setup` skill.
-
-#### Scenario: Config generated with empty entry_points
-- **GIVEN** the user runs `agent-gauntlet init`
-- **AND** no `.gauntlet/config.yml` exists
-- **WHEN** `.gauntlet/config.yml` is created
-- **THEN** the config SHALL include `entry_points: []`
-- **AND** the config SHALL include `base_branch`, `log_dir`, and `cli` sections
-- **AND** the config SHALL NOT include any check or review references in entry_points
-
-#### Scenario: Init re-run preserves existing config
-- **GIVEN** `.gauntlet/config.yml` already exists
-- **WHEN** the user runs `agent-gauntlet init` (with or without `--yes`)
-- **THEN** the existing `config.yml` SHALL be preserved entirely (not overwritten)
-
-#### Scenario: Config with --yes flag
-- **GIVEN** the user runs `agent-gauntlet init --yes`
-- **AND** no `.gauntlet/config.yml` exists
-- **WHEN** `.gauntlet/config.yml` is created
-- **THEN** the config SHALL include `entry_points: []`
-- **AND** the `cli.default_preference` SHALL include all detected CLIs
+## MODIFIED Requirements
 
 ### Requirement: Init uses non-interactive config defaults
 
@@ -187,18 +103,14 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 
 When `.gauntlet/` already exists, Phase 4 SHALL skip entirely without modifying any files inside the directory.
 
-#### Scenario: Fresh init creates .gauntlet/ directory
-- **GIVEN** the user runs `agent-gauntlet init`
-- **AND** no `.gauntlet/` directory exists
-- **WHEN** Phase 4 runs
-- **THEN** `.gauntlet/` SHALL be created with full scaffolding (directory structure, config.yml, default review, .gitignore entry)
-
 #### Scenario: Re-run skips .gauntlet/ scaffolding
 - **GIVEN** the user runs `agent-gauntlet init`
 - **AND** `.gauntlet/` directory already exists
 - **WHEN** Phase 4 runs
 - **THEN** no files inside `.gauntlet/` SHALL be created or modified
 - **AND** init SHALL delegate to update logic (not run Phase 5 directly)
+
+## ADDED Requirements
 
 ### Requirement: Init installs Claude plugin instead of copying skills
 
@@ -245,15 +157,6 @@ When Codex is a selected development CLI, init SHALL install skills to the appro
 - **WHEN** its checksum differs from the source skill
 - **THEN** the user SHALL be prompted to overwrite (unless `--yes` is passed)
 
-### Requirement: CodexAdapter reports project skill directory
-
-`CodexAdapter.getProjectSkillDir()` SHALL return `.agents/skills` so the adapter system correctly reflects Codex's native skill location.
-
-#### Scenario: CodexAdapter returns .agents/skills for project skill dir
-- **GIVEN** a `CodexAdapter` instance exists
-- **WHEN** `getProjectSkillDir()` is called
-- **THEN** it SHALL return `.agents/skills`
-
 ### Requirement: Re-run delegates to update
 
 When `.gauntlet/` already exists, the init command SHALL skip interactive phases and delegate to the update logic.
@@ -286,3 +189,12 @@ CLIs that are not Claude or Codex SHALL continue using the existing skill-copy i
 - **THEN** skills SHALL be installed using the existing Cursor adapter behavior
 - **AND** no Cursor hook configuration SHALL be performed (Cursor hook support is deferred)
 
+## REMOVED Requirements
+
+### Requirement: Init installs skills to Codex skill directory
+**Reason**: Replaced by "Init installs Codex skills based on scope" which adds global scope support
+**Migration**: Existing `.agents/skills/` installations continue to work; re-run init to adopt new scope behavior
+
+### Requirement: Skill overwrite prompt supports update-all option
+**Reason**: Claude skills no longer use file copy (plugin handles it). Codex-only update-all is lower value.
+**Migration**: Use `--yes` flag for non-interactive updates

@@ -1,0 +1,2 @@
+- [x] Plugin infrastructure + init rewrite (`tasks/plugin-init-rewrite.md`)
+- [x] Update command + re-run delegation (`tasks/update-command.md`)

@@ -35,37 +35,17 @@ The stop hook automatically detects which IDE is calling it based on the input f
 
 ### Claude Code Configuration
 
-Add the stop hook to your Claude Code settings:
+When you run `agent-gauntlet init` with Claude Code selected, the stop hook is delivered automatically as part of the agent-gauntlet Claude Code plugin. The plugin's `hooks/hooks.json` contains both the stop hook and the session start hook — no manual settings.json configuration is needed.
 
-**Option 1: Project-level settings** (`.claude/settings.json`):
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": ["agent-gauntlet stop-hook"]
-      }
-    ]
-  }
-}
+**Manual setup** (if not using `init`):
+
+```bash
+# Register the marketplace and install the plugin
+claude plugin marketplace add pcaplan/agent-gauntlet
+claude plugin install agent-gauntlet --scope project
 ```
 
-**Option 2: Global settings** (via `claude settings`):
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": ["agent-gauntlet stop-hook"]
-      }
-    ]
-  }
-}
-```
-
-The empty `matcher` means the hook runs for all projects. Use a path pattern like `"/path/to/project/*"` to limit to specific projects.
+The plugin includes a `hooks/hooks.json` that configures the stop hook with a 300-second timeout and a session start hook for priming agent sessions.
 
 ### Cursor IDE Configuration
 
@@ -307,9 +287,9 @@ Fields:
 **Symptoms**: Agent stops without gauntlet validation.
 
 **Checks**:
-1. Verify hook is configured in Claude Code settings
+1. Verify the agent-gauntlet plugin is installed: `claude plugin list --json`
 2. Confirm `.gauntlet/config.yml` exists in the project
-3. Check if the matcher pattern includes your project path
+3. Ensure the plugin is installed at the correct scope for your project
 
 ### Hook Keeps Blocking
 
@@ -429,7 +409,7 @@ The stop hook supports both Claude Code and Cursor IDE with automatic protocol d
 | Working directory | `cwd` field | `workspace_roots[0]` |
 | Session ID | `session_id` | `conversation_id` |
 | Loop prevention | `stop_hook_active` flag | `loop_count` + `loop_limit` |
-| Config location | `.claude/settings.json` | `.cursor/hooks.json` |
+| Config location | Plugin `hooks/hooks.json` | `.cursor/hooks.json` |
 
 ## Related Documentation
 

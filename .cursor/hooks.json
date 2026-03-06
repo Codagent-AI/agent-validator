@@ -1,11 +1,16 @@
 {
   "version": 1,
   "hooks": {
-    // "stop": [
-      // {
-        // "command": "bun src/index.ts stop-hook",
-        // "timeout": 300
-      // }
-    // ]
+    "stop": [
+      {
+        "command": "agent-gauntlet stop-hook",
+        "loop_limit": 10
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "agent-gauntlet start-hook --adapter cursor"
+      }
+    ]
   }
 }

@@ -13,4 +13,5 @@ export { registerSkipCommand } from './skip.js';
 export { registerStartHookCommand } from './start-hook.js';
 export { registerStatusCommand } from './status.js';
 export { registerStopHookCommand } from './stop-hook.js';
+export { registerUpdateCommand } from './update.js';
 export { registerValidateCommand } from './validate.js';

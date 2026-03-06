@@ -41,6 +41,21 @@ export async function promptReviewCLIs(
   return selected;
 }
 
+export async function promptInstallScope(
+  skipPrompts: boolean,
+): Promise<'user' | 'project'> {
+  if (skipPrompts) return 'project';
+
+  console.log();
+  return select({
+    message: 'Install scope for Claude plugin and Codex skills:',
+    choices: [
+      { name: 'Local (project)', value: 'project' as const },
+      { name: 'Global (user)', value: 'user' as const },
+    ],
+  });
+}
+
 export async function promptNumReviews(
   reviewCliCount: number,
   skipPrompts: boolean,

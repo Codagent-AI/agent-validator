@@ -9,14 +9,6 @@ import {
 	spawnGauntlet,
 } from "./helpers.js";
 
-const SKILL_ACTIONS = [
-	"run",
-	"check",
-	"status",
-	"help",
-	"setup",
-] as const;
-
 let tempDir: string;
 let initResult: { exitCode: number; stdout: string; stderr: string };
 let canRun: boolean;
@@ -45,19 +37,11 @@ describe("agent-gauntlet init (E2E)", () => {
 		expect(initResult.exitCode).toBe(0);
 	});
 
-	it("should install all skill directories with SKILL.md", async () => {
+	it("should not write Claude hooks to settings.local.json during init", async () => {
 		if (!canRun) return;
-		for (const action of SKILL_ACTIONS) {
-			const skillMd = path.join(
-				tempDir,
-				".claude",
-				"skills",
-				`gauntlet-${action}`,
-				"SKILL.md",
-			);
-			const stat = await fs.stat(skillMd).catch(() => null);
-			expect(stat?.isFile()).toBe(true);
-		}
+		const settingsPath = path.join(tempDir, ".claude", "settings.local.json");
+		const stat = await fs.stat(settingsPath).catch(() => null);
+		expect(stat).toBeNull();
 	});
 
 	it("should scaffold .gauntlet/ with config and review", async () => {
@@ -71,21 +55,6 @@ describe("agent-gauntlet init (E2E)", () => {
 		);
 		expect((await fs.stat(configPath).catch(() => null))?.isFile()).toBe(true);
 		expect((await fs.stat(reviewPath).catch(() => null))?.isFile()).toBe(true);
-	});
-
-	it("should install hooks in settings.local.json", async () => {
-		if (!canRun) return;
-		const settingsPath = path.join(
-			tempDir,
-			".claude",
-			"settings.local.json",
-		);
-		const content = JSON.parse(await fs.readFile(settingsPath, "utf-8"));
-		const hooks = content.hooks ?? {};
-		expect(Array.isArray(hooks.Stop)).toBe(true);
-		expect(hooks.Stop.length).toBeGreaterThan(0);
-		expect(Array.isArray(hooks.SessionStart)).toBe(true);
-		expect(hooks.SessionStart.length).toBeGreaterThan(0);
 	});
 
 	it("should add gauntlet_logs to .gitignore", async () => {

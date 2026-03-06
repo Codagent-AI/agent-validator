@@ -1,0 +1,1 @@
+../../../.claude/skills/gauntlet-run/extract-prompt.md

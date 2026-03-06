@@ -1,0 +1,6 @@
+{
+  "name": "agent-gauntlet",
+  "version": "1.2.2",
+  "description": "A CLI tool for testing AI coding agents",
+  "license": "MIT"
+}
