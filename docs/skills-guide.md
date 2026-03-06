@@ -27,7 +27,7 @@ claude plugin marketplace add pcaplan/agent-gauntlet
 claude plugin install agent-gauntlet --scope <project|user>
 ```
 
-The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. No manual file management is needed — updates are delivered via `agent-gauntlet update` or `claude plugin marketplace update`.
+The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. No manual file management is needed — updates are delivered via `agent-gauntlet update`, or manually with `claude plugin marketplace update agent-gauntlet` followed by `claude plugin update agent-gauntlet@pcaplan/agent-gauntlet`.
 
 ### Codex (File Copy)
 

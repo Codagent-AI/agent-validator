@@ -31,6 +31,7 @@ const SKILLS_SOURCE_DIR = (() => {
 
 interface PluginEntry {
   name?: unknown;
+  id?: unknown;
   scope?: unknown;
   projectPath?: unknown;
 }
@@ -87,9 +88,13 @@ function detectInstalledScope(
   entries: PluginEntry[],
   cwd: string,
 ): 'project' | 'user' | null {
-  const pluginEntries = entries.filter(
-    (entry) => entry.name === 'agent-gauntlet',
-  );
+  const pluginEntries = entries.filter((entry) => {
+    const name = entry.name ?? entry.id;
+    return (
+      name === 'agent-gauntlet' ||
+      (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
+    );
+  });
 
   const projectEntries = pluginEntries.filter(
     (entry) =>

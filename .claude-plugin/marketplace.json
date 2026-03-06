@@ -1,7 +1,7 @@
 {
   "name": "agent-gauntlet",
   "owner": {
-    "name": "pacaplan"
+    "name": "pcaplan"
   },
   "metadata": {
     "description": "A configurable feedback loop runner for AI-assisted development workflows."
@@ -19,7 +19,7 @@
         "code-review",
         "ai-agents"
       ],
-      "repository": "https://github.com/pacaplan/agent-gauntlet"
+      "repository": "https://github.com/pcaplan/agent-gauntlet"
     }
   ]
 }

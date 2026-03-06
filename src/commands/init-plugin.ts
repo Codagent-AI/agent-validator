@@ -22,8 +22,12 @@ export async function detectInstalledPlugin(
   try {
     const entries = await listPlugins();
     const pluginEntries = entries.filter((entry) => {
-      const name = (entry as { name?: unknown })?.name;
-      return name === 'agent-gauntlet';
+      const e = entry as { name?: unknown; id?: unknown };
+      const name = e.name ?? e.id;
+      return (
+        name === 'agent-gauntlet' ||
+        (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
+      );
     });
     const resolved = path.resolve(projectRoot);
     if (
@@ -62,8 +66,12 @@ export function detectClaudePluginScope(): 'user' | 'project' {
       ? parsed
       : ((parsed as { plugins?: unknown[] })?.plugins ?? []);
     const pluginEntries = entries.filter((entry) => {
-      const name = (entry as { name?: unknown })?.name;
-      return name === 'agent-gauntlet';
+      const e = entry as { name?: unknown; id?: unknown };
+      const name = e.name ?? e.id;
+      return (
+        name === 'agent-gauntlet' ||
+        (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
+      );
     });
     if (
       pluginEntries.some(
