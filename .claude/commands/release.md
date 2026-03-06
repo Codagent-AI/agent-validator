@@ -70,12 +70,14 @@ This invokes `changeset version`, which:
 
 ### 6. Sync Claude plugin version
 
-After `changeset version` bumps `package.json`, sync `.claude-plugin/plugin.json` to match:
+After `changeset version` bumps `package.json`, sync `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` to match:
 
 ```bash
 NEW_VERSION=$(node -p "require('./package.json').version")
 jq --arg v "$NEW_VERSION" '.version = $v' .claude-plugin/plugin.json > .claude-plugin/plugin.json.tmp \
   && mv .claude-plugin/plugin.json.tmp .claude-plugin/plugin.json
+jq --arg v "$NEW_VERSION" '.plugins[0].version = $v' .claude-plugin/marketplace.json > .claude-plugin/marketplace.json.tmp \
+  && mv .claude-plugin/marketplace.json.tmp .claude-plugin/marketplace.json
 ```
 
 ### 7. Reformat the changelog
@@ -113,7 +115,7 @@ git checkout -B "release/v${NEW_VERSION}"
 bun install
 
 # Stage all changes including deleted changeset files and updated lockfile
-git add CHANGELOG.md package.json .claude-plugin/plugin.json bun.lock
+git add CHANGELOG.md package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json bun.lock
 git add -A .changeset/
 git commit -m "chore: release v${NEW_VERSION}"
 

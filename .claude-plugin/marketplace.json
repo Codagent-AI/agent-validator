@@ -1,0 +1,25 @@
+{
+  "name": "agent-gauntlet",
+  "owner": {
+    "name": "pacaplan"
+  },
+  "metadata": {
+    "description": "A configurable feedback loop runner for AI-assisted development workflows."
+  },
+  "plugins": [
+    {
+      "name": "agent-gauntlet",
+      "version": "1.2.2",
+      "source": "./",
+      "description": "A configurable feedback loop runner for AI-assisted development workflows.",
+      "license": "MIT",
+      "keywords": [
+        "testing",
+        "quality",
+        "code-review",
+        "ai-agents"
+      ],
+      "repository": "https://github.com/pacaplan/agent-gauntlet"
+    }
+  ]
+}
