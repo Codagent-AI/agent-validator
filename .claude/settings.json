@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "agent-gauntlet@agent-gauntlet": true
+  }
+}

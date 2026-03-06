@@ -81,21 +81,27 @@ apply:
   requires: [review]
   tracks: tasks.md
   instruction: |
-    IMPORTANT: This is a fully autonomous flow. Execute all steps below without pausing for
+    You are the tech lead for this work. You will be overseeing implementor agents
+    who do the coding, but you are responsible for the successful completion of the deliverable.
+
+    Start by reading all the change artifacts — proposal.md, design.md, all specs/ files, and
+    tasks.md — and make sure you have a thorough understanding of the work. If you have any
+    questions for the human, stop and ask right away before proceeding.
+
+    Otherwise, this is a fully autonomous flow. Execute all steps below without pausing for
     user confirmation. Do NOT ask "would you like me to..." or "should I proceed with..." between
     steps. Only pause if you hit a blocker that genuinely requires human input.
 
     Create a task list to track progress through these steps:
 
-    1. Read context — Read the change's proposal.md, design.md, and all specs/ files for full context.
-    2. Implement tasks — Use the `flokay:implement-task` skill. Read tasks.md, then for each unchecked
+    1. Implement tasks — Use the `flokay:implement-task` skill. Read tasks.md, then for each unchecked
        task (`- [ ]`), the skill dispatches a subagent to implement the work and marks it
        complete (`- [x]`) in tasks.md.
-    3. Run gauntlet — Run `agent-gauntlet detect` and check the output. If the only unverified file
-       is a task-tracking file (e.g. tasks.md checkbox edits), run the `gauntlet-skip` skill.
+    2. Run gauntlet — Run `agent-gauntlet detect` and check the output. If the only unverified file
+       is a task-tracking file (e.g. tasks.md checkbox edits), run `agent-gauntlet skip`.
        Otherwise, run the full gauntlet and fix issues before proceeding.
-    4. Archive change — Invoke the `openspec-archive-change` skill. Always sync delta specs to main
+    3. Archive change — Invoke the `openspec-archive-change` skill. Always sync delta specs to main
        specs automatically — do not prompt the user about syncing.
-    5. Run `gauntlet-skip` skill again.
-    6. Finalize PR — Invoke the `flokay:finalize-pr` skill to push the PR, wait for CI, and fix any
+    4. Run `agent-gauntlet skip` again.
+    5. Finalize PR — Invoke the `flokay:finalize-pr` skill to push the PR, wait for CI, and fix any
        failures. It handles the full push → wait → fix loop with automatic retry and termination rules.

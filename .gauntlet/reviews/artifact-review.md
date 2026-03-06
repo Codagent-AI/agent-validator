@@ -39,11 +39,32 @@ Specs live at `openspec/changes/*/specs/*/spec.md`
 
 ### 4. Tasks (The Plan)
 Tasks live at `openspec/changes/*/tasks.md` or `openspec/changes/*/tasks/`
+
+#### 4a. Task index (tasks.md)
+*   Does tasks.md follow the template structure (checkbox list with `tasks/<slug>.md` paths)?
 *   Every spec requirement traces to at least one task?
 *   Every task traces back to a spec requirement?
 *   Ordering and grouping makes sense for implementation?
-*   **Task granularity:** Are tasks at the right level — not too big, not too small? Apply the splitting rules, merge test, anti-patterns, and size guidance from the plan-tasks skill. Flag tasks that look like "laying the groundwork," split too finely by layer, or bundle too much into one unit.
-*   Does the tasks.md follow the structure in the tasks template?
+
+#### 4b. Task file structure
+Read every task file in `tasks/`. Each one must follow the plan-tasks skill format:
+
+**Required sections (multi-task changes):**
+*   `## Goal` — 1–3 sentences on what the task accomplishes and why. Flag if missing or using a different heading (e.g., "Summary").
+*   `## Background` — context the implementer needs: relevant design decisions, key files, constraints, conventions. Flag if missing.
+*   `## Spec` — verbatim spec scenarios copied from the spec files, structured as `### Requirement:` / `#### Scenario:` with WHEN/THEN conditions. Flag if scenarios are summarized, paraphrased, or replaced with counts (e.g., "all 5 scenarios").
+*   `## Done When` — concrete completion criterion. Flag if missing.
+
+**Required sections (single-task changes):**
+*   `## Goal`, `## Background` (with explicit file paths to read), `## Done When`. Spec section is optional if Background references spec files by path.
+
+**Content rules — flag violations of any of these:**
+*   **No code snippets as implementation instructions.** Task files describe *what* to build and the constraints that matter, not *how* to write each line. Code blocks showing function implementations, class definitions, or method bodies are violations. (Brief type signatures or interface shapes to clarify a constraint are acceptable.)
+*   **No arbitrary decision numbering.** References like "(D1)", "(D4)", "Decision 3" are meaningless to the implementer — state the decision itself in prose.
+*   **No cross-task references.** Phrases like "built in Task 2" or "required by Task 5" violate self-containment. Each task must be understandable in isolation.
+*   **No unresolved placeholders.** `<path to file>`, `<your-service>`, or similar template placeholders must be resolved to actual values.
+*   **Exact file paths.** Key files must use real paths from the codebase, not placeholders.
+*   **No extraneous sections.** Sections like "Files to modify", "Implementation details", or "Tests" are not part of the format. Implementation guidance belongs in Background; test expectations are captured by the Spec scenarios and Done When.
 
 ### 5. Cross-Artifact Coherence
 *   Each capability in proposal has a corresponding spec file?
