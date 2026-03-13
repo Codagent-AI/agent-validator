@@ -49,9 +49,13 @@ The plugin includes a `hooks/hooks.json` that configures the stop hook with a 30
 
 ### Cursor IDE Configuration
 
-Add the stop hook to your Cursor hooks configuration:
+When you run `agent-gauntlet init` with Cursor selected, the stop hook is delivered automatically as part of the agent-gauntlet Cursor plugin. The plugin's `hooks/hooks.json` contains both the stop hook and the session start hook — no manual configuration is needed.
 
-**Project-level settings** (`.cursor/hooks.json`):
+The plugin is installed to `.cursor/plugins/agent-gauntlet/` (project scope) or `~/.cursor/plugins/agent-gauntlet/` (user scope).
+
+**Manual setup** (if not using `init`):
+
+Create `.cursor/hooks.json` in your project:
 ```json
 {
   "version": 1,

@@ -1,14 +1,19 @@
 # Plugin & Update Guide
 
-Agent Gauntlet delivers skills and hooks to Claude Code via a **Claude Code plugin**. This replaces the previous approach of copying skill files and writing hook entries to `.claude/settings.local.json`.
+Agent Gauntlet delivers skills and hooks to AI coding agents via **plugins**. Both Claude Code and Cursor are supported, each with their own plugin format and installation mechanism.
 
 ## How It Works
 
-The agent-gauntlet npm package includes:
+The agent-gauntlet npm package includes plugin assets for both Claude Code and Cursor:
 
-- `.claude-plugin/plugin.json` — Plugin manifest for discovery by Claude Code
-- `hooks/hooks.json` — Static hook definitions (stop hook + session start hook)
-- `.claude/skills/` — Skill files bundled in the plugin
+- `.claude-plugin/plugin.json` — Plugin manifest for Claude Code
+- `.cursor-plugin/plugin.json` — Plugin manifest for Cursor
+- `hooks/hooks.json` — Claude Code hook definitions (stop hook + session start hook)
+- `hooks/cursor-hooks.json` — Cursor hook definitions (stop hook + session start hook)
+- `.claude/skills/` — Skill files bundled in the Claude plugin
+- `skills/` — Skill files bundled in the Cursor plugin
+
+### Claude Code
 
 When you run `agent-gauntlet init` with Claude Code selected, it:
 
@@ -16,6 +21,15 @@ When you run `agent-gauntlet init` with Claude Code selected, it:
 2. Installs the plugin: `claude plugin install agent-gauntlet --scope <project|user>`
 
 Claude Code then discovers and loads the plugin's skills and hooks automatically.
+
+### Cursor
+
+When you run `agent-gauntlet init` with Cursor selected, it copies plugin files to the appropriate directory:
+
+- **Project scope**: `.cursor/plugins/agent-gauntlet/`
+- **User scope**: `~/.cursor/plugins/agent-gauntlet/`
+
+The copied files include `.cursor-plugin/plugin.json`, `skills/`, and `hooks/hooks.json`. Cursor auto-discovers the plugin by convention.
 
 ## Install Scope
 
@@ -108,6 +122,37 @@ If `agent-gauntlet update` fails, try manual update:
 claude plugin marketplace update agent-gauntlet
 claude plugin update agent-gauntlet@pcaplan/agent-gauntlet
 ```
+
+## Cursor Plugin
+
+The Cursor plugin is delivered via file copy during `agent-gauntlet init`. Unlike Claude Code's marketplace-based delivery, the Cursor plugin files are copied directly from the npm package to the target directory.
+
+### Plugin Contents
+
+- `.cursor-plugin/plugin.json` — Plugin manifest (name, version, description, license)
+- `skills/` — All gauntlet skill files
+- `hooks/hooks.json` — Stop hook (`loop_limit: 10`) and session start hook
+
+### Updating
+
+Re-run `agent-gauntlet init` to refresh Cursor plugin files. The init command detects the existing installation and updates files in place.
+
+### Manual Installation
+
+Copy the plugin files from the installed npm package:
+
+```bash
+# Find the package location
+npm ls -g agent-gauntlet --parseable
+
+# Copy plugin files to your project
+cp -r <package-path>/.cursor-plugin .cursor/plugins/agent-gauntlet/.cursor-plugin
+cp -r <package-path>/skills .cursor/plugins/agent-gauntlet/skills
+mkdir -p .cursor/plugins/agent-gauntlet/hooks
+cp <package-path>/hooks/cursor-hooks.json .cursor/plugins/agent-gauntlet/hooks/hooks.json
+```
+
+Or install via `/add-plugin` in Cursor or from the Cursor marketplace.
 
 ## Codex Skills (Non-Plugin)
 
