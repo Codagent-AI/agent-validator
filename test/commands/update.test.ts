@@ -336,8 +336,8 @@ describe("update command", () => {
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 	});
 
-	it("continues with Codex skills after Claude update fails but Cursor succeeds", async () => {
-		// Spec: Claude update fails, Cursor succeeds — should continue
+	it("throws when Claude update fails (Cursor update is not reached)", async () => {
+		// Claude marketplace update fails fast — Cursor update never runs
 		listPluginsMock.mockImplementationOnce(async () => [
 			{ name: "agent-gauntlet", scope: "user" },
 		]);
@@ -347,8 +347,8 @@ describe("update command", () => {
 			stderr: "marketplace down",
 		}));
 
-		// Should throw for Claude failure (existing behavior), but Cursor update was called
+		// Claude failure propagates; Cursor update is never reached
 		await expect(runPluginUpdate()).rejects.toThrow("marketplace down");
-		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled(); // Claude fails fast before Cursor
+		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 	});
 });
