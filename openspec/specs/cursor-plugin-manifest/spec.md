@@ -1,7 +1,7 @@
 # cursor-plugin-manifest Specification
 
 ## Purpose
-TBD - created by archiving change cursor-coding-agent-support. Update Purpose after archive.
+Cursor plugin manifest format and packaging requirements. Covers `.cursor-plugin/plugin.json` structure, version sync with `package.json`, and convention-based asset discovery.
 ## Requirements
 ### Requirement: Cursor plugin manifest exists
 

@@ -1,17 +1,19 @@
 # cursor-plugin-install Specification
 
 ## Purpose
-TBD - created by archiving change cursor-coding-agent-support. Update Purpose after archive.
+Cursor plugin installation during `agent-gauntlet init`. Covers file-copy-based plugin installation with user/project scope, already-installed detection, failure handling, and marketplace guidance.
 ## Requirements
 ### Requirement: Plugin installation with scope
 
 The `init` command SHALL install the agent-gauntlet Cursor plugin by copying plugin files to the appropriate directory based on scope: `~/.cursor/plugins/agent-gauntlet/` (user) or `.cursor/plugins/agent-gauntlet/` (project).
 
 #### Scenario: User selects user scope
+- **GIVEN** the user runs `agent-gauntlet init` with Cursor selected
 - **WHEN** the user selects global installation
 - **THEN** init SHALL copy plugin files to `~/.cursor/plugins/agent-gauntlet/`
 
 #### Scenario: User selects project scope
+- **GIVEN** the user runs `agent-gauntlet init` with Cursor selected
 - **WHEN** the user selects local/project installation
 - **THEN** init SHALL copy plugin files to `.cursor/plugins/agent-gauntlet/`
 
@@ -20,6 +22,7 @@ The `init` command SHALL install the agent-gauntlet Cursor plugin by copying plu
 Init SHALL check both `~/.cursor/plugins/agent-gauntlet/` and `.cursor/plugins/agent-gauntlet/` before attempting installation.
 
 #### Scenario: Plugin already installed
+- **GIVEN** the user runs `agent-gauntlet init` with Cursor selected
 - **WHEN** the plugin is found at either scope
 - **THEN** init SHALL inform the user it is already installed and at which scope
 - **AND** SHALL skip the scope prompt
@@ -30,6 +33,7 @@ Init SHALL check both `~/.cursor/plugins/agent-gauntlet/` and `.cursor/plugins/a
 When plugin file copying fails, init SHALL warn the user, print manual installation instructions, and continue with remaining init steps.
 
 #### Scenario: Plugin install fails
+- **GIVEN** the user runs `agent-gauntlet init` with Cursor selected
 - **WHEN** copying plugin files fails
 - **THEN** init SHALL warn the user that plugin installation failed
 - **AND** SHALL print manual installation instructions
@@ -40,6 +44,7 @@ When plugin file copying fails, init SHALL warn the user, print manual installat
 Since Cursor marketplace registration is web-based (no CLI command), init SHALL print instructions directing the user to install from the marketplace as an alternative to the local install.
 
 #### Scenario: Marketplace guidance printed
+- **GIVEN** the user runs `agent-gauntlet init` with Cursor selected
 - **WHEN** Cursor plugin installation completes (success or failure)
 - **THEN** init SHALL print a note that the plugin is also available via `/add-plugin` in Cursor or at the Cursor marketplace
 

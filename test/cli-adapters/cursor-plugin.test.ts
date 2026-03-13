@@ -39,6 +39,9 @@ describe("CursorAdapter plugin lifecycle", () => {
 		it("returns null when no plugin files exist", async () => {
 			const tmpDir = await makeTmpDir();
 			const result = await adapter.detectPlugin(tmpDir);
+			// User-scope check uses os.homedir() which is immutable in Bun,
+			// so this test relies on no user-scope plugin being installed.
+			// Project-scope is tested via the isolated temp dir.
 			expect(result).toBeNull();
 		});
 
@@ -58,39 +61,38 @@ describe("CursorAdapter plugin lifecycle", () => {
 			expect(result).toBe("project");
 		});
 
-		it("returns 'user' when user plugin file exists", async () => {
-			// This test checks the user-scope path which uses os.homedir().
-			// We cannot easily mock os.homedir(), so we verify the method
-			// returns null when the user-scope file doesn't exist (which
-			// is the expected case in test environments). The project-scope
-			// test above validates the fs.access logic.
+		it("prefers project scope over user scope", async () => {
+			// When both scopes exist, project scope should be returned first
+			// (project check runs before user check in detectPlugin)
 			const tmpDir = await makeTmpDir();
+			const pluginDir = path.join(
+				tmpDir,
+				".cursor",
+				"plugins",
+				"agent-gauntlet",
+				".cursor-plugin",
+			);
+			await fs.mkdir(pluginDir, { recursive: true });
+			await fs.writeFile(path.join(pluginDir, "plugin.json"), "{}");
+
 			const result = await adapter.detectPlugin(tmpDir);
-			// If user-scope plugin happens to be installed, it returns 'user';
-			// otherwise null. Both are valid for this environment.
-			expect(result === "user" || result === null).toBe(true);
+			// Even if a user-scope plugin exists, project scope takes priority
+			expect(result).toBe("project");
 		});
 	});
 
 	describe("installPlugin", () => {
 		it("copies files to the correct location for project scope", async () => {
 			const tmpDir = await makeTmpDir();
-			// installPlugin('project') uses relative path '.cursor/plugins/agent-gauntlet'
-			// We need to run from a controlled directory, so we test the user scope
-			// with an absolute path instead, or test that the method returns success.
-			const result = await adapter.installPlugin("user");
-			// The install should succeed (package root assets exist in dev)
+			const result = await adapter.installPlugin("project", tmpDir);
 			expect(result.success).toBe(true);
 
-			// Verify files were copied to user scope
-			const userPluginDir = path.join(
-				os.homedir(),
+			// Verify plugin manifest was copied
+			const pluginJson = path.join(
+				tmpDir,
 				".cursor",
 				"plugins",
 				"agent-gauntlet",
-			);
-			const pluginJson = path.join(
-				userPluginDir,
 				".cursor-plugin",
 				"plugin.json",
 			);
@@ -98,18 +100,33 @@ describe("CursorAdapter plugin lifecycle", () => {
 			expect(stat.isFile()).toBe(true);
 
 			// Verify skills were copied
-			const skillsDir = path.join(userPluginDir, "skills");
+			const skillsDir = path.join(
+				tmpDir,
+				".cursor",
+				"plugins",
+				"agent-gauntlet",
+				"skills",
+			);
 			const skillsStat = await fs.stat(skillsDir);
 			expect(skillsStat.isDirectory()).toBe(true);
 
 			// Verify hooks were copied
-			const hooksFile = path.join(userPluginDir, "hooks", "hooks.json");
+			const hooksFile = path.join(
+				tmpDir,
+				".cursor",
+				"plugins",
+				"agent-gauntlet",
+				"hooks",
+				"hooks.json",
+			);
 			const hooksStat = await fs.stat(hooksFile);
 			expect(hooksStat.isFile()).toBe(true);
-
-			// Cleanup the installed files
-			await fs.rm(userPluginDir, { recursive: true, force: true });
 		});
+
+		// Note: user-scope installPlugin cannot be isolated in tests because
+		// Bun's os.homedir() is immutable at runtime (ignores process.env.HOME
+		// changes). The project-scope test above validates the same file-copy
+		// logic that user-scope uses.
 	});
 
 	describe("getManualInstallInstructions", () => {
