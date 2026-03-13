@@ -299,7 +299,7 @@ The `init` command walks you through the following steps:
 6. **Install Plugin & Skills**: For Claude Code, registers the marketplace and installs the agent-gauntlet plugin (which delivers skills and hooks). For Cursor, copies plugin files (manifest, skills, hooks) to `.cursor/plugins/agent-gauntlet/` (project) or `~/.cursor/plugins/agent-gauntlet/` (user). For Codex, copies skill files to `.agents/skills/` (local or `$HOME/.agents/skills/` for global scope). Uses SHA-256 checksums for Codex skill files.
 7. **Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor) get `/gauntlet-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
 
-**Re-running init:** When `.gauntlet/` already exists, init delegates to the update flow — refreshing the Claude Code plugin via marketplace, updating Cursor plugin files, and updating Codex skills via checksums. If the plugin isn't installed yet, it falls back to a fresh install. This lets you update after upgrading Agent Gauntlet without re-configuring your project.
+**Re-running init:** When `.gauntlet/` already exists, init delegates to the update flow — refreshing the Claude Code plugin via marketplace and updating Codex skills via checksums. If the plugin isn't installed yet, it falls back to a fresh install. This lets you update after upgrading Agent Gauntlet without re-configuring your project.
 
 After `init`, run `/gauntlet-setup` in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
 
@@ -328,7 +328,7 @@ Internal command used by the CI workflow to discover which jobs to run.
 
 ### `agent-gauntlet update`
 
-Updates the Claude Code plugin and refreshes Codex skills. For Cursor, re-run `agent-gauntlet init` to update the plugin.
+Updates the Claude Code plugin and refreshes Codex skills. Cursor plugin updates are not yet supported by this command.
 
 - Detects where the Claude plugin is installed by running `claude plugin list --json`
 - If installed at both project and user scope, targets the project-scope installation (closest scope wins)

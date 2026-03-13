@@ -33,7 +33,7 @@ The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. 
 
 For Cursor, skills and hooks are delivered as part of the **agent-gauntlet Cursor plugin**. When you run `agent-gauntlet init` with Cursor selected, it copies plugin files to `.cursor/plugins/agent-gauntlet/` (project scope) or `~/.cursor/plugins/agent-gauntlet/` (user scope).
 
-The plugin bundles skills in `skills/` and hooks in `hooks/hooks.json`. Updates are delivered by re-running `agent-gauntlet init`.
+The plugin bundles skills in `skills/` and hooks in `hooks/hooks.json`.
 
 ### Codex (File Copy)
 
@@ -186,4 +186,4 @@ To update skills after upgrading Agent Gauntlet:
 agent-gauntlet update
 ```
 
-For Claude Code, this updates the plugin via marketplace. For Codex, it refreshes skill files using checksum comparison. For Cursor, re-run `agent-gauntlet init` to refresh plugin files. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.
+For Claude Code, this updates the plugin via marketplace. For Codex, it refreshes skill files using checksum comparison. Cursor plugin updates are not yet supported by this command. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.

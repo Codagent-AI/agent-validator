@@ -229,7 +229,7 @@ To update Agent Gauntlet after upgrading the npm package:
 agent-gauntlet update
 ```
 
-This updates the Claude Code plugin (via marketplace) and refreshes Codex skills if installed. For Cursor, re-running `agent-gauntlet init` refreshes plugin files. The command auto-detects where the Claude plugin is installed (project or user scope).
+This updates the Claude Code plugin (via marketplace) and refreshes Codex skills if installed. The command auto-detects where the Claude plugin is installed (project or user scope). Cursor plugin updates are not yet supported by this command.
 
 ## Further Reading
 - [User Guide](user-guide.md) — full usage details

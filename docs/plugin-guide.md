@@ -135,7 +135,7 @@ The Cursor plugin is delivered via file copy during `agent-gauntlet init`. Unlik
 
 ### Updating
 
-Re-run `agent-gauntlet init` to refresh Cursor plugin files. The init command detects the existing installation and updates files in place.
+There is currently no automated update command for the Cursor plugin. To update, remove the existing plugin directory and re-run `agent-gauntlet init`.
 
 ### Manual Installation
 
