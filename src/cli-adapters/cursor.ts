@@ -1,7 +1,9 @@
 import { exec } from 'node:child_process';
+import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getCategoryLogger } from '../output/app-logger.js';
@@ -75,11 +77,11 @@ export class CursorAdapter implements CLIAdapter {
   }
 
   getProjectSkillDir(): string | null {
-    return null;
+    return '.cursor/skills';
   }
 
   getUserSkillDir(): string | null {
-    return null;
+    return path.join(os.homedir(), '.cursor', 'skills');
   }
 
   getCommandExtension(): string {
@@ -211,6 +213,130 @@ export class CursorAdapter implements CLIAdapter {
     } finally {
       // Cleanup errors are intentionally ignored - the tmp file will be cleaned up by OS
       await cleanup();
+    }
+  }
+
+  async detectPlugin(projectRoot: string): Promise<'user' | 'project' | null> {
+    // Check project scope: <projectRoot>/.cursor/plugins/agent-gauntlet/.cursor-plugin/plugin.json
+    const projectPluginPath = path.join(
+      projectRoot,
+      '.cursor',
+      'plugins',
+      'agent-gauntlet',
+      '.cursor-plugin',
+      'plugin.json',
+    );
+    try {
+      await fs.access(projectPluginPath);
+      return 'project';
+    } catch {}
+
+    // Check user scope: ~/.cursor/plugins/agent-gauntlet/.cursor-plugin/plugin.json
+    const userPluginPath = path.join(
+      os.homedir(),
+      '.cursor',
+      'plugins',
+      'agent-gauntlet',
+      '.cursor-plugin',
+      'plugin.json',
+    );
+    try {
+      await fs.access(userPluginPath);
+      return 'user';
+    } catch {}
+
+    return null;
+  }
+
+  async installPlugin(
+    scope: 'user' | 'project',
+    projectRoot?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const baseDir =
+        scope === 'user'
+          ? path.join(os.homedir(), '.cursor', 'plugins', 'agent-gauntlet')
+          : path.join(
+              projectRoot ?? '.',
+              '.cursor',
+              'plugins',
+              'agent-gauntlet',
+            );
+
+      // Find package root (where .cursor-plugin/ lives)
+      const packageRoot = this.findPackageRoot();
+
+      // Copy plugin assets: .cursor-plugin/, skills/, hooks/cursor-hooks.json
+      await this.copyPluginAssets(packageRoot, baseDir);
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  getManualInstallInstructions(scope: 'user' | 'project'): string[] {
+    const targetDir =
+      scope === 'user'
+        ? '~/.cursor/plugins/agent-gauntlet/'
+        : '.cursor/plugins/agent-gauntlet/';
+    return [
+      `Copy plugin files to ${targetDir}`,
+      'Or install via /add-plugin in Cursor or at the Cursor marketplace',
+    ];
+  }
+
+  private findPackageRoot(): string {
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    // Bundled: moduleDir is dist/ (one level below root)
+    const bundled = path.join(moduleDir, '..');
+    // Dev: moduleDir is src/cli-adapters/ (two levels below root)
+    const dev = path.join(moduleDir, '..', '..');
+
+    try {
+      statSync(path.join(bundled, '.cursor-plugin', 'plugin.json'));
+      return bundled;
+    } catch {
+      return dev;
+    }
+  }
+
+  private async copyPluginAssets(
+    packageRoot: string,
+    targetDir: string,
+  ): Promise<void> {
+    await fs.mkdir(targetDir, { recursive: true });
+
+    // Copy .cursor-plugin/
+    const pluginSrc = path.join(packageRoot, '.cursor-plugin');
+    const pluginDest = path.join(targetDir, '.cursor-plugin');
+    await this.copyDirRecursive(pluginSrc, pluginDest);
+
+    // Copy skills/
+    const skillsSrc = path.join(packageRoot, 'skills');
+    const skillsDest = path.join(targetDir, 'skills');
+    await this.copyDirRecursive(skillsSrc, skillsDest);
+
+    // Copy hooks/cursor-hooks.json
+    const hooksSrc = path.join(packageRoot, 'hooks', 'cursor-hooks.json');
+    const hooksDest = path.join(targetDir, 'hooks');
+    await fs.mkdir(hooksDest, { recursive: true });
+    await fs.copyFile(hooksSrc, path.join(hooksDest, 'hooks.json'));
+  }
+
+  private async copyDirRecursive(src: string, dest: string): Promise<void> {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      if (entry.isDirectory()) {
+        await this.copyDirRecursive(srcPath, destPath);
+      } else {
+        await fs.copyFile(srcPath, destPath);
+      }
     }
   }
 }

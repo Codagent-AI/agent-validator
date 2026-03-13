@@ -23,32 +23,22 @@ The `init` command SHALL run `claude plugin marketplace add pcaplan/agent-gauntl
 
 ### Requirement: Plugin installation with scope
 
-The `init` command SHALL install the agent-gauntlet Claude plugin using `claude plugin install agent-gauntlet --scope <scope>`, where scope is `user` (global) or `project` (local) based on the user's selection.
+The `init` command SHALL support plugin installation for any adapter that provides a plugin install mechanism. Each adapter SHALL define its own installation strategy (e.g., CLI commands, local file copy). The init flow SHALL prompt for scope (user/project), delegate to the adapter's install mechanism, and handle success/failure uniformly.
 
-#### Scenario: User selects local scope
-- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
-- **WHEN** the user selects local/project installation
-- **THEN** init SHALL run `claude plugin install agent-gauntlet --scope project`
+#### Scenario: Adapter-specific installation dispatched
+- **WHEN** the user selects a development CLI that supports plugin installation
+- **THEN** init SHALL delegate to that adapter's installation strategy with the selected scope
 
-#### Scenario: User selects global scope
-- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
-- **WHEN** the user selects global installation
-- **THEN** init SHALL run `claude plugin install agent-gauntlet --scope user`
+#### Scenario: Already-installed detection
+- **WHEN** the plugin is already installed for the selected adapter at any scope
+- **THEN** init SHALL inform the user it is already installed and at which scope
+- **AND** SHALL skip the scope prompt
+- **AND** SHALL skip the install step
 
-#### Scenario: Plugin already installed
-- **GIVEN** the agent-gauntlet plugin is already installed at user or project scope
-- **WHEN** the user runs `agent-gauntlet init`
-- **THEN** init SHALL detect the existing installation
-- **AND** SHALL inform the user that the plugin is already installed and at which scope
-- **AND** SHALL skip the install scope prompt
-- **AND** SHALL skip the plugin install step
-- **AND** SHALL use the existing scope for Codex skill installation
-
-#### Scenario: Plugin install command fails
-- **GIVEN** the user runs `agent-gauntlet init` with Claude selected
-- **WHEN** `claude plugin install` fails
+#### Scenario: Installation failure
+- **WHEN** the adapter's installation strategy fails
 - **THEN** init SHALL warn the user that plugin installation failed
-- **AND** SHALL print manual installation instructions
+- **AND** SHALL print adapter-specific manual installation instructions
 - **AND** SHALL continue with remaining init steps
 
 ### Requirement: Plugin manifest
@@ -60,3 +50,4 @@ The npm package SHALL include a `.claude-plugin/plugin.json` manifest so the pac
 - **WHEN** the package is published
 - **THEN** `.claude-plugin/plugin.json` SHALL contain `name`, `version`, `description`, and `license` fields
 - **AND** the `version` field SHALL match the version in `package.json`
+

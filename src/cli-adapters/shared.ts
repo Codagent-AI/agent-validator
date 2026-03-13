@@ -215,4 +215,20 @@ export interface CLIAdapter {
    * Returns true if this CLI supports hooks (stop hook, start hook).
    */
   supportsHooks(): boolean;
+  /**
+   * Detect if the plugin is already installed.
+   * Returns 'user' or 'project' scope if found, null otherwise.
+   */
+  detectPlugin?(projectRoot: string): Promise<'user' | 'project' | null>;
+  /**
+   * Install the plugin at the given scope.
+   */
+  installPlugin?(
+    scope: 'user' | 'project',
+    projectRoot?: string,
+  ): Promise<{ success: boolean; error?: string }>;
+  /**
+   * Get manual installation instructions for when automatic install fails.
+   */
+  getManualInstallInstructions?(scope: 'user' | 'project'): string[];
 }

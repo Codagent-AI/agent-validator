@@ -42,13 +42,35 @@ const mockAdapters = [
 		transformCommand: (content: string) => content,
 		supportsHooks: () => true,
 		checkHealth: async () => ({ status: "healthy" as const }),
+		detectPlugin: async (_projectRoot: string) => {
+			const entries = await listPluginsMock();
+			const pluginEntries = entries.filter(
+				(e) => e.name === "agent-gauntlet" || e.name?.startsWith("agent-gauntlet@"),
+			);
+			if (pluginEntries.some((e) => e.scope === "project")) return "project" as const;
+			if (pluginEntries.some((e) => e.scope === "user")) return "user" as const;
+			return null;
+		},
+		installPlugin: async (scope: "user" | "project") => {
+			const addResult = await addMarketplaceMock();
+			if (!addResult.success)
+				return { success: false, error: (addResult as { stderr?: string }).stderr };
+			const installResult = await installPluginMock(scope);
+			if (!installResult.success)
+				return { success: false, error: (installResult as { stderr?: string }).stderr };
+			return { success: true };
+		},
+		getManualInstallInstructions: (scope: "user" | "project") => [
+			"claude plugin marketplace add pcaplan/agent-gauntlet",
+			`claude plugin install agent-gauntlet --scope ${scope}`,
+		],
 	},
 	{
 		name: "cursor",
 		isAvailable: async () => true,
 		getProjectCommandDir: () => null,
 		getUserCommandDir: () => null,
-		getProjectSkillDir: () => ".claude/skills",
+		getProjectSkillDir: () => ".cursor/skills",
 		getUserSkillDir: () => null,
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => true,
@@ -194,7 +216,7 @@ describe("init command plugin installation", () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("Plugin installation failed");
+		expect(output).toContain("plugin installation failed");
 		expect(output).toContain(
 			"claude plugin marketplace add pcaplan/agent-gauntlet",
 		);
@@ -219,7 +241,7 @@ describe("init command plugin installation", () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("Plugin installation failed");
+		expect(output).toContain("plugin installation failed");
 		expect(output).toContain("claude plugin install agent-gauntlet --scope project");
 
 		const codexSkill = path.join(
