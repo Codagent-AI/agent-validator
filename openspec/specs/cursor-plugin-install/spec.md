@@ -41,10 +41,10 @@ When plugin file copying fails, init SHALL warn the user, print manual installat
 
 ### Requirement: Marketplace instructions
 
-Since Cursor marketplace registration is web-based (no CLI command), init SHALL print instructions directing the user to install from the marketplace as an alternative to the local install.
+Since Cursor marketplace registration is web-based (no CLI command), the manual installation instructions SHALL mention the Cursor marketplace as an alternative installation path.
 
-#### Scenario: Marketplace guidance printed
+#### Scenario: Marketplace guidance on failure
 - **GIVEN** the user runs `agent-gauntlet init` with Cursor selected
-- **WHEN** Cursor plugin installation completes (success or failure)
-- **THEN** init SHALL print a note that the plugin is also available via `/add-plugin` in Cursor or at the Cursor marketplace
+- **WHEN** Cursor plugin installation fails
+- **THEN** the manual installation instructions SHALL mention `/add-plugin` in Cursor or the Cursor marketplace as an alternative
 
