@@ -150,4 +150,82 @@ describe("CursorAdapter plugin lifecycle", () => {
 			).toBe(true);
 		});
 	});
+
+	describe("updatePlugin", () => {
+		it("copies plugin files to correct location for project scope", async () => {
+			const tmpDir = await makeTmpDir();
+			const result = await adapter.updatePlugin!("project", tmpDir);
+			expect(result.success).toBe(true);
+
+			// Verify plugin manifest was copied
+			const pluginJson = path.join(
+				tmpDir,
+				".cursor",
+				"plugins",
+				"agent-gauntlet",
+				".cursor-plugin",
+				"plugin.json",
+			);
+			const stat = await fs.stat(pluginJson);
+			expect(stat.isFile()).toBe(true);
+
+			// Verify hooks were copied
+			const hooksFile = path.join(
+				tmpDir,
+				".cursor",
+				"plugins",
+				"agent-gauntlet",
+				"hooks",
+				"hooks.json",
+			);
+			const hooksStat = await fs.stat(hooksFile);
+			expect(hooksStat.isFile()).toBe(true);
+		});
+
+		it("overwrites existing files on update", async () => {
+			const tmpDir = await makeTmpDir();
+			// Pre-create a stale plugin.json
+			const pluginDir = path.join(
+				tmpDir,
+				".cursor",
+				"plugins",
+				"agent-gauntlet",
+				".cursor-plugin",
+			);
+			await fs.mkdir(pluginDir, { recursive: true });
+			await fs.writeFile(path.join(pluginDir, "plugin.json"), "stale");
+
+			const result = await adapter.updatePlugin!("project", tmpDir);
+			expect(result.success).toBe(true);
+
+			// File should be overwritten with real content
+			const content = await fs.readFile(
+				path.join(pluginDir, "plugin.json"),
+				"utf-8",
+			);
+			expect(content).not.toBe("stale");
+		});
+
+		it("returns success: false when copy fails", async () => {
+			// Provide a non-existent projectRoot so mkdir will fail? Actually we need
+			// to simulate a copy failure. Use a read-only directory.
+			// Instead, test that the method handles errors gracefully by
+			// making the target an unwritable path – easiest: check error return shape.
+			// We'll spy on installPlugin (same internals) by verifying updatePlugin
+			// delegates correctly and returns failure on error.
+
+			// Inject a bad scope-derived path by subclassing or just rely on
+			// testing with an impossible path
+			const badAdapter = new CursorAdapter();
+			// Override findPackageRoot via instancing is not easy; instead test via
+			// calling with a path whose parent we make a file (not a dir)
+			const tmpDir = await makeTmpDir();
+			const blocker = path.join(tmpDir, ".cursor");
+			await fs.writeFile(blocker, "I am a file, not a dir");
+
+			const result = await badAdapter.updatePlugin!("project", tmpDir);
+			expect(result.success).toBe(false);
+			expect(result.error).toBeDefined();
+		});
+	});
 });

@@ -328,13 +328,15 @@ Internal command used by the CI workflow to discover which jobs to run.
 
 ### `agent-gauntlet update`
 
-Updates the Claude Code plugin and refreshes Codex skills. Cursor plugin updates are not yet supported by this command.
+Updates installed plugins and skills for all supported adapters.
 
 - Detects where the Claude plugin is installed by running `claude plugin list --json`
-- If installed at both project and user scope, targets the project-scope installation (closest scope wins)
-- Runs `claude plugin marketplace update` followed by `claude plugin update`
+- If Claude plugin found and installed at both scopes, targets project scope (closest scope wins)
+- If Claude plugin found → runs `claude plugin marketplace update` followed by `claude plugin update`
+- Detects where the Cursor plugin is installed (file-system check for `.cursor/plugins/agent-gauntlet/`)
+- If Cursor plugin found → re-copies plugin assets from the npm package (always overwrite)
 - Refreshes Codex skills if installed (using checksum comparison)
-- If the Claude plugin is not found, exits with an error suggesting `agent-gauntlet init`
+- If no plugins are found at all, exits with an error suggesting `agent-gauntlet init`
 
 ### `agent-gauntlet help`
 

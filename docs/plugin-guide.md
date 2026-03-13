@@ -67,10 +67,11 @@ agent-gauntlet update
 
 This command:
 
-1. Detects where the plugin is installed (`claude plugin list --json`)
-2. Updates the marketplace registry: `claude plugin marketplace update agent-gauntlet`
-3. Updates the plugin: `claude plugin update agent-gauntlet@pcaplan/agent-gauntlet`
-4. Refreshes Codex skills if installed (checksum-based)
+1. Detects where the Claude plugin is installed (`claude plugin list --json`)
+2. If Claude plugin found → updates the marketplace registry and plugin
+3. Detects where the Cursor plugin is installed (file-system check)
+4. If Cursor plugin found → re-copies plugin assets from the npm package
+5. Refreshes Codex skills if installed (checksum-based)
 
 ### Scope Detection
 
@@ -135,7 +136,7 @@ The Cursor plugin is delivered via file copy during `agent-gauntlet init`. Unlik
 
 ### Updating
 
-There is currently no automated update command for the Cursor plugin. To update, remove the existing plugin directory and re-run `agent-gauntlet init`.
+Run `agent-gauntlet update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/`, `skills/`, and `hooks/cursor-hooks.json` from the npm package to the installed location, overwriting existing files.
 
 ### Manual Installation
 

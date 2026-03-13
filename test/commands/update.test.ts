@@ -23,12 +23,34 @@ const updatePluginMock = mock(async () => ({ success: true }));
 const addMarketplaceMock = mock(async () => ({ success: true }));
 const installPluginMock = mock(async (_scope: string) => ({ success: true }));
 
+// Cursor adapter mocks
+const cursorDetectPluginMock = mock(
+	async (_projectRoot: string): Promise<"user" | "project" | null> => null,
+);
+const cursorUpdatePluginMock = mock(
+	async (_scope: "user" | "project", _projectRoot?: string) => ({
+		success: true,
+	}),
+);
+
 mock.module("../../src/plugin/claude-cli.js", () => ({
 	addMarketplace: () => addMarketplaceMock(),
 	installPlugin: (scope: string) => installPluginMock(scope),
 	listPlugins: () => listPluginsMock(),
 	updateMarketplace: () => updateMarketplaceMock(),
 	updatePlugin: () => updatePluginMock(),
+}));
+
+mock.module("../../src/cli-adapters/cursor.js", () => ({
+	CursorAdapter: class {
+		name = "cursor";
+		detectPlugin(projectRoot: string) {
+			return cursorDetectPluginMock(projectRoot);
+		}
+		updatePlugin(scope: "user" | "project", projectRoot?: string) {
+			return cursorUpdatePluginMock(scope, projectRoot);
+		}
+	},
 }));
 
 const { registerUpdateCommand } = await import("../../src/commands/update.js");
@@ -62,6 +84,8 @@ describe("update command", () => {
 		listPluginsMock.mockClear();
 		updateMarketplaceMock.mockClear();
 		updatePluginMock.mockClear();
+		cursorDetectPluginMock.mockClear();
+		cursorUpdatePluginMock.mockClear();
 	});
 
 	afterEach(async () => {
@@ -214,5 +238,116 @@ describe("update command", () => {
 		expect(output).toContain(
 			"claude plugin update agent-gauntlet@pcaplan/agent-gauntlet",
 		);
+	});
+
+	it("fails when no Claude plugin and no Cursor plugin are installed", async () => {
+		listPluginsMock.mockImplementationOnce(async () => []);
+		cursorDetectPluginMock.mockImplementationOnce(async () => null);
+
+		await expect(runPluginUpdate()).rejects.toThrow(
+			"run `agent-gauntlet init` first",
+		);
+		expect(updateMarketplaceMock).not.toHaveBeenCalled();
+		expect(cursorUpdatePluginMock).not.toHaveBeenCalled();
+	});
+
+	it("skips Claude update and updates Cursor when only Cursor is installed", async () => {
+		listPluginsMock.mockImplementationOnce(async () => []);
+		cursorDetectPluginMock.mockImplementationOnce(async () => "user");
+
+		await runPluginUpdate();
+
+		expect(updateMarketplaceMock).not.toHaveBeenCalled();
+		expect(updatePluginMock).not.toHaveBeenCalled();
+		expect(cursorUpdatePluginMock).toHaveBeenCalledTimes(1);
+		const [calledScope, calledPath] = cursorUpdatePluginMock.mock.calls[0] as [
+			string,
+			string,
+		];
+		expect(calledScope).toBe("user");
+		// cwd and testDir may differ due to symlink resolution on macOS
+		expect(calledPath).toBeTruthy();
+		const output = logs.join("\n");
+		expect(output).toMatch(/[Cc]ursor/);
+	});
+
+	it("updates both Claude and Cursor when both are installed", async () => {
+		listPluginsMock.mockImplementationOnce(async () => [
+			{ name: "agent-gauntlet", scope: "user" },
+		]);
+		cursorDetectPluginMock.mockImplementationOnce(async () => "project");
+
+		await runPluginUpdate();
+
+		expect(updateMarketplaceMock).toHaveBeenCalledTimes(1);
+		expect(updatePluginMock).toHaveBeenCalledTimes(1);
+		expect(cursorUpdatePluginMock).toHaveBeenCalledTimes(1);
+		const [calledScope] = cursorUpdatePluginMock.mock.calls[0] as [string];
+		expect(calledScope).toBe("project");
+	});
+
+	it("warns and continues when Cursor update fails", async () => {
+		listPluginsMock.mockImplementationOnce(async () => [
+			{ name: "agent-gauntlet", scope: "user" },
+		]);
+		cursorDetectPluginMock.mockImplementationOnce(async () => "user");
+		cursorUpdatePluginMock.mockImplementationOnce(async () => ({
+			success: false,
+			error: "copy failed",
+		}));
+
+		// Should NOT throw
+		await expect(runPluginUpdate()).resolves.toBeUndefined();
+
+		const output = errors.join("\n");
+		expect(output).toContain("copy failed");
+	});
+
+	it("reports success message after Cursor update", async () => {
+		listPluginsMock.mockImplementationOnce(async () => []);
+		cursorDetectPluginMock.mockImplementationOnce(async () => "user");
+
+		await runPluginUpdate();
+
+		const output = logs.join("\n");
+		expect(output).toMatch(/[Cc]ursor/);
+		expect(output).toMatch(/updat/i);
+	});
+
+	it("tells user to restart Cursor sessions after update", async () => {
+		listPluginsMock.mockImplementationOnce(async () => []);
+		cursorDetectPluginMock.mockImplementationOnce(async () => "user");
+
+		await runPluginUpdate();
+
+		const output = logs.join("\n");
+		expect(output).toMatch(/restart/i);
+	});
+
+	it("skips Cursor update silently when Cursor plugin not installed", async () => {
+		listPluginsMock.mockImplementationOnce(async () => [
+			{ name: "agent-gauntlet", scope: "user" },
+		]);
+		cursorDetectPluginMock.mockImplementationOnce(async () => null);
+
+		await runPluginUpdate();
+
+		expect(cursorUpdatePluginMock).not.toHaveBeenCalled();
+	});
+
+	it("continues with Codex skills after Claude update fails but Cursor succeeds", async () => {
+		// Spec: Claude update fails, Cursor succeeds — should continue
+		listPluginsMock.mockImplementationOnce(async () => [
+			{ name: "agent-gauntlet", scope: "user" },
+		]);
+		cursorDetectPluginMock.mockImplementationOnce(async () => "user");
+		updateMarketplaceMock.mockImplementationOnce(async () => ({
+			success: false,
+			stderr: "marketplace down",
+		}));
+
+		// Should throw for Claude failure (existing behavior), but Cursor update was called
+		await expect(runPluginUpdate()).rejects.toThrow("marketplace down");
+		expect(cursorUpdatePluginMock).not.toHaveBeenCalled(); // Claude fails fast before Cursor
 	});
 });

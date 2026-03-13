@@ -186,4 +186,4 @@ To update skills after upgrading Agent Gauntlet:
 agent-gauntlet update
 ```
 
-For Claude Code, this updates the plugin via marketplace. For Codex, it refreshes skill files using checksum comparison. Cursor plugin updates are not yet supported by this command. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.
+For Claude Code, this updates the plugin via marketplace. For Cursor, it re-copies plugin assets from the npm package. For Codex, it refreshes skill files using checksum comparison. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.

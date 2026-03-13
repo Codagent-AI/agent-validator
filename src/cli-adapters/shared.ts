@@ -228,6 +228,14 @@ export interface CLIAdapter {
     projectRoot?: string,
   ): Promise<{ success: boolean; error?: string }>;
   /**
+   * Update the plugin at the given scope (re-copy assets, always overwrite).
+   * Same signature as installPlugin.
+   */
+  updatePlugin?(
+    scope: 'user' | 'project',
+    projectRoot?: string,
+  ): Promise<{ success: boolean; error?: string }>;
+  /**
    * Get manual installation instructions for when automatic install fails.
    */
   getManualInstallInstructions?(scope: 'user' | 'project'): string[];

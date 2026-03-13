@@ -277,6 +277,13 @@ export class CursorAdapter implements CLIAdapter {
     }
   }
 
+  async updatePlugin(
+    scope: 'user' | 'project',
+    projectRoot?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    return this.installPlugin(scope, projectRoot);
+  }
+
   getManualInstallInstructions(scope: 'user' | 'project'): string[] {
     const targetDir =
       scope === 'user'
