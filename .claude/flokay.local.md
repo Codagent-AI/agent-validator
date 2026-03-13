@@ -1,5 +1,5 @@
 ---
 implementation:
-  preference: [codex, claude]
+  preference: [claude]
   fallback: true
 ---

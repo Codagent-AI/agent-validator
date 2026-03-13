@@ -5,7 +5,7 @@ Plugin update logic for `agent-gauntlet update`. Covers Claude plugin location d
 ## Requirements
 ### Requirement: Plugin location detection
 
-The `update` command SHALL detect where the agent-gauntlet plugin is installed by running `claude plugin list --json` and parsing the output.
+The `update` command SHALL detect where the agent-gauntlet plugin is installed by running `claude plugin list --json` and parsing the output. It SHALL also check for Cursor plugin installations via adapter detection.
 
 #### Scenario: Plugin installed locally only
 - **GIVEN** the user runs `agent-gauntlet update`
@@ -22,25 +22,36 @@ The `update` command SHALL detect where the agent-gauntlet plugin is installed b
 - **WHEN** the plugin is installed at both project and user scope
 - **THEN** update SHALL target the project-scope installation only (closest scope wins)
 
-#### Scenario: Plugin not installed anywhere
+#### Scenario: No plugins installed anywhere
 - **GIVEN** the user runs `agent-gauntlet update`
-- **WHEN** the plugin is not found in the plugin list
+- **WHEN** no Claude plugin, no Cursor plugin, and no Codex skills are found
 - **THEN** update SHALL exit with an error message telling the user to run `agent-gauntlet init` first
 
 ### Requirement: Plugin update execution
 
-The `update` command SHALL update the plugin by running `claude plugin marketplace update agent-gauntlet` followed by `claude plugin update agent-gauntlet@pcaplan/agent-gauntlet`.
+The `update` command SHALL update plugins for all supported adapters that have installed plugins, not just Claude. It SHALL run Claude plugin marketplace update, then iterate over adapters with `updatePlugin` methods to refresh their installations.
 
 #### Scenario: Update succeeds
 - **GIVEN** the user runs `agent-gauntlet update`
-- **WHEN** both marketplace update and plugin update commands succeed
+- **WHEN** Claude marketplace update and plugin update commands succeed
+- **AND** all adapter plugin updates succeed
 - **THEN** update SHALL report success
 - **AND** SHALL tell the user to restart any open agent sessions
 
-#### Scenario: Update fails
+#### Scenario: Claude update fails but Cursor update succeeds
 - **GIVEN** the user runs `agent-gauntlet update`
-- **WHEN** either update command fails
-- **THEN** update SHALL report the error and print manual update instructions
+- **WHEN** the Claude plugin update command fails
+- **BUT** the Cursor plugin update succeeds
+- **THEN** update SHALL report the Claude error and print manual update instructions
+- **AND** SHALL still report the Cursor update as successful
+
+#### Scenario: No Claude plugin but Cursor plugin exists
+- **GIVEN** the user runs `agent-gauntlet update`
+- **WHEN** no Claude plugin is installed
+- **BUT** a Cursor plugin is installed
+- **THEN** update SHALL skip Claude plugin update
+- **AND** SHALL update the Cursor plugin
+- **AND** SHALL NOT error about missing Claude plugin
 
 ### Requirement: Codex skill update
 
@@ -62,3 +73,4 @@ The `update` command SHALL update Codex skills if they are installed, using the 
 - **GIVEN** the user runs `agent-gauntlet update`
 - **WHEN** no gauntlet skills are found in either Codex skill location
 - **THEN** update SHALL skip Codex skill update silently
+
