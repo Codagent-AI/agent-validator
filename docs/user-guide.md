@@ -296,7 +296,7 @@ The `init` command walks you through the following steps:
 3. **Install Scope Selection**: Choose local (project) or global (user) scope for plugin and skill installation.
 4. **Review CLI Selection**: Multi-select prompt for review tools. Populates `cli.default_preference` in the user's selection order. If one review CLI is selected, `num_reviews` is set to 1 automatically. If multiple are selected, you're prompted for how many to run per review.
 5. **Scaffold `.gauntlet/`**: Creates the directory, config skeleton (`entry_points: []`), and built-in code-quality review. **Skipped entirely** if `.gauntlet/` already exists (config is never overwritten).
-6. **Install Plugin & Skills**: For Claude Code, registers the marketplace and installs the agent-gauntlet plugin (which delivers skills and hooks). For Codex, copies skill files to `.agents/skills/` (local or `$HOME/.agents/skills/` for global scope). For Cursor, writes hooks to `.cursor/hooks.json`. Uses SHA-256 checksums for Codex skill files.
+6. **Install Plugin & Skills**: For Claude Code, registers the marketplace and installs the agent-gauntlet plugin (which delivers skills and hooks). For Cursor, copies plugin files (manifest, skills, hooks) to `.cursor/plugins/agent-gauntlet/` (project) or `~/.cursor/plugins/agent-gauntlet/` (user). For Codex, copies skill files to `.agents/skills/` (local or `$HOME/.agents/skills/` for global scope). Uses SHA-256 checksums for Codex skill files.
 7. **Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor) get `/gauntlet-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
 
 **Re-running init:** When `.gauntlet/` already exists, init delegates to the update flow — refreshing the Claude Code plugin via marketplace and updating Codex skills via checksums. If the plugin isn't installed yet, it falls back to a fresh install. This lets you update after upgrading Agent Gauntlet without re-configuring your project.
@@ -328,13 +328,15 @@ Internal command used by the CI workflow to discover which jobs to run.
 
 ### `agent-gauntlet update`
 
-Updates the Claude Code plugin and refreshes Codex skills.
+Updates installed plugins and skills for all supported adapters.
 
-- Detects where the plugin is installed by running `claude plugin list --json`
-- If installed at both project and user scope, targets the project-scope installation (closest scope wins)
-- Runs `claude plugin marketplace update` followed by `claude plugin update`
+- Detects where the Claude plugin is installed by running `claude plugin list --json`
+- If Claude plugin found and installed at both scopes, targets project scope (closest scope wins)
+- If Claude plugin found → runs `claude plugin marketplace update` followed by `claude plugin update`
+- Detects where the Cursor plugin is installed (file-system check for `.cursor/plugins/agent-gauntlet/`)
+- If Cursor plugin found → re-copies plugin assets from the npm package (always overwrite)
 - Refreshes Codex skills if installed (using checksum comparison)
-- If the plugin is not found, exits with an error suggesting `agent-gauntlet init`
+- If no plugins are found at all, exits with an error suggesting `agent-gauntlet init`
 
 ### `agent-gauntlet help`
 

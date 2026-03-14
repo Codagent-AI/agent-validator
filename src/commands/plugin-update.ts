@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
+import { CursorAdapter } from '../cli-adapters/cursor.js';
 import {
   listPlugins,
   updateMarketplace,
@@ -158,28 +159,38 @@ async function refreshCodexSkills(cwd: string): Promise<void> {
   }
 }
 
-export async function runPluginUpdate(
-  options?: PluginUpdateOptions,
-): Promise<void> {
-  void options?.skipPrompts;
+function isCliUnavailableError(err: unknown): boolean {
+  if (err != null && typeof err === 'object') {
+    const code = (err as { code?: unknown }).code;
+    if (code === 'ENOENT') {
+      return true;
+    }
+  }
+  const msg =
+    err instanceof Error
+      ? err.message.toLowerCase()
+      : String(err).toLowerCase();
+  return msg.includes('command not found') || msg.includes('not installed');
+}
 
-  const cwd = process.cwd();
-  let scope: 'project' | 'user' | null = null;
-
+async function detectClaudeScope(
+  cwd: string,
+): Promise<'project' | 'user' | null> {
   try {
     const parsedPlugins = (await listPlugins()) as PluginEntry[];
-    scope = detectInstalledScope(parsedPlugins, cwd);
+    return detectInstalledScope(parsedPlugins, cwd);
   } catch (error: unknown) {
+    if (isCliUnavailableError(error)) {
+      // Claude CLI is not installed — treat as not found so Cursor-only
+      // setups can still update successfully.
+      return null;
+    }
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to detect plugin installation: ${message}`);
+    throw new Error(`Failed to detect Claude plugin installation: ${message}`);
   }
+}
 
-  if (!scope) {
-    throw new Error(
-      'agent-gauntlet Claude plugin is not installed for this project. Please run `agent-gauntlet init` first.',
-    );
-  }
-
+async function updateClaudePlugin(scope: 'project' | 'user'): Promise<void> {
   console.log(
     chalk.cyan(`Updating agent-gauntlet Claude plugin (${scope} scope)...`),
   );
@@ -204,6 +215,60 @@ export async function runPluginUpdate(
     }
     printManualUpdateInstructions();
     throw new Error(pluginResult.stderr ?? 'Failed to update plugin');
+  }
+}
+
+async function updateCursorPlugin(
+  adapter: CursorAdapter,
+  scope: 'project' | 'user',
+  cwd: string,
+): Promise<void> {
+  console.log(
+    chalk.cyan(`Updating agent-gauntlet Cursor plugin (${scope} scope)...`),
+  );
+
+  const cursorResult = await adapter.updatePlugin(scope, cwd);
+  if (cursorResult.success) {
+    console.log(chalk.green('Cursor plugin updated successfully.'));
+    console.log(
+      chalk.yellow(
+        'Restart any open Cursor sessions to use the updated plugin.',
+      ),
+    );
+  } else {
+    console.error(
+      chalk.yellow(
+        `Cursor plugin update failed: ${cursorResult.error ?? 'unknown error'}`,
+      ),
+    );
+  }
+}
+
+export async function runPluginUpdate(
+  options?: PluginUpdateOptions,
+): Promise<void> {
+  void options?.skipPrompts;
+
+  const cwd = process.cwd();
+  const claudeScope = await detectClaudeScope(cwd);
+
+  // Detect Cursor plugin installation
+  const cursorAdapter = new CursorAdapter();
+  const cursorScope = await cursorAdapter.detectPlugin(cwd);
+
+  // Error if nothing is installed at all
+  if (!(claudeScope || cursorScope)) {
+    throw new Error(
+      'No agent-gauntlet plugin is installed for this project. Please run `agent-gauntlet init` first.',
+    );
+  }
+
+  if (claudeScope) {
+    await updateClaudePlugin(claudeScope);
+  }
+
+  if (cursorScope) {
+    await updateCursorPlugin(cursorAdapter, cursorScope, cwd);
   }
 
   await refreshCodexSkills(cwd);

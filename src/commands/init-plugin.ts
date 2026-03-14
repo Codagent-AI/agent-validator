@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import chalk from 'chalk';
+import type { CLIAdapter } from '../cli-adapters/shared.js';
 import {
   addMarketplace,
   installPlugin,
@@ -121,4 +122,34 @@ function warnClaudePluginInstallFailure(
   console.warn(
     `  claude plugin install agent-gauntlet --scope ${installScope}`,
   );
+}
+
+/**
+ * Generic adapter plugin installer. Calls the adapter's installPlugin() method
+ * and prints fallback manual instructions on failure.
+ */
+export async function installAdapterPlugin(
+  adapter: CLIAdapter,
+  projectRoot: string,
+  installScope: 'user' | 'project',
+): Promise<void> {
+  if (!adapter.installPlugin) return;
+  const result = await adapter.installPlugin(installScope, projectRoot);
+  if (!result.success) {
+    console.warn(
+      chalk.yellow(
+        `${adapter.name} plugin installation failed. Continuing init.`,
+      ),
+    );
+    if (result.error) {
+      console.warn(chalk.yellow(result.error.trim()));
+    }
+    const instructions = adapter.getManualInstallInstructions?.(installScope);
+    if (instructions) {
+      console.warn('Run these steps manually:');
+      for (const step of instructions) {
+        console.warn(`  ${step}`);
+      }
+    }
+  }
 }

@@ -58,7 +58,7 @@ This document lists the configuration files Agent Gauntlet loads and all support
   - **run_interval_minutes**: number (optional; default from global config, typically `5`)
     Minimum minutes between gauntlet runs. Set to `0` to always run the gauntlet on every stop attempt.
 
-  Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (`.claude/settings.local.json`) and Cursor (`.cursor/hooks.json`) when they are selected as **development CLIs** in Phase 2. No manual setup is required.
+  Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (via the Claude Code plugin) and Cursor (via the Cursor plugin at `.cursor/plugins/agent-gauntlet/`) when they are selected as **development CLIs**. No manual setup is required.
 - **entry_points**: array (required)
   Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-gauntlet init`, this starts as `[]` (empty) and is populated by the `/gauntlet-setup` skill.
   - **path**: string (required)  
