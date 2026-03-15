@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import {
   hasExistingLogs,
   performAutoClean,
@@ -14,6 +16,7 @@ import {
 } from '../output/app-logger.js';
 import { startConsoleLog } from '../output/console-log.js';
 import { Logger } from '../output/logger.js';
+import { generateReport } from '../output/report.js';
 import type { RunResult } from '../types/gauntlet-status.js';
 import {
   getDebugLogger,
@@ -47,6 +50,8 @@ export interface ExecuteRunOptions {
   checkInterval?: boolean;
   /** Set of review names to activate even if their config has enabled: false */
   enableReviews?: Set<string>;
+  /** When true, generate a plain-text report in RunResult.reportText */
+  report?: boolean;
 }
 
 /** Initialize app logger and debug logger, returning a RunContext. */
@@ -147,6 +152,22 @@ async function runWithLock(
   );
 
   if ('earlyResult' in prepared) {
+    if (ctx.options.report) {
+      const reportText = await generateReport(
+        prepared.earlyResult.status,
+        prepared.earlyResult.gateResults,
+        ctx.config.project.log_dir,
+      );
+      prepared.earlyResult.reportText = reportText;
+      // Write report file as fallback
+      try {
+        const reportPath = path.join(ctx.config.project.log_dir, 'report.txt');
+        await fs.mkdir(ctx.config.project.log_dir, { recursive: true });
+        await fs.writeFile(reportPath, reportText, 'utf-8');
+      } catch {
+        // Best effort
+      }
+    }
     return finalizeAndReturn(
       ctx.loggerInitializedHere,
       prepared.earlyResult,

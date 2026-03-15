@@ -16,7 +16,6 @@ export class CheckGateExecutor {
     options?: { baseBranch?: string; isRerun?: boolean },
   ): Promise<GateResult> {
     const startTime = Date.now();
-
     const command = resolveCheckCommand(config, options);
 
     try {
@@ -40,66 +39,96 @@ export class CheckGateExecutor {
         status: 'pass',
         duration: Date.now() - startTime,
         message: 'Command exited with code 0',
+        command,
+        workingDirectory,
       };
 
       await logger(`Result: ${result.status} - ${result.message}\n`);
       return result;
     } catch (error: unknown) {
-      const err = error as {
-        stdout?: string;
-        stderr?: string;
-        message?: string;
-        signal?: string;
-        code?: number;
-      };
-      if (err.stdout) await logger(err.stdout);
-      if (err.stderr) await logger(`\nSTDERR:\n${err.stderr}`);
-
-      await logger(`\nCommand failed: ${err.message}`);
-
-      // If it's a timeout
-      if (err.signal === 'SIGTERM' && config.timeout) {
-        const result: GateResult = {
-          jobId,
-          status: 'fail',
-          duration: Date.now() - startTime,
-          message: `Timed out after ${config.timeout}s`,
-          fixInstructions: config.fixInstructionsContent,
-          fixWithSkill: config.fixWithSkill,
-        };
-        await logger(`Result: ${result.status} - ${result.message}\n`);
-        await this.logFixInfo(config, logger);
-        return result;
-      }
-
-      // If it's a non-zero exit code
-      if (typeof err.code === 'number') {
-        const result: GateResult = {
-          jobId,
-          status: 'fail',
-          duration: Date.now() - startTime,
-          message: `Exited with code ${err.code}`,
-          fixInstructions: config.fixInstructionsContent,
-          fixWithSkill: config.fixWithSkill,
-        };
-        await logger(`Result: ${result.status} - ${result.message}\n`);
-        await this.logFixInfo(config, logger);
-        return result;
-      }
-
-      // Other errors
-      const result: GateResult = {
+      return this.handleExecutionError(
+        error,
         jobId,
-        status: 'error',
-        duration: Date.now() - startTime,
-        message: err.message || 'Unknown error',
-        fixInstructions: config.fixInstructionsContent,
-        fixWithSkill: config.fixWithSkill,
-      };
-      await logger(`Result: ${result.status} - ${result.message}\n`);
-      await this.logFixInfo(config, logger);
-      return result;
+        command,
+        workingDirectory,
+        config,
+        startTime,
+        logger,
+      );
     }
+  }
+
+  private async handleExecutionError(
+    error: unknown,
+    jobId: string,
+    command: string,
+    workingDirectory: string,
+    config: LoadedCheckGateConfig,
+    startTime: number,
+    logger: (output: string) => Promise<void>,
+  ): Promise<GateResult> {
+    const err = error as {
+      stdout?: string;
+      stderr?: string;
+      message?: string;
+      signal?: string;
+      code?: number;
+    };
+    if (err.stdout) await logger(err.stdout);
+    if (err.stderr) await logger(`\nSTDERR:\n${err.stderr}`);
+
+    await logger(`\nCommand failed: ${err.message}`);
+
+    const result = this.buildErrorResult(
+      err,
+      jobId,
+      command,
+      workingDirectory,
+      config,
+      startTime,
+    );
+
+    await logger(`Result: ${result.status} - ${result.message}\n`);
+    await this.logFixInfo(config, logger);
+    return result;
+  }
+
+  private buildErrorResult(
+    err: { signal?: string; code?: number; message?: string },
+    jobId: string,
+    command: string,
+    workingDirectory: string,
+    config: LoadedCheckGateConfig,
+    startTime: number,
+  ): GateResult {
+    const base = {
+      jobId,
+      duration: Date.now() - startTime,
+      command,
+      workingDirectory,
+      fixInstructions: config.fixInstructionsContent,
+      fixWithSkill: config.fixWithSkill,
+    };
+
+    if (err.signal === 'SIGTERM' && config.timeout) {
+      return {
+        ...base,
+        status: 'fail',
+        message: `Timed out after ${config.timeout}s`,
+      };
+    }
+    if (typeof err.code === 'number') {
+      return {
+        ...base,
+        status: 'fail',
+        message: `Exited with code ${err.code}`,
+      };
+    }
+    return {
+      ...base,
+      status: 'error',
+      message: err.message || 'Unknown error',
+    };
   }
 
   private async logFixInfo(

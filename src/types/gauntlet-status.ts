@@ -35,6 +35,8 @@ export interface RunResult {
   errorMessage?: string;
   /** Interval minutes (when status is "interval_not_elapsed") */
   intervalMinutes?: number;
+  /** Plain-text report for --report flag (written to stdout by caller) */
+  reportText?: string;
   /** Individual gate results (available when gates were executed) */
   gateResults?: Array<{
     jobId: string;

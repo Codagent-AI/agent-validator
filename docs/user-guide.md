@@ -191,6 +191,23 @@ Uses diff for a specific commit instead of the default change detection logic. T
 
 Uses diff for current uncommitted changes only (both staged and unstaged, plus untracked files). Ignores committed changes. Git-ignored files (via `.gitignore` or other git exclude files) are excluded from untracked file detection.
 
+#### `--report`
+
+Writes a plain-text failure report to stdout (in addition to the normal stderr output). Designed for external orchestrators like [Baton](https://github.com/pacaplan/baton) that capture stdout from shell steps.
+
+The report contains:
+- A `Status:` line (Passed, Passed with warnings, Failed, etc.)
+- **CHECK FAILURES**: gate label, command, working directory, fix instructions, fix skill, log file path. Does not include parsed error output — the consuming agent reads the log file directly.
+- **REVIEW VIOLATIONS**: each violation with a stable numeric ID (`#1`, `#2`, ...), priority, gate label, `file:line - issue`, fix suggestion, and JSON file path.
+
+The report is also written to `<log_dir>/report.txt` to ensure availability in environments where stdout may be dropped.
+
+Output is plain text with no ANSI escape codes, consistent with the convention that stdout is reserved for machine-readable output.
+
+```bash
+agent-gauntlet run --report --enable-review task-compliance
+```
+
 ### `agent-gauntlet check`
 
 Runs only applicable checks for detected changes. Reviews are skipped.
@@ -337,6 +354,45 @@ Updates installed plugins and skills for all supported adapters.
 - If Cursor plugin found → re-copies plugin assets from the npm package (always overwrite)
 - Refreshes Codex skills if installed (using checksum comparison)
 - If no plugins are found at all, exits with an error suggesting `agent-gauntlet init`
+
+### `agent-gauntlet update-review`
+
+Manages review violation decisions by stable numeric ID. Used after a gauntlet run to mark violations as fixed or skipped before re-running verification.
+
+Violations are enumerated by scanning review JSON files in the log directory (sorted by filename), collecting violations with `status: "new"`, and assigning sequential IDs from 1. The same enumeration is used by `--report`, so IDs are consistent between the report output and these commands.
+
+#### `agent-gauntlet update-review list`
+
+Lists all pending review violations with their numeric IDs.
+
+```bash
+$ agent-gauntlet update-review list
+  #1 [high] review:src:code-quality (claude@1)
+     src/main.ts:45 - Missing error handling for async database call
+     Fix: Wrap in try-catch block
+
+  #2 [medium] review:src:code-quality (claude@1)
+     src/utils.ts:22 - Function exceeds 50 lines
+     Fix: Extract helper functions
+```
+
+#### `agent-gauntlet update-review fix <id> <reason>`
+
+Marks a violation as fixed. Sets `status` to `"fixed"` and `result` to the reason string in the review JSON file.
+
+```bash
+agent-gauntlet update-review fix 1 "Added try-catch around database call"
+```
+
+#### `agent-gauntlet update-review skip <id> <reason>`
+
+Marks a violation as skipped. Sets `status` to `"skipped"` and `result` to the reason string in the review JSON file. Skipped violations cause the run to report "Passed with warnings" instead of "Failed".
+
+```bash
+agent-gauntlet update-review skip 2 "Function is readable at current length"
+```
+
+Only violations with `status: "new"` can be updated. Attempting to update an already-fixed or already-skipped violation produces an error.
 
 ### `agent-gauntlet help`
 

@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { cleanLogs, hasExistingLogs } from '../commands/shared.js';
 import { loadGlobalConfig } from '../config/global.js';
 import type { loadConfig } from '../config/loader.js';
@@ -6,6 +8,7 @@ import { getCategoryLogger, resetLogger } from '../output/app-logger.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { ConsoleLogHandle } from '../output/console-log.js';
 import type { Logger } from '../output/logger.js';
+import { generateReport } from '../output/report.js';
 import type { GauntletStatus, RunResult } from '../types/gauntlet-status.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import {
@@ -46,6 +49,7 @@ export interface RunContext {
     cwd?: string;
     checkInterval?: boolean;
     enableReviews?: Set<string>;
+    report?: boolean;
   };
   config: LoadedConfig;
   loggerInitializedHere: boolean;
@@ -394,6 +398,24 @@ async function buildRunResult(
   const consoleLogPath = await findLatestConsoleLog(ctx.config.project.log_dir);
   const status = determineStatus(outcome);
 
+  // Generate the report BEFORE cleanup archives logs
+  let reportText: string | undefined;
+  if (ctx.options.report) {
+    reportText = await generateReport(
+      status,
+      outcome.gateResults,
+      ctx.config.project.log_dir,
+    );
+    // Write report file as a fallback
+    const reportPath = path.join(ctx.config.project.log_dir, 'report.txt');
+    try {
+      await fs.writeFile(reportPath, reportText, 'utf-8');
+    } catch (err) {
+      // Best effort — don't fail the run if we can't write the report file
+      console.debug(`Failed to write report file ${reportPath}: ${err}`);
+    }
+  }
+
   if (status === 'passed' || status === 'retry_limit_exceeded') {
     const reason = status === 'passed' ? 'all_passed' : 'retry_limit_exceeded';
     const debugLogger = getDebugLogger();
@@ -410,6 +432,7 @@ async function buildRunResult(
     gatesRun: jobs.length,
     gatesFailed: outcome.allPassed ? 0 : jobs.length,
     consoleLogPath: consoleLogPath ?? undefined,
+    reportText,
     gateResults: outcome.gateResults,
   };
 }
