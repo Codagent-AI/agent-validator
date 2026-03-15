@@ -39,4 +39,11 @@ describe("Run Command", () => {
 		);
 		expect(enableReviewOpt?.short).toBe("-e");
 	});
+
+	it("should have --report option", () => {
+		const runCmd = program.commands.find((cmd) => cmd.name() === "run");
+		expect(
+			runCmd?.options.some((opt) => opt.long === "--report"),
+		).toBe(true);
+	});
 });

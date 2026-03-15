@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { executeRun } from '../core/run-executor.js';
+import { statusLineText } from '../output/report.js';
 import { isSuccessStatus } from '../types/gauntlet-status.js';
 
 export function registerRunCommand(program: Command): void {
@@ -22,14 +23,25 @@ export function registerRunCommand(program: Command): void {
       (value: string, prev: string[] = []) => [...prev, value],
       [] as string[],
     )
+    .option('--report', 'Write a structured failure report to stdout')
     .action(async (options) => {
+      const reportEnabled = options.report ?? false;
+
       const result = await executeRun({
         baseBranch: options.baseBranch,
         gate: options.gate,
         commit: options.commit,
         uncommitted: options.uncommitted,
         enableReviews: new Set<string>(options.enableReview ?? []),
+        report: reportEnabled,
       });
+
+      if (reportEnabled) {
+        // Use reportText from the executor, or fall back to a status-only line
+        // for early-return paths (no_changes, no_applicable_gates, etc.)
+        const text = result.reportText ?? statusLineText(result.status);
+        process.stdout.write(`${text}\n`);
+      }
 
       const code = isSuccessStatus(result.status) ? 0 : 1;
       process.exit(code);
