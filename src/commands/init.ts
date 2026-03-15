@@ -7,11 +7,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
 import { computeSkillChecksum } from './init-checksums.js';
-import {
-  detectInstalledPlugin,
-  getCodexSkillsBaseDir,
-  installClaudePluginWithFallback,
-} from './init-plugin.js';
+import { getCodexSkillsBaseDir, installAdapterPlugin } from './init-plugin.js';
 import {
   type OverwriteChoice,
   promptDevCLIs,
@@ -104,13 +100,7 @@ async function handleRerun(
     console.log(
       chalk.yellow('Plugin not installed yet, running fresh install...'),
     );
-    const installScope = await promptInstallScope(skipPrompts);
-    await installExternalFiles(
-      projectRoot,
-      availableAdapters,
-      skipPrompts,
-      installScope,
-    );
+    await installExternalFiles(projectRoot, availableAdapters, skipPrompts);
   }
 }
 
@@ -132,7 +122,6 @@ async function runInit(options: InitOptions): Promise<void> {
 
   let devAdapters: CLIAdapter[];
   let instructionCLINames: string[];
-  let installScope: 'user' | 'project' = 'project';
 
   if (gauntletExists) {
     console.log(chalk.dim('.gauntlet/ already exists, skipping scaffolding'));
@@ -141,20 +130,6 @@ async function runInit(options: InitOptions): Promise<void> {
   } else {
     const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
     devAdapters = availableAdapters.filter((a) => devCLINames.includes(a.name));
-
-    const existingPluginScope = devCLINames.includes('claude')
-      ? await detectInstalledPlugin(projectRoot)
-      : null;
-    if (existingPluginScope) {
-      console.log(
-        chalk.dim(
-          `Claude plugin already installed at ${existingPluginScope} scope, skipping install`,
-        ),
-      );
-      installScope = existingPluginScope;
-    } else {
-      installScope = await promptInstallScope(skipPrompts);
-    }
 
     for (const adapter of devAdapters) {
       if (!adapter.supportsHooks()) {
@@ -184,13 +159,7 @@ async function runInit(options: InitOptions): Promise<void> {
       numReviews,
     );
     instructionCLINames = devCLINames;
-    await installExternalFiles(
-      projectRoot,
-      devAdapters,
-      skipPrompts,
-      installScope,
-      existingPluginScope !== null,
-    );
+    await installExternalFiles(projectRoot, devAdapters, skipPrompts);
   }
   await addToGitignore(projectRoot, 'gauntlet_logs');
   await printPostInitInstructions(instructionCLINames);
@@ -291,34 +260,42 @@ async function installSkillsWithChecksums(
   }
 }
 
-async function installExternalFiles(
+/** Detect which adapters need plugin installation, logging already-installed adapters. */
+async function detectAdaptersNeedingInstall(
+  devAdapters: CLIAdapter[],
+  projectRoot: string,
+): Promise<CLIAdapter[]> {
+  const result: CLIAdapter[] = [];
+  for (const adapter of devAdapters) {
+    if (!adapter.installPlugin) continue;
+
+    if (adapter.detectPlugin) {
+      const existingScope = await adapter.detectPlugin(projectRoot);
+      if (existingScope) {
+        console.log(
+          chalk.dim(
+            `${adapter.name} plugin already installed at ${existingScope} scope, skipping install`,
+          ),
+        );
+        continue;
+      }
+    }
+
+    result.push(adapter);
+  }
+  return result;
+}
+
+/** Install skills for non-Claude/Codex adapters (e.g. Gemini, Cursor). */
+async function installOtherAdapterSkills(
   projectRoot: string,
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
-  installScope: 'user' | 'project',
-  skipClaudePlugin = false,
+  updateAllState: UpdateAllState,
 ): Promise<void> {
-  const updateAllState: UpdateAllState = { updateAll: false };
-  const devAdapterNames = new Set(devAdapters.map((adapter) => adapter.name));
-
-  if (devAdapterNames.has('claude') && !skipClaudePlugin) {
-    await installClaudePluginWithFallback(installScope);
-  }
-  if (devAdapterNames.has('codex')) {
-    const codexBaseDir = getCodexSkillsBaseDir(installScope);
-    await installSkillsWithChecksums(
-      projectRoot,
-      codexBaseDir,
-      skipPrompts,
-      updateAllState,
-    );
-  }
-
   const seen = new Set<string>();
   for (const adapter of devAdapters) {
-    if (adapter.name === 'claude' || adapter.name === 'codex') {
-      continue;
-    }
+    if (adapter.name === 'claude' || adapter.name === 'codex') continue;
     const dir = adapter.getProjectSkillDir();
     if (dir && !seen.has(dir)) {
       seen.add(dir);
@@ -330,6 +307,48 @@ async function installExternalFiles(
       );
     }
   }
+}
+
+async function installExternalFiles(
+  projectRoot: string,
+  devAdapters: CLIAdapter[],
+  skipPrompts: boolean,
+): Promise<void> {
+  const updateAllState: UpdateAllState = { updateAll: false };
+  const devAdapterNames = new Set(devAdapters.map((adapter) => adapter.name));
+
+  const adaptersNeedingInstall = await detectAdaptersNeedingInstall(
+    devAdapters,
+    projectRoot,
+  );
+
+  // Prompt for scope only when at least one adapter needs installation
+  const needsScope =
+    adaptersNeedingInstall.length > 0 || devAdapterNames.has('codex');
+  const installScope: 'user' | 'project' = needsScope
+    ? await promptInstallScope(skipPrompts)
+    : 'project';
+
+  for (const adapter of adaptersNeedingInstall) {
+    await installAdapterPlugin(adapter, projectRoot, installScope);
+  }
+
+  if (devAdapterNames.has('codex')) {
+    const codexBaseDir = getCodexSkillsBaseDir(installScope);
+    await installSkillsWithChecksums(
+      projectRoot,
+      codexBaseDir,
+      skipPrompts,
+      updateAllState,
+    );
+  }
+
+  await installOtherAdapterSkills(
+    projectRoot,
+    devAdapters,
+    skipPrompts,
+    updateAllState,
+  );
 }
 
 async function printPostInitInstructions(devCLINames: string[]): Promise<void> {

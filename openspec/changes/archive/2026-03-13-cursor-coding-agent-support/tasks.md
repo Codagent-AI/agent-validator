@@ -1,0 +1,4 @@
+- [x] Create Cursor plugin assets (`tasks/cursor-plugin-assets.md`)
+- [x] Add plugin lifecycle methods to Claude adapter (`tasks/claude-adapter-plugin.md`)
+- [x] Upgrade Cursor adapter with skill dirs and plugin methods (`tasks/cursor-adapter-upgrade.md`)
+- [x] Generalize init-plugin for multi-adapter support (`tasks/generalize-init-plugin.md`)

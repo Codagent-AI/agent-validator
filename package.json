@@ -23,6 +23,7 @@
     "dist",
     "skills",
     ".claude-plugin",
+    ".cursor-plugin",
     "hooks",
     "README.md",
     "LICENSE"

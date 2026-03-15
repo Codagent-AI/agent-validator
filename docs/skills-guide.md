@@ -29,6 +29,12 @@ claude plugin install agent-gauntlet --scope <project|user>
 
 The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. No manual file management is needed — updates are delivered via `agent-gauntlet update`, or manually with `claude plugin marketplace update agent-gauntlet` followed by `claude plugin update agent-gauntlet@pcaplan/agent-gauntlet`.
 
+### Cursor (Plugin Delivery)
+
+For Cursor, skills and hooks are delivered as part of the **agent-gauntlet Cursor plugin**. When you run `agent-gauntlet init` with Cursor selected, it copies plugin files to `.cursor/plugins/agent-gauntlet/` (project scope) or `~/.cursor/plugins/agent-gauntlet/` (user scope).
+
+The plugin bundles skills in `skills/` and hooks in `hooks/hooks.json`.
+
 ### Codex (File Copy)
 
 For Codex, skills are copied to `.agents/skills/` (local scope) or `$HOME/.agents/skills/` (global scope) during init. Installation uses **checksum-based comparison**:
@@ -180,4 +186,4 @@ To update skills after upgrading Agent Gauntlet:
 agent-gauntlet update
 ```
 
-For Claude Code, this updates the plugin via marketplace. For Codex, it refreshes skill files using checksum comparison. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.
+For Claude Code, this updates the plugin via marketplace. For Cursor, it re-copies plugin assets from the npm package. For Codex, it refreshes skill files using checksum comparison. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.

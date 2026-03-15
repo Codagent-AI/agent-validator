@@ -1,0 +1,1 @@
+- [x] `tasks/cursor-update-support.md`
