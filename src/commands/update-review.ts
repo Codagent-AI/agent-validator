@@ -4,6 +4,36 @@ import { loadConfig } from '../config/loader.js';
 import type { ReviewFullJsonOutput } from '../gates/result.js';
 import { enumerateNewViolations } from '../output/report.js';
 
+async function ensureLogDir(logDir: string): Promise<void> {
+  try {
+    await fs.stat(logDir);
+  } catch (error: unknown) {
+    const code = (error as { code?: string }).code;
+    if (code === 'ENOENT') {
+      console.error(`Error: Log directory does not exist: ${logDir}`);
+      process.exit(1);
+    }
+    throw new Error(
+      `Failed to access log directory ${logDir}: ${String(error)}`,
+    );
+  }
+}
+
+function printViolation(
+  v: ReturnType<typeof enumerateNewViolations> extends Promise<(infer T)[]>
+    ? T
+    : never,
+): void {
+  const priorityStr = v.priority ? ` [${v.priority}]` : '';
+  console.log(`#${v.id}${priorityStr} ${v.gateLabel} (${v.adapterSuffix})`);
+  console.log(`  ${v.file}:${v.line} - ${v.issue}`);
+  if (v.fix) {
+    console.log(`  Fix: ${v.fix}`);
+  }
+  console.log(`  JSON: ${v.jsonPath}`);
+  console.log('');
+}
+
 export function registerUpdateReviewCommand(program: Command): void {
   const cmd = program
     .command('update-review')
@@ -17,19 +47,7 @@ export function registerUpdateReviewCommand(program: Command): void {
         const config = await loadConfig();
         const logDir = config.project.log_dir;
 
-        // Check if log directory exists
-        try {
-          await fs.stat(logDir);
-        } catch (error: unknown) {
-          const code = (error as { code?: string }).code;
-          if (code === 'ENOENT') {
-            console.error(`Error: Log directory does not exist: ${logDir}`);
-            process.exit(1);
-          }
-          throw new Error(
-            `Failed to access log directory ${logDir}: ${String(error)}`,
-          );
-        }
+        await ensureLogDir(logDir);
 
         const violations = await enumerateNewViolations(logDir);
 
@@ -39,16 +57,7 @@ export function registerUpdateReviewCommand(program: Command): void {
         }
 
         for (const v of violations) {
-          const priorityStr = v.priority ? ` [${v.priority}]` : '';
-          console.log(
-            `#${v.id}${priorityStr} ${v.gateLabel} (${v.adapterSuffix})`,
-          );
-          console.log(`  ${v.file}:${v.line} - ${v.issue}`);
-          if (v.fix) {
-            console.log(`  Fix: ${v.fix}`);
-          }
-          console.log(`  JSON: ${v.jsonPath}`);
-          console.log('');
+          printViolation(v);
         }
 
         process.exit(0);
