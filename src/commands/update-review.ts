@@ -54,14 +54,14 @@ export function registerUpdateReviewCommand(program: Command): void {
     });
 
   cmd
-    .command('fix <id> [reason]')
+    .command('fix <id> <reason>')
     .description('Mark a violation as fixed')
     .action(async (idStr: string, reason: string | undefined) => {
       await updateViolation(idStr, reason, 'fixed');
     });
 
   cmd
-    .command('skip <id> [reason]')
+    .command('skip <id> <reason>')
     .description('Mark a violation as skipped')
     .action(async (idStr: string, reason: string | undefined) => {
       await updateViolation(idStr, reason, 'skipped');

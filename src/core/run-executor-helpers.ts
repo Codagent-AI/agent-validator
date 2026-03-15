@@ -410,8 +410,9 @@ async function buildRunResult(
     const reportPath = path.join(ctx.config.project.log_dir, 'report.txt');
     try {
       await fs.writeFile(reportPath, reportText, 'utf-8');
-    } catch {
+    } catch (err) {
       // Best effort — don't fail the run if we can't write the report file
+      console.debug(`Failed to write report file ${reportPath}: ${err}`);
     }
   }
 

@@ -52,6 +52,8 @@ async function collectViolationsFromFile(
   startId: number,
 ): Promise<NumberedViolation[]> {
   const content = await fs.readFile(jsonPath, 'utf-8');
+  // Intentional: ReviewFullJsonOutput is an internal format produced by review-agg.ts.
+  // Type assertion is sufficient here; Zod validation is not needed for stable internal data.
   const data: ReviewFullJsonOutput = JSON.parse(content);
 
   if (!(data.violations && Array.isArray(data.violations))) return [];
@@ -97,14 +99,18 @@ export async function enumerateNewViolations(
   let files: string[];
   try {
     files = await fs.readdir(logDir);
-  } catch {
-    return [];
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code === 'ENOENT') return [];
+    throw new Error(`Failed to read log directory ${logDir}: ${err}`);
   }
 
-  const jsonFiles = files.filter((f) => f.endsWith('.json')).sort();
+  const reviewFiles = files
+    .filter((f) => f.endsWith('.json') && parseReviewJsonFilename(f) !== null)
+    .sort();
   const allViolations: NumberedViolation[] = [];
 
-  for (const file of jsonFiles) {
+  for (const file of reviewFiles) {
     try {
       const fileViolations = await collectViolationsFromFile(
         path.join(logDir, file),
@@ -112,8 +118,8 @@ export async function enumerateNewViolations(
         allViolations.length + 1,
       );
       allViolations.push(...fileViolations);
-    } catch {
-      // Skip unparseable files
+    } catch (err) {
+      throw new Error(`Failed to read review JSON ${file}: ${err}`);
     }
   }
 

@@ -68,3 +68,50 @@ issues:
     difficulty: medium
     priority: high
     source: 2026-02-28 skill-review.agent-gauntlet
+  - id: silent-error-swallow-file-enumeration
+    file: src/output/report.ts
+    line_range:
+      - 111
+      - 118
+    description: >
+      Review JSON files that fail to read or parse are silently skipped during violation
+      enumeration. This causes --report to omit real review failures and update-review list/fix/skip
+      to act as if no pending violations exist, hiding failures in the exact workflow the feature is
+      meant to drive.
+    code_snippet: |
+      for (const file of jsonFiles) {
+        try {
+          const fileViolations = await collectViolationsFromFile(
+            path.join(logDir, file),
+            file,
+            allViolations.length + 1,
+          );
+          allViolations.push(...fileViolations);
+        } catch {
+          // Skip unparseable files
+        }
+      }
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-03-15 agent-gauntlet
+  - id: blanket-catch-readdir-hides-failures
+    file: src/output/report.ts
+    line_range:
+      - 97
+      - 104
+    description: >
+      fs.readdir(logDir) failures for any reason (permission errors, transient IO failures) are
+      caught and return an empty violation list, turning real errors into false "no violations"
+      results. Only ENOENT should be treated as empty; other errors should propagate.
+    code_snippet: |
+      let files: string[];
+      try {
+        files = await fs.readdir(logDir);
+      } catch {
+        return [];
+      }
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-03-15 agent-gauntlet

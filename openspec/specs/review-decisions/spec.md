@@ -1,7 +1,7 @@
 # review-decisions Specification
 
 ## Purpose
-TBD - created by archiving change baton-gauntlet-integration. Update Purpose after archive.
+Defines the expected behavior for `agent-gauntlet update-review` commands (`list`, `fix`, `skip`), including deterministic violation IDs and status transition rules.
 
 ## Requirements
 

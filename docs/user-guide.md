@@ -200,7 +200,7 @@ The report contains:
 - **CHECK FAILURES**: gate label, command, working directory, fix instructions, fix skill, log file path. Does not include parsed error output — the consuming agent reads the log file directly.
 - **REVIEW VIOLATIONS**: each violation with a stable numeric ID (`#1`, `#2`, ...), priority, gate label, `file:line - issue`, fix suggestion, and JSON file path.
 
-The report is also written to `<log_dir>/report.txt` as a fallback for environments where Bun may drop stdout.
+The report is also written to `<log_dir>/report.txt` to ensure availability in environments where stdout may be dropped.
 
 Output is plain text with no ANSI escape codes, consistent with the convention that stdout is reserved for machine-readable output.
 

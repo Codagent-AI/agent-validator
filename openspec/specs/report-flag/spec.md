@@ -1,7 +1,7 @@
 # report-flag Specification
 
 ## Purpose
-TBD - created by archiving change baton-gauntlet-integration. Update Purpose after archive.
+Defines the `--report` flag behavior for `agent-gauntlet run`, enabling structured plain-text failure reports on stdout for external orchestrators. The report provides machine-readable output while preserving existing stderr behavior.
 
 ## Requirements
 
