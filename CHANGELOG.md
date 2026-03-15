@@ -1,5 +1,17 @@
 # agent-gauntlet
 
+## 1.3.0
+
+### Minor Changes
+
+- [#102](https://github.com/pacaplan/agent-gauntlet/pull/102) Add Codex as a supported coding agent with skill installation and an `update-all` prompt for batch-updating agent configurations
+
+- [#103](https://github.com/pacaplan/agent-gauntlet/pull/103) Deliver gauntlet skills and hooks as a Claude Code plugin, enabling automatic installation via the plugin system
+
+- [#104](https://github.com/pacaplan/agent-gauntlet/pull/104) Add Cursor as a first-class coding agent with dedicated plugin support and configuration scaffolding
+
+- [#105](https://github.com/pacaplan/agent-gauntlet/pull/105) Add `--report` flag for machine-readable gauntlet output and `update-review` command for baton-based review integration
+
 ## 1.2.2
 
 ### Patch Changes
