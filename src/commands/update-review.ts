@@ -20,9 +20,15 @@ export function registerUpdateReviewCommand(program: Command): void {
         // Check if log directory exists
         try {
           await fs.stat(logDir);
-        } catch {
-          console.error(`Error: Log directory does not exist: ${logDir}`);
-          process.exit(1);
+        } catch (error: unknown) {
+          const code = (error as { code?: string }).code;
+          if (code === 'ENOENT') {
+            console.error(`Error: Log directory does not exist: ${logDir}`);
+            process.exit(1);
+          }
+          throw new Error(
+            `Failed to access log directory ${logDir}: ${String(error)}`,
+          );
         }
 
         const violations = await enumerateNewViolations(logDir);
