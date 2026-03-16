@@ -306,12 +306,13 @@ async function executeAndFinalize(
     logger.getRunNumber(),
   );
 
-  await writeExecutionState(config.project.log_dir);
-
   if (outcome.allPassed) {
     await debugLogger?.logClean('auto', 'all_passed');
     await cleanLogs(config.project.log_dir);
   }
+
+  // Write execution state AFTER clean so the file always survives.
+  await writeExecutionState(config.project.log_dir);
 
   return outcome.allPassed;
 }

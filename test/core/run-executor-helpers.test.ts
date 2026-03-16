@@ -3,6 +3,7 @@ import * as appLogger from "../../src/output/app-logger.js";
 import * as debugLog from "../../src/utils/debug-log.js";
 import * as logParser from "../../src/utils/log-parser.js";
 import * as shared from "../../src/commands/shared.js";
+import * as executionState from "../../src/utils/execution-state.js";
 import { handleNoChanges } from "../../src/core/run-executor-helpers.js";
 
 const noopLogger = {
@@ -33,6 +34,7 @@ describe("handleNoChanges", () => {
 	let debugLogSpy: ReturnType<typeof spyOn>;
 	let hasSkippedSpy: ReturnType<typeof spyOn>;
 	let cleanLogsSpy: ReturnType<typeof spyOn>;
+	let writeStateSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(() => {
 		loggerSpy = spyOn(appLogger, "getCategoryLogger").mockReturnValue(
@@ -48,6 +50,10 @@ describe("handleNoChanges", () => {
 		cleanLogsSpy = spyOn(shared, "cleanLogs").mockResolvedValue(
 			undefined as any,
 		);
+		writeStateSpy = spyOn(
+			executionState,
+			"writeExecutionState",
+		).mockResolvedValue(undefined as any);
 	});
 
 	afterEach(() => {
@@ -55,6 +61,7 @@ describe("handleNoChanges", () => {
 		debugLogSpy.mockRestore();
 		hasSkippedSpy.mockRestore();
 		cleanLogsSpy.mockRestore();
+		writeStateSpy.mockRestore();
 	});
 
 	it("returns 'passed' when failuresMap is empty", async () => {
@@ -62,6 +69,20 @@ describe("handleNoChanges", () => {
 		const failuresMap = new Map();
 		const result = await handleNoChanges(ctx, failuresMap);
 		expect(result.status).toBe("passed");
+	});
+
+	it("writes execution state AFTER cleanLogs when passed", async () => {
+		const callOrder: string[] = [];
+		cleanLogsSpy.mockImplementation(async () => {
+			callOrder.push("cleanLogs");
+		});
+		writeStateSpy.mockImplementation(async () => {
+			callOrder.push("writeExecutionState");
+		});
+		const ctx = makeCtx();
+		const failuresMap = new Map();
+		await handleNoChanges(ctx, failuresMap);
+		expect(callOrder).toEqual(["cleanLogs", "writeExecutionState"]);
 	});
 
 	it("returns 'no_changes' when failuresMap is undefined", async () => {

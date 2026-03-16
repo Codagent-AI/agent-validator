@@ -177,6 +177,15 @@ export class DebugLogger {
   }
 
   /**
+   * Log the files moved/kept during a clean operation for diagnostics.
+   */
+  async logCleanDetails(moved: string[], kept: string[]): Promise<void> {
+    await this.write(
+      `CLEAN_DETAILS moved=${moved.length} kept=${kept.length} kept_files=${kept.join(',')}`,
+    );
+  }
+
+  /**
    * Log a stop hook decision.
    */
   async logStopHook(
