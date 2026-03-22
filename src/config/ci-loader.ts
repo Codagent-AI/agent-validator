@@ -12,8 +12,12 @@ const CI_FILE = 'ci.yml';
 function resolveConfigDir(rootDir: string): string {
   const validatorPath = path.join(rootDir, VALIDATOR_DIR);
   const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
-  if (existsSync(validatorPath)) return validatorPath;
-  if (existsSync(gauntletPath)) return gauntletPath;
+  // Prefer the dir that already has ci.yml (handles legacy .gauntlet/ projects)
+  if (existsSync(path.join(validatorPath, CI_FILE))) return validatorPath;
+  if (existsSync(path.join(gauntletPath, CI_FILE))) return gauntletPath;
+  // Fall back to whichever dir has the main config
+  if (existsSync(path.join(validatorPath, 'config.yml'))) return validatorPath;
+  if (existsSync(path.join(gauntletPath, 'config.yml'))) return gauntletPath;
   return validatorPath;
 }
 
