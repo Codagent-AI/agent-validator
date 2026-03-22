@@ -106,9 +106,10 @@ base_branch: origin/develop
 
 ## Config Precedence
 
-Configuration is loaded with this precedence (highest first):
-1. **Project config** (`.gauntlet/config.yml`)
-2. **Global config** (`~/.config/agent-gauntlet/config.yml`)
+Most settings come from the project config (`.gauntlet/config.yml`) with built-in defaults as fallback. The global config (`~/.config/agent-gauntlet/config.yml`) only applies to `debug_log` settings:
+
+1. **Project config** (`.gauntlet/config.yml`) — all project settings
+2. **Global config** (`~/.config/agent-gauntlet/config.yml`) — `debug_log` only
 3. **Defaults** (built-in)
 
 ## Init Setup Problems

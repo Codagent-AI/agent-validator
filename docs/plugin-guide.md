@@ -8,8 +8,8 @@ The agent-gauntlet npm package includes plugin assets for both Claude Code and C
 
 - `.claude-plugin/plugin.json` — Plugin manifest for Claude Code
 - `.cursor-plugin/plugin.json` — Plugin manifest for Cursor
-- `hooks/hooks.json` — Claude Code hook definitions
-- `hooks/cursor-hooks.json` — Cursor hook definitions
+- `hooks/hooks.json` — Claude Code hook definitions (installed destination)
+- `hooks/cursor-hooks.json` — Cursor hook definitions (source; installed as `hooks/hooks.json`)
 - `.claude/skills/` — Skill files bundled in the Claude plugin
 - `skills/` — Skill files bundled in the Cursor plugin
 
@@ -123,11 +123,11 @@ The Cursor plugin is delivered via file copy during `agent-gauntlet init`. Unlik
 
 - `.cursor-plugin/plugin.json` — Plugin manifest (name, version, description, license)
 - `skills/` — All gauntlet skill files
-- `hooks/hooks.json` — Hook definitions
+- `hooks/hooks.json` — Hook definitions (installed from source file `hooks/cursor-hooks.json`)
 
 ### Updating
 
-Run `agent-gauntlet update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/`, `skills/`, and `hooks/cursor-hooks.json` from the npm package to the installed location, overwriting existing files.
+Run `agent-gauntlet update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/`, `skills/`, and `hooks/cursor-hooks.json` (installed as `hooks/hooks.json`) from the npm package to the installed location, overwriting existing files.
 
 ### Manual Installation
 
