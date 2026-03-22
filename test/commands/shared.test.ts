@@ -193,6 +193,92 @@ describe("cleanLogs", () => {
 		expect(previousFiles).not.toContain(getExecutionStateFilename());
 		expect(previousFiles).toContain("check.1.log");
 	});
+
+	it("preserves .execution_state with production-like layout (multi-run + rotation)", async () => {
+		// Reproduce exact production scenario: 3-run session with
+		// previous/, previous.1/, previous.2/ already populated,
+		// multiple log/json files across 3 run numbers, plus
+		// persistent files (.execution_state, .debug.log, .lock).
+		const stateFile = getExecutionStateFilename();
+
+		// Existing previous dirs (from prior sessions)
+		for (const dir of ["previous", "previous.1", "previous.2"]) {
+			const p = path.join(TEST_DIR, dir);
+			await fs.mkdir(p, { recursive: true });
+			await fs.writeFile(path.join(p, "check_src_build.1.log"), "old");
+		}
+
+		// Current session logs: 3 run numbers across multiple gates
+		const gates = [
+			"check_src_build",
+			"check_src_lint",
+			"check_src_typecheck",
+			"check_src_security-deps",
+			"check_._test",
+			"check_._security-code",
+		];
+		for (const gate of gates) {
+			for (let run = 1; run <= 3; run++) {
+				await fs.writeFile(
+					path.join(TEST_DIR, `${gate}.${run}.log`),
+					`run ${run}`,
+				);
+			}
+		}
+		// Review logs with adapter@index format
+		for (let run = 1; run <= 3; run++) {
+			await fs.writeFile(
+				path.join(TEST_DIR, `review_src_code-quality_codex@1.${run}.log`),
+				`run ${run}`,
+			);
+			await fs.writeFile(
+				path.join(TEST_DIR, `review_src_code-quality_codex@1.${run}.json`),
+				`{"run":${run}}`,
+			);
+		}
+		// Console logs
+		for (let run = 1; run <= 3; run++) {
+			await fs.writeFile(
+				path.join(TEST_DIR, `console.${run}.log`),
+				`console ${run}`,
+			);
+		}
+
+		// Persistent files
+		await fs.writeFile(
+			path.join(TEST_DIR, stateFile),
+			JSON.stringify({
+				branch: "feature",
+				commit: "abc123",
+				working_tree_ref: "def456",
+				last_run_completed_at: new Date().toISOString(),
+			}),
+		);
+		await fs.writeFile(path.join(TEST_DIR, ".debug.log"), "debug entries");
+		await fs.writeFile(
+			path.join(TEST_DIR, ".gauntlet-run.lock"),
+			"12345",
+		);
+
+		// Run cleanLogs with default rotation depth (3)
+		await cleanLogs(TEST_DIR, 3);
+
+		// .execution_state MUST survive in root
+		const rootFiles = await fs.readdir(TEST_DIR);
+		expect(rootFiles).toContain(stateFile);
+		expect(rootFiles).toContain(".debug.log");
+		expect(rootFiles).toContain(".gauntlet-run.lock");
+
+		// Current logs should NOT be in root
+		expect(rootFiles).not.toContain("check_src_build.1.log");
+		expect(rootFiles).not.toContain("console.1.log");
+
+		// .execution_state should NOT be in previous/
+		const prevFiles = await fs.readdir(path.join(TEST_DIR, "previous"));
+		expect(prevFiles).not.toContain(stateFile);
+		// But log files should be there
+		expect(prevFiles).toContain("check_src_build.1.log");
+	});
 });
 
 describe("cleanLogs rotation", () => {
