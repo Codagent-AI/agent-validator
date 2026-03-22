@@ -379,11 +379,11 @@ The system MUST support an optional persistent debug log that captures operation
 - **WHEN** the system writes a debug log entry
 - **THEN** the entry SHALL be plain text on a single line
 - **AND** the entry SHALL begin with an ISO 8601 timestamp in brackets
-- **AND** the entry SHALL include an event type (e.g., `COMMAND`, `RUN_START`, `GATE_RESULT`, `RUN_END`, `CLEAN`, `STOP_HOOK`)
+- **AND** the entry SHALL include an event type (e.g., `COMMAND`, `RUN_START`, `GATE_RESULT`, `RUN_END`, `CLEAN`)
 - **AND** the entry SHALL include event-specific fields
 
 #### Scenario: Command logging
-- **WHEN** any CLI command starts (run, check, review, clean, stop-hook, etc.)
+- **WHEN** any CLI command starts (run, check, review, clean, etc.)
 - **THEN** the system SHALL write a `COMMAND` entry
 - **AND** the entry SHALL include the command name and arguments
 
@@ -407,11 +407,6 @@ The system MUST support an optional persistent debug log that captures operation
 - **WHEN** a clean operation executes (auto or manual)
 - **THEN** the system SHALL write a `CLEAN` entry
 - **AND** the entry SHALL include: type (auto/manual), reason
-
-#### Scenario: Stop hook logging
-- **WHEN** the stop-hook command completes
-- **THEN** the system SHALL write a `STOP_HOOK` entry
-- **AND** the entry SHALL include: decision (allow/block), reason
 
 #### Scenario: Debug log disabled by default
 - **GIVEN** no debug log configuration is specified

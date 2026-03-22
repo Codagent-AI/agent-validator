@@ -1,0 +1,1 @@
+- [x] Remove stop hook feature (`tasks/remove-stop-hooks.md`)
