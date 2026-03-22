@@ -1,5 +1,14 @@
 # Adapter Troubleshooting
 
+- [`agent-validate health` Output](#agent-validate-health-output)
+- [Missing CLI Tools](#missing-cli-tools)
+- [Authentication Issues](#authentication-issues)
+- [Usage Limits and 1-Hour Cooldown](#usage-limits-and-1-hour-cooldown)
+- [`cli.default_preference` and Adapter Selection](#clidefault_preference-and-adapter-selection)
+- [`allow_tool_use` and `thinking_budget` Settings](#allow_tool_use-and-thinking_budget-settings)
+- [`.execution_state` File](#execution_state-file)
+- [Troubleshooting Checklist](#troubleshooting-checklist)
+
 ## `agent-validate health` Output
 
 Run `agent-validate health` to check adapter status. Each adapter reports one of:

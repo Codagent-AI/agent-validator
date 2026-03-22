@@ -1,6 +1,6 @@
 ---
 name: validator-status
-description: Shows a summary of the most recent validator session. Use when asked to "show validator status", "summarize last validator run", or "what failed in the last validator session".
+description: Shows a summary of the most recent validator session for requests such as "show validator status", "summarize last validator run", or "what failed in the last validator session".
 disable-model-invocation: true
 allowed-tools: Bash, Read
 ---

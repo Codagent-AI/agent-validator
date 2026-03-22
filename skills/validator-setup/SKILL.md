@@ -1,6 +1,6 @@
 ---
 name: validator-setup
-description: Scans the project and configures checks and reviews for Agent Validator. Use when asked to "set up validator", "configure checks and reviews", or "initialize validator for this repo".
+description: Scans the project and configures checks and reviews for Agent Validator for requests such as "set up validator", "configure checks and reviews", or "initialize validator for this repo".
 allowed-tools: Bash, Read, Glob, Grep, Write, Edit
 ---
 

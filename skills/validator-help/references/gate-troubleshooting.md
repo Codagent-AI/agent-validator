@@ -1,5 +1,13 @@
 # Gate Troubleshooting
 
+- [Check Gate Failures](#check-gate-failures)
+- [Review Gate Failures](#review-gate-failures)
+- [`no_applicable_gates`](#no_applicable_gates)
+- [`no_changes`](#no_changes)
+- [Parallel vs Sequential Execution](#parallel-vs-sequential-execution)
+- [Rerun / Verification Mode](#rerun--verification-mode)
+- [How to Read Gate Logs](#how-to-read-gate-logs)
+
 ## Check Gate Failures
 
 Check gates run shell commands (linters, test runners, etc.) and report pass/fail based on exit code.

@@ -1,8 +1,7 @@
 ---
 name: validator-commit
 description: >-
-  Gates commits behind optional gauntlet validation by detecting changes, running selected validations, handling failures, and completing the commit flow.
-  Activates when requests include "commit with gauntlet", "run checks before commit", "run gauntlet then commit", or "skip gauntlet and commit".
+  Handles commit flows by detecting changes, optionally running gauntlet validation, and completing commits for requests such as "commit with gauntlet", "run checks before commit", "run gauntlet then commit", or "skip gauntlet and commit".
 disable-model-invocation: false
 allowed-tools: Bash, Task
 ---

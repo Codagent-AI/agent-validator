@@ -1,7 +1,7 @@
 ---
 name: validator-check
 description: >-
-  Runs validator checks only without AI reviews. Use when asked to "run validator checks", "check without reviews", or "validate before commit without AI review".
+  Runs validator checks only without AI reviews for requests such as "run validator checks", "check without reviews", or "validate before commit without AI review".
 disable-model-invocation: true
 allowed-tools: Bash, Task
 ---

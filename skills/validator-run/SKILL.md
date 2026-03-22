@@ -1,7 +1,7 @@
 ---
 name: validator-run
 description: >-
-  Runs the full validator workflow after coding tasks, including requests such as "run the validator", "run final verification", "validate before commit", or "run the gauntlet". Executes checks and reviews before commit, push, or PR creation.
+  Runs the full validator workflow after coding tasks for requests such as "run the validator", "run final verification", "validate before commit", or "run the gauntlet". Executes checks and reviews before commit, push, or PR creation.
 disable-model-invocation: false
 allowed-tools: Bash, Task
 ---

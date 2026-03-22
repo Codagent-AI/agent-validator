@@ -1,5 +1,15 @@
 # Config Troubleshooting
 
+- [`no_config` — Missing Configuration](#no_config--missing-configuration)
+- [YAML Syntax and Schema Errors](#yaml-syntax-and-schema-errors)
+- [Common Misconfigurations](#common-misconfigurations)
+- [`log_dir` Issues](#log_dir-issues)
+- [`base_branch` Misconfiguration](#base_branch-misconfiguration)
+- [Config Precedence](#config-precedence)
+- [Init Setup Problems](#init-setup-problems)
+- [Adapter Configuration](#adapter-configuration)
+- [Debug Logging](#debug-logging)
+
 ## `no_config` — Missing Configuration
 
 The `no_config` status is returned when `.validator/config.yml` doesn't exist. This is normal for non-gauntlet projects.

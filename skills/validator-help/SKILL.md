@@ -1,6 +1,6 @@
 ---
 name: validator-help
-description: Diagnoses and explains validator behavior using runtime evidence. Use when asked to "why did validator fail", "explain validator behavior", "diagnose validator logs", or "what went wrong in the validator run".
+description: Diagnoses and explains validator behavior from runtime evidence for requests such as "why did validator fail", "explain validator behavior", "diagnose validator logs", or "what went wrong in the validator run".
 allowed-tools: Bash, Read, Glob, Grep
 ---
 

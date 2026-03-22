@@ -3,31 +3,41 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+	createClaudeStub,
 	initGitRepo,
-	isClaudeAvailable,
 	isDistBuilt,
 	spawnGauntlet,
 } from "./helpers.js";
 
 let tempDir: string;
+let stubBinDir: string;
 let initResult: { exitCode: number; stdout: string; stderr: string };
 let canRun: boolean;
 
 beforeAll(async () => {
-	canRun = isDistBuilt() && (await isClaudeAvailable());
+	canRun = isDistBuilt();
 	if (!canRun) return;
+
+	const stub = await createClaudeStub();
+	stubBinDir = stub.binDir;
 
 	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-init-e2e-"));
 	await fs.mkdir(path.join(tempDir, "src"), { recursive: true });
 	await fs.writeFile(path.join(tempDir, "src", "index.ts"), "export {};\n");
 	await initGitRepo(tempDir);
 
-	initResult = await spawnGauntlet(["init", "--yes"], { cwd: tempDir });
+	initResult = await spawnGauntlet(["init", "--yes"], {
+		cwd: tempDir,
+		env: { ...process.env, PATH: `${stubBinDir}:${process.env.PATH}` },
+	});
 });
 
 afterAll(async () => {
 	if (tempDir) {
 		await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+	}
+	if (stubBinDir) {
+		await fs.rm(stubBinDir, { recursive: true, force: true }).catch(() => {});
 	}
 });
 
