@@ -14,11 +14,11 @@ Run validator checks only — no AI reviews.
 
 ### Step 1 - Clean Logs
 
-Run `agent-validator clean` to archive any previous log files.
+Run `agent-validate clean` to archive any previous log files.
 
 ### Step 2 - Run Checks
 
-Run `agent-validator check` using `Bash` with `timeout: 300000`. **ALWAYS wait for and read the full command output** before proceeding. **Verify you can see a `Status:` line in the output before continuing.**
+Run `agent-validate check` using `Bash` with `timeout: 300000`. **ALWAYS wait for and read the full command output** before proceeding. **Verify you can see a `Status:` line in the output before continuing.**
 
 ### Step 3 - Check Status
 
@@ -26,7 +26,7 @@ Run `agent-validator check` using `Bash` with `timeout: 300000`. **ALWAYS wait f
 - `Status: Passed` → Go to Step 7.
 - `Status: Passed with warnings` → Go to Step 7.
 - `Status: Failed` → Continue to Step 4. **You MUST continue — do not stop here.**
-- `Status: Retry limit exceeded` → Run `agent-validator clean` to archive logs. Go to Step 7.
+- `Status: Retry limit exceeded` → Run `agent-validate clean` to archive logs. Go to Step 7.
 - No status line visible → **Known issue:** Bun can drop all stdout/stderr. Read the console log file to get the status: find the latest `console.*.log` in the validator log directory (e.g., `validator_logs/console.1.log`) and look for the `Status:` line there. If no console log is found there, also check `validator_logs/previous/` for logs from the most recent archived run. If no console log exists in either location, the command may have timed out or failed to run — re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
 
 ### Step 4 - Extract Failures
@@ -47,7 +47,7 @@ Execute the fixes for all failed checks:
 
 ### Step 6 - Re-run Verification
 
-**NEVER skip this step** — if the run failed, you MUST fix and re-run. Run `agent-validator check` again with `Bash` and `timeout: 300000`. Do NOT run `agent-validator clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to Step 3** to check the status line and repeat.
+**NEVER skip this step** — if the run failed, you MUST fix and re-run. Run `agent-validate check` again with `Bash` and `timeout: 300000`. Do NOT run `agent-validate clean` between retries. The tool detects existing logs and automatically switches to verification mode. **Go back to Step 3** to check the status line and repeat.
 
 ### Step 7 - Summarize Session
 

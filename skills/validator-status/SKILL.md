@@ -11,7 +11,7 @@ Show a detailed summary of the most recent validator session.
 ## Step 1: Run the status script
 
 ```bash
-agent-validator status 2>&1
+agent-validate status 2>&1
 ```
 
 The script parses the `.debug.log` for session-level data (run count, gate results, pass/fail status) and lists all log files with their paths and sizes.

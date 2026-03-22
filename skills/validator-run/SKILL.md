@@ -17,7 +17,7 @@ Fix issues you reasonably agree with or believe the human wants to be fixed. Ski
 
 If the caller requests a specific review to be enabled, append `--enable-review <name>` to the run command for each requested review.
 
-Run `agent-validator run` using `Bash` with `timeout: 300000`. **ALWAYS wait for and read the full command output** before proceeding — the command typically takes 1-2 minutes. **Verify you can see a `Status:` line in the output before continuing.**
+Run `agent-validate run` using `Bash` with `timeout: 300000`. **ALWAYS wait for and read the full command output** before proceeding — the command typically takes 1-2 minutes. **Verify you can see a `Status:` line in the output before continuing.**
 
 ### Step 2 - Check Status
 

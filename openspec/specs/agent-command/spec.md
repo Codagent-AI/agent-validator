@@ -35,7 +35,7 @@ The command template SHALL instruct the agent to update status fields in review 
 - **THEN** the agent does not modify other attributes such as `file`, `line`, `issue`, `fix`, or `priority`
 
 ### Requirement: Retry Termination
-The command template SHALL NOT include a hardcoded retry limit. Instead, the template SHALL instruct the agent to repeat the run/fix cycle until the script reports a terminal status. The termination conditions SHALL be: "Passed", "Passed with warnings", or "Retry limit exceeded". When "Retry limit exceeded" is reported, the template SHALL instruct the agent to run `agent-validator clean` to archive logs and include any unverified fixes in the session summary.
+The command template SHALL NOT include a hardcoded retry limit. Instead, the template SHALL instruct the agent to repeat the run/fix cycle until the script reports a terminal status. The termination conditions SHALL be: "Passed", "Passed with warnings", or "Retry limit exceeded". When "Retry limit exceeded" is reported, the template SHALL instruct the agent to run `agent-validate clean` to archive logs and include any unverified fixes in the session summary.
 
 #### Scenario: Template termination conditions
 - **WHEN** a user views the command template's loop instructions
@@ -45,7 +45,7 @@ The command template SHALL NOT include a hardcoded retry limit. Instead, the tem
 #### Scenario: Script reports retry limit exceeded
 - **WHEN** the script outputs "Status: Retry limit exceeded"
 - **THEN** the agent SHALL stop retrying (no further fix attempts)
-- **AND** the agent SHALL run `agent-validator clean` to archive logs for the session record
+- **AND** the agent SHALL run `agent-validate clean` to archive logs for the session record
 - **AND** the agent SHALL NOT retry after cleaning (clean is for archival, not for resetting the retry count)
 - **AND** the agent SHALL report any unverified fixes in its session summary under "Outstanding Failures"
 
@@ -100,14 +100,14 @@ The `validator-help` skill SHALL provide situation-based troubleshooting referen
 #### Scenario: Explain gate failures with targeted evidence gathering
 - **GIVEN** a user asks why a gate failed
 - **WHEN** logs/state do not provide enough evidence for a confident explanation
-- **THEN** the skill SHALL run one or more of `agent-validator list`, `agent-validator health`, and `agent-validator detect` as needed
+- **THEN** the skill SHALL run one or more of `agent-validate list`, `agent-validate health`, and `agent-validate detect` as needed
 - **AND** it SHALL explain the observed result using the relevant troubleshooting reference
 
 ### Requirement: Skill Directory Structure
-The system SHALL store canonical skill files under `.validator/skills/gauntlet-<action>/SKILL.md` using a flat directory structure with hyphenated naming to achieve `/gauntlet-<action>` invocation.
+The system SHALL store canonical skill files under `.validator/skills/validator-<action>/SKILL.md` using a flat directory structure with hyphenated naming to achieve `/validator-<action>` invocation.
 
 #### Scenario: Canonical skill files created during init
-- **WHEN** `agent-validator init` creates the gauntlet configuration
+- **WHEN** `agent-validate init` creates the gauntlet configuration
 - **THEN** skill directories SHALL be created under `.validator/skills/` for each action: `validator-run`, `validator-check`, `validator-status`
 - **AND** each directory SHALL contain a `SKILL.md` file with YAML frontmatter
 
@@ -129,14 +129,14 @@ The init command SHALL install skills into `.claude/skills/` for Claude Code by 
 - **GIVEN** a user selects project-level installation during init
 - **AND** Claude is a selected agent
 - **WHEN** skills are installed
-- **THEN** skill directories SHALL be created under `.claude/skills/gauntlet-<action>/` for each skill
+- **THEN** skill directories SHALL be created under `.claude/skills/validator-<action>/` for each skill
 - **AND** each `SKILL.md` SHALL be written directly (not symlinked) by the `installSkill` function
 
 #### Scenario: User-level Claude skill installation
 - **GIVEN** a user selects user-level installation during init
 - **AND** Claude is a selected agent
 - **WHEN** skills are installed
-- **THEN** skill files SHALL be written directly to `~/.claude/skills/gauntlet-<action>/SKILL.md`
+- **THEN** skill files SHALL be written directly to `~/.claude/skills/validator-<action>/SKILL.md`
 
 ### Requirement: Command Installation for Non-Claude Agents
 The init command SHALL continue installing flat command files for agents that do not support the skills directory model.
@@ -156,11 +156,11 @@ The system SHALL provide a `/validator-check` skill that runs only check gates (
 
 #### Scenario: Check skill runs checks only
 - **WHEN** the agent invokes `/validator-check`
-- **THEN** the skill SHALL instruct the agent to run `agent-validator check`
+- **THEN** the skill SHALL instruct the agent to run `agent-validate check`
 - **AND** the fix-and-rerun loop SHALL follow the same pattern as `/validator-run`
 
 #### Scenario: Check skill installed during init
-- **GIVEN** a user runs `agent-validator init`
+- **GIVEN** a user runs `agent-validate init`
 - **WHEN** skills are installed
 - **THEN** the `validator-check` skill SHALL be included in the installed skills
 
@@ -199,26 +199,26 @@ The system SHALL provide a `/validator-status` skill that summarizes the most re
   - Gate-level results (which specific checks/reviews passed or failed)
 
 ### Requirement: Skill Naming Convention
-All gauntlet skills SHALL use a flat `gauntlet-<action>/` directory structure with hyphenated naming to achieve `/gauntlet-<action>` invocation.
+All validator skills SHALL use a flat `validator-<action>/` directory structure with hyphenated naming to achieve `/validator-<action>` invocation.
 
 #### Scenario: Skill name format
-- **WHEN** a gauntlet skill is registered
-- **THEN** its directory structure SHALL be `gauntlet-<action>/SKILL.md` (e.g., `validator-run/SKILL.md`, `validator-check/SKILL.md`, `validator-status/SKILL.md`)
-- **AND** the `name` field in frontmatter SHALL be `gauntlet-<action>` (e.g., `validator-run`, `validator-check`, `validator-status`)
+- **WHEN** a validator skill is registered
+- **THEN** its directory structure SHALL be `validator-<action>/SKILL.md` (e.g., `validator-run/SKILL.md`, `validator-check/SKILL.md`, `validator-status/SKILL.md`)
+- **AND** the `name` field in frontmatter SHALL be `validator-<action>` (e.g., `validator-run`, `validator-check`, `validator-status`)
 
 ### Requirement: Setup Skill Installation
 
 The `init` command SHALL install the `/validator-setup` skill alongside existing skills (run, check, status, help). The setup skill SHALL be installed as a multi-file skill with a SKILL.md and a references directory.
 
 #### Scenario: Setup skill installed during init
-- **GIVEN** a user runs `agent-validator init`
+- **GIVEN** a user runs `agent-validate init`
 - **AND** selects CLI agents that support skills
 - **WHEN** skills are installed
 - **THEN** the `validator-setup` skill SHALL be installed with `SKILL.md` and `references/check-catalog.md`
 
 #### Scenario: Setup skill not overwritten
 - **GIVEN** the `validator-setup` skill already exists
-- **WHEN** `agent-validator init` runs
+- **WHEN** `agent-validate init` runs
 - **THEN** existing skill files SHALL NOT be overwritten, but any missing skill files SHALL be created
 
 ### Requirement: Setup Skill Fresh Configuration
@@ -228,7 +228,7 @@ The `/validator-setup` skill SHALL guide the agent through scanning a project, d
 #### Scenario: Config file missing
 - **GIVEN** `.validator/config.yml` does not exist
 - **WHEN** the agent invokes `/validator-setup`
-- **THEN** the agent SHALL inform the user to run `agent-validator init` first
+- **THEN** the agent SHALL inform the user to run `agent-validate init` first
 - **AND** SHALL NOT proceed with scanning
 
 #### Scenario: Fresh setup with discovered checks
@@ -254,7 +254,7 @@ The `/validator-setup` skill SHALL guide the agent through scanning a project, d
 - **GIVEN** the user confirms checks and source directory
 - **WHEN** the agent updates `.validator/config.yml`
 - **THEN** `entry_points` SHALL include the confirmed checks and the `code-quality` review
-- **AND** the agent SHALL run `agent-validator validate` to verify the configuration
+- **AND** the agent SHALL run `agent-validate validate` to verify the configuration
 
 #### Scenario: Suggest next steps after successful setup
 - **GIVEN** the agent has validated the configuration
@@ -263,10 +263,10 @@ The `/validator-setup` skill SHALL guide the agent through scanning a project, d
 
 #### Scenario: Validation fails after setup
 - **GIVEN** the agent has created check files and updated config.yml
-- **WHEN** `agent-validator validate` reports errors
+- **WHEN** `agent-validate validate` reports errors
 - **THEN** the agent SHALL display the validation errors to the user
 - **AND** apply one corrective update attempt based on the error messages
-- **AND** rerun `agent-validator validate` once more
+- **AND** rerun `agent-validate validate` once more
 - **AND** if validation still fails, stop and ask the user for guidance
 
 #### Scenario: User declines all discovered checks
@@ -324,7 +324,7 @@ The `/validator-setup` skill SHALL support adding custom checks and reviews that
 - **WHEN** the files are written
 - **THEN** the agent SHALL ask "Add something else?"
 - **AND** if yes, loop back to the custom addition flow
-- **AND** if no, proceed to the validation step (run `agent-validator validate`)
+- **AND** if no, proceed to the validation step (run `agent-validate validate`)
 
 ### Requirement: Setup Skill Check Catalog Reference
 
@@ -344,22 +344,22 @@ The `run` and `review` commands SHALL accept a repeatable `--enable-review <name
 
 #### Scenario: Single review enabled via CLI
 - **GIVEN** a configured review named `task-compliance` exists and its config has `enabled: false`
-- **WHEN** `agent-validator run --enable-review task-compliance` is invoked
+- **WHEN** `agent-validate run --enable-review task-compliance` is invoked
 - **THEN** the `task-compliance` review SHALL be activated for that run even if its config has `enabled: false`
 
 #### Scenario: Multiple reviews enabled via repeated flag
 - **GIVEN** `task-compliance` and `security` reviews are configured in the project
-- **WHEN** `agent-validator run --enable-review task-compliance --enable-review security` is invoked
+- **WHEN** `agent-validate run --enable-review task-compliance --enable-review security` is invoked
 - **THEN** both `task-compliance` and `security` reviews SHALL be activated for that run
 
 #### Scenario: Enable-review on review command
 - **GIVEN** a configured review named `task-compliance` exists in the project
-- **WHEN** `agent-validator review --enable-review task-compliance` is invoked
+- **WHEN** `agent-validate review --enable-review task-compliance` is invoked
 - **THEN** the `task-compliance` review SHALL be activated for that review-only run
 
 #### Scenario: Enable-review with unknown name is silently ignored
 - **GIVEN** no review named `nonexistent` is configured in the project
-- **WHEN** `agent-validator run --enable-review nonexistent` is invoked
+- **WHEN** `agent-validate run --enable-review nonexistent` is invoked
 - **THEN** the run SHALL proceed normally without error
 
 ### Requirement: Gauntlet-Run Skill Auto-Invocation

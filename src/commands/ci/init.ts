@@ -15,8 +15,8 @@ const LEGACY_GAUNTLET_DIR = '.gauntlet';
 function resolveConfigDir(rootDir: string): string {
   const validatorPath = path.join(rootDir, VALIDATOR_DIR);
   const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
-  if (existsSync(validatorPath)) return validatorPath;
-  if (existsSync(gauntletPath)) return gauntletPath;
+  if (existsSync(path.join(validatorPath, 'config.yml'))) return validatorPath;
+  if (existsSync(path.join(gauntletPath, 'config.yml'))) return gauntletPath;
   return validatorPath;
 }
 

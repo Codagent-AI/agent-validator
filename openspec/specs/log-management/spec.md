@@ -181,16 +181,16 @@ When all gates pass (exit code 0), the system MUST automatically perform the log
 - **AND** log files SHALL remain in the log directory root for the next rerun
 
 ### Requirement: Clean CLI Command
-The system MUST provide an `agent-validator clean` CLI command that performs the log clean process on demand.
+The system MUST provide an `agent-validate clean` CLI command that performs the log clean process on demand.
 
 #### Scenario: User runs clean command
 - **GIVEN** a `.validator/config.yml` exists with a configured `log_dir`
-- **WHEN** the user executes `agent-validator clean`
+- **WHEN** the user executes `agent-validate clean`
 - **THEN** the log clean process SHALL execute using the configured `log_dir`
 
 #### Scenario: Clean command with no config
 - **GIVEN** no `.validator/config.yml` exists in the working directory
-- **WHEN** the user runs `agent-validator clean`
+- **WHEN** the user runs `agent-validate clean`
 - **THEN** the command SHALL use the default log directory (`validator_logs`)
 
 ### Requirement: Run Lock File

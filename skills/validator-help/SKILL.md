@@ -42,11 +42,11 @@ Use these only when passive evidence is insufficient:
 
 | Command | When to Use |
 |---------|-------------|
-| `agent-validator list` | See configured gates and entry points |
-| `agent-validator health` | Check adapter availability and health status |
-| `agent-validator detect` | See which files changed and which gates would apply |
-| `agent-validator validate` | Validate config.yml syntax and schema |
-| `agent-validator clean` | Archive current logs and reset state (destructive — confirm with user first) |
+| `agent-validate list` | See configured gates and entry points |
+| `agent-validate health` | Check adapter availability and health status |
+| `agent-validate detect` | See which files changed and which gates would apply |
+| `agent-validate validate` | Validate config.yml syntax and schema |
+| `agent-validate clean` | Archive current logs and reset state (destructive — confirm with user first) |
 
 ## Routing Logic
 

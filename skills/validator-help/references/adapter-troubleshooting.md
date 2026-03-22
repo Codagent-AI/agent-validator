@@ -1,8 +1,8 @@
 # Adapter Troubleshooting
 
-## `agent-validator health` Output
+## `agent-validate health` Output
 
-Run `agent-validator health` to check adapter status. Each adapter reports one of:
+Run `agent-validate health` to check adapter status. Each adapter reports one of:
 
 | Status | Meaning |
 |--------|---------|
@@ -127,11 +127,11 @@ This file is:
 - Written after successful execution
 - Preserved across runs
 - Auto-cleaned when the branch changes or commit is merged
-- Deleted by `agent-validator clean`
+- Deleted by `agent-validate clean`
 
 ## Troubleshooting Checklist
 
-1. **Run `agent-validator health`** to see overall adapter status
+1. **Run `agent-validate health`** to see overall adapter status
 2. **Check `.execution_state`** for cooldown entries
 3. **Verify `cli.default_preference`** includes the adapters you expect
 4. **Try the CLI tool directly** (e.g., `claude --version`) to isolate the issue

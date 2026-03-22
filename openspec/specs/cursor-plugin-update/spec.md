@@ -8,17 +8,17 @@ TBD - created by archiving change cursor-plugin-update. Update Purpose after arc
 The `update` command SHALL detect installed Cursor plugins by calling `CursorAdapter.detectPlugin()` to determine the installed scope (user or project).
 
 #### Scenario: Cursor plugin installed at user scope
-- **WHEN** the user runs `agent-validator update`
+- **WHEN** the user runs `agent-validate update`
 - **AND** the Cursor plugin exists at `~/.cursor/plugins/agent-validator/`
 - **THEN** update SHALL target the user-scope Cursor installation for refresh
 
 #### Scenario: Cursor plugin installed at project scope
-- **WHEN** the user runs `agent-validator update`
+- **WHEN** the user runs `agent-validate update`
 - **AND** the Cursor plugin exists at `.cursor/plugins/agent-validator/`
 - **THEN** update SHALL target the project-scope Cursor installation for refresh
 
 #### Scenario: Cursor plugin not installed
-- **WHEN** the user runs `agent-validator update`
+- **WHEN** the user runs `agent-validate update`
 - **AND** no Cursor plugin is found at either scope
 - **THEN** update SHALL skip the Cursor plugin update silently
 

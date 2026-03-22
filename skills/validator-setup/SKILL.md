@@ -12,7 +12,7 @@ Before starting, read `references/check-catalog.md` for check category details, 
 
 ## Step 1: Check config exists
 
-Read `.validator/config.yml`. If the file does not exist, tell the user to run `agent-validator init` first and **STOP** — do not proceed with any further steps.
+Read `.validator/config.yml`. If the file does not exist, tell the user to run `agent-validate init` first and **STOP** — do not proceed with any further steps.
 
 ## Step 2: Check existing config
 
@@ -142,7 +142,7 @@ Ask the user. If yes, loop to Step 7. If no, proceed.
 
 ## Step 10: Validate
 
-Run `agent-validator validate`. If it fails, apply one corrective attempt and re-validate. If it still fails, **STOP** and ask the user.
+Run `agent-validate validate`. If it fails, apply one corrective attempt and re-validate. If it still fails, **STOP** and ask the user.
 
 ## Step 11: Commit configuration
 

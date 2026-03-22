@@ -5,12 +5,12 @@
 The `no_config` status is returned when `.validator/config.yml` doesn't exist. This is normal for non-gauntlet projects.
 
 **If it should exist:**
-1. Run `agent-validator init` to create the configuration
+1. Run `agent-validate init` to create the configuration
 2. Or manually create `.validator/config.yml`
 
 ## YAML Syntax and Schema Errors
 
-Run `agent-validator validate` to check config syntax and schema.
+Run `agent-validate validate` to check config syntax and schema.
 
 **Common YAML issues:**
 - Indentation errors (YAML requires consistent indentation)
@@ -82,7 +82,7 @@ The `log_dir` field (default: `validator_logs`) determines where all logs are wr
 **Can't find logs:**
 1. Check `config.yml` for the `log_dir` value
 2. Verify the directory exists (it's created automatically on first run)
-3. Check if a previous `agent-validator clean` archived everything to `previous/`
+3. Check if a previous `agent-validate clean` archived everything to `previous/`
 
 **Permissions:**
 - The gauntlet needs write access to `log_dir`
@@ -115,7 +115,7 @@ Most settings come from the project config (`.validator/config.yml`) with built-
 ## Init Setup Problems
 
 ### "`.gauntlet` directory already exists"
-`agent-validator init` won't overwrite an existing `.validator/` directory. Delete it first or manually edit.
+`agent-validate init` won't overwrite an existing `.validator/` directory. Delete it first or manually edit.
 
 ### Git Not Initialized
 Some features require a git repository. Run `git init` first.

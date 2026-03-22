@@ -11,7 +11,7 @@ Advance the execution state baseline to the current working tree without running
 ## Step 1: Run the skip command
 
 ```bash
-agent-validator skip 2>&1
+agent-validate skip 2>&1
 ```
 
 Report the command output to the user.

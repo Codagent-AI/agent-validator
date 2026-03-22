@@ -9,14 +9,14 @@ allowed-tools: Bash, Task
 
 # /validator-commit $ARGUMENTS
 
-Commit with optional gauntlet validation. Runs `agent-validator detect` first, validates based on intent (full run, checks only, or skip), handles failures, then commits.
+Commit with optional gauntlet validation. Runs `agent-validate detect` first, validates based on intent (full run, checks only, or skip), handles failures, then commits.
 
 ## Step 1 - Detect Changes
 
-Run `agent-validator detect` using `Bash`:
+Run `agent-validate detect` using `Bash`:
 
 ```bash
-agent-validator detect 2>&1; echo "DETECT_EXIT:$?"
+agent-validate detect 2>&1; echo "DETECT_EXIT:$?"
 ```
 
 Check the exit code from the `DETECT_EXIT:` line:
@@ -34,7 +34,7 @@ Parse `$ARGUMENTS` for a validation intent. Do not prompt the user if a clear in
 |-------------------|--------|
 | Contains "run", "full", or "all gates" | Invoke `/validator-run` (Step 3a) |
 | Contains "check" or "checks" | Invoke `/validator-check` (Step 3b) |
-| Contains "skip" | Run `agent-validator skip 2>&1` (Step 3c), then go to Step 4 |
+| Contains "skip" | Run `agent-validate skip 2>&1` (Step 3c), then go to Step 4 |
 | Empty or no clear intent | Present the three choices below to the user, wait for selection |
 
 **When prompting the user**, present these choices:
@@ -64,7 +64,7 @@ Invoke `/validator-check`.
 Run:
 
 ```bash
-agent-validator skip 2>&1
+agent-validate skip 2>&1
 ```
 
 Report the command output to the user, then go to Step 4.

@@ -22,7 +22,7 @@ The `validator-commit` skill SHALL parse its ARGUMENTS string for a validation i
 #### Scenario: ARGUMENTS contains skip intent
 
 - **WHEN** ARGUMENTS contains words indicating skip (e.g. "skip")
-- **THEN** the skill SHALL invoke `agent-validator skip` without prompting the user for a choice
+- **THEN** the skill SHALL invoke `agent-validate skip` without prompting the user for a choice
 
 #### Scenario: ARGUMENTS contains no clear intent
 
@@ -33,17 +33,17 @@ The `validator-commit` skill SHALL parse its ARGUMENTS string for a validation i
 
 ### Requirement: Change Detection Gate
 
-The `validator-commit` skill SHALL run `agent-validator detect` before any validation or commit step to determine whether changes exist.
+The `validator-commit` skill SHALL run `agent-validate detect` before any validation or commit step to determine whether changes exist.
 
 #### Scenario: No changes detected
 
-- **WHEN** `agent-validator detect` reports no changed files
+- **WHEN** `agent-validate detect` reports no changed files
 - **THEN** the skill SHALL skip all validation steps
 - **AND** SHALL proceed directly to the commit step without prompting
 
 #### Scenario: Changes detected
 
-- **WHEN** `agent-validator detect` reports one or more changed files
+- **WHEN** `agent-validate detect` reports one or more changed files
 - **THEN** the skill SHALL proceed to the validation selection step (inline parse or user prompt)
 
 ---

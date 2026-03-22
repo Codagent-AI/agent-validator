@@ -1,20 +1,20 @@
 # plugin-install Specification
 
 ## Purpose
-Plugin installation during `agent-validator init`. Covers Claude plugin marketplace registration, plugin installation with scope, and plugin manifest requirements.
+Plugin installation during `agent-validate init`. Covers Claude plugin marketplace registration, plugin installation with scope, and plugin manifest requirements.
 ## Requirements
 ### Requirement: Plugin marketplace registration
 
-The `init` command SHALL run `claude plugin marketplace add pcaplan/agent-validator` before attempting plugin installation. The command SHALL be run unconditionally (no pre-check).
+The `init` command SHALL run `claude plugin marketplace add pacaplan/agent-validator` before attempting plugin installation. The command SHALL be run unconditionally (no pre-check).
 
 #### Scenario: Marketplace add succeeds
-- **GIVEN** the user runs `agent-validator init` with Claude selected
+- **GIVEN** the user runs `agent-validate init` with Claude selected
 - **WHEN** `init` runs the marketplace add command
 - **AND** the command succeeds
 - **THEN** init SHALL proceed to plugin installation
 
 #### Scenario: Marketplace add fails
-- **GIVEN** the user runs `agent-validator init` with Claude selected
+- **GIVEN** the user runs `agent-validate init` with Claude selected
 - **WHEN** `init` runs the marketplace add command
 - **AND** the command fails
 - **THEN** init SHALL warn the user that plugin installation failed
@@ -26,19 +26,19 @@ The `init` command SHALL run `claude plugin marketplace add pcaplan/agent-valida
 The `init` command SHALL support plugin installation for any adapter that provides a plugin install mechanism. Each adapter SHALL define its own installation strategy (e.g., CLI commands, local file copy). The init flow SHALL prompt for scope (user/project), delegate to the adapter's install mechanism, and handle success/failure uniformly.
 
 #### Scenario: Adapter-specific installation dispatched
-- **GIVEN** the user runs `agent-validator init` with a plugin-capable CLI selected
+- **GIVEN** the user runs `agent-validate init` with a plugin-capable CLI selected
 - **WHEN** the user selects a development CLI that supports plugin installation
 - **THEN** init SHALL delegate to that adapter's installation strategy with the selected scope
 
 #### Scenario: Already-installed detection
-- **GIVEN** the user runs `agent-validator init` with a plugin-capable CLI selected
+- **GIVEN** the user runs `agent-validate init` with a plugin-capable CLI selected
 - **WHEN** the plugin is already installed for the selected adapter at any scope
 - **THEN** init SHALL inform the user it is already installed and at which scope
 - **AND** SHALL skip the scope prompt
 - **AND** SHALL skip the install step
 
 #### Scenario: Installation failure
-- **GIVEN** the user runs `agent-validator init` with a plugin-capable CLI selected
+- **GIVEN** the user runs `agent-validate init` with a plugin-capable CLI selected
 - **WHEN** the adapter's installation strategy fails
 - **THEN** init SHALL warn the user that plugin installation failed
 - **AND** SHALL print adapter-specific manual installation instructions

@@ -29,7 +29,7 @@ Review gates use AI CLI tools to review code changes.
 
 | Failure | Cause | Evidence |
 |---------|-------|----------|
-| No healthy adapters | All configured CLI tools are missing, unhealthy, or in cooldown | Run `agent-validator health` |
+| No healthy adapters | All configured CLI tools are missing, unhealthy, or in cooldown | Run `agent-validate health` |
 | JSON parsing error | Adapter returned non-JSON output | Review log shows raw output instead of violations |
 | Violations outside diff scope | Reviewer flagged code not in the current diff | Check violation `file` and `line` against changed files |
 | Usage limit | API quota exceeded for the adapter | Look for "usage limit" in review log; adapter enters 1-hour cooldown |
@@ -55,7 +55,7 @@ Review gates use AI CLI tools to review code changes.
 All configured gates were skipped because no changed files matched any entry point path.
 
 **Diagnosis:**
-1. Run `agent-validator detect` to see which files changed and which gates match
+1. Run `agent-validate detect` to see which files changed and which gates match
 2. Check `entry_points` in `config.yml` — do the paths cover your changed files?
 3. Verify `base_branch` — if wrong, the diff may not include your changes
 
@@ -67,7 +67,7 @@ No files changed relative to `base_branch`.
 1. Check `base_branch` in `config.yml` (default: `origin/main`)
 2. Run `git diff origin/main...HEAD --stat` to verify
 3. If working on uncommitted changes, they are included in local mode but may not be in CI mode
-4. Check if a recent `agent-validator clean` reset the execution state
+4. Check if a recent `agent-validate clean` reset the execution state
 
 ## Parallel vs Sequential Execution
 
