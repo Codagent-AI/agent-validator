@@ -54,7 +54,8 @@
     "detect": "bun src/index.ts detect",
     "list": "bun src/index.ts list",
     "health": "bun src/index.ts health",
-    "validate": "bun src/index.ts validate"
+    "validate": "bun src/index.ts validate",
+    "demo": "bun src/index.ts demo"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.3",

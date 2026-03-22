@@ -5,6 +5,7 @@ import {
   registerCheckCommand,
   registerCICommand,
   registerCleanCommand,
+  registerDemoCommand,
   registerDetectCommand,
   registerHealthCommand,
   registerHelpCommand,
@@ -32,6 +33,7 @@ registerRunCommand(program);
 registerCheckCommand(program);
 registerCICommand(program);
 registerCleanCommand(program);
+registerDemoCommand(program);
 registerReviewAuditCommand(program);
 registerReviewCommand(program);
 registerDetectCommand(program);
