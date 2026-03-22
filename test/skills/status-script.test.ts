@@ -73,7 +73,6 @@ describe("Status Script", () => {
 [2026-02-07T10:00:05.000] GATE_RESULT check:.:lint status=pass duration=5.0s
 [2026-02-07T10:00:30.000] GATE_RESULT review:.:code-quality cli=claude status=fail duration=25.0s violations=3
 [2026-02-07T10:00:30.500] RUN_END status=fail fixed=1 skipped=1 failed=3 iterations=2 duration=30.5s
-[2026-02-07T10:00:31.000] STOP_HOOK decision=block reason=failed
 `;
 		await fs.writeFile(path.join(logDir, ".debug.log"), debugLog);
 		await writeFileAt(
@@ -101,10 +100,6 @@ describe("Status Script", () => {
 		expect(output).toContain("pass");
 		expect(output).toContain("review:.:code-quality");
 		expect(output).toContain("FAIL");
-
-		// Stop hook
-		expect(output).toContain("block");
-		expect(output).toContain("failed");
 	});
 
 	it("should list log files in file inventory", async () => {

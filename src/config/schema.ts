@@ -145,11 +145,6 @@ export const loggingConfigSchema = z.object({
   file: loggingFileConfigSchema.optional(),
 });
 
-export const stopHookConfigSchema = z.object({
-  enabled: z.boolean().optional(),
-  run_interval_minutes: z.number().int().min(0).optional(),
-});
-
 export const gauntletConfigSchema = z.object({
   base_branch: z.string().min(1).default('origin/main'),
   log_dir: z.string().min(1).default('gauntlet_logs'),
@@ -163,5 +158,4 @@ export const gauntletConfigSchema = z.object({
   entry_points: z.array(entryPointSchema).min(1),
   debug_log: debugLogConfigSchema.optional(),
   logging: loggingConfigSchema.optional(),
-  stop_hook: stopHookConfigSchema.optional(),
 });

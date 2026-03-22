@@ -211,16 +211,6 @@ This creates:
 
 Your local check definitions (`.gauntlet/checks/`) are automatically used in CI. The `ci.yml` file lets you configure additional CI-specific settings like database services or runtime versions.
 
-## Stop Hook (Claude Code & Cursor Integration)
-
-The stop hook automatically runs the gauntlet when an AI agent tries to stop working, ensuring all gates pass before completion.
-
-**Automatic setup:** For Claude Code, hooks are delivered as part of the agent-gauntlet plugin — `agent-gauntlet init` installs the plugin, and hooks are served from the plugin's `hooks/hooks.json`. For Cursor, `agent-gauntlet init` installs the plugin by copying files to `.cursor/plugins/agent-gauntlet/`, which includes hooks in `hooks/hooks.json`. No manual configuration is needed for either.
-
-When the agent tries to stop, the hook runs the gauntlet. If gates fail, the agent is directed to fix issues before stopping.
-
-For detailed configuration options, troubleshooting, and advanced usage, see the [Stop Hook Guide](stop-hook-guide.md).
-
 ## Updating
 
 To update Agent Gauntlet after upgrading the npm package:
@@ -237,4 +227,3 @@ This updates the Claude Code plugin (via marketplace), refreshes the Cursor plug
 - [Plugin & Update Guide](plugin-guide.md) — Claude Code and Cursor plugin delivery and updating
 - [Configuration Reference](config-reference.md) — all configuration fields + defaults
 - [CLI Invocation Details](cli-invocation-details.md) — how we securely invoke AI CLIs
-- [Stop Hook Guide](stop-hook-guide.md) — stop hook configuration and troubleshooting

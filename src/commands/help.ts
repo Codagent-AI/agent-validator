@@ -39,12 +39,6 @@ export function registerHelpCommand(program: Command): void {
         '  review-audit  Audit review execution from the debug log (--date or --since)',
       );
       console.log('  ci            CI integration commands (init, list-jobs)');
-      console.log(
-        '  start-hook    Session start hook (primes agent with verification instructions)',
-      );
-      console.log(
-        '  stop-hook     Claude Code stop hook (validates gauntlet completion)',
-      );
       console.log('  help          Show this help message\n');
       console.log(
         'For more information, see: https://github.com/your-repo/agent-gauntlet',

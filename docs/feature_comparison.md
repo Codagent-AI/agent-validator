@@ -13,7 +13,6 @@ This document compares Agent Gauntlet's features with other popular AI-powered c
 | **Multi-Agent Review** | ✅ Multiple AI tools can review same changes | ❌ Single platform |
 | **Run Locally** | ✅ Yes (primary mode) | ✅ Yes (CLI or IDE) |
 | **CI / PR Comments** | ❌ No (focus is on agentic workflow) | ✅ Mature PR integrations |
-| **Stop Hook Integration** | ✅ Prevents agent completion until checks pass | ❌ No |
 | **Pricing** | ✅ **Free** (OSS) | $$ Paid SaaS (~$30/user/month) |
 | **Self-Hosted** | ✅ Fully local | ✅ Enterprise tier |
 | **Maturity** | ⚠️ Emerging | ✅ Mature |
@@ -30,9 +29,7 @@ This document compares Agent Gauntlet's features with other popular AI-powered c
 
 4. **Multi-Agent Code Review**: Unique ability to have one AI agent review another's work. Configurable via `num_reviews` and `cli_preference`.
 
-5. **Stop Hook Integration**: Integrates with agent stop hooks to automatically block completion until all checks pass—creating an enforced quality gate in the agent workflow.
-
-6. **Free and Open Source**: No per-seat licensing or usage-based pricing. The tool is free; you only pay for the AI CLI tools you already have.
+5. **Free and Open Source**: No per-seat licensing or usage-based pricing. The tool is free; you only pay for the AI CLI tools you already have.
 
 ### Where Other Tools Excel
 

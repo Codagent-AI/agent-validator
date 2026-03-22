@@ -27,14 +27,13 @@ Follow this order for every diagnostic question:
 
 | Source | What It Confirms |
 |--------|-----------------|
-| `.gauntlet/config.yml` | `log_dir`, `base_branch`, `entry_points`, `cli.default_preference`, `stop_hook` settings, `max_retries`, `rerun_new_issue_threshold` |
+| `.gauntlet/config.yml` | `log_dir`, `base_branch`, `entry_points`, `cli.default_preference`, `max_retries`, `rerun_new_issue_threshold` |
 | `<log_dir>/.debug.log` | Timestamped event history: commands executed, gate results, state transitions, errors |
 | `<log_dir>/.execution_state` | Last successful run timestamp, branch/commit at that time, working tree stash ref, unhealthy adapter cooldowns |
 | `<log_dir>/console.*.log` | Human-readable output from each run iteration |
 | `<log_dir>/check_*.log` | Raw output from check gate commands (linters, test runners, etc.) |
 | `<log_dir>/review_*.json` | Structured review violations with file, line, issue, priority, and resolution status |
 | `<log_dir>/.gauntlet-run.lock` | Lock file (contains PID) — present only during active execution |
-| `<log_dir>/.stop-hook-active` | Marker file (contains PID) — present only during active stop-hook execution |
 | `<log_dir>/.ci-wait-attempts` | CI wait attempt counter |
 
 ## CLI Command Quick-Reference
@@ -55,7 +54,6 @@ Based on the user's question, load the appropriate reference file for detailed g
 
 | Question Domain | Reference File |
 |----------------|---------------|
-| Stop hook blocked/allowed, hook statuses, recursion, timing | `references/stop-hook-troubleshooting.md` |
 | Missing config, YAML errors, misconfiguration, init problems | `references/config-troubleshooting.md` |
 | Check failures, review failures, no_changes, no_applicable_gates, rerun mode | `references/gate-troubleshooting.md` |
 | Lock conflict, stale locks, parallel runs, cleanup | `references/lock-troubleshooting.md` |

@@ -49,7 +49,7 @@ function formatLogRecord(record: LogRecord): string {
 
 /**
  * Create a console sink that outputs to stderr with chalk formatting.
- * Uses stderr to keep stdout clean for JSON protocol responses (stop-hook).
+ * Uses stderr to keep stdout clean for machine-readable output.
  */
 export function createConsoleSink(): Sink {
   return (record: LogRecord) => {

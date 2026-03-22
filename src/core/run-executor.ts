@@ -25,7 +25,6 @@ import {
 } from '../utils/debug-log.js';
 import { resolveBaseBranch } from '../utils/git.js';
 import {
-  checkRunInterval,
   detectAndPrepareChanges,
   executeAndReport,
   finalizeAndReturn,
@@ -42,12 +41,6 @@ export interface ExecuteRunOptions {
   uncommitted?: boolean;
   /** Working directory for config loading (defaults to process.cwd()) */
   cwd?: string;
-  /**
-   * When true, check if run interval has elapsed before proceeding.
-   * Only stop-hook uses this; CLI commands (run, check, review) always run immediately.
-   * If interval hasn't elapsed, returns { status: "interval_not_elapsed", ... }.
-   */
-  checkInterval?: boolean;
   /** Set of review names to activate even if their config has enabled: false */
   enableReviews?: Set<string>;
   /** When true, generate a plain-text report in RunResult.reportText */
@@ -98,7 +91,6 @@ async function logCommandInvocation(options: ExecuteRunOptions): Promise<void> {
     options.gate ? `-g ${options.gate}` : '',
     options.commit ? `-c ${options.commit}` : '',
     options.uncommitted ? '-u' : '',
-    options.checkInterval ? '--check-interval' : '',
   ].filter(Boolean);
   await debugLogger?.logCommand('run', args);
 }
@@ -208,11 +200,6 @@ export async function executeRun(
       config,
     );
     loggerInitializedHere = lih;
-
-    const intervalResult = await checkRunInterval(ctx);
-    if (intervalResult) {
-      return finalizeAndReturn(loggerInitializedHere, intervalResult);
-    }
 
     await handleAutoClean(ctx);
 

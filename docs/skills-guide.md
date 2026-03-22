@@ -60,7 +60,6 @@ Skills are directory-based `SKILL.md` files:
   gauntlet-status/SKILL.md
   gauntlet-help/SKILL.md
   gauntlet-help/references/
-    stop-hook-troubleshooting.md
     config-troubleshooting.md
     gate-troubleshooting.md
     lock-troubleshooting.md
@@ -114,7 +113,7 @@ The skill follows a structured diagnostic workflow:
 3. Runs CLI commands only when needed (`agent-gauntlet list`, `health`, `detect`)
 4. Returns a structured response with **Diagnosis**, **Evidence**, **Confidence**, and **Next Steps**
 
-Reference files under `references/` provide detailed troubleshooting guidance organized by domain: stop-hook, config, gates, locks, adapters, and CI/PR.
+Reference files under `references/` provide detailed troubleshooting guidance organized by domain: config, gates, locks, and adapters.
 
 After diagnosis, the skill applies confidence-based bug-filing routing:
 - **High confidence + bug**: automatically invokes `/gauntlet-issue`

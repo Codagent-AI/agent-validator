@@ -1,27 +1,3 @@
 {
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "agent-gauntlet stop-hook",
-            "timeout": 300
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "agent-gauntlet start-hook",
-            "async": false
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }

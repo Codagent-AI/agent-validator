@@ -1,6 +1,5 @@
 /**
  * All possible outcomes from gauntlet operations.
- * Used by both the run executor and stop-hook - NO MAPPING REQUIRED.
  */
 export type GauntletStatus =
   // Run outcomes (from executor)
@@ -12,14 +11,7 @@ export type GauntletStatus =
   | 'retry_limit_exceeded' // Max retries reached
   | 'lock_conflict' // Another run in progress
   | 'error' // Unexpected error (includes config errors)
-  // Stop-hook pre-checks (before running executor)
-  | 'validation_required' // Changes need validation or previous run has unresolved failures
-  | 'no_config' // No .gauntlet/config.yml found
-  | 'stop_hook_active' // Infinite loop prevention
-  | 'loop_detected' // Rapid-fire block loop detected
-  | 'interval_not_elapsed' // Run interval hasn't passed
-  | 'invalid_input' // Failed to parse hook JSON input
-  | 'stop_hook_disabled'; // Stop hook disabled via configuration
+  | 'no_config'; // No .gauntlet/config.yml found
 
 export interface RunResult {
   status: GauntletStatus;
@@ -33,8 +25,6 @@ export interface RunResult {
   consoleLogPath?: string;
   /** Error message if status is "error" */
   errorMessage?: string;
-  /** Interval minutes (when status is "interval_not_elapsed") */
-  intervalMinutes?: number;
   /** Plain-text report for --report flag (written to stdout by caller) */
   reportText?: string;
   /** Individual gate results (available when gates were executed) */
@@ -49,13 +39,6 @@ export interface RunResult {
       logPath?: string;
     }>;
   }>;
-}
-
-/**
- * Determine if a status should block the stop hook.
- */
-export function isBlockingStatus(status: GauntletStatus): boolean {
-  return status === 'failed' || status === 'validation_required';
 }
 
 /**

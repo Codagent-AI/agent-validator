@@ -1,48 +1,5 @@
 {
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun src/index.ts stop-hook",
-            "timeout": 300
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "agent-gauntlet stop-hook",
-            "timeout": 300
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun src/index.ts start-hook",
-            "async": false
-          }
-        ],
-        "matcher": "startup|resume|clear|compact"
-      },
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "agent-gauntlet start-hook",
-            "async": false
-          }
-        ]
-      }
-    ]
-  },
+  "hooks": {},
   "permissions": {
     "allow": [
       "Bash(bun src/index.ts:*)"

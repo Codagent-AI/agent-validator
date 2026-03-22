@@ -432,13 +432,6 @@ entry_points: []
 # Options: critical, high, medium, low
 # rerun_new_issue_threshold: medium
 
-# Stop hook — auto-run gauntlet when the agent stops
-# Precedence: env vars > project config > global config (~/.config/agent-gauntlet/config.yml)
-# Env overrides: GAUNTLET_STOP_HOOK_ENABLED, GAUNTLET_STOP_HOOK_INTERVAL_MINUTES
-# stop_hook:
-#   enabled: false
-#   run_interval_minutes: 5       # Minimum minutes between runs (0 = always run)
-
 # Debug log — persistent debug logging to .debug.log
 # debug_log:
 #   enabled: false

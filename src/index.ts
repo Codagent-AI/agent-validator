@@ -14,9 +14,7 @@ import {
   registerReviewCommand,
   registerRunCommand,
   registerSkipCommand,
-  registerStartHookCommand,
   registerStatusCommand,
-  registerStopHookCommand,
   registerUpdateCommand,
   registerUpdateReviewCommand,
   registerValidateCommand,
@@ -44,9 +42,7 @@ registerUpdateCommand(program);
 registerUpdateReviewCommand(program);
 registerValidateCommand(program);
 registerSkipCommand(program);
-registerStartHookCommand(program);
 registerStatusCommand(program);
-registerStopHookCommand(program);
 registerHelpCommand(program);
 
 // Default action: help

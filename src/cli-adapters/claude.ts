@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { GAUNTLET_STOP_HOOK_ACTIVE_ENV } from '../commands/stop-hook.js';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import {
   addMarketplace,
@@ -218,7 +217,6 @@ export class ClaudeAdapter implements CLIAdapter {
     const { CLAUDECODE: _, ...parentEnv } = process.env;
     const execEnv = {
       ...parentEnv,
-      [GAUNTLET_STOP_HOOK_ACTIVE_ENV]: '1',
       ...otelEnv,
       ...thinkingEnv,
     };

@@ -30,7 +30,7 @@ Agent Gauntlet supports three workflows, ranging from simple CLI execution to fu
 
 - **CLI Mode** — Run checks via command line; ideal for CI pipelines and scripts.
 - **Assistant Mode** — AI assistant runs validation loop, fixing issues iteratively.
-- **Agentic Mode** — Autonomous agent validates and fixes in real-time via stop hook, delivered as a Claude Code or Cursor plugin (experimental).
+- **Agentic Mode** — Autonomous agent validates and fixes in real-time, delivered as a Claude Code or Cursor plugin.
 
 ![Agent Gauntlet Workflows](docs/images/workflows.png)
 
@@ -63,7 +63,6 @@ For basic usage and configuration guide, see the [Quick Start Guide](docs/quick-
 - [User Guide](docs/user-guide.md) — full usage details
 - [Configuration Reference](docs/config-reference.md) — all configuration fields + defaults
 - [Plugin & Update Guide](docs/plugin-guide.md) — Claude Code and Cursor plugin delivery and updating
-- [Stop Hook Guide](docs/stop-hook-guide.md) — integrate with Claude Code's stop hook (experimental).
 - [CLI Invocation Details](docs/cli-invocation-details.md) — how we securely invoke AI CLIs
 - [Feature Comparison](docs/feature_comparison.md) — how Agent Gauntlet compares to other tools
 - [Development Guide](docs/development.md) — how to build and develop this project
