@@ -44,7 +44,7 @@ async function writeValidatorConfig(dir: string): Promise<void> {
 	await fs.mkdir(path.join(dir, ".validator", "checks"), { recursive: true });
 	await fs.writeFile(
 		path.join(dir, ".validator", "config.yml"),
-		`base_branch: main
+		`base_branch: base
 log_dir: validator_logs
 cli:
   default_preference:
@@ -65,12 +65,20 @@ timeout: 10
 	await fs.writeFile(path.join(dir, ".gitignore"), "validator_logs/\n");
 }
 
-// Helper: create a fresh temp git repo with gauntlet config
+// Helper: create a fresh temp git repo with gauntlet config.
+// Creates a 'base' branch at the initial commit, then makes one committed
+// change on 'main' so the validator always has a real diff scope to work with.
 async function createTestRepo(): Promise<string> {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-wtr-e2e-"));
 	await fs.writeFile(path.join(dir, "hello.ts"), "export const x = 1;\n");
 	await writeValidatorConfig(dir);
 	await initGitRepo(dir);
+	// Anchor 'base' at the initial commit, then commit a change on 'main'.
+	// This gives the validator a committed diff (base..HEAD) to scope gates against.
+	await git(["branch", "base"], dir);
+	await fs.writeFile(path.join(dir, "hello.ts"), "export const x = 0;\n");
+	await git(["add", "hello.ts"], dir);
+	await git(["commit", "-m", "baseline: establish diff scope"], dir);
 	return dir;
 }
 
@@ -169,32 +177,15 @@ describe("working-tree-ref E2E", () => {
 				const tempDir = await createTestRepo();
 				tempDirs.push(tempDir);
 
-				// Create a 'base' branch at the initial commit to use as base_branch,
-				// so that subsequent commits on 'main' create a real diff from base
-				await git(["branch", "base"], tempDir);
-
-				// Update gauntlet config to use 'base' as base_branch AND
-				// make a change to hello.ts — both committed together
-				await fs.writeFile(
-					path.join(tempDir, ".validator", "config.yml"),
-					`base_branch: base
-log_dir: validator_logs
-cli:
-  default_preference:
-    - claude
-entry_points:
-  - path: "."
-    checks:
-      - echo-pass
-`,
-				);
+				// createTestRepo already set up 'base' branch and base_branch: base config.
+				// Make a further committed change so the working tree is clean at a new HEAD.
 				await fs.writeFile(
 					path.join(tempDir, "hello.ts"),
 					"export const x = 42;\n",
 				);
 				await git(["add", "-A"], tempDir);
 				await git(
-					["commit", "-m", "update config and modify hello.ts"],
+					["commit", "-m", "further committed change"],
 					tempDir,
 				);
 
@@ -215,7 +206,7 @@ entry_points:
 		);
 
 		it(
-			"Scenario: Untracked→tracked transition does not produce spurious diff",
+			"Scenario: Untracked\u2192tracked transition does not produce spurious diff",
 			async () => {
 				if (!canRun) return;
 
