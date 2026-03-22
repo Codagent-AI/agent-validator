@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   getDebugLogBackupFilename,
   getDebugLogFilename,
+  getDebugLogger,
 } from '../utils/debug-log.js';
 import {
   deleteExecutionState,
@@ -256,8 +257,11 @@ export async function cleanLogs(
     await fs.mkdir(previousDir, { recursive: true });
 
     const files = await fs.readdir(logDir);
+    const toMove = getCurrentLogFiles(files);
+    const kept = files.filter((f) => !toMove.includes(f));
+    await getDebugLogger()?.logCleanDetails(toMove, kept);
     await Promise.all(
-      getCurrentLogFiles(files).map((file) =>
+      toMove.map((file) =>
         fs.rename(path.join(logDir, file), path.join(previousDir, file)),
       ),
     );
@@ -267,6 +271,20 @@ export async function cleanLogs(
       await fs.rm(path.join(logDir, SESSION_REF_FILENAME), { force: true });
     } catch {
       // Ignore errors
+    }
+
+    // Post-clean verification: warn if execution state was lost
+    const stateFile = getExecutionStateFilename();
+    const stateSurvived = await exists(path.join(logDir, stateFile));
+    if (!stateSurvived && kept.includes(stateFile)) {
+      console.warn(
+        `BUG: ${stateFile} was in kept list but missing after clean`,
+      );
+      const debugLogger = getDebugLogger();
+      await debugLogger?.logCleanDetails(
+        ['POST_CLEAN_MISSING'],
+        [`${stateFile}_WAS_KEPT_BUT_GONE`],
+      );
     }
   } catch (error) {
     console.warn(

@@ -287,6 +287,9 @@ export async function handleNoChanges(
       );
     }
 
+    // Write execution state AFTER clean so the file always survives.
+    await writeExecutionState(ctx.config.project.log_dir);
+
     log.info(getStatusMessage(status));
     return { status, message: getStatusMessage(status), gatesRun: 0 };
   }
@@ -484,7 +487,12 @@ export async function executeAndReport(
     logger.getRunNumber(),
   );
 
+  const result = await buildRunResult(ctx, outcome, jobs);
+
+  // Write execution state AFTER clean so the file always survives.
+  // cleanLogs should preserve persistent files, but writing after clean
+  // is the defensive ordering (matches the skip command's pattern).
   await writeExecutionState(ctx.config.project.log_dir);
 
-  return buildRunResult(ctx, outcome, jobs);
+  return result;
 }
