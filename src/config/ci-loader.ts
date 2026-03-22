@@ -9,7 +9,7 @@ const VALIDATOR_DIR = '.validator';
 const LEGACY_GAUNTLET_DIR = '.gauntlet';
 const CI_FILE = 'ci.yml';
 
-function resolveConfigDir(rootDir: string): string {
+export function resolveConfigDir(rootDir: string): string {
   const validatorPath = path.join(rootDir, VALIDATOR_DIR);
   const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
   // Prefer the dir that already has ci.yml (handles legacy .gauntlet/ projects)
