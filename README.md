@@ -1,4 +1,4 @@
-![Agent Validator logo](docs/images/logo2.png)
+![Agent Validator logo](docs/images/agent-validator-logo.png)
 
 [![CI](https://github.com/Codagent-AI/agent-validator/actions/workflows/gauntlet.yml/badge.svg)](https://github.com/Codagent-AI/agent-validator/actions/workflows/gauntlet.yml)
 [![npm](https://img.shields.io/npm/v/agent-validator)](https://www.npmjs.com/package/agent-validator)
@@ -30,9 +30,9 @@ Agent Validator supports three workflows, ranging from simple CLI execution to f
 
 - **CLI Mode** — Run checks via command line; ideal for CI pipelines and scripts.
 - **Assistant Mode** — AI assistant runs validation loop, fixing issues iteratively.
-- **Agentic Mode** — Autonomous agent validates and fixes in real-time, delivered as a Claude Code or Cursor plugin.
+- **Agentic Mode** — Autonomous agent validates and fixes in real-time, delivered as a Claude Code or Cursor plugin. *(Coming soon with [Agent Runner](https://www.codagent.dev/).)*
 
-![Agent Validator Workflows](docs/images/workflows.png)
+![Agent Validator Workflows](docs/images/workflows2.png)
 
 ### Example Workflow
 

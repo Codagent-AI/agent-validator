@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import chalk from 'chalk';
 import {
   getDebugLogBackupFilename,
   getDebugLogFilename,
@@ -97,6 +98,24 @@ export async function performAutoClean(
  */
 export function getLockFilename(): string {
   return LOCK_FILENAME;
+}
+
+export async function addToGitignore(
+  projectRoot: string,
+  entry: string,
+): Promise<void> {
+  const gitignorePath = path.join(projectRoot, '.gitignore');
+
+  let content = '';
+  if (await exists(gitignorePath)) {
+    content = await fs.readFile(gitignorePath, 'utf-8');
+    const lines = content.split('\n').map((l) => l.trim());
+    if (lines.includes(entry)) return;
+  }
+
+  const suffix = content.length > 0 && !content.endsWith('\n') ? '\n' : '';
+  await fs.appendFile(gitignorePath, `${suffix}${entry}\n`);
+  console.log(chalk.green(`Added ${entry} to .gitignore`));
 }
 
 export async function exists(filePath: string): Promise<boolean> {

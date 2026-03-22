@@ -17,7 +17,7 @@ import {
   promptReviewCLIs,
 } from './init-prompts.js';
 import { runPluginUpdate } from './plugin-update.js';
-import { exists } from './shared.js';
+import { addToGitignore, exists } from './shared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -462,24 +462,6 @@ entry_points: []
 `;
   await fs.writeFile(path.join(targetDir, 'config.yml'), content);
   console.log(chalk.green('Created .validator/config.yml'));
-}
-
-async function addToGitignore(
-  projectRoot: string,
-  entry: string,
-): Promise<void> {
-  const gitignorePath = path.join(projectRoot, '.gitignore');
-
-  let content = '';
-  if (await exists(gitignorePath)) {
-    content = await fs.readFile(gitignorePath, 'utf-8');
-    const lines = content.split('\n').map((l) => l.trim());
-    if (lines.includes(entry)) return;
-  }
-
-  const suffix = content.length > 0 && !content.endsWith('\n') ? '\n' : '';
-  await fs.appendFile(gitignorePath, `${suffix}${entry}\n`);
-  console.log(chalk.green(`Added ${entry} to .gitignore`));
 }
 
 function gitSilent(args: string[], opts?: { timeout?: number }): string | null {

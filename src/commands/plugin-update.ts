@@ -11,7 +11,7 @@ import {
   updatePlugin,
 } from '../plugin/claude-cli.js';
 import { computeSkillChecksum } from './init-checksums.js';
-import { exists } from './shared.js';
+import { addToGitignore, exists } from './shared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -151,16 +151,39 @@ function printManualUpdateInstructions(installedName: string): void {
   );
 }
 
-async function removeOldGauntletSkills(targetBase: string): Promise<void> {
+async function warnAndRemoveOldGauntletSkills(
+  targetBase: string,
+): Promise<void> {
   try {
     const existing = await fs.readdir(targetBase, { withFileTypes: true });
-    for (const entry of existing) {
-      if (entry.isDirectory() && entry.name.startsWith('gauntlet-')) {
-        await fs.rm(path.join(targetBase, entry.name), {
-          recursive: true,
-          force: true,
-        });
-      }
+    const oldSkills = existing
+      .filter(
+        (entry) => entry.isDirectory() && entry.name.startsWith('gauntlet-'),
+      )
+      .map((entry) => entry.name);
+
+    if (oldSkills.length === 0) return;
+
+    console.log(
+      chalk.yellow(
+        `\nRenamed ${oldSkills.length} skill(s) from "gauntlet-*" to "validator-*":`,
+      ),
+    );
+    for (const name of oldSkills) {
+      const newName = name.replace(/^gauntlet-/, 'validator-');
+      console.log(chalk.yellow(`  ${name} → ${newName}`));
+    }
+    console.log(
+      chalk.yellow(
+        'If you reference these skills by name (e.g. in AGENTS.md), please update to the new names.\n',
+      ),
+    );
+
+    for (const name of oldSkills) {
+      await fs.rm(path.join(targetBase, name), {
+        recursive: true,
+        force: true,
+      });
     }
   } catch {
     // Best effort — ignore errors reading the directory
@@ -209,8 +232,8 @@ async function refreshCodexSkills(cwd: string): Promise<void> {
     await copyDirRecursive({ src: sourceDir, dest: targetDir });
   }
 
-  // Remove old gauntlet-* skill directories now that validator-* are installed
-  await removeOldGauntletSkills(targetBase);
+  // Warn about and remove old gauntlet-* skill directories
+  await warnAndRemoveOldGauntletSkills(targetBase);
 }
 
 function isCliUnavailableError(err: unknown): boolean {
@@ -326,6 +349,9 @@ export async function runPluginUpdate(
   }
 
   await refreshCodexSkills(cwd);
+
+  // Ensure validator_logs is in .gitignore (backwards compat: log dir was renamed)
+  await addToGitignore(cwd, 'validator_logs');
 
   console.log(chalk.green('Plugin update completed successfully.'));
   console.log(
