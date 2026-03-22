@@ -37,6 +37,9 @@ export function registerHelpCommand(program: Command): void {
         '  review-audit  Audit review execution from the debug log (--date or --since)',
       );
       console.log('  ci            CI integration commands (init, list-jobs)');
+      console.log(
+        '  update        Update the agent-validator Claude plugin and refresh skills',
+      );
       console.log('  help          Show this help message\n');
       console.log(
         'For more information, see: https://github.com/Codagent-AI/agent-validator',

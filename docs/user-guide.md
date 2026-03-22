@@ -394,6 +394,34 @@ agent-validator update-review skip 2 "Function is readable at current length"
 
 Only violations with `status: "new"` can be updated. Attempting to update an already-fixed or already-skipped violation produces an error.
 
+### `agent-validator validate`
+
+Validates all config files (`.gauntlet/config.yml`, check definitions, review definitions) against their schemas. Useful for catching configuration mistakes without running any gates.
+
+```bash
+agent-validator validate
+```
+
+Exits `0` if all config files are valid, `1` if validation fails (with the error message printed to stderr).
+
+### `agent-validator skip`
+
+Advances the execution state baseline to the current commit without running any gates. The next `run` will diff from this new baseline.
+
+```bash
+agent-validator skip
+```
+
+This is useful when you want to skip validation for a known-good state (e.g., after a merge from main) and start fresh from the current commit.
+
+### `agent-validator status`
+
+Shows a summary of the most recent validator session, including gate results and overall outcome.
+
+```bash
+agent-validator status
+```
+
 ### `agent-validator help`
 
 Shows help information, including an overview of Agent Gauntlet and all available commands. This is the default command when no command is provided.
