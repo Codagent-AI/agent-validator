@@ -19,8 +19,8 @@ type PluginListEntry = {
 	projectPath?: string;
 };
 const listPluginsMock = mock(async () => [] as PluginListEntry[]);
-const updateMarketplaceMock = mock(async () => ({ success: true }));
-const updatePluginMock = mock(async () => ({ success: true }));
+const updateMarketplaceMock = mock(async (_name: string) => ({ success: true }));
+const updatePluginMock = mock(async (_name: string) => ({ success: true }));
 
 const addMarketplaceMock = mock(async () => ({ success: true }));
 const installPluginMock = mock(async (_scope: string) => ({ success: true }));
@@ -37,8 +37,8 @@ mock.module("../../src/plugin/claude-cli.js", () => ({
 	addMarketplace: () => addMarketplaceMock(),
 	installPlugin: (scope: string) => installPluginMock(scope),
 	listPlugins: () => listPluginsMock(),
-	updateMarketplace: () => updateMarketplaceMock(),
-	updatePlugin: () => updatePluginMock(),
+	updateMarketplace: (name: string) => updateMarketplaceMock(name),
+	updatePlugin: (name: string) => updatePluginMock(name),
 }));
 
 const { registerUpdateCommand } = await import("../../src/commands/update.js");
@@ -237,7 +237,7 @@ describe("update command", () => {
 		expect(output).toContain("Plugin update failed");
 		expect(output).toContain("claude plugin marketplace update agent-validator");
 		expect(output).toContain(
-			"claude plugin update agent-validator@pacaplan/agent-validator",
+			"claude plugin update agent-validator@Codagent-AI/agent-validator",
 		);
 	});
 

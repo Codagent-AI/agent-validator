@@ -39,7 +39,7 @@ export function registerHelpCommand(program: Command): void {
       console.log('  ci            CI integration commands (init, list-jobs)');
       console.log('  help          Show this help message\n');
       console.log(
-        'For more information, see: https://github.com/pacaplan/agent-gauntlet',
+        'For more information, see: https://github.com/Codagent-AI/agent-validator',
       );
       console.log('Or run: agent-validate <command> --help');
     });

@@ -96,10 +96,26 @@ function isPluginEntry(entry: PluginEntry): boolean {
   );
 }
 
+interface DetectedPlugin {
+  scope: 'project' | 'user';
+  installedName: string;
+}
+
+function extractPluginBaseName(entry: PluginEntry): string {
+  // Prefer `name` over `id` — `id` may be a marketplace slug like "agent-validator@org/repo"
+  const raw =
+    typeof entry.name === 'string' ? entry.name : String(entry.id ?? '');
+  // Strip version/source suffix: "agent-validator@org/repo" → "agent-validator"
+  const atIdx = raw.indexOf('@');
+  const base = atIdx > 0 ? raw.slice(0, atIdx) : raw;
+  // Reject slugs containing "/" — fall back to the canonical name
+  return base && !base.includes('/') ? base : 'agent-validator';
+}
+
 function detectInstalledScope(
   entries: PluginEntry[],
   cwd: string,
-): 'project' | 'user' | null {
+): DetectedPlugin | null {
   const pluginEntries = entries.filter(isPluginEntry);
 
   const projectEntries = pluginEntries.filter(
@@ -108,23 +124,30 @@ function detectInstalledScope(
       typeof entry.projectPath === 'string' &&
       isInProjectScope(cwd, entry.projectPath),
   );
-  if (projectEntries.length > 0) {
-    return 'project';
+  const firstProject = projectEntries[0];
+  if (firstProject) {
+    return {
+      scope: 'project',
+      installedName: extractPluginBaseName(firstProject),
+    };
   }
 
-  const hasUserInstall = pluginEntries.some((entry) => entry.scope === 'user');
-  if (hasUserInstall) {
-    return 'user';
+  const userEntry = pluginEntries.find((entry) => entry.scope === 'user');
+  if (userEntry) {
+    return {
+      scope: 'user',
+      installedName: extractPluginBaseName(userEntry),
+    };
   }
 
   return null;
 }
 
-function printManualUpdateInstructions(): void {
+function printManualUpdateInstructions(installedName: string): void {
   console.error('Run these commands manually:');
-  console.error('  claude plugin marketplace update agent-validator');
+  console.error(`  claude plugin marketplace update ${installedName}`);
   console.error(
-    '  claude plugin update agent-validator@pacaplan/agent-validator',
+    `  claude plugin update ${installedName}@Codagent-AI/agent-validator`,
   );
 }
 
@@ -204,9 +227,7 @@ function isCliUnavailableError(err: unknown): boolean {
   return msg.includes('command not found') || msg.includes('not installed');
 }
 
-async function detectClaudeScope(
-  cwd: string,
-): Promise<'project' | 'user' | null> {
+async function detectClaudePlugin(cwd: string): Promise<DetectedPlugin | null> {
   try {
     const parsedPlugins = (await listPlugins()) as PluginEntry[];
     return detectInstalledScope(parsedPlugins, cwd);
@@ -221,30 +242,32 @@ async function detectClaudeScope(
   }
 }
 
-async function updateClaudePlugin(scope: 'project' | 'user'): Promise<void> {
+async function updateClaudePlugin(detected: DetectedPlugin): Promise<void> {
   console.log(
-    chalk.cyan(`Updating agent-validator Claude plugin (${scope} scope)...`),
+    chalk.cyan(
+      `Updating agent-validator Claude plugin (${detected.scope} scope)...`,
+    ),
   );
 
-  const marketplaceResult = await updateMarketplace();
+  const marketplaceResult = await updateMarketplace(detected.installedName);
   if (!marketplaceResult.success) {
     console.error(chalk.red('Plugin update failed.'));
     if (marketplaceResult.stderr) {
       console.error(chalk.red(marketplaceResult.stderr.trim()));
     }
-    printManualUpdateInstructions();
+    printManualUpdateInstructions(detected.installedName);
     throw new Error(
       marketplaceResult.stderr ?? 'Failed to update plugin marketplace entry',
     );
   }
 
-  const pluginResult = await updatePlugin();
+  const pluginResult = await updatePlugin(detected.installedName);
   if (!pluginResult.success) {
     console.error(chalk.red('Plugin update failed.'));
     if (pluginResult.stderr) {
       console.error(chalk.red(pluginResult.stderr.trim()));
     }
-    printManualUpdateInstructions();
+    printManualUpdateInstructions(detected.installedName);
     throw new Error(pluginResult.stderr ?? 'Failed to update plugin');
   }
 }
@@ -281,21 +304,21 @@ export async function runPluginUpdate(
   void options?.skipPrompts;
 
   const cwd = process.cwd();
-  const claudeScope = await detectClaudeScope(cwd);
+  const claudeDetected = await detectClaudePlugin(cwd);
 
   // Detect Cursor plugin installation
   const cursorAdapter = new CursorAdapter();
   const cursorScope = await cursorAdapter.detectPlugin(cwd);
 
   // Error if nothing is installed at all
-  if (!(claudeScope || cursorScope)) {
+  if (!(claudeDetected || cursorScope)) {
     throw new Error(
       'No agent-validator plugin is installed for this project. Please run `agent-validate init` first.',
     );
   }
 
-  if (claudeScope) {
-    await updateClaudePlugin(claudeScope);
+  if (claudeDetected) {
+    await updateClaudePlugin(claudeDetected);
   }
 
   if (cursorScope) {

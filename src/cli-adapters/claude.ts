@@ -146,7 +146,7 @@ export class ClaudeAdapter implements CLIAdapter {
 
   getManualInstallInstructions(scope: 'user' | 'project'): string[] {
     return [
-      'claude plugin marketplace add pacaplan/agent-validator',
+      'claude plugin marketplace add Codagent-AI/agent-validator',
       `claude plugin install agent-validator --scope ${scope}`,
     ];
   }

@@ -149,14 +149,14 @@ The branch must be checked out in some worktree — if it was deleted after merg
 
 ### /gauntlet-issue
 
-Collect runtime diagnostic evidence and file a structured GitHub issue on `pacaplan/agent-gauntlet`. Requires the `gh` CLI.
+Collect runtime diagnostic evidence and file a structured GitHub issue on `Codagent-AI/agent-validator`. Requires the `gh` CLI.
 
 **Workflow:**
 1. Reads bug description from arguments (or prompts if empty)
 2. Collects evidence: last 50 lines of `.debug.log`, full `.execution_state`, `.gauntlet/config.yml` — notes absent files
 3. Drafts a structured issue (Problem, Steps to Reproduce, Expected vs Actual, Evidence) with redaction guidance for sensitive values
 4. Shows full preview and asks for confirmation (unless invoked with `--auto-file`)
-5. Files via `gh issue create --repo pacaplan/agent-gauntlet`
+5. Files via `gh issue create --repo Codagent-AI/agent-validator`
 
 **Usage:** `/gauntlet-issue` or `/gauntlet-issue <description of the bug>`
 

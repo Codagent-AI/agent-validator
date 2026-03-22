@@ -1,12 +1,12 @@
 ![Agent Validator logo](docs/images/logo2.png)
 
-[![CI](https://github.com/pacaplan/agent-validator/actions/workflows/gauntlet.yml/badge.svg)](https://github.com/pacaplan/agent-validator/actions/workflows/gauntlet.yml)
+[![CI](https://github.com/Codagent-AI/agent-validator/actions/workflows/gauntlet.yml/badge.svg)](https://github.com/Codagent-AI/agent-validator/actions/workflows/gauntlet.yml)
 [![npm](https://img.shields.io/npm/v/agent-validator)](https://www.npmjs.com/package/agent-validator)
 [![npm downloads](https://img.shields.io/npm/dm/agent-validator)](https://www.npmjs.com/package/agent-validator)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![CodeRabbit](https://img.shields.io/coderabbit/prs/github/pacaplan/agent-validator)](https://coderabbit.ai)
-[![OpenSpec](https://raw.githubusercontent.com/pacaplan/flokay/gh-pages/badges/number_of_specs.svg)](https://github.com/pacaplan/flokay)
+[![CodeRabbit](https://img.shields.io/coderabbit/prs/github/Codagent-AI/agent-validator)](https://coderabbit.ai)
+[![OpenSpec](https://raw.githubusercontent.com/Codagent-AI/flokay/gh-pages/badges/number_of_specs.svg)](https://github.com/Codagent-AI/flokay)
 
 > Don't just review the agent's code — put it through the gauntlet.
 

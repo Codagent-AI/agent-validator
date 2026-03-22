@@ -124,7 +124,7 @@ function warnClaudePluginInstallFailure(
     console.warn(chalk.yellow(stderr.trim()));
   }
   console.warn('Run these commands manually:');
-  console.warn('  claude plugin marketplace add pacaplan/agent-validator');
+  console.warn('  claude plugin marketplace add Codagent-AI/agent-validator');
   console.warn(
     `  claude plugin install agent-validator --scope ${installScope}`,
   );

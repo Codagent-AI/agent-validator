@@ -62,7 +62,7 @@ jobs:
           tag_name: v${{ steps.check.outputs.version }}
           name: v${{ steps.check.outputs.version }}
           body: |
-            See [CHANGELOG.md](https://github.com/pacaplan/agent-gauntlet/blob/main/CHANGELOG.md) for details.
+            See [CHANGELOG.md](https://github.com/Codagent-AI/agent-validator/blob/main/CHANGELOG.md) for details.
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -153,7 +153,7 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 		it("returns correct CLI commands for user scope", () => {
 			const instructions = adapter.getManualInstallInstructions("user");
 			expect(instructions).toEqual([
-				"claude plugin marketplace add pacaplan/agent-validator",
+				"claude plugin marketplace add Codagent-AI/agent-validator",
 				"claude plugin install agent-validator --scope user",
 			]);
 		});
@@ -162,7 +162,7 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 			const instructions =
 				adapter.getManualInstallInstructions("project");
 			expect(instructions).toEqual([
-				"claude plugin marketplace add pacaplan/agent-validator",
+				"claude plugin marketplace add Codagent-AI/agent-validator",
 				"claude plugin install agent-validator --scope project",
 			]);
 		});

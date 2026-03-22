@@ -193,7 +193,7 @@ Uses diff for current uncommitted changes only (both staged and unstaged, plus u
 
 #### `--report`
 
-Writes a plain-text failure report to stdout (in addition to the normal stderr output). Designed for external orchestrators like [Baton](https://github.com/pacaplan/baton) that capture stdout from shell steps.
+Writes a plain-text failure report to stdout (in addition to the normal stderr output). Designed for external orchestrators like [Baton](https://github.com/Codagent-AI/baton) that capture stdout from shell steps.
 
 The report contains:
 - A `Status:` line (Passed, Passed with warnings, Failed, etc.)

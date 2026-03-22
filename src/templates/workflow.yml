@@ -21,7 +21,7 @@ jobs:
           curl -fsSL https://bun.sh/install | bash
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
           export PATH="$HOME/.bun/bin:$PATH"
-          bun add -g pacaplan/agent-validator
+          bun add -g Codagent-AI/agent-validator
 
       - name: Discover validator jobs
         id: discover

@@ -6,11 +6,11 @@
   "author": "Paul Caplan",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pacaplan/agent-gauntlet.git"
+    "url": "git+https://github.com/Codagent-AI/agent-validator.git"
   },
-  "homepage": "https://github.com/pacaplan/agent-gauntlet",
+  "homepage": "https://github.com/Codagent-AI/agent-validator",
   "bugs": {
-    "url": "https://github.com/pacaplan/agent-gauntlet/issues"
+    "url": "https://github.com/Codagent-AI/agent-validator/issues"
   },
   "keywords": [
     "cli",

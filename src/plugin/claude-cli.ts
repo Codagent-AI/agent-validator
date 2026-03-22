@@ -44,7 +44,7 @@ export async function addMarketplace(): Promise<ClaudeCliResult> {
     'plugin',
     'marketplace',
     'add',
-    'pacaplan/agent-validator',
+    'Codagent-AI/agent-validator',
   ]);
 }
 
@@ -77,19 +77,23 @@ export async function listPlugins(): Promise<unknown[]> {
   }
 }
 
-export async function updateMarketplace(): Promise<ClaudeCliResult> {
+export async function updateMarketplace(
+  installedName: string,
+): Promise<ClaudeCliResult> {
   return runClaudePluginCommand([
     'plugin',
     'marketplace',
     'update',
-    'agent-validator',
+    installedName,
   ]);
 }
 
-export async function updatePlugin(): Promise<ClaudeCliResult> {
+export async function updatePlugin(
+  installedName: string,
+): Promise<ClaudeCliResult> {
   return runClaudePluginCommand([
     'plugin',
     'update',
-    'agent-validator@pacaplan/agent-validator',
+    `${installedName}@Codagent-AI/agent-validator`,
   ]);
 }

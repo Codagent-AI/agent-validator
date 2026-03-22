@@ -5,7 +5,7 @@ Plugin installation during `agent-validate init`. Covers Claude plugin marketpla
 ## Requirements
 ### Requirement: Plugin marketplace registration
 
-The `init` command SHALL run `claude plugin marketplace add pacaplan/agent-validator` before attempting plugin installation. The command SHALL be run unconditionally (no pre-check).
+The `init` command SHALL run `claude plugin marketplace add Codagent-AI/agent-validator` before attempting plugin installation. The command SHALL be run unconditionally (no pre-check).
 
 #### Scenario: Marketplace add succeeds
 - **GIVEN** the user runs `agent-validate init` with Claude selected

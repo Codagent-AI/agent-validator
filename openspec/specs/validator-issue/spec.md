@@ -49,7 +49,7 @@ The `validator-issue` skill SHALL show the user a full preview of the issue befo
 
 - **WHEN** the skill presents the drafted issue (title and body)
 - **AND** the user confirms
-- **THEN** the skill SHALL file the issue via `gh issue create --repo pacaplan/agent-validator`
+- **THEN** the skill SHALL file the issue via `gh issue create --repo Codagent-AI/agent-validator`
 - **AND** SHALL report the created issue URL
 
 #### Scenario: User declines

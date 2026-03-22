@@ -99,7 +99,7 @@ BODY_FILE=$(mktemp)
 cat > "$BODY_FILE" << 'ISSUE_EOF'
 <paste the full issue body here>
 ISSUE_EOF
-gh issue create --repo pacaplan/agent-validator --title "$ISSUE_TITLE" --body-file "$BODY_FILE"
+gh issue create --repo Codagent-AI/agent-validator --title "$ISSUE_TITLE" --body-file "$BODY_FILE"
 rm -f "$BODY_FILE"
 ```
 
