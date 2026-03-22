@@ -1,7 +1,7 @@
 # General
 
 ## Project Overview
-This project is “Agent Validator”, a configurable “feedback loop” runner for AI-assisted development workflows.
+This project is “Agent Validator” (formerly Agent Gauntlet), a configurable “feedback loop” runner for AI-assisted development workflows.
 
 The user configures which paths in their repo should trigger which validations — shell commands like tests and linters, plus AI-powered code reviews. When files change, Agent Validator automatically runs the relevant validations and reports results.
 

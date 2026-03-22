@@ -8,9 +8,9 @@
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/pacaplan/agent-validator)](https://coderabbit.ai)
 [![OpenSpec](https://raw.githubusercontent.com/pacaplan/flokay/gh-pages/badges/number_of_specs.svg)](https://github.com/pacaplan/flokay)
 
-> Don't just review the agent's code — validate it.
+> Don't just review the agent's code — put it through the gauntlet.
 
-Agent Validator is a configurable “feedback loop” runner for AI-assisted development workflows.
+Agent Validator (formerly Agent Gauntlet) is a configurable “feedback loop” runner for AI-assisted development workflows.
 
 You configure which paths in your repo should trigger which validations — shell commands like tests and linters, plus AI-powered local code reviews. When files change, Gauntlet automatically runs the relevant validations and reports results.
 
