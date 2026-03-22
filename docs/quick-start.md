@@ -9,7 +9,7 @@
 ## Installation
 
 ```bash
-npm install -g agent-gauntlet
+npm install -g agent-validator
 ```
 
 ## Initialization
@@ -17,7 +17,7 @@ npm install -g agent-gauntlet
 Initialize configuration in your project root:
 
 ```bash
-agent-gauntlet init
+agent-validator init
 ```
 
 This walks you through an interactive setup:
@@ -27,7 +27,7 @@ This walks you through an interactive setup:
 3. **Prompts for install scope** — local (project) or global (user) installation
 4. **Prompts for review CLIs** — the tools used for AI code reviews (sets `cli.default_preference`)
 5. **Creates `.gauntlet/`** with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout))
-6. **Installs skills and hooks** — for Claude Code, installs as a Claude Code plugin (skills and hooks delivered via plugin). For Cursor, installs by copying plugin files (`.cursor-plugin/`, skills, hooks) to `.cursor/plugins/agent-gauntlet/` or `~/.cursor/plugins/agent-gauntlet/`. For Codex, copies skill files to `.agents/skills/`.
+6. **Installs skills and hooks** — for Claude Code, installs as a Claude Code plugin (skills and hooks delivered via plugin). For Cursor, installs by copying plugin files (`.cursor-plugin/`, skills, hooks) to `.cursor/plugins/agent-validator/` or `~/.cursor/plugins/agent-validator/`. For Codex, copies skill files to `.agents/skills/`.
 7. **Prints next steps** with context-aware instructions for your selected CLIs
 
 Use `--yes` to skip all prompts (selects all detected CLIs, overwrites changed files).
@@ -48,14 +48,14 @@ Agent Gauntlet uses three core concepts:
 - **Checks**: Shell commands that run when an entry point changes — things like tests, linters, and type-checkers.
 - **Reviews**: AI-powered code reviews requested via CLI tools like Codex, Claude, or Gemini. Each review uses a custom prompt you define.
 
-When you run `agent-gauntlet`, it detects which entry points have changed files and runs the associated checks and reviews.
+When you run `agent-validator`, it detects which entry points have changed files and runs the associated checks and reviews.
 
 ## Basic Usage
 
 - **Run gates for detected changes**
 
 ```bash
-agent-gauntlet run
+agent-validator run
 ```
 
 - **Run gates from your agent and auto-fix detected issues**
@@ -86,7 +86,7 @@ Agent Gauntlet loads configuration from your repository:
 
 ## Example Configuration
 
-After running `agent-gauntlet init`, your `config.yml` starts with empty entry points:
+After running `agent-validator init`, your `config.yml` starts with empty entry points:
 
 ```yaml
 base_branch: origin/main
@@ -202,7 +202,7 @@ Each job writes a log file under `log_dir` (default: `gauntlet_logs/`). Filename
 To run your checks in GitHub Actions:
 
 ```bash
-agent-gauntlet ci init
+agent-validator ci init
 ```
 
 This creates:
@@ -216,7 +216,7 @@ Your local check definitions (`.gauntlet/checks/`) are automatically used in CI.
 To update Agent Gauntlet after upgrading the npm package:
 
 ```bash
-agent-gauntlet update
+agent-validator update
 ```
 
 This updates the Claude Code plugin (via marketplace), refreshes the Cursor plugin (via file copy) if installed, and refreshes Codex skills if installed. The command auto-detects where each plugin is installed.

@@ -61,7 +61,7 @@ const mockAdapters = [
 			return { success: true };
 		},
 		getManualInstallInstructions: (scope: "user" | "project") => [
-			"claude plugin marketplace add pcaplan/agent-validator",
+			"claude plugin marketplace add Codagent-AI/agent-validator",
 			`claude plugin install agent-validator --scope ${scope}`,
 		],
 	},
@@ -218,7 +218,7 @@ describe("init command plugin installation", () => {
 		const output = logs.join("\n");
 		expect(output).toContain("plugin installation failed");
 		expect(output).toContain(
-			"claude plugin marketplace add pcaplan/agent-validator",
+			"claude plugin marketplace add Codagent-AI/agent-validator",
 		);
 		expect(output).toContain("claude plugin install agent-validator --scope project");
 

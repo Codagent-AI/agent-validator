@@ -91,7 +91,7 @@ If the code looks good, please reply with "LGTM!" (Looks Good To Me).
 ### 1) Run interactive setup
 
 ```bash
-agent-gauntlet init
+agent-validator init
 ```
 
 This walks you through a guided setup:
@@ -156,11 +156,11 @@ Edit `.gauntlet/config.yml` and add `entry_points` that reference your check/rev
 
 ## Commands
 
-### `agent-gauntlet` / `agent-gauntlet help`
+### `agent-validator` / `agent-validator help`
 
 Shows help information and available commands. This is the default when no command is provided.
 
-### `agent-gauntlet run`
+### `agent-validator run`
 
 Runs applicable gates for detected changes.
 
@@ -177,8 +177,8 @@ Filters to a single gate name (check or review). If multiple entry points would 
 Activates a review that has `enabled: false` in its config for this run. Can be repeated to activate multiple reviews:
 
 ```bash
-agent-gauntlet run --enable-review task-compliance
-agent-gauntlet run --enable-review task-compliance --enable-review security
+agent-validator run --enable-review task-compliance
+agent-validator run --enable-review task-compliance --enable-review security
 ```
 
 Reviews with `enabled: true` (the default) are unaffected by this flag. If the name doesn't match any configured review, the flag is silently ignored.
@@ -205,10 +205,10 @@ The report is also written to `<log_dir>/report.txt` to ensure availability in e
 Output is plain text with no ANSI escape codes, consistent with the convention that stdout is reserved for machine-readable output.
 
 ```bash
-agent-gauntlet run --report --enable-review task-compliance
+agent-validator run --report --enable-review task-compliance
 ```
 
-### `agent-gauntlet check`
+### `agent-validator check`
 
 Runs only applicable checks for detected changes. Reviews are skipped.
 
@@ -218,7 +218,7 @@ Runs only applicable checks for detected changes. Reviews are skipped.
 
 Uses the same options as `run` (see above). When using `--gate <name>`, filters to a single check gate name.
 
-### `agent-gauntlet review`
+### `agent-validator review`
 
 Runs only applicable reviews for detected changes. Checks are skipped.
 
@@ -228,12 +228,12 @@ Runs only applicable reviews for detected changes. Checks are skipped.
 
 Uses the same options as `run` (see above), including `--enable-review`. When using `--gate <name>`, filters to a single review gate name.
 
-### `agent-gauntlet review-audit`
+### `agent-validator review-audit`
 
 Parses the debug log and produces a structured audit report of review gate execution for a given date or date range.
 
 ```bash
-agent-gauntlet review-audit [--date YYYY-MM-DD] [--since YYYY-MM-DD]
+agent-validator review-audit [--date YYYY-MM-DD] [--since YYYY-MM-DD]
 ```
 
 #### Options
@@ -251,7 +251,7 @@ Prints five sections:
 - **Token Usage** — input/output/cache token totals and API request counts per adapter
 - **Fix / Skip** — gauntlet run outcomes: fixed, skipped, failed violations; prior-pass skips
 
-### `agent-gauntlet clean`
+### `agent-validator clean`
 
 Archives logs using configurable N-deep rotation. Current `.log` and `.json` files are moved into `previous/`, while existing `previous/` archives shift to `previous.1/`, `previous.2/`, etc. The oldest archive beyond `max_previous_logs` (default: 3) is evicted. Execution state is preserved.
 
@@ -265,9 +265,9 @@ When `run`, `check`, or `review` detect existing `.log` files in the log directo
 - Parses the highest-numbered log per prefix for previous failures
 - Injects those failures as context for review gates
 
-This replaces the old `rerun` command — simply run `agent-gauntlet run` again after making fixes.
+This replaces the old `rerun` command — simply run `agent-validator run` again after making fixes.
 
-### `agent-gauntlet detect`
+### `agent-validator detect`
 
 Shows what gates would run for detected changes without actually executing them.
 
@@ -283,18 +283,18 @@ Uses diff for a specific commit instead of the default change detection logic.
 
 Uses diff for current uncommitted changes only (both staged and unstaged, plus untracked files). Git-ignored files (via `.gitignore` or other git exclude files) are excluded from untracked file detection.
 
-### `agent-gauntlet list`
+### `agent-validator list`
 
 Prints:
 - Loaded check gate names (from `.gauntlet/checks/*.yml`)
 - Loaded review gate names (from `.gauntlet/reviews/*.md`)
 - Configured entry points (from `.gauntlet/config.yml`)
 
-### `agent-gauntlet health`
+### `agent-validator health`
 
 Checks availability of supported review CLIs (`gemini`, `codex`, `claude`, `github-copilot`).
 
-### `agent-gauntlet init`
+### `agent-validator init`
 
 Guided interactive setup that creates `.gauntlet/`, installs skills, and configures hooks.
 
@@ -313,7 +313,7 @@ The `init` command walks you through the following steps:
 3. **Install Scope Selection**: Choose local (project) or global (user) scope for plugin and skill installation.
 4. **Review CLI Selection**: Multi-select prompt for review tools. Populates `cli.default_preference` in the user's selection order. If one review CLI is selected, `num_reviews` is set to 1 automatically. If multiple are selected, you're prompted for how many to run per review.
 5. **Scaffold `.gauntlet/`**: Creates the directory, config skeleton (`entry_points: []`), and built-in code-quality review. **Skipped entirely** if `.gauntlet/` already exists (config is never overwritten).
-6. **Install Plugin & Skills**: For Claude Code, registers the marketplace and installs the agent-gauntlet plugin (which delivers skills and hooks). For Cursor, copies plugin files (manifest, skills, hooks) to `.cursor/plugins/agent-gauntlet/` (project) or `~/.cursor/plugins/agent-gauntlet/` (user). For Codex, copies skill files to `.agents/skills/` (local or `$HOME/.agents/skills/` for global scope). Uses SHA-256 checksums for Codex skill files.
+6. **Install Plugin & Skills**: For Claude Code, registers the marketplace and installs the agent-validator plugin (which delivers skills and hooks). For Cursor, copies plugin files (manifest, skills, hooks) to `.cursor/plugins/agent-validator/` (project) or `~/.cursor/plugins/agent-validator/` (user). For Codex, copies skill files to `.agents/skills/` (local or `$HOME/.agents/skills/` for global scope). Uses SHA-256 checksums for Codex skill files.
 7. **Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor) get `/gauntlet-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
 
 **Re-running init:** When `.gauntlet/` already exists, init delegates to the update flow — refreshing the Claude Code plugin via marketplace and updating Codex skills via checksums. If the plugin isn't installed yet, it falls back to a fresh install. This lets you update after upgrading Agent Gauntlet without re-configuring your project.
@@ -324,18 +324,18 @@ After `init`, run `/gauntlet-setup` in your AI agent session to scan the project
 
 - `-y, --yes`: Skip all interactive prompts. Selects all detected CLIs as both development and review CLIs, sets `num_reviews` to the detected count, and overwrites changed files without asking.
 
-### `agent-gauntlet ci`
+### `agent-validator ci`
 
 Commands for integrating Agent Gauntlet with CI/CD systems (GitHub Actions).
 
-#### `agent-gauntlet ci init`
+#### `agent-validator ci init`
 
 Generates a dynamic GitHub Actions workflow (`.github/workflows/gauntlet.yml`) and a starter CI configuration (`.gauntlet/ci.yml`).
 
 - The generated workflow uses a "discover" job to dynamically build the job matrix based on changed files and configured checks.
 - You generally only need to run this once, or when you add new service dependencies (e.g. Postgres, Redis) to `.gauntlet/ci.yml`.
 
-#### `agent-gauntlet ci list-jobs`
+#### `agent-validator ci list-jobs`
 
 Internal command used by the CI workflow to discover which jobs to run.
 
@@ -343,30 +343,30 @@ Internal command used by the CI workflow to discover which jobs to run.
 - Expands entry points based on file patterns
 - Outputs a JSON object defining the job matrix and service configurations
 
-### `agent-gauntlet update`
+### `agent-validator update`
 
 Updates installed plugins and skills for all supported adapters.
 
 - Detects where the Claude plugin is installed by running `claude plugin list --json`
 - If Claude plugin found and installed at both scopes, targets project scope (closest scope wins)
 - If Claude plugin found → runs `claude plugin marketplace update` followed by `claude plugin update`
-- Detects where the Cursor plugin is installed (file-system check for `.cursor/plugins/agent-gauntlet/`)
+- Detects where the Cursor plugin is installed (file-system check for `.cursor/plugins/agent-validator/`)
 - If Cursor plugin found → re-copies plugin assets from the npm package (always overwrite)
 - Refreshes Codex skills if installed (using checksum comparison)
-- If no plugins are found at all, exits with an error suggesting `agent-gauntlet init`
+- If no plugins are found at all, exits with an error suggesting `agent-validator init`
 
-### `agent-gauntlet update-review`
+### `agent-validator update-review`
 
 Manages review violation decisions by stable numeric ID. Used after a gauntlet run to mark violations as fixed or skipped before re-running verification.
 
 Violations are enumerated by scanning review JSON files in the log directory (sorted by filename), collecting violations with `status: "new"`, and assigning sequential IDs from 1. The same enumeration is used by `--report`, so IDs are consistent between the report output and these commands.
 
-#### `agent-gauntlet update-review list`
+#### `agent-validator update-review list`
 
 Lists all pending review violations with their numeric IDs.
 
 ```bash
-$ agent-gauntlet update-review list
+$ agent-validator update-review list
   #1 [high] review:src:code-quality (claude@1)
      src/main.ts:45 - Missing error handling for async database call
      Fix: Wrap in try-catch block
@@ -376,25 +376,25 @@ $ agent-gauntlet update-review list
      Fix: Extract helper functions
 ```
 
-#### `agent-gauntlet update-review fix <id> <reason>`
+#### `agent-validator update-review fix <id> <reason>`
 
 Marks a violation as fixed. Sets `status` to `"fixed"` and `result` to the reason string in the review JSON file.
 
 ```bash
-agent-gauntlet update-review fix 1 "Added try-catch around database call"
+agent-validator update-review fix 1 "Added try-catch around database call"
 ```
 
-#### `agent-gauntlet update-review skip <id> <reason>`
+#### `agent-validator update-review skip <id> <reason>`
 
 Marks a violation as skipped. Sets `status` to `"skipped"` and `result` to the reason string in the review JSON file. Skipped violations cause the run to report "Passed with warnings" instead of "Failed".
 
 ```bash
-agent-gauntlet update-review skip 2 "Function is readable at current length"
+agent-validator update-review skip 2 "Function is readable at current length"
 ```
 
 Only violations with `status: "new"` can be updated. Attempting to update an already-fixed or already-skipped violation produces an error.
 
-### `agent-gauntlet help`
+### `agent-validator help`
 
 Shows help information, including an overview of Agent Gauntlet and all available commands. This is the default command when no command is provided.
 
@@ -562,7 +562,7 @@ The following files in the log directory survive `clean` operations:
 
 ## Troubleshooting
 
-- **“Configuration file not found”**: ensure `.gauntlet/config.yml` exists (or run `agent-gauntlet init`).
+- **“Configuration file not found”**: ensure `.gauntlet/config.yml` exists (or run `agent-validator init`).
 - **No gates run**: either no changes were detected, or no entry point matched those changes, or the matching entry point has no gates.
 - **Check gate shows “Missing command” in preflight**: the first token of `command` must resolve on `PATH` (or be an executable path).
 - **Review gate shows "Missing CLI tools"**: install one of the requested tools (`gemini`, `codex`, `claude`, `github-copilot`) and ensure it's on `PATH`.

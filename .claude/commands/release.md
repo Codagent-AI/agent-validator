@@ -48,7 +48,7 @@ For each qualifying PR, create a file `.changeset/pr-<number>.md` with this form
 
 ```markdown
 ---
-"agent-gauntlet": <bump>
+"agent-validator": <bump>
 ---
 
 <summary>

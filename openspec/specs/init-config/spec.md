@@ -208,7 +208,7 @@ When Claude is a selected development CLI, init SHALL install the agent-validato
 - **GIVEN** the user selects `claude` as a development CLI
 - **AND** the user selects local scope
 - **WHEN** Phase 5 runs
-- **THEN** init SHALL run `claude plugin marketplace add pcaplan/agent-validator`
+- **THEN** init SHALL run `claude plugin marketplace add Codagent-AI/agent-validator`
 - **AND** init SHALL run `claude plugin install agent-validator --scope project`
 - **AND** no skill files SHALL be copied to `.claude/skills/`
 

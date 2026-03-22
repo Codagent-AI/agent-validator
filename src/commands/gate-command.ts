@@ -321,7 +321,22 @@ async function executeAndFinalize(
 async function handleNoWork(
   logDir: string,
   restoreConsole: ConsoleLogHandle | undefined,
+  failuresMap?: Map<string, Map<string, PreviousViolation[]>>,
 ): Promise<never> {
+  // Match run-executor's handleNoChanges: outstanding violations → fail, don't advance state.
+  if (failuresMap && failuresMap.size > 0) {
+    let total = 0;
+    for (const am of failuresMap.values())
+      for (const v of am.values()) total += v.length;
+    console.log(
+      chalk.yellow(
+        `No changes detected — ${total} violation(s) still outstanding.`,
+      ),
+    );
+    await releaseLock(logDir);
+    restoreConsole?.restore();
+    process.exit(1);
+  }
   await writeExecutionState(logDir);
   await releaseLock(logDir);
   restoreConsole?.restore();
@@ -335,10 +350,10 @@ async function checkEarlyExit(
   commandName: GateCommandName,
   logDir: string,
   restoreConsole: ConsoleLogHandle | undefined,
+  failuresMap?: Map<string, Map<string, PreviousViolation[]>>,
 ): Promise<void> {
   if (changes.length === 0) {
-    console.log(chalk.green('No changes detected.'));
-    await handleNoWork(logDir, restoreConsole);
+    await handleNoWork(logDir, restoreConsole, failuresMap);
   }
   if (jobs.length === 0) {
     console.log(
@@ -452,7 +467,14 @@ export async function executeGateCommand(
       commandName,
     );
 
-    await checkEarlyExit(changes, jobs, commandName, logDir, restoreConsole);
+    await checkEarlyExit(
+      changes,
+      jobs,
+      commandName,
+      logDir,
+      restoreConsole,
+      rerunResult.failuresMap,
+    );
 
     console.log(chalk.dim(`Running ${jobs.length} ${commandName}(s)...`));
 

@@ -79,3 +79,23 @@ When the release PR is merged to `main`, the publish workflow automatically:
 - Creates a GitHub release (`softprops/action-gh-release`)
 
 One merge → publish. No manual changeset creation needed.
+
+## Local Plugin Testing
+
+To test the plugin from another project on the same machine:
+
+```bash
+claude plugin uninstall agent-validator
+claude plugin marketplace add /path/to/agent-validator
+claude plugin install agent-validator
+```
+
+### Refreshing after changes
+
+Installed plugins are cached at `~/.claude/plugins/cache/`. Edits to your local source files are **not** picked up automatically. After making changes, clear the cache and reinstall:
+
+```bash
+rm -rf ~/.claude/plugins/cache/agent-validator
+```
+
+Then start a new Claude session — the plugin will be re-cached from your local directory.

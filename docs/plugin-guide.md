@@ -4,7 +4,7 @@ Agent Gauntlet delivers skills and hooks to AI coding agents via **plugins**. Bo
 
 ## How It Works
 
-The agent-gauntlet npm package includes plugin assets for both Claude Code and Cursor:
+The agent-validator npm package includes plugin assets for both Claude Code and Cursor:
 
 - `.claude-plugin/plugin.json` — Plugin manifest for Claude Code
 - `.cursor-plugin/plugin.json` — Plugin manifest for Cursor
@@ -15,19 +15,19 @@ The agent-gauntlet npm package includes plugin assets for both Claude Code and C
 
 ### Claude Code
 
-When you run `agent-gauntlet init` with Claude Code selected, it:
+When you run `agent-validator init` with Claude Code selected, it:
 
-1. Registers the marketplace: `claude plugin marketplace add pcaplan/agent-gauntlet`
-2. Installs the plugin: `claude plugin install agent-gauntlet --scope <project|user>`
+1. Registers the marketplace: `claude plugin marketplace add Codagent-AI/agent-validator`
+2. Installs the plugin: `claude plugin install agent-validator --scope <project|user>`
 
 Claude Code then discovers and loads the plugin's skills and hooks automatically.
 
 ### Cursor
 
-When you run `agent-gauntlet init` with Cursor selected, it copies plugin files to the appropriate directory:
+When you run `agent-validator init` with Cursor selected, it copies plugin files to the appropriate directory:
 
-- **Project scope**: `.cursor/plugins/agent-gauntlet/`
-- **User scope**: `~/.cursor/plugins/agent-gauntlet/`
+- **Project scope**: `.cursor/plugins/agent-validator/`
+- **User scope**: `~/.cursor/plugins/agent-validator/`
 
 The copied files include `.cursor-plugin/plugin.json`, `skills/`, and `hooks/hooks.json`. Cursor auto-discovers the plugin by convention.
 
@@ -50,10 +50,10 @@ All gauntlet skills (`/gauntlet-run`, `/gauntlet-setup`, etc.) are bundled in th
 
 ## Updating
 
-After upgrading the `agent-gauntlet` npm package, update the plugin:
+After upgrading the `agent-validator` npm package, update the plugin:
 
 ```bash
-agent-gauntlet update
+agent-validator update
 ```
 
 This command:
@@ -71,23 +71,23 @@ The update command auto-detects the installed scope:
 - If installed at project scope → updates project installation
 - If installed at user scope only → updates user installation
 - If installed at both → updates project scope (closest wins)
-- If not installed → error with instructions to run `agent-gauntlet init`
+- If not installed → error with instructions to run `agent-validator init`
 
 ### Re-running Init
 
-Running `agent-gauntlet init` on a project that already has `.gauntlet/` delegates to the update flow. If the plugin isn't installed yet, it falls back to a fresh install.
+Running `agent-validator init` on a project that already has `.gauntlet/` delegates to the update flow. If the plugin isn't installed yet, it falls back to a fresh install.
 
 ## Manual Installation
 
-If you prefer not to use `agent-gauntlet init`:
+If you prefer not to use `agent-validator init`:
 
 ```bash
 # Install the npm package
-npm install -g agent-gauntlet
+npm install -g agent-validator
 
 # Register marketplace and install plugin
-claude plugin marketplace add pcaplan/agent-gauntlet
-claude plugin install agent-gauntlet --scope project
+claude plugin marketplace add Codagent-AI/agent-validator
+claude plugin install agent-validator --scope project
 ```
 
 ## Troubleshooting
@@ -100,7 +100,7 @@ Verify the plugin is installed:
 claude plugin list --json
 ```
 
-Look for an entry with `name: "agent-gauntlet"`.
+Look for an entry with `name: "agent-validator"`.
 
 ### Hooks not firing
 
@@ -108,16 +108,16 @@ Ensure the plugin is installed at the correct scope for your project. Project-sc
 
 ### Update fails
 
-If `agent-gauntlet update` fails, try manual update:
+If `agent-validator update` fails, try manual update:
 
 ```bash
-claude plugin marketplace update agent-gauntlet
-claude plugin update agent-gauntlet@pcaplan/agent-gauntlet
+claude plugin marketplace update agent-validator
+claude plugin update agent-validator@Codagent-AI/agent-validator
 ```
 
 ## Cursor Plugin
 
-The Cursor plugin is delivered via file copy during `agent-gauntlet init`. Unlike Claude Code's marketplace-based delivery, the Cursor plugin files are copied directly from the npm package to the target directory.
+The Cursor plugin is delivered via file copy during `agent-validator init`. Unlike Claude Code's marketplace-based delivery, the Cursor plugin files are copied directly from the npm package to the target directory.
 
 ### Plugin Contents
 
@@ -127,7 +127,7 @@ The Cursor plugin is delivered via file copy during `agent-gauntlet init`. Unlik
 
 ### Updating
 
-Run `agent-gauntlet update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/`, `skills/`, and `hooks/cursor-hooks.json` (installed as `hooks/hooks.json`) from the npm package to the installed location, overwriting existing files.
+Run `agent-validator update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/`, `skills/`, and `hooks/cursor-hooks.json` (installed as `hooks/hooks.json`) from the npm package to the installed location, overwriting existing files.
 
 ### Manual Installation
 
@@ -135,13 +135,13 @@ Copy the plugin files from the installed npm package:
 
 ```bash
 # Find the package location
-npm ls -g agent-gauntlet --parseable
+npm ls -g agent-validator --parseable
 
 # Copy plugin files to your project
-cp -r <package-path>/.cursor-plugin .cursor/plugins/agent-gauntlet/.cursor-plugin
-cp -r <package-path>/skills .cursor/plugins/agent-gauntlet/skills
-mkdir -p .cursor/plugins/agent-gauntlet/hooks
-cp <package-path>/hooks/cursor-hooks.json .cursor/plugins/agent-gauntlet/hooks/hooks.json
+cp -r <package-path>/.cursor-plugin .cursor/plugins/agent-validator/.cursor-plugin
+cp -r <package-path>/skills .cursor/plugins/agent-validator/skills
+mkdir -p .cursor/plugins/agent-validator/hooks
+cp <package-path>/hooks/cursor-hooks.json .cursor/plugins/agent-validator/hooks/hooks.json
 ```
 
 Or install via `/add-plugin` in Cursor or from the Cursor marketplace.

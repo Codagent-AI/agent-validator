@@ -20,18 +20,18 @@ Agent Gauntlet installs **skills** that let you invoke gauntlet workflows direct
 
 ### Claude Code (Plugin Delivery)
 
-For Claude Code, skills and hooks are delivered as part of the **agent-gauntlet Claude Code plugin**. When you run `agent-gauntlet init` with Claude selected, it registers the marketplace and installs the plugin via:
+For Claude Code, skills and hooks are delivered as part of the **agent-validator Claude Code plugin**. When you run `agent-validator init` with Claude selected, it registers the marketplace and installs the plugin via:
 
 ```bash
-claude plugin marketplace add pcaplan/agent-gauntlet
-claude plugin install agent-gauntlet --scope <project|user>
+claude plugin marketplace add Codagent-AI/agent-validator
+claude plugin install agent-validator --scope <project|user>
 ```
 
-The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. No manual file management is needed — updates are delivered via `agent-gauntlet update`, or manually with `claude plugin marketplace update agent-gauntlet` followed by `claude plugin update agent-gauntlet@pcaplan/agent-gauntlet`.
+The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. No manual file management is needed — updates are delivered via `agent-validator update`, or manually with `claude plugin marketplace update agent-validator` followed by `claude plugin update agent-validator@Codagent-AI/agent-validator`.
 
 ### Cursor (Plugin Delivery)
 
-For Cursor, skills and hooks are delivered as part of the **agent-gauntlet Cursor plugin**. When you run `agent-gauntlet init` with Cursor selected, it copies plugin files to `.cursor/plugins/agent-gauntlet/` (project scope) or `~/.cursor/plugins/agent-gauntlet/` (user scope).
+For Cursor, skills and hooks are delivered as part of the **agent-validator Cursor plugin**. When you run `agent-validator init` with Cursor selected, it copies plugin files to `.cursor/plugins/agent-validator/` (project scope) or `~/.cursor/plugins/agent-validator/` (user scope).
 
 The plugin bundles skills in `skills/` and hooks in `hooks/hooks.json`.
 
@@ -80,17 +80,17 @@ Scans the project and configures checks and reviews. This is a multi-file skill 
 3. If `entry_points` is populated (existing setup): offers options to add checks, add custom gates, or reconfigure
 4. Presents discovered checks and asks for confirmation
 5. Creates check YAML files and updates `entry_points` in `config.yml`
-6. Validates the configuration with `agent-gauntlet validate`
+6. Validates the configuration with `agent-validator validate`
 
-Run this skill after `agent-gauntlet init` to complete your setup.
+Run this skill after `agent-validator init` to complete your setup.
 
 ### /gauntlet-run
 
 The primary skill. Runs the full gauntlet (checks + reviews) and iterates on failures.
 
 **Workflow:**
-1. Archives previous logs (`agent-gauntlet clean` with configurable rotation depth)
-2. Runs `agent-gauntlet run`
+1. Archives previous logs (`agent-validator clean` with configurable rotation depth)
+2. Runs `agent-validator run`
 3. If failures: reads log/JSON output, fixes issues, re-runs
 4. Repeats until all gates pass, warnings only remain, or retry limit is reached (logs auto-archived)
 5. Provides a session summary
@@ -110,7 +110,7 @@ Diagnose and explain gauntlet behavior from runtime evidence. This is a **diagno
 The skill follows a structured diagnostic workflow:
 1. Resolves `log_dir` from `.gauntlet/config.yml`
 2. Reads passive evidence (logs, execution state, config)
-3. Runs CLI commands only when needed (`agent-gauntlet list`, `health`, `detect`)
+3. Runs CLI commands only when needed (`agent-validator list`, `health`, `detect`)
 4. Returns a structured response with **Diagnosis**, **Evidence**, **Confidence**, and **Next Steps**
 
 Reference files under `references/` provide detailed troubleshooting guidance organized by domain: config, gates, locks, and adapters.
@@ -125,8 +125,8 @@ After diagnosis, the skill applies confidence-based bug-filing routing:
 Gate a commit behind optional gauntlet validation.
 
 **Workflow:**
-1. Runs `agent-gauntlet detect` — if no changes found, commits immediately (no validation)
-2. Parses inline intent from arguments: "run"/"full" → `/gauntlet-run`; "check"/"checks" → `/gauntlet-check`; "skip" → `agent-gauntlet skip`; unclear → prompts user to choose
+1. Runs `agent-validator detect` — if no changes found, commits immediately (no validation)
+2. Parses inline intent from arguments: "run"/"full" → `/gauntlet-run`; "check"/"checks" → `/gauntlet-check`; "skip" → `agent-validator skip`; unclear → prompts user to choose
 3. Runs the chosen validation skill; if it fails, asks "Ready to commit?" before proceeding
 4. Commits using an available commit skill if found, otherwise stages and commits directly
 
@@ -182,7 +182,7 @@ allowed-tools: Bash
 To update skills after upgrading Agent Gauntlet:
 
 ```bash
-agent-gauntlet update
+agent-validator update
 ```
 
-For Claude Code, this updates the plugin via marketplace. For Cursor, it re-copies plugin assets from the npm package. For Codex, it refreshes skill files using checksum comparison. You can also re-run `agent-gauntlet init` which delegates to the update flow when `.gauntlet/` already exists.
+For Claude Code, this updates the plugin via marketplace. For Cursor, it re-copies plugin assets from the npm package. For Codex, it refreshes skill files using checksum comparison. You can also re-run `agent-validator init` which delegates to the update flow when `.gauntlet/` already exists.

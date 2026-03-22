@@ -36,7 +36,7 @@ jobs:
         run: |
           LOCAL_VERSION=$(node -p "require('./package.json').version")
           echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
-          NPM_OUTPUT=$(npm view agent-gauntlet@"$LOCAL_VERSION" version 2>&1) && {
+          NPM_OUTPUT=$(npm view agent-validator@"$LOCAL_VERSION" version 2>&1) && {
             echo "published=true" >> "$GITHUB_OUTPUT"
           } || {
             if echo "$NPM_OUTPUT" | grep -q 'E404'; then

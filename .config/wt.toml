@@ -1,5 +1,5 @@
 # Worktrunk Project Configuration
-# Hooks for agent-gauntlet worktrees
+# Hooks for agent-validator worktrees
 
 # Post-Create: install dependencies after worktree creation
 [post-create]

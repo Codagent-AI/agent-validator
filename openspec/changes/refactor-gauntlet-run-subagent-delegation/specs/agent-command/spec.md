@@ -81,7 +81,7 @@ The gauntlet-run skill SHALL explicitly prohibit background subagent execution t
 The gauntlet-run skill SHALL include separate prompt template files for each subagent role, generated alongside SKILL.md during init.
 
 #### Scenario: Prompt files generated during init
-- **GIVEN** a user runs `agent-gauntlet init`
+- **GIVEN** a user runs `agent-validator init`
 - **WHEN** the init command generates the gauntlet-run skill
 - **THEN** it SHALL create three files: `SKILL.md`, `extract-prompt.md`, and `update-prompt.md` in the gauntlet-run skill directory
 
@@ -94,6 +94,6 @@ The gauntlet-run skill SHALL include separate prompt template files for each sub
 The gauntlet-run skill SHALL declare both `Bash` and `Task` in its `allowed-tools` frontmatter to enable subagent delegation.
 
 #### Scenario: Allowed tools include Task
-- **GIVEN** `agent-gauntlet init` generates the gauntlet-run skill
+- **GIVEN** `agent-validator init` generates the gauntlet-run skill
 - **WHEN** the skill frontmatter is written
 - **THEN** the `allowed-tools` field SHALL include both `Bash` and `Task`

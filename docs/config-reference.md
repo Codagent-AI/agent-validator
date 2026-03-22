@@ -52,7 +52,7 @@ This document lists the configuration files Agent Gauntlet loads and all support
     - **enabled**: boolean (default: `true`)
     - **format**: `"text"` | `"json"` (default: `"text"`)
 - **entry_points**: array (required)
-  Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-gauntlet init`, this starts as `[]` (empty) and is populated by the `/gauntlet-setup` skill.
+  Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-validator init`, this starts as `[]` (empty) and is populated by the `/gauntlet-setup` skill.
   - **path**: string (required)  
     The scope path for the entry point. Supports fixed paths like `apps/api` and a trailing wildcard form like `packages/*` which expands to one job per changed subdirectory.
   - **checks**: string[] (optional; names of gates from `.gauntlet/checks/*.yml`)  
@@ -213,7 +213,7 @@ enabled: false
 Review the diff against the task requirements in the provided context.
 ```
 
-To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-gauntlet-run)).
+To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-validator-run)).
 
 **Markdown review with external prompt file:**
 

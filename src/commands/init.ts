@@ -96,7 +96,13 @@ async function handleRerun(
     await runPluginUpdate({ skipPrompts });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('Claude plugin is not installed')) throw error;
+    if (
+      !(
+        message.includes('Claude plugin is not installed') ||
+        message.includes('No agent-validator plugin is installed')
+      )
+    )
+      throw error;
     console.log(
       chalk.yellow('Plugin not installed yet, running fresh install...'),
     );
