@@ -228,14 +228,6 @@ describe("DebugLogger", () => {
 			expect(await readLog()).toContain("CLEAN type=auto reason=all_passed");
 		});
 
-		it("writes STOP_HOOK entries", async () => {
-			const { logger, readLog } = createTestLogger();
-			await logger.logStopHook("allow", "passed");
-			expect(await readLog()).toContain(
-				"STOP_HOOK decision=allow reason=passed",
-			);
-		});
-
 		it("writes STATE_WRITE with changed fields", async () => {
 			const { logger, readLog } = createTestLogger();
 			await logger.logStateWrite({

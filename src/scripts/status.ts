@@ -45,17 +45,10 @@ interface RunEnd {
   duration: string;
 }
 
-interface StopHookEntry {
-  timestamp: string;
-  decision: string;
-  reason: string;
-}
-
 interface SessionRun {
   start: RunStart;
   gates: GateResult[];
   end?: RunEnd;
-  stopHook?: StopHookEntry;
 }
 
 // --- Parsing helpers ---
@@ -129,15 +122,6 @@ function parseRunEnd(ts: string, body: string): RunEnd {
   };
 }
 
-function parseStopHookEntry(ts: string, body: string): StopHookEntry {
-  const kv = parseKeyValue(body);
-  return {
-    timestamp: ts,
-    decision: kv.decision ?? 'unknown',
-    reason: kv.reason ?? 'unknown',
-  };
-}
-
 function isBeforeSession(
   ts: string,
   sessionStartTime: Date | undefined,
@@ -169,9 +153,6 @@ function parseDebugLog(content: string, sessionStartTime?: Date): SessionRun[] {
         break;
       case 'RUN_END':
         if (current) current.end = parseRunEnd(ts, body);
-        break;
-      case 'STOP_HOOK':
-        if (current) current.stopHook = parseStopHookEntry(ts, body);
         break;
     }
   }
@@ -324,14 +305,6 @@ function formatSession(sessions: SessionRun[], logDir: string): string {
     );
   }
   lines.push('');
-
-  // Stop hook
-  if (session.stopHook) {
-    lines.push('### Stop Hook');
-    lines.push(`- Decision: ${session.stopHook.decision}`);
-    lines.push(`- Reason: ${session.stopHook.reason}`);
-    lines.push('');
-  }
 
   // File inventory
   lines.push(...formatFileInventory(logDir));

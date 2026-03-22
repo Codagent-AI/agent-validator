@@ -10,7 +10,7 @@ The user configures which paths in their repo should trigger which validations â
   - `commands/`: CLI command implementations
   - `core/`: Core application logic
   - `gates/`: Validation checks and quality gates
-  - `hooks/`: Lifecycle hooks (e.g., stop hooks)
+  - `hooks/`: Lifecycle hooks
 - `test/`: Test suite
 - `bin/`: Compiled binary output
 - `docs/`: Documentation

@@ -158,12 +158,6 @@ export async function hasExistingLogs(logDir: string): Promise<boolean> {
 /**
  * Get the set of persistent files that should never be moved during clean.
  */
-/**
- * Marker file used by stop-hook to detect nested invocations.
- * Must match STOP_HOOK_MARKER_FILE in stop-hook.ts.
- */
-const STOP_HOOK_MARKER_FILE = '.stop-hook-active';
-
 function getPersistentFiles(): Set<string> {
   return new Set([
     getExecutionStateFilename(),
@@ -171,7 +165,6 @@ function getPersistentFiles(): Set<string> {
     getDebugLogBackupFilename(),
     LOCK_FILENAME,
     SESSION_REF_FILENAME, // Will be deleted, not moved
-    STOP_HOOK_MARKER_FILE, // Cleaned up by stop-hook finally block, not cleanLogs
   ]);
 }
 

@@ -2,7 +2,7 @@
 
 ## `no_config` — Missing Configuration
 
-The stop hook returns `no_config` when `.gauntlet/config.yml` doesn't exist. This is normal for non-gauntlet projects.
+The `no_config` status is returned when `.gauntlet/config.yml` doesn't exist. This is normal for non-gauntlet projects.
 
 **If it should exist:**
 1. Run `agent-gauntlet init` to create the configuration
@@ -107,10 +107,9 @@ base_branch: origin/develop
 ## Config Precedence
 
 Configuration is loaded with this precedence (highest first):
-1. **Environment variables** (e.g., `GAUNTLET_STOP_HOOK_ENABLED`)
-2. **Project config** (`.gauntlet/config.yml`)
-3. **Global config** (`~/.config/agent-gauntlet/config.yml`)
-4. **Defaults** (built-in)
+1. **Project config** (`.gauntlet/config.yml`)
+2. **Global config** (`~/.config/agent-gauntlet/config.yml`)
+3. **Defaults** (built-in)
 
 ## Init Setup Problems
 

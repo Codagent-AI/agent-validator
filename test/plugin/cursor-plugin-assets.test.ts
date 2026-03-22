@@ -43,21 +43,10 @@ describe("Cursor plugin assets", () => {
 			expect(existsSync(hooksPath)).toBe(true);
 		});
 
-		test("has stop hook with loop_limit", () => {
+		test("has empty hooks object", () => {
 			const hooks = JSON.parse(readFileSync(hooksPath, "utf-8"));
-			expect(hooks.hooks.stop).toBeArray();
-			expect(hooks.hooks.stop.length).toBeGreaterThan(0);
-			const stopHook = hooks.hooks.stop[0];
-			expect(stopHook.command).toContain("stop-hook");
-			expect(stopHook.loop_limit).toBeNumber();
-		});
-
-		test("has sessionStart hook with --adapter cursor", () => {
-			const hooks = JSON.parse(readFileSync(hooksPath, "utf-8"));
-			expect(hooks.hooks.sessionStart).toBeArray();
-			expect(hooks.hooks.sessionStart.length).toBeGreaterThan(0);
-			const startHook = hooks.hooks.sessionStart[0];
-			expect(startHook.command).toContain("--adapter cursor");
+			expect(hooks.hooks).toBeDefined();
+			expect(Object.keys(hooks.hooks)).toHaveLength(0);
 		});
 	});
 

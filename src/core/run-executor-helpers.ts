@@ -1,9 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { cleanLogs, hasExistingLogs } from '../commands/shared.js';
-import { loadGlobalConfig } from '../config/global.js';
+import { cleanLogs } from '../commands/shared.js';
 import type { loadConfig } from '../config/loader.js';
-import { resolveStopHookConfig } from '../config/stop-hook-config.js';
 import { getCategoryLogger, resetLogger } from '../output/app-logger.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { ConsoleLogHandle } from '../output/console-log.js';
@@ -47,7 +45,6 @@ export interface RunContext {
     commit?: string;
     uncommitted?: boolean;
     cwd?: string;
-    checkInterval?: boolean;
     enableReviews?: Set<string>;
     report?: boolean;
   };
@@ -67,13 +64,6 @@ const statusMessages: Record<GauntletStatus, string> = {
   lock_conflict: 'Another gauntlet run is already in progress.',
   error: 'Unexpected error occurred.',
   no_config: 'No .gauntlet/config.yml found.',
-  stop_hook_active: 'Stop hook already active.',
-  loop_detected: 'Loop detected -- rapid blocks overridden.',
-  interval_not_elapsed: 'Run interval not elapsed.',
-  invalid_input: 'Invalid input.',
-  stop_hook_disabled: '',
-  validation_required:
-    'Changes need validation or previous run has unresolved failures.',
 };
 
 export function getStatusMessage(status: GauntletStatus): string {
@@ -94,68 +84,6 @@ export async function finalizeAndReturn(
     await resetLogger();
   }
   return result;
-}
-
-export async function shouldRunBasedOnInterval(
-  logDir: string,
-  intervalMinutes: number,
-): Promise<boolean> {
-  const state = await readExecutionState(logDir);
-  if (!state) {
-    return true;
-  }
-
-  const lastRun = new Date(state.last_run_completed_at);
-  if (Number.isNaN(lastRun.getTime())) {
-    return true;
-  }
-
-  const now = new Date();
-  const elapsedMinutes = (now.getTime() - lastRun.getTime()) / (1000 * 60);
-  return elapsedMinutes >= intervalMinutes;
-}
-
-export async function checkRunInterval(
-  ctx: RunContext,
-): Promise<RunResult | null> {
-  if (!ctx.options.checkInterval) {
-    return null;
-  }
-
-  const globalConfig = await loadGlobalConfig();
-  const stopHookConfig = resolveStopHookConfig(
-    ctx.config.project.stop_hook,
-    globalConfig,
-  );
-
-  const log = getRunLogger();
-
-  if (!stopHookConfig.enabled) {
-    log.debug('Stop hook is disabled via configuration, skipping');
-    return {
-      status: 'stop_hook_disabled',
-      message: getStatusMessage('stop_hook_disabled'),
-    };
-  }
-
-  const logsExist = await hasExistingLogs(ctx.config.project.log_dir);
-  if (!logsExist && stopHookConfig.run_interval_minutes > 0) {
-    const intervalMinutes = stopHookConfig.run_interval_minutes;
-    const shouldRun = await shouldRunBasedOnInterval(
-      ctx.config.project.log_dir,
-      intervalMinutes,
-    );
-    if (!shouldRun) {
-      log.debug(`Run interval (${intervalMinutes} min) not elapsed, skipping`);
-      return {
-        status: 'interval_not_elapsed',
-        message: `Run interval (${intervalMinutes} min) not elapsed.`,
-        intervalMinutes,
-      };
-    }
-  }
-
-  return null;
 }
 
 function buildFailuresMap(

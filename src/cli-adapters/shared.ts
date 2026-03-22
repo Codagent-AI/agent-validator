@@ -212,7 +212,7 @@ export interface CLIAdapter {
    */
   transformCommand(markdownContent: string): string;
   /**
-   * Returns true if this CLI supports hooks (stop hook, start hook).
+   * Returns true if this CLI supports hooks.
    */
   supportsHooks(): boolean;
   /**

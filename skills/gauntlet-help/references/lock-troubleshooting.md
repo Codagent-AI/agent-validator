@@ -41,13 +41,6 @@ The `allow_parallel` config setting (default: `true`) controls whether gates can
 - **Purpose**: Prevent concurrent gauntlet runs
 - **Lifecycle**: Created at run start, removed at run end (always in `finally`)
 
-### `.stop-hook-active`
-- **Location**: `<log_dir>/.stop-hook-active`
-- **Purpose**: Prevent stop-hook recursion (see stop-hook-troubleshooting.md)
-- **Content**: PID of the stop-hook process
-- **Stale threshold**: 10 minutes
-- **Lifecycle**: Created before stop-hook execution, removed after (always in `finally`)
-
 ## Manual Cleanup
 
 If a lock is stuck and the process is dead:
@@ -59,8 +52,7 @@ agent-gauntlet clean
 This command:
 1. Archives current logs to `<log_dir>/previous/`
 2. Removes the lock file
-3. Removes the stop-hook marker file
-4. Resets execution state
+3. Resets execution state
 
 **Confirm with the user before running `clean`** — it archives all current logs and resets state, which means the next run starts fresh (no rerun mode).
 

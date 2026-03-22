@@ -51,14 +51,6 @@ This document lists the configuration files Agent Gauntlet loads and all support
     File logging output settings.
     - **enabled**: boolean (default: `true`)
     - **format**: `"text"` | `"json"` (default: `"text"`)
-- **stop_hook**: object (optional)
-  Configuration for the stop hook behavior. These settings can be overridden by environment variables (see [Environment Variable Overrides](#environment-variable-overrides)).
-  - **enabled**: boolean (optional; default from global config, typically `false`)
-    Whether the stop hook gauntlet is enabled for this project. Set to `false` to disable stop hook validation entirely.
-  - **run_interval_minutes**: number (optional; default from global config, typically `5`)
-    Minimum minutes between gauntlet runs. Set to `0` to always run the gauntlet on every stop attempt.
-
-  Stop hooks are auto-installed by `agent-gauntlet init` for Claude Code (via the Claude Code plugin) and Cursor (via the Cursor plugin at `.cursor/plugins/agent-gauntlet/`) when they are selected as **development CLIs**. No manual setup is required.
 - **entry_points**: array (required)
   Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-gauntlet init`, this starts as `[]` (empty) and is populated by the `/gauntlet-setup` skill.
   - **path**: string (required)  
@@ -100,37 +92,6 @@ entry_points:
   - path: packages/*
     checks:
       - lint
-```
-
-## Environment Variable Overrides
-
-Stop hook configuration can be overridden using environment variables. This is useful for CI/CD pipelines or temporary disabling of the stop hook.
-
-**Precedence order** (highest to lowest):
-1. Environment variables
-2. Project config (`.gauntlet/config.yml`)
-3. Global config (`~/.config/agent-gauntlet/config.yml`)
-
-| Variable | Values | Description |
-|----------|--------|-------------|
-| `GAUNTLET_STOP_HOOK_ENABLED` | `true`, `1`, `false`, `0` | Override whether stop hook is enabled |
-| `GAUNTLET_STOP_HOOK_INTERVAL_MINUTES` | Non-negative integer | Override run interval (0 = always run) |
-| `GAUNTLET_AUTO_PUSH_PR` | `true`, `1`, `false`, `0` | Override whether auto PR push check is enabled |
-| `GAUNTLET_AUTO_FIX_PR` | `true`, `1`, `false`, `0` | Override whether auto-fix PR CI wait workflow is enabled |
-
-Each field is resolved independently, so you can set one via environment variable while using config files for the other.
-
-### Examples
-
-```bash
-# Disable stop hook for this session
-GAUNTLET_STOP_HOOK_ENABLED=false claude
-
-# Always run gauntlet on every stop (no interval throttling)
-GAUNTLET_STOP_HOOK_INTERVAL_MINUTES=0 claude
-
-# Combine both
-GAUNTLET_STOP_HOOK_ENABLED=true GAUNTLET_STOP_HOOK_INTERVAL_MINUTES=5 claude
 ```
 
 ## Check gates: `.gauntlet/checks/*.yml`

@@ -1,16 +1,4 @@
 {
   "version": 1,
-  "hooks": {
-    "stop": [
-      {
-        "command": "agent-gauntlet stop-hook",
-        "loop_limit": 10
-      }
-    ],
-    "sessionStart": [
-      {
-        "command": "agent-gauntlet start-hook --adapter cursor"
-      }
-    ]
-  }
+  "hooks": {}
 }

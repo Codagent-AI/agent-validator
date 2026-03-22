@@ -20,10 +20,6 @@ cli:
     gemini:
       allow_tool_use: false
       thinking_budget: low
-stop_hook:
-  enabled: false
-  auto_push_pr: true
-  auto_fix_pr: true
 entry_points:
   - path: "."
     exclude:

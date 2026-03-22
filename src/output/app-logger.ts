@@ -12,10 +12,9 @@ import { createConsoleSink } from './sinks/console-sink.js';
 /**
  * Logger modes that determine sink configuration:
  * - "interactive": Console output to stderr (file capture via console-log.ts)
- * - "stop-hook": NO console output (JSON protocol on stdout must be clean)
  * - "ci": Console output to stderr
  */
-export type LoggerMode = 'interactive' | 'stop-hook' | 'ci';
+export type LoggerMode = 'interactive' | 'ci';
 
 /**
  * Log level options.
@@ -86,8 +85,6 @@ function createDebugLogSink(logDir: string): (record: LogRecord) => void {
 /**
  * Initialize the application logger with LogTape.
  *
- * IMPORTANT: In stop-hook mode, NO console output is generated.
- * stdout must remain clean for the JSON protocol response.
  * File logging is handled separately by console-log.ts which captures stderr.
  *
  * @param config - Logger configuration
@@ -110,12 +107,9 @@ export async function initLogger(config: AppLoggerConfig): Promise<void> {
   const sinks: Record<string, (record: LogRecord) => void> = {};
   const activeSinks: string[] = [];
 
-  // Console sink (only for interactive and ci modes)
-  // Outputs to stderr, which gets captured by console-log.ts
-  if (mode !== 'stop-hook') {
-    sinks.console = createConsoleSink();
-    activeSinks.push('console');
-  }
+  // Console sink — outputs to stderr, which gets captured by console-log.ts
+  sinks.console = createConsoleSink();
+  activeSinks.push('console');
 
   // Debug log sink (writes directly to .debug.log)
   if (logDir && debugLog?.enabled) {
@@ -124,9 +118,8 @@ export async function initLogger(config: AppLoggerConfig): Promise<void> {
   }
 
   // Configure LogTape (reset: true needed if LogTape was previously configured)
-  // IMPORTANT: Configure the meta logger to suppress its default stdout output.
-  // Without this, LogTape writes "LogTape loggers are configured..." to stdout,
-  // which breaks the stop-hook JSON protocol.
+  // Configure the meta logger to suppress its default stdout output.
+  // Without this, LogTape writes "LogTape loggers are configured..." to stdout.
   try {
     await configure({
       sinks,

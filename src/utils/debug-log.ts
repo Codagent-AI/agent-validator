@@ -177,68 +177,6 @@ export class DebugLogger {
   }
 
   /**
-   * Log a stop hook decision.
-   */
-  async logStopHook(
-    decision: 'allow' | 'block',
-    reason: string,
-  ): Promise<void> {
-    await this.write(`STOP_HOOK decision=${decision} reason=${reason}`);
-  }
-
-  /**
-   * Log a start hook invocation.
-   */
-  async logStartHook(adapter: string): Promise<void> {
-    await this.write(`START_HOOK adapter=${adapter}`);
-  }
-
-  /**
-   * Log stop hook diagnostic information.
-   * Used to debug duplicate/unexpected stop hook invocations.
-   */
-  async logStopHookDiagnostics(diagnostics: {
-    pid: number;
-    ppid: number;
-    envVarSet: boolean;
-    processCwd: string;
-    rawStdin: string;
-    stdinSessionId?: string;
-    stdinStopHookActive?: boolean;
-    stdinCwd?: string;
-    stdinHookEventName?: string;
-  }): Promise<void> {
-    const parts = [
-      'STOP_HOOK_DIAG',
-      `pid=${diagnostics.pid}`,
-      `ppid=${diagnostics.ppid}`,
-      `env_var_set=${diagnostics.envVarSet}`,
-      `session_id=${diagnostics.stdinSessionId ?? 'none'}`,
-      `stop_hook_active=${diagnostics.stdinStopHookActive ?? 'none'}`,
-      `hook_event=${diagnostics.stdinHookEventName ?? 'none'}`,
-      `stdin_cwd=${diagnostics.stdinCwd ?? 'none'}`,
-      `process_cwd=${diagnostics.processCwd}`,
-    ];
-    await this.write(parts.join(' '));
-  }
-
-  /**
-   * Log a stop hook early exit decision.
-   * These exits happen before full initialization, so a specific event
-   * is needed to distinguish which code path was taken.
-   */
-  async logStopHookEarlyExit(
-    source: string,
-    status: string,
-    detail?: string,
-  ): Promise<void> {
-    const detailStr = detail ? ` detail=${detail}` : '';
-    await this.write(
-      `STOP_HOOK_EARLY_EXIT source=${source} status=${status}${detailStr}`,
-    );
-  }
-
-  /**
    * Log an execution state write, showing only changed fields.
    * Skips `last_run_completed_at` since every log line is already timestamped.
    */

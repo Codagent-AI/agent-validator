@@ -398,42 +398,6 @@ Only violations with `status: "new"` can be updated. Attempting to update an alr
 
 Shows help information, including an overview of Agent Gauntlet and all available commands. This is the default command when no command is provided.
 
-### `agent-gauntlet start-hook`
-
-Session start hook that primes AI agents with gauntlet verification instructions at the beginning of a session.
-
-#### Purpose
-
-The start hook automatically injects context into agent sessions to remind them to run `/gauntlet-run` before completing coding tasks. This ensures agents are aware of quality gates from the start of each session.
-
-#### Usage
-
-```bash
-agent-gauntlet start-hook [--adapter <adapter>]
-```
-
-#### Options
-
-- `--adapter <adapter>` (default: `claude`): Output format for the specific CLI adapter
-  - `claude`: Outputs JSON in Claude Code's `SessionStart` hook format
-  - `cursor`: Outputs plain text for Cursor IDE
-
-#### Behavior
-
-- Checks for `.gauntlet/config.yml` in the current directory
-- If no valid config exists, performs a silent no-op (no output, clean exit)
-- If config exists, outputs verification instructions in the appropriate format for the target CLI
-- Instructions remind agents to run `/gauntlet-run` before reporting tasks as complete
-
-#### Installation
-
-Start hooks are automatically installed during `agent-gauntlet init` for Claude Code and Cursor when they are among the selected CLIs. No manual configuration is required.
-
-#### Integration
-
-- **Claude Code**: Delivered via the agent-gauntlet plugin's `hooks/hooks.json` — fires on session events (startup, resume, clear, compact). No manual settings.json configuration needed.
-- **Cursor**: Configured in `.cursor/hooks.json` as a `sessionStart` hook
-
 ## Change detection
 
 Agent Gauntlet uses `git` to find changed file paths.
@@ -511,7 +475,6 @@ Key configuration sections:
 - **log_dir**: Directory where job logs are written
 - **cli**: CLI tool preferences for reviews
 - **entry_points**: Maps paths to their applicable gates
-- **stop_hook**: Stop hook behavior for CLI agents (see also [Environment Variable Overrides](config-reference.md#environment-variable-overrides))
 
 ### Entry points example
 
@@ -587,7 +550,6 @@ When `debug_log.enabled` is `true`, Agent Gauntlet writes detailed execution log
 - Run start/end events with timing
 - Gate results (pass/fail/error)
 - Clean operations (manual/auto with reason)
-- Stop hook decisions
 
 The debug log survives `clean` operations and rotates when it exceeds `max_size_mb`.
 

@@ -8,8 +8,8 @@ The agent-gauntlet npm package includes plugin assets for both Claude Code and C
 
 - `.claude-plugin/plugin.json` — Plugin manifest for Claude Code
 - `.cursor-plugin/plugin.json` — Plugin manifest for Cursor
-- `hooks/hooks.json` — Claude Code hook definitions (stop hook + session start hook)
-- `hooks/cursor-hooks.json` — Cursor hook definitions (stop hook + session start hook)
+- `hooks/hooks.json` — Claude Code hook definitions
+- `hooks/cursor-hooks.json` — Cursor hook definitions
 - `.claude/skills/` — Skill files bundled in the Claude plugin
 - `skills/` — Skill files bundled in the Cursor plugin
 
@@ -43,15 +43,6 @@ During init, you choose an install scope:
 Both scopes can coexist — if installed at both, the project-scope installation takes precedence.
 
 ## Plugin Contents
-
-### Hooks (`hooks/hooks.json`)
-
-The plugin delivers two hooks:
-
-- **Stop hook**: Runs `agent-gauntlet stop-hook` when the agent tries to stop (300s timeout)
-- **Session start hook**: Runs `agent-gauntlet start-hook` to prime agent sessions with verification instructions
-
-These are served directly from the plugin — no manual hook configuration in settings.json is needed.
 
 ### Skills
 
@@ -132,7 +123,7 @@ The Cursor plugin is delivered via file copy during `agent-gauntlet init`. Unlik
 
 - `.cursor-plugin/plugin.json` — Plugin manifest (name, version, description, license)
 - `skills/` — All gauntlet skill files
-- `hooks/hooks.json` — Stop hook (`loop_limit: 10`) and session start hook
+- `hooks/hooks.json` — Hook definitions
 
 ### Updating
 
