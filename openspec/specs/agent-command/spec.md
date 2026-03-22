@@ -49,8 +49,8 @@ The command template SHALL NOT include a hardcoded retry limit. Instead, the tem
 - **AND** the agent SHALL NOT retry after cleaning (clean is for archival, not for resetting the retry count)
 - **AND** the agent SHALL report any unverified fixes in its session summary under "Outstanding Failures"
 
-### Requirement: Gauntlet Help Diagnostic Skill
-The system SHALL provide a `/validator-help` skill for evidence-based diagnosis of gauntlet behavior. The skill SHALL be diagnosis-only (no auto-fix behavior) and SHALL operate without requiring source code access. After completing a diagnosis, the skill SHALL route to bug filing based on confidence level: automatically invoking `validator-issue` on high-confidence bug diagnoses, prompting the user on medium confidence, and taking no action on low confidence.
+### Requirement: Validator Help Diagnostic Skill
+The system SHALL provide a `/validator-help` skill for evidence-based diagnosis of validator behavior. The skill SHALL be diagnosis-only (no auto-fix behavior) and SHALL operate without requiring source code access. After completing a diagnosis, the skill SHALL route to bug filing based on confidence level: automatically invoking `validator-issue` on high-confidence bug diagnoses, prompting the user on medium confidence, and taking no action on low confidence.
 
 #### Scenario: Diagnose a "no changes" question from runtime evidence
 - **GIVEN** a user asks "/validator-help: the hook reported no changes, why?"
@@ -75,8 +75,8 @@ The system SHALL provide a `/validator-help` skill for evidence-based diagnosis 
 #### Scenario: Medium-confidence possible bug
 
 - **WHEN** the skill completes a diagnosis with confidence level Medium
-- **AND** the evidence suggests a possible gauntlet bug
-- **THEN** the skill SHALL ask the user: "This may be a gauntlet bug. Want me to file a GitHub issue?"
+- **AND** the evidence suggests a possible validator bug
+- **THEN** the skill SHALL ask the user: "This may be a validator bug. Want me to file a GitHub issue?"
 - **AND** if the user confirms, SHALL invoke `validator-issue` with the diagnosis as the bug description
 - **AND** if the user declines, SHALL exit without filing
 
@@ -107,14 +107,14 @@ The `validator-help` skill SHALL provide situation-based troubleshooting referen
 The system SHALL store canonical skill files under `.validator/skills/validator-<action>/SKILL.md` using a flat directory structure with hyphenated naming to achieve `/validator-<action>` invocation.
 
 #### Scenario: Canonical skill files created during init
-- **WHEN** `agent-validate init` creates the gauntlet configuration
+- **WHEN** `agent-validate init` creates the validator configuration
 - **THEN** skill directories SHALL be created under `.validator/skills/` for each action: `validator-run`, `validator-check`, `validator-status`
 - **AND** each directory SHALL contain a `SKILL.md` file with YAML frontmatter
 
 #### Scenario: Skill frontmatter format
 - **WHEN** a skill `SKILL.md` file is created
 - **THEN** it SHALL contain YAML frontmatter with `name`, `description`, and `allowed-tools` fields
-- **AND** non-auto-invoked gauntlet skills (`validator-check`, `validator-status`) SHALL set `disable-model-invocation: true`
+- **AND** non-auto-invoked validator skills (`validator-check`, `validator-status`) SHALL set `disable-model-invocation: true`
 - **AND** `validator-run` SHALL set `disable-model-invocation: false` for auto-invocation
 
 #### Scenario: Hyphenated skill invocation
@@ -165,7 +165,7 @@ The system SHALL provide a `/validator-check` skill that runs only check gates (
 - **THEN** the `validator-check` skill SHALL be included in the installed skills
 
 ### Requirement: Status Skill
-The system SHALL provide a `/validator-status` skill that summarizes the most recent gauntlet session from log files.
+The system SHALL provide a `/validator-status` skill that summarizes the most recent validator session from log files.
 
 #### Scenario: Status from active logs
 - **WHEN** the agent invokes `/validator-status`
@@ -181,7 +181,7 @@ The system SHALL provide a `/validator-status` skill that summarizes the most re
 #### Scenario: No logs available
 - **WHEN** the agent invokes `/validator-status`
 - **AND** neither `validator_logs/` nor `validator_logs/previous/` contain log files
-- **THEN** the skill SHALL report that no gauntlet session data is available
+- **THEN** the skill SHALL report that no validator session data is available
 
 #### Scenario: Status skill bundled script
 - **GIVEN** the `validator-status` skill is installed
@@ -362,12 +362,12 @@ The `run` and `review` commands SHALL accept a repeatable `--enable-review <name
 - **WHEN** `agent-validate run --enable-review nonexistent` is invoked
 - **THEN** the run SHALL proceed normally without error
 
-### Requirement: Gauntlet-Run Skill Auto-Invocation
+### Requirement: Validator-Run Skill Auto-Invocation
 The validator-run skill SHALL have auto-invocation enabled so that Claude's skill invocation logic can trigger it automatically when the agent completes a coding task. The skill content is stored as static files under `skills/validator-run/` and installed to `.claude/skills/validator-run/` during init.
 
 The validator-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review.
 
-#### Scenario: Gauntlet-run skill auto-invocation enabled
+#### Scenario: Validator-run skill auto-invocation enabled
 - **GIVEN** the validator-run skill is installed at `.claude/skills/validator-run/SKILL.md`
 - **WHEN** a user views the skill frontmatter
 - **THEN** the skill frontmatter SHALL set `disable-model-invocation: false`
