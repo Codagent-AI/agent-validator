@@ -13,7 +13,7 @@ import { Command } from "commander";
 import { registerListCommand } from "../../src/commands/list.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-list-${Date.now()}`);
-const GAUNTLET_DIR = path.join(TEST_DIR, ".gauntlet");
+const GAUNTLET_DIR = path.join(TEST_DIR, ".validator");
 const CHECKS_DIR = path.join(GAUNTLET_DIR, "checks");
 const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
 
@@ -37,7 +37,7 @@ describe("List Command", () => {
 			path.join(GAUNTLET_DIR, "config.yml"),
 			`
 base_branch: origin/main
-log_dir: gauntlet_logs
+log_dir: validator_logs
 cli:
   default_preference:
     - gemini

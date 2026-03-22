@@ -7,7 +7,7 @@ import { z } from 'zod';
 const GLOBAL_CONFIG_PATH = path.join(
   os.homedir(),
   '.config',
-  'agent-gauntlet',
+  'agent-validator',
   'config.yml',
 );
 
@@ -32,7 +32,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
 };
 
 /**
- * Load the global agent-gauntlet configuration.
+ * Load the global agent-validator configuration.
  * Returns default values if the file doesn't exist or is invalid.
  */
 export async function loadGlobalConfig(): Promise<GlobalConfig> {
@@ -53,7 +53,7 @@ export async function loadGlobalConfig(): Promise<GlobalConfig> {
 
     // File exists but is invalid - log warning and use defaults
     console.error(
-      `[gauntlet] Warning: Failed to parse global config at ${GLOBAL_CONFIG_PATH}, using defaults`,
+      `[agent-validator] Warning: Failed to parse global config at ${GLOBAL_CONFIG_PATH}, using defaults`,
     );
     return DEFAULT_GLOBAL_CONFIG;
   }

@@ -4,7 +4,7 @@ import { main } from '../scripts/status.js';
 export function registerStatusCommand(program: Command): void {
   program
     .command('status')
-    .description('Show a summary of the most recent gauntlet session')
+    .description('Show a summary of the most recent validator session')
     .action(() => {
       main();
     });

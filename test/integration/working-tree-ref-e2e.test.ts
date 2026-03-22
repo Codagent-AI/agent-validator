@@ -30,7 +30,7 @@ async function readExecutionState(
 ): Promise<Record<string, unknown> | null> {
 	try {
 		const content = await fs.readFile(
-			path.join(tempDir, "gauntlet_logs", ".execution_state"),
+			path.join(tempDir, "validator_logs", ".execution_state"),
 			"utf-8",
 		);
 		return JSON.parse(content) as Record<string, unknown>;
@@ -40,12 +40,12 @@ async function readExecutionState(
 }
 
 // Helper: write gauntlet config with a simple echo-pass check
-async function writeGauntletConfig(dir: string): Promise<void> {
-	await fs.mkdir(path.join(dir, ".gauntlet", "checks"), { recursive: true });
+async function writeValidatorConfig(dir: string): Promise<void> {
+	await fs.mkdir(path.join(dir, ".validator", "checks"), { recursive: true });
 	await fs.writeFile(
-		path.join(dir, ".gauntlet", "config.yml"),
+		path.join(dir, ".validator", "config.yml"),
 		`base_branch: main
-log_dir: gauntlet_logs
+log_dir: validator_logs
 cli:
   default_preference:
     - claude
@@ -56,20 +56,20 @@ entry_points:
 `,
 	);
 	await fs.writeFile(
-		path.join(dir, ".gauntlet", "checks", "echo-pass.yml"),
+		path.join(dir, ".validator", "checks", "echo-pass.yml"),
 		`command: "echo pass"
 timeout: 10
 `,
 	);
 	// Gitignore the log dir so it doesn't appear as untracked and affect working_tree_ref
-	await fs.writeFile(path.join(dir, ".gitignore"), "gauntlet_logs/\n");
+	await fs.writeFile(path.join(dir, ".gitignore"), "validator_logs/\n");
 }
 
 // Helper: create a fresh temp git repo with gauntlet config
 async function createTestRepo(): Promise<string> {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-wtr-e2e-"));
 	await fs.writeFile(path.join(dir, "hello.ts"), "export const x = 1;\n");
-	await writeGauntletConfig(dir);
+	await writeValidatorConfig(dir);
 	await initGitRepo(dir);
 	return dir;
 }
@@ -176,9 +176,9 @@ describe("working-tree-ref E2E", () => {
 				// Update gauntlet config to use 'base' as base_branch AND
 				// make a change to hello.ts — both committed together
 				await fs.writeFile(
-					path.join(tempDir, ".gauntlet", "config.yml"),
+					path.join(tempDir, ".validator", "config.yml"),
 					`base_branch: base
-log_dir: gauntlet_logs
+log_dir: validator_logs
 cli:
   default_preference:
     - claude

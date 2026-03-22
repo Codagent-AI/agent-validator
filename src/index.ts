@@ -23,7 +23,7 @@ import {
 const program = new Command();
 
 program
-  .name('agent-gauntlet')
+  .name('agent-validate')
   .description('AI-assisted quality gates')
   .version(packageJson.version);
 

@@ -17,7 +17,7 @@ import {
 import { startConsoleLog } from '../output/console-log.js';
 import { Logger } from '../output/logger.js';
 import { generateReport } from '../output/report.js';
-import type { RunResult } from '../types/gauntlet-status.js';
+import type { RunResult } from '../types/validator-status.js';
 import {
   getDebugLogger,
   initDebugLogger,
@@ -185,7 +185,7 @@ async function runWithLock(
 }
 
 /**
- * Execute the gauntlet run logic. Returns a structured RunResult.
+ * Execute the validator run logic. Returns a structured RunResult.
  * This function never calls process.exit() - the caller is responsible for that.
  */
 export async function executeRun(

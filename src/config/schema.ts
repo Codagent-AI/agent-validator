@@ -55,7 +55,7 @@ export const checkGateSchema = z
 
 export const reviewGateSchema = z.object({
   name: z.string().min(1),
-  prompt: z.string().min(1), // Path relative to .gauntlet/reviews/
+  prompt: z.string().min(1), // Path relative to config reviews/ dir
   cli_preference: z.array(z.string().min(1)).optional(),
   num_reviews: z.number().default(1),
   parallel: z.boolean().default(true),
@@ -145,9 +145,9 @@ export const loggingConfigSchema = z.object({
   file: loggingFileConfigSchema.optional(),
 });
 
-export const gauntletConfigSchema = z.object({
+export const validatorConfigSchema = z.object({
   base_branch: z.string().min(1).default('origin/main'),
-  log_dir: z.string().min(1).default('gauntlet_logs'),
+  log_dir: z.string().min(1).default('validator_logs'),
   allow_parallel: z.boolean().default(true),
   max_retries: z.number().default(3),
   max_previous_logs: z.number().int().min(0).default(3),

@@ -85,17 +85,22 @@ function normalizePathForMatch(inputPath: string): string {
   }
 }
 
+function isPluginEntry(entry: PluginEntry): boolean {
+  const name = entry.name ?? entry.id;
+  return (
+    name === 'agent-validator' ||
+    (typeof name === 'string' && name.startsWith('agent-validator@')) ||
+    // Legacy: also detect old installs so we can update them
+    name === 'agent-gauntlet' ||
+    (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
+  );
+}
+
 function detectInstalledScope(
   entries: PluginEntry[],
   cwd: string,
 ): 'project' | 'user' | null {
-  const pluginEntries = entries.filter((entry) => {
-    const name = entry.name ?? entry.id;
-    return (
-      name === 'agent-gauntlet' ||
-      (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
-    );
-  });
+  const pluginEntries = entries.filter(isPluginEntry);
 
   const projectEntries = pluginEntries.filter(
     (entry) =>
@@ -117,17 +122,40 @@ function detectInstalledScope(
 
 function printManualUpdateInstructions(): void {
   console.error('Run these commands manually:');
-  console.error('  claude plugin marketplace update agent-gauntlet');
-  console.error('  claude plugin update agent-gauntlet@pcaplan/agent-gauntlet');
+  console.error('  claude plugin marketplace update agent-validator');
+  console.error(
+    '  claude plugin update agent-validator@pacaplan/agent-validator',
+  );
+}
+
+async function removeOldGauntletSkills(targetBase: string): Promise<void> {
+  try {
+    const existing = await fs.readdir(targetBase, { withFileTypes: true });
+    for (const entry of existing) {
+      if (entry.isDirectory() && entry.name.startsWith('gauntlet-')) {
+        await fs.rm(path.join(targetBase, entry.name), {
+          recursive: true,
+          force: true,
+        });
+      }
+    }
+  } catch {
+    // Best effort — ignore errors reading the directory
+  }
 }
 
 async function refreshCodexSkills(cwd: string): Promise<void> {
   const localBase = path.join(cwd, '.agents', 'skills');
-  const localMarker = path.join(localBase, 'gauntlet-run');
+  // Check for new name first, then legacy name
+  const localMarker = (await exists(path.join(localBase, 'validator-run')))
+    ? path.join(localBase, 'validator-run')
+    : path.join(localBase, 'gauntlet-run');
 
   const homeDir = process.env.HOME?.trim() || os.homedir();
   const globalBase = path.join(homeDir, '.agents', 'skills');
-  const globalMarker = path.join(globalBase, 'gauntlet-run');
+  const globalMarker = (await exists(path.join(globalBase, 'validator-run')))
+    ? path.join(globalBase, 'validator-run')
+    : path.join(globalBase, 'gauntlet-run');
 
   let targetBase: string | null = null;
   if (await exists(localMarker)) {
@@ -157,6 +185,9 @@ async function refreshCodexSkills(cwd: string): Promise<void> {
     await fs.rm(targetDir, { recursive: true, force: true });
     await copyDirRecursive({ src: sourceDir, dest: targetDir });
   }
+
+  // Remove old gauntlet-* skill directories now that validator-* are installed
+  await removeOldGauntletSkills(targetBase);
 }
 
 function isCliUnavailableError(err: unknown): boolean {
@@ -192,7 +223,7 @@ async function detectClaudeScope(
 
 async function updateClaudePlugin(scope: 'project' | 'user'): Promise<void> {
   console.log(
-    chalk.cyan(`Updating agent-gauntlet Claude plugin (${scope} scope)...`),
+    chalk.cyan(`Updating agent-validator Claude plugin (${scope} scope)...`),
   );
 
   const marketplaceResult = await updateMarketplace();
@@ -224,7 +255,7 @@ async function updateCursorPlugin(
   cwd: string,
 ): Promise<void> {
   console.log(
-    chalk.cyan(`Updating agent-gauntlet Cursor plugin (${scope} scope)...`),
+    chalk.cyan(`Updating agent-validator Cursor plugin (${scope} scope)...`),
   );
 
   const cursorResult = await adapter.updatePlugin(scope, cwd);
@@ -259,7 +290,7 @@ export async function runPluginUpdate(
   // Error if nothing is installed at all
   if (!(claudeScope || cursorScope)) {
     throw new Error(
-      'No agent-gauntlet plugin is installed for this project. Please run `agent-gauntlet init` first.',
+      'No agent-validator plugin is installed for this project. Please run `agent-validate init` first.',
     );
   }
 

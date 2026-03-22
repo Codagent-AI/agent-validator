@@ -14,7 +14,7 @@ import {
   readExecutionState,
 } from '../utils/execution-state.js';
 
-const LOCK_FILENAME = '.gauntlet-run.lock';
+const LOCK_FILENAME = '.validator-run.lock';
 const SESSION_REF_FILENAME = '.session_ref';
 
 export interface AutoCleanResult {
@@ -121,7 +121,7 @@ export async function acquireLock(logDir: string): Promise<void> {
       (err as { code: string }).code === 'EEXIST'
     ) {
       console.error(
-        `Error: A gauntlet run is already in progress (lock file: ${lockPath}).`,
+        `Error: A validator run is already in progress (lock file: ${lockPath}).`,
       );
       console.error(
         'If no run is actually in progress, delete the lock file manually.',

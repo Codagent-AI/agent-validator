@@ -1,7 +1,7 @@
 {
-  "name": "agent-gauntlet",
+  "name": "agent-validator",
   "version": "1.3.0",
-  "description": "A CLI tool for testing AI coding agents",
+  "description": "A CLI tool for validating AI coding agents",
   "license": "MIT",
   "author": "Paul Caplan",
   "repository": {
@@ -29,6 +29,7 @@
     "LICENSE"
   ],
   "bin": {
+    "agent-validate": "dist/index.js",
     "agent-gauntlet": "dist/index.js"
   },
   "type": "module",
@@ -36,7 +37,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:bin": "bun build --compile --minify --sourcemap ./src/index.ts --outfile bin/agent-gauntlet",
+    "build:bin": "bun build --compile --minify --sourcemap ./src/index.ts --outfile bin/agent-validate",
     "build:npm": "bun build.ts",
     "prepublishOnly": "bun run build:npm",
     "test": "bun test",

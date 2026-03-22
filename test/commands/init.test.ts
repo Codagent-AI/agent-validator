@@ -45,7 +45,7 @@ const mockAdapters = [
 		detectPlugin: async (_projectRoot: string) => {
 			const entries = await listPluginsMock();
 			const pluginEntries = entries.filter(
-				(e) => e.name === "agent-gauntlet" || e.name?.startsWith("agent-gauntlet@"),
+				(e) => e.name === "agent-validator" || e.name?.startsWith("agent-validator@"),
 			);
 			if (pluginEntries.some((e) => e.scope === "project")) return "project" as const;
 			if (pluginEntries.some((e) => e.scope === "user")) return "user" as const;
@@ -61,8 +61,8 @@ const mockAdapters = [
 			return { success: true };
 		},
 		getManualInstallInstructions: (scope: "user" | "project") => [
-			"claude plugin marketplace add pcaplan/agent-gauntlet",
-			`claude plugin install agent-gauntlet --scope ${scope}`,
+			"claude plugin marketplace add pcaplan/agent-validator",
+			`claude plugin install agent-validator --scope ${scope}`,
 		],
 	},
 	{
@@ -218,15 +218,15 @@ describe("init command plugin installation", () => {
 		const output = logs.join("\n");
 		expect(output).toContain("plugin installation failed");
 		expect(output).toContain(
-			"claude plugin marketplace add pcaplan/agent-gauntlet",
+			"claude plugin marketplace add pcaplan/agent-validator",
 		);
-		expect(output).toContain("claude plugin install agent-gauntlet --scope project");
+		expect(output).toContain("claude plugin install agent-validator --scope project");
 
 		const codexSkill = path.join(
 			testDir,
 			".agents",
 			"skills",
-			"gauntlet-run",
+			"validator-run",
 			"SKILL.md",
 		);
 		expect((await fs.stat(codexSkill).catch(() => null))?.isFile()).toBe(true);
@@ -242,13 +242,13 @@ describe("init command plugin installation", () => {
 
 		const output = logs.join("\n");
 		expect(output).toContain("plugin installation failed");
-		expect(output).toContain("claude plugin install agent-gauntlet --scope project");
+		expect(output).toContain("claude plugin install agent-validator --scope project");
 
 		const codexSkill = path.join(
 			testDir,
 			".agents",
 			"skills",
-			"gauntlet-check",
+			"validator-check",
 			"SKILL.md",
 		);
 		expect((await fs.stat(codexSkill).catch(() => null))?.isFile()).toBe(true);
@@ -269,7 +269,7 @@ describe("init command plugin installation", () => {
 			testDir,
 			".agents",
 			"skills",
-			"gauntlet-status",
+			"validator-status",
 			"SKILL.md",
 		);
 		expect((await fs.stat(codexSkill).catch(() => null))?.isFile()).toBe(true);
@@ -286,7 +286,7 @@ describe("init command plugin installation", () => {
 			fakeHome,
 			".agents",
 			"skills",
-			"gauntlet-help",
+			"validator-help",
 			"SKILL.md",
 		);
 		expect((await fs.stat(globalSkill).catch(() => null))?.isFile()).toBe(true);
@@ -301,13 +301,13 @@ describe("init command plugin installation", () => {
 		expect(addMarketplaceMock).not.toHaveBeenCalled();
 		expect(installPluginMock).not.toHaveBeenCalled();
 
-		const skill = path.join(testDir, ".claude", "skills", "gauntlet-setup", "SKILL.md");
+		const skill = path.join(testDir, ".claude", "skills", "validator-setup", "SKILL.md");
 		expect((await fs.stat(skill).catch(() => null))?.isFile()).toBe(true);
 	});
 
 	it("skips scope prompt and install when plugin already installed at user scope", async () => {
 		listPluginsMock.mockImplementation(async () => [
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "user" },
 		]);
 		selectedDevCliNames = ["claude"];
 		selectedReviewCliNames = ["claude"];
@@ -322,9 +322,9 @@ describe("init command plugin installation", () => {
 	});
 
 	it("on re-run with existing .gauntlet, delegates to plugin update logic", async () => {
-		await fs.mkdir(path.join(testDir, ".gauntlet"), { recursive: true });
+		await fs.mkdir(path.join(testDir, ".validator"), { recursive: true });
 		listPluginsMock.mockImplementation(async () => [
-			{ name: "agent-gauntlet", scope: "project", projectPath: testDir },
+			{ name: "agent-validator", scope: "project", projectPath: testDir },
 		]);
 
 		await program.parseAsync(["node", "test", "init", "--yes"]);

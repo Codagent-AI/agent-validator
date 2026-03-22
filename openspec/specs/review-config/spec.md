@@ -4,25 +4,25 @@
 TBD - created by archiving change add-prompt-configurability. Update Purpose after archive.
 ## Requirements
 ### Requirement: Reviews support YAML configuration files
-The system MUST load review configurations from both `.md` and `.yml`/`.yaml` files in the `.gauntlet/reviews/` directory. The review name MUST be derived from the filename (without extension). If both a `.md` and `.yml`/`.yaml` file exist with the same base name, the system MUST reject the configuration with an error.
+The system MUST load review configurations from both `.md` and `.yml`/`.yaml` files in the `.validator/reviews/` directory. The review name MUST be derived from the filename (without extension). If both a `.md` and `.yml`/`.yaml` file exist with the same base name, the system MUST reject the configuration with an error.
 
 YAML review files MUST specify exactly one of `prompt_file`, `skill_name`, or `builtin`. These three attributes are mutually exclusive. When `builtin` is specified, the prompt content MUST be loaded from the package's built-in review registry.
 
 All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `enabled` boolean attribute that defaults to `true`. When `enabled` is `false`, the review is opt-in and SHALL only run when explicitly activated via the `--enable-review` CLI option.
 
 #### Scenario: YAML review with prompt_file
-- **GIVEN** a file `.gauntlet/reviews/security.yml` with content:
+- **GIVEN** a file `.validator/reviews/security.yml` with content:
   ```yaml
   prompt_file: prompts/security-review.md
   cli_preference:
     - claude
   ```
-- **AND** a file `.gauntlet/prompts/security-review.md` exists with prompt content
+- **AND** a file `.validator/prompts/security-review.md` exists with prompt content
 - **WHEN** the configuration is loaded
 - **THEN** the review "security" is available with `promptContent` loaded from the external file
 
 #### Scenario: YAML review with skill_name
-- **GIVEN** a file `.gauntlet/reviews/code-quality.yml` with content:
+- **GIVEN** a file `.validator/reviews/code-quality.yml` with content:
   ```yaml
   skill_name: code-review
   num_reviews: 2
@@ -31,7 +31,7 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **THEN** the review "code-quality" is available with `skillName` set to "code-review" and no `promptContent`
 
 #### Scenario: YAML review with builtin attribute
-- **GIVEN** a file `.gauntlet/reviews/code-quality.yml` with content:
+- **GIVEN** a file `.validator/reviews/code-quality.yml` with content:
   ```yaml
   builtin: code-quality
   num_reviews: 2
@@ -41,7 +41,7 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **AND** `num_reviews` is 2
 
 #### Scenario: YAML review with builtin and no other settings uses schema defaults
-- **GIVEN** a file `.gauntlet/reviews/code-quality.yml` with content:
+- **GIVEN** a file `.validator/reviews/code-quality.yml` with content:
   ```yaml
   builtin: code-quality
   ```
@@ -54,27 +54,27 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **AND** `enabled` defaults to true
 
 #### Scenario: YAML review must specify exactly one prompt source
-- **GIVEN** a file `.gauntlet/reviews/invalid.yml` with both `prompt_file` and `skill_name`
+- **GIVEN** a file `.validator/reviews/invalid.yml` with both `prompt_file` and `skill_name`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error
 
 #### Scenario: YAML review with neither prompt source nor builtin
-- **GIVEN** a file `.gauntlet/reviews/empty.yml` with none of `prompt_file`, `skill_name`, or `builtin`
+- **GIVEN** a file `.validator/reviews/empty.yml` with none of `prompt_file`, `skill_name`, or `builtin`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error
 
 #### Scenario: YAML review with builtin and prompt_file is rejected
-- **GIVEN** a file `.gauntlet/reviews/invalid.yml` with both `builtin: code-quality` and `prompt_file: prompts/review.md`
+- **GIVEN** a file `.validator/reviews/invalid.yml` with both `builtin: code-quality` and `prompt_file: prompts/review.md`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error stating the attributes are mutually exclusive
 
 #### Scenario: YAML review with builtin and skill_name is rejected
-- **GIVEN** a file `.gauntlet/reviews/invalid.yml` with both `builtin: code-quality` and `skill_name: my-skill`
+- **GIVEN** a file `.validator/reviews/invalid.yml` with both `builtin: code-quality` and `skill_name: my-skill`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error stating the attributes are mutually exclusive
 
 #### Scenario: YAML review with unknown builtin name
-- **GIVEN** a file `.gauntlet/reviews/bad.yml` with content:
+- **GIVEN** a file `.validator/reviews/bad.yml` with content:
   ```yaml
   builtin: nonexistent
   ```
@@ -82,12 +82,12 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **THEN** the system MUST reject with an error indicating the built-in review "nonexistent" is unknown
 
 #### Scenario: Duplicate review name across formats
-- **GIVEN** both `.gauntlet/reviews/security.md` and `.gauntlet/reviews/security.yml` exist
+- **GIVEN** both `.validator/reviews/security.md` and `.validator/reviews/security.yml` exist
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a duplicate name error
 
 #### Scenario: YAML review with enabled false
-- **GIVEN** a file `.gauntlet/reviews/task-compliance.yml` with content:
+- **GIVEN** a file `.validator/reviews/task-compliance.yml` with content:
   ```yaml
   builtin: code-quality
   enabled: false
@@ -96,7 +96,7 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **THEN** the review "task-compliance" is available with `enabled` set to `false`
 
 #### Scenario: Markdown review with enabled false in frontmatter
-- **GIVEN** a file `.gauntlet/reviews/task-compliance.md` with frontmatter containing `enabled: false`
+- **GIVEN** a file `.validator/reviews/task-compliance.md` with frontmatter containing `enabled: false`
 - **WHEN** the configuration is loaded
 - **THEN** the review "task-compliance" is available with `enabled` set to `false`
 
@@ -104,29 +104,29 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 Existing `.md` review files MUST support optional `prompt_file` or `skill_name` fields in their YAML frontmatter. These fields are mutually exclusive. When `prompt_file` is specified, the file content MUST override the markdown body. When `skill_name` is specified, the markdown body MUST be ignored and the skill MUST be used instead.
 
 #### Scenario: Markdown review with prompt_file in frontmatter
-- **GIVEN** a file `.gauntlet/reviews/security.md` with frontmatter containing `prompt_file: prompts/shared.md`
-- **AND** the file `.gauntlet/prompts/shared.md` exists
+- **GIVEN** a file `.validator/reviews/security.md` with frontmatter containing `prompt_file: prompts/shared.md`
+- **AND** the file `.validator/prompts/shared.md` exists
 - **WHEN** the configuration is loaded
 - **THEN** `promptContent` is loaded from `prompts/shared.md`, not from the markdown body
 
 #### Scenario: Markdown review with skill_name in frontmatter
-- **GIVEN** a file `.gauntlet/reviews/security.md` with frontmatter containing `skill_name: my-skill`
+- **GIVEN** a file `.validator/reviews/security.md` with frontmatter containing `skill_name: my-skill`
 - **WHEN** the configuration is loaded
 - **THEN** `skillName` is set to "my-skill" and `promptContent` is undefined
 
 #### Scenario: Markdown review with both prompt_file and skill_name
-- **GIVEN** a file `.gauntlet/reviews/invalid.md` with frontmatter containing both `prompt_file` and `skill_name`
+- **GIVEN** a file `.validator/reviews/invalid.md` with frontmatter containing both `prompt_file` and `skill_name`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error
 
 ### Requirement: Prompt file paths support absolute and relative resolution
-The `prompt_file` field MUST accept both absolute and relative file paths. Relative paths MUST resolve from the `.gauntlet/` directory. When an absolute path is used, the system MUST log a warning. The system MUST reject the configuration if the referenced file does not exist.
+The `prompt_file` field MUST accept both absolute and relative file paths. Relative paths MUST resolve from the `.validator/` directory. When an absolute path is used, the system MUST log a warning. The system MUST reject the configuration if the referenced file does not exist.
 
 #### Scenario: Relative path resolves from .gauntlet directory
 - **GIVEN** a review config with `prompt_file: prompts/review.md`
-- **AND** the file `.gauntlet/prompts/review.md` exists
+- **AND** the file `.validator/prompts/review.md` exists
 - **WHEN** the configuration is loaded
-- **THEN** the content is loaded from `.gauntlet/prompts/review.md`
+- **THEN** the content is loaded from `.validator/prompts/review.md`
 
 #### Scenario: Absolute path with warning
 - **GIVEN** a review config with `prompt_file: /shared/prompts/review.md`
@@ -141,35 +141,35 @@ The `prompt_file` field MUST accept both absolute and relative file paths. Relat
 - **THEN** the system MUST reject with a file-not-found error
 
 ### Requirement: Per-Adapter Configuration
-The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.gauntlet/config.yml`. Each adapter entry is keyed by adapter name and the system MUST accept optional `allow_tool_use` (boolean, defaults to `true`) and `thinking_budget` (one of `off`, `low`, `medium`, `high`) when provided. When `thinking_budget` is not specified, the adapter MUST use its built-in default behavior (no thinking budget override is applied). Unknown adapter names in the config are silently ignored at the schema level. When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
+The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.validator/config.yml`. Each adapter entry is keyed by adapter name and the system MUST accept optional `allow_tool_use` (boolean, defaults to `true`) and `thinking_budget` (one of `off`, `low`, `medium`, `high`) when provided. When `thinking_budget` is not specified, the adapter MUST use its built-in default behavior (no thinking budget override is applied). Unknown adapter names in the config are silently ignored at the schema level. When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
 
 #### Scenario: Adapter with tool use disabled
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.gemini.allow_tool_use: false`
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.gemini.allow_tool_use: false`
 - **WHEN** a review is executed using the Gemini adapter
 - **THEN** the Gemini CLI MUST be invoked without the `--allowed-tools` argument
 
 #### Scenario: Adapter with tool use enabled (default)
-- **GIVEN** a `.gauntlet/config.yml` with no `allow_tool_use` setting for Claude
+- **GIVEN** a `.validator/config.yml` with no `allow_tool_use` setting for Claude
 - **WHEN** a review is executed using the Claude adapter
 - **THEN** the Claude CLI MUST be invoked with the `--allowedTools` argument containing the default tool set
 
 #### Scenario: Adapter with thinking budget configured
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.codex.thinking_budget: high`
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.codex.thinking_budget: high`
 - **WHEN** a review is executed using the Codex adapter
 - **THEN** the Codex CLI MUST be invoked with `-c model_reasoning_effort="high"`
 
 #### Scenario: Invalid thinking budget level rejected
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.claude.thinking_budget: extreme`
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.claude.thinking_budget: extreme`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error
 
 #### Scenario: Adapter with partial configuration
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.gemini.allow_tool_use: false` and no `thinking_budget` setting
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.gemini.allow_tool_use: false` and no `thinking_budget` setting
 - **WHEN** a review is executed using the Gemini adapter
 - **THEN** tools MUST be disabled AND the thinking budget MUST use the adapter's built-in default
 
 #### Scenario: No adapter config section
-- **GIVEN** a `.gauntlet/config.yml` with no `cli.adapters` section
+- **GIVEN** a `.validator/config.yml` with no `cli.adapters` section
 - **WHEN** reviews are executed
 - **THEN** all adapters MUST use their default hardcoded settings (tool use enabled, no thinking budget override)
 

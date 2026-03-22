@@ -31,7 +31,7 @@ describe("Help Command", () => {
 		await helpCmd?.parseAsync(["help"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("Agent Gauntlet");
+		expect(output).toContain("Agent Validator");
 		expect(output).toContain("Commands:");
 		expect(output).toContain("run");
 		expect(output).toContain("check");

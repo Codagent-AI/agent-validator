@@ -62,7 +62,7 @@ The Logger MUST write log files with a dot-separated run-number suffix. The run 
 
 ### Requirement: Configurable Log Rotation Depth
 
-The system MUST support configurable N-deep log rotation via the `max_previous_logs` field in `.gauntlet/config.yml` (default: 3). Archived sessions are stored in logrotate-style directories: `previous/` (most recent), `previous.1/`, `previous.2/`, etc. The oldest directory beyond the configured count is evicted on each clean operation.
+The system MUST support configurable N-deep log rotation via the `max_previous_logs` field in `.validator/config.yml` (default: 3). Archived sessions are stored in logrotate-style directories: `previous/` (most recent), `previous.1/`, `previous.2/`, etc. The oldest directory beyond the configured count is evicted on each clean operation.
 
 #### Scenario: Default rotation depth
 
@@ -181,17 +181,17 @@ When all gates pass (exit code 0), the system MUST automatically perform the log
 - **AND** log files SHALL remain in the log directory root for the next rerun
 
 ### Requirement: Clean CLI Command
-The system MUST provide an `agent-gauntlet clean` CLI command that performs the log clean process on demand.
+The system MUST provide an `agent-validator clean` CLI command that performs the log clean process on demand.
 
 #### Scenario: User runs clean command
-- **GIVEN** a `.gauntlet/config.yml` exists with a configured `log_dir`
-- **WHEN** the user executes `agent-gauntlet clean`
+- **GIVEN** a `.validator/config.yml` exists with a configured `log_dir`
+- **WHEN** the user executes `agent-validator clean`
 - **THEN** the log clean process SHALL execute using the configured `log_dir`
 
 #### Scenario: Clean command with no config
-- **GIVEN** no `.gauntlet/config.yml` exists in the working directory
-- **WHEN** the user runs `agent-gauntlet clean`
-- **THEN** the command SHALL use the default log directory (`gauntlet_logs`)
+- **GIVEN** no `.validator/config.yml` exists in the working directory
+- **WHEN** the user runs `agent-validator clean`
+- **THEN** the command SHALL use the default log directory (`validator_logs`)
 
 ### Requirement: Run Lock File
 The `run`, `check`, and `review` commands MUST use a dot file in the log directory to prevent concurrent execution. The lock file SHALL be created at the start of a run and removed when the run completes (regardless of success or failure).
@@ -414,12 +414,12 @@ The system MUST support an optional persistent debug log that captures operation
 - **THEN** no debug log entries SHALL be written
 
 #### Scenario: Debug log enabled via project config
-- **GIVEN** `.gauntlet/config.yml` contains `debug_log.enabled: true`
+- **GIVEN** `.validator/config.yml` contains `debug_log.enabled: true`
 - **WHEN** the system starts
 - **THEN** debug log entries SHALL be written
 
 #### Scenario: Debug log enabled via global config
-- **GIVEN** `~/.config/agent-gauntlet/config.yml` contains `debug_log.enabled: true`
+- **GIVEN** `~/.config/agent-validator/config.yml` contains `debug_log.enabled: true`
 - **AND** no project-level debug_log config exists
 - **WHEN** the system starts
 - **THEN** debug log entries SHALL be written

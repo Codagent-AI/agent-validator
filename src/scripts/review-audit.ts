@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: backward-compat config-dir resolution added lines
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -78,12 +79,18 @@ const parseDuration = (d: string): number => {
 };
 
 function getLogDir(cwd: string): string {
-  try {
-    const cfg = path.join(cwd, '.gauntlet', 'config.yml');
-    const m = fs.readFileSync(cfg, 'utf-8').match(/^log_dir:\s*(.+)$/m);
-    if (m?.[1]) return m[1].trim().replace(/^["']|["']$/g, '');
-  } catch {}
-  return 'gauntlet_logs';
+  const candidates = [
+    path.join(cwd, '.validator', 'config.yml'),
+    path.join(cwd, '.gauntlet', 'config.yml'),
+  ];
+  for (const cfg of candidates) {
+    try {
+      const m = fs.readFileSync(cfg, 'utf-8').match(/^log_dir:\s*(.+)$/m);
+      if (m?.[1]) return m[1].trim().replace(/^["']|["']$/g, '');
+      break;
+    } catch {}
+  }
+  return 'validator_logs';
 }
 
 function handleRunStart(ts: string, body: string): RunBlock {
@@ -133,7 +140,6 @@ function handleRunEnd(current: RunBlock, body: string): void {
   const kv = parseKeyValue(body);
   current.end = { status: kv.status ?? 'unknown', failed: safeNum(kv.failed) };
 }
-
 const emptyStat = (): GateStat => ({
   count: 0,
   totalDuration: 0,
@@ -391,7 +397,7 @@ function formatSummary(
   const total = blocks.filter((b) => b.end).length;
   return [
     '=== Summary ===',
-    `Gauntlet rounds: ${total}`,
+    `Validator rounds: ${total}`,
     `  Total gate executions: ${ct.grandTotal.count}`,
     `  Total review issues fixed: ${totalFixed}`,
   ];
@@ -409,7 +415,7 @@ function computeViolationsFixed(blocks: RunBlock[]): void {
 }
 export function formatAuditReport(blocks: RunBlock[], date: string): string {
   if (blocks.length === 0)
-    return `Review Execution Audit — ${date}\n\nNo gauntlet runs found for this date.`;
+    return `Review Execution Audit — ${date}\n\nNo validator runs found for this date.`;
   computeViolationsFixed(blocks);
   const ct = buildCrossTab(blocks);
   const tokenStats = aggregateTokenStats(blocks);
@@ -431,10 +437,8 @@ export function formatAuditReport(blocks: RunBlock[], date: string): string {
 }
 
 function todayLocalDate(): string {
-  const now = new Date();
-  const mo = String(now.getMonth() + 1).padStart(2, '0');
-  const dy = String(now.getDate()).padStart(2, '0');
-  return `${now.getFullYear()}-${mo}-${dy}`;
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 async function readBlocks(
@@ -484,9 +488,9 @@ export async function main(date?: string, since?: string): Promise<void> {
     process.exit(0);
   }
   const targetDate = since ?? date ?? todayLocalDate();
-  const matchDate: (d: string) => boolean = since
-    ? (d) => d >= since
-    : (d) => d === targetDate;
+  const matchDate = since
+    ? (d: string) => d >= since
+    : (d: string) => d === targetDate;
   const label = since ? `${since} – ${todayLocalDate()}` : targetDate;
   const blocks = await readBlocks(debugLogPath, matchDate);
   console.log(formatAuditReport(blocks, label));

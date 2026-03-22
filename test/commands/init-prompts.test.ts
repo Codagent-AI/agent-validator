@@ -83,12 +83,12 @@ describe("promptFileOverwrite", () => {
 	});
 
 	it("should return 'yes' when skipPrompts is true", async () => {
-		const result = await promptFileOverwrite("gauntlet-run", true);
+		const result = await promptFileOverwrite("validator-run", true);
 		expect(result).toBe("yes");
 	});
 
 	it("should call select when skipPrompts is false", async () => {
-		const result = await promptFileOverwrite("gauntlet-run", false);
+		const result = await promptFileOverwrite("validator-run", false);
 		expect(result).toBe("yes"); // mocked select returns "yes"
 	});
 });

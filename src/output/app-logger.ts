@@ -96,7 +96,7 @@ export async function initLogger(config: AppLoggerConfig): Promise<void> {
     await resetLogger();
   }
 
-  const { mode, level = 'info', logDir, debugLog } = config;
+  const { level = 'info', logDir, debugLog } = config;
 
   // Ensure log directory exists if we need it for debug log
   if (logDir && debugLog?.enabled) {
@@ -125,7 +125,7 @@ export async function initLogger(config: AppLoggerConfig): Promise<void> {
       sinks,
       loggers: [
         {
-          category: ['gauntlet'],
+          category: ['validator'],
           lowestLevel: level,
           sinks: activeSinks,
         },
@@ -186,17 +186,17 @@ export async function resetLogger(): Promise<void> {
  * Get the root application logger.
  */
 export function getAppLogger(): LogTapeLogger {
-  return getLogger(['gauntlet']);
+  return getLogger(['validator']);
 }
 
 /**
  * Get a child logger for a specific category.
- * Categories are hierarchical, e.g., ["gauntlet", "runner"] or ["gauntlet", "gate", "check"]
+ * Categories are hierarchical, e.g., ["validator", "runner"] or ["validator", "gate", "check"]
  *
- * @param category - The category path (after "gauntlet" prefix)
+ * @param category - The category path (after "validator" prefix)
  */
 export function getCategoryLogger(...category: string[]): LogTapeLogger {
-  return getLogger(['gauntlet', ...category]);
+  return getLogger(['validator', ...category]);
 }
 
 /**

@@ -42,7 +42,7 @@ function makeConfig(
 	return {
 		project: {
 			base_branch: "main",
-			log_dir: "gauntlet_logs",
+			log_dir: "validator_logs",
 			allow_parallel: true,
 			max_retries: 3,
 			max_previous_logs: 3,

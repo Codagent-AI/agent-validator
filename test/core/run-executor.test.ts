@@ -102,7 +102,7 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 
 		// The status message should say logs are automatically archived
 		expect(sourceFile).not.toMatch(
-			/retry_limit_exceeded[\s\S]*?agent-gauntlet clean/,
+			/retry_limit_exceeded[\s\S]*?agent-validator clean/,
 		);
 	});
 

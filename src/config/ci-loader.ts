@@ -1,20 +1,30 @@
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
 import { ciConfigSchema } from './ci-schema.js';
 import type { CIConfig } from './types.js';
 
-const GAUNTLET_DIR = '.gauntlet';
+const VALIDATOR_DIR = '.validator';
+const LEGACY_GAUNTLET_DIR = '.gauntlet';
 const CI_FILE = 'ci.yml';
+
+function resolveConfigDir(rootDir: string): string {
+  const validatorPath = path.join(rootDir, VALIDATOR_DIR);
+  const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
+  if (existsSync(validatorPath)) return validatorPath;
+  if (existsSync(gauntletPath)) return gauntletPath;
+  return validatorPath;
+}
 
 export async function loadCIConfig(
   rootDir: string = process.cwd(),
 ): Promise<CIConfig> {
-  const ciPath = path.join(rootDir, GAUNTLET_DIR, CI_FILE);
+  const ciPath = path.join(resolveConfigDir(rootDir), CI_FILE);
 
   if (!(await fileExists(ciPath))) {
     throw new Error(
-      `CI configuration file not found at ${ciPath}. Run 'agent-gauntlet ci init' to create it.`,
+      `CI configuration file not found at ${ciPath}. Run 'agent-validate ci init' to create it.`,
     );
   }
 

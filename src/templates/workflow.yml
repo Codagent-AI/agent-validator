@@ -1,4 +1,4 @@
-name: Gauntlet CI
+name: Validator CI
 
 on:
   push:
@@ -16,17 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install agent-gauntlet
+      - name: Install agent-validator
         run: |
           curl -fsSL https://bun.sh/install | bash
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
           export PATH="$HOME/.bun/bin:$PATH"
-          bun add -g pacaplan/agent-gauntlet
+          bun add -g pacaplan/agent-validator
 
-      - name: Discover gauntlet jobs
+      - name: Discover validator jobs
         id: discover
         run: |
-          output=$(agent-gauntlet ci list-jobs)
+          output=$(agent-validate ci list-jobs)
           echo "matrix=$(echo "$output" | jq -c '.matrix')" >> $GITHUB_OUTPUT
           echo "runtimes=$(echo "$output" | jq -c '.runtimes')" >> $GITHUB_OUTPUT
 
@@ -40,7 +40,7 @@ jobs:
       matrix:
         job: ${{ fromJson(needs.discover.outputs.matrix) }}
 
-    # Services will be injected here by agent-gauntlet
+    # Services will be injected here by agent-validator
 
     steps:
       - uses: actions/checkout@v4

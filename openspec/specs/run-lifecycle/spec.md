@@ -82,7 +82,7 @@ The `rerun` subcommand MUST be removed from the CLI. Its behavior is subsumed by
 
 #### Scenario: User invokes rerun
 - **GIVEN** the CLI is installed
-- **WHEN** the user executes `agent-gauntlet rerun`
+- **WHEN** the user executes `agent-validator rerun`
 - **THEN** the CLI SHALL report an unknown command error
 
 ### Requirement: Latest Log Parsing for Verification
@@ -158,7 +158,7 @@ When `fixBase` is provided in the change detector options and neither `commit` n
 
 ### Requirement: Max Retries Enforcement
 
-The Runner (which backs the `run`, `check`, and `review` commands) MUST enforce a configurable retry limit. The limit is determined by the `max_retries` field in `.gauntlet/config.yml` (default: 3). The system allows `max_retries + 1` total runs (1 initial + N retries). The current run number is determined by finding the highest run-number suffix across all log files in the log directory (regardless of job ID or adapter) and adding 1. On the final allowed run, if gates still fail, the status SHALL be reported as "Retry limit exceeded" instead of "Failed" and logs SHALL be automatically archived. Any subsequent run attempt SHALL immediately exit with a non-zero exit code without executing gates.
+The Runner (which backs the `run`, `check`, and `review` commands) MUST enforce a configurable retry limit. The limit is determined by the `max_retries` field in `.validator/config.yml` (default: 3). The system allows `max_retries + 1` total runs (1 initial + N retries). The current run number is determined by finding the highest run-number suffix across all log files in the log directory (regardless of job ID or adapter) and adding 1. On the final allowed run, if gates still fail, the status SHALL be reported as "Retry limit exceeded" instead of "Failed" and logs SHALL be automatically archived. Any subsequent run attempt SHALL immediately exit with a non-zero exit code without executing gates.
 
 #### Scenario: First run (no existing logs)
 
@@ -420,14 +420,14 @@ The `run`, `check`, and `review` commands MUST acquire the run lock before start
 
 #### Scenario: Lock acquisition fails - no console log created
 - **GIVEN** another gauntlet run is in progress (lock file exists)
-- **WHEN** the user executes `agent-gauntlet run`
+- **WHEN** the user executes `agent-validator run`
 - **THEN** the lock acquisition SHALL fail with an error message
 - **AND** no console log file SHALL be created
 - **AND** the command SHALL exit with a non-zero exit code
 
 #### Scenario: Lock acquisition succeeds - console log created
 - **GIVEN** no gauntlet run is in progress (lock file does not exist)
-- **WHEN** the user executes `agent-gauntlet run`
+- **WHEN** the user executes `agent-validator run`
 - **THEN** the lock SHALL be acquired first
 - **AND** the console log file SHALL be created after lock acquisition
 - **AND** the command SHALL proceed normally
@@ -638,12 +638,12 @@ Adapters marked as unhealthy SHALL be skipped for a 1-hour cooldown period. Afte
 CLI commands (`run`, `check`, `review`) SHALL always execute immediately without interval checking.
 
 #### Scenario: Run command executes immediately
-- **GIVEN** the user runs `agent-gauntlet run`
+- **GIVEN** the user runs `agent-validator run`
 - **WHEN** the command executes
 - **THEN** the gauntlet SHALL run immediately regardless of last run time
 
 ### Requirement: Adapter Health Tracking in Global State
-The system MUST store unhealthy adapter cooldown state in a global state file located in the global config directory (default: `~/.config/agent-gauntlet/unhealthy_adapters.json`). Each entry is keyed by adapter name and contains the timestamp when the adapter was marked unhealthy and the reason. The global state file SHALL be used to determine adapter cooldown across projects.
+The system MUST store unhealthy adapter cooldown state in a global state file located in the global config directory (default: `~/.config/agent-validator/unhealthy_adapters.json`). Each entry is keyed by adapter name and contains the timestamp when the adapter was marked unhealthy and the reason. The global state file SHALL be used to determine adapter cooldown across projects.
 
 #### Scenario: Global unhealthy adapter file structure
 - **GIVEN** one or more adapters have been marked unhealthy
@@ -692,13 +692,13 @@ All ConsoleReporter output (gate start/complete messages, results summary, statu
 The `run` command SHALL accept a `--report` flag to enable structured stdout output for external orchestrators. Exit code semantics MUST remain unchanged: exit 0 for success statuses (`passed`, `passed_with_warnings`, `no_applicable_gates`, `no_changes`), exit 1 for all others.
 
 #### Scenario: Run with --report flag
-- **WHEN** `agent-gauntlet run --report` is invoked
+- **WHEN** `agent-validator run --report` is invoked
 - **THEN** the run SHALL execute normally (all existing behavior preserved)
 - **AND** a structured failure report SHALL be written to stdout per the report-flag specification
 - **AND** stderr output SHALL remain unchanged
 - **AND** exit codes SHALL remain unchanged
 
 #### Scenario: Run with --report and --enable-review
-- **WHEN** `agent-gauntlet run --report --enable-review task-compliance` is invoked
+- **WHEN** `agent-validator run --report --enable-review task-compliance` is invoked
 - **THEN** both flags SHALL be honored: the enabled review runs AND the report is written to stdout
 

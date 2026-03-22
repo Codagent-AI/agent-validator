@@ -207,7 +207,7 @@ export interface CLIAdapter {
    */
   canUseSymlink(): boolean;
   /**
-   * Transforms gauntlet command content to this CLI's format.
+   * Transforms validator command content to this CLI's format.
    * The source content is always Markdown with YAML frontmatter.
    */
   transformCommand(markdownContent: string): string;

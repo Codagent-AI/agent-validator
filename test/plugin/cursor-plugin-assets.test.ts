@@ -14,7 +14,7 @@ describe("Cursor plugin assets", () => {
 
 		test("has required fields", () => {
 			const plugin = JSON.parse(readFileSync(pluginPath, "utf-8"));
-			expect(plugin.name).toBe("agent-gauntlet");
+			expect(plugin.name).toBe("agent-validator");
 			expect(plugin.version).toBeString();
 			expect(plugin.description).toBeString();
 			expect(plugin.license).toBeString();

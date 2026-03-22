@@ -1,3 +1,5 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: backward-compat config-dir resolution added lines
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
@@ -6,19 +8,28 @@ import { getValidCLITools } from '../cli-adapters/index.js';
 import {
   checkGateSchema,
   entryPointSchema,
-  gauntletConfigSchema,
+  validatorConfigSchema,
 } from './schema.js';
 import type {
   CheckGateConfig,
-  GauntletConfig,
   ReviewPromptFrontmatter,
+  ValidatorConfig,
 } from './types.js';
 import { validateReviewGates } from './validate-reviews.js';
 
-const GAUNTLET_DIR = '.gauntlet';
+const VALIDATOR_DIR = '.validator';
+const LEGACY_GAUNTLET_DIR = '.gauntlet';
 const CONFIG_FILE = 'config.yml';
 const CHECKS_DIR = 'checks';
 const REVIEWS_DIR = 'reviews';
+
+function resolveConfigDir(rootDir: string): string {
+  const validatorPath = path.join(rootDir, VALIDATOR_DIR);
+  const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
+  if (existsSync(validatorPath)) return validatorPath;
+  if (existsSync(gauntletPath)) return gauntletPath;
+  return validatorPath;
+}
 
 export interface ValidationIssue {
   file: string;
@@ -43,7 +54,7 @@ interface ValidatorContext {
 export async function validateConfig(
   rootDir: string = process.cwd(),
 ): Promise<ValidationResult> {
-  const gauntletPath = path.join(rootDir, GAUNTLET_DIR);
+  const gauntletPath = resolveConfigDir(rootDir);
   const configPath = path.join(gauntletPath, CONFIG_FILE);
   const ctx: ValidatorContext = {
     gauntletPath,
@@ -77,7 +88,7 @@ export async function validateConfig(
 
 async function validateProjectConfig(
   ctx: ValidatorContext,
-): Promise<GauntletConfig | null> {
+): Promise<ValidatorConfig | null> {
   try {
     if (await fileExists(ctx.configPath)) {
       ctx.filesChecked.push(ctx.configPath);
@@ -104,10 +115,10 @@ async function validateProjectConfig(
 function parseProjectConfig(
   configContent: string,
   ctx: ValidatorContext,
-): GauntletConfig | null {
+): ValidatorConfig | null {
   try {
     const raw = YAML.parse(configContent);
-    return gauntletConfigSchema.parse(raw);
+    return validatorConfigSchema.parse(raw);
   } catch (error: unknown) {
     if (error instanceof ZodError) {
       for (const err of error.issues) {
@@ -217,7 +228,7 @@ async function validateReviewGatesWrapper(ctx: ValidatorContext): Promise<{
 }
 
 function validateEntryPointReferences(
-  projectConfig: GauntletConfig,
+  projectConfig: ValidatorConfig,
   existingCheckNames: Set<string>,
   existingReviewNames: Set<string>,
   ctx: ValidatorContext,
@@ -342,7 +353,7 @@ function validateEntryPointPathField(
 }
 
 function validateProjectLevelConfig(
-  projectConfig: GauntletConfig,
+  projectConfig: ValidatorConfig,
   ctx: ValidatorContext,
 ): void {
   if (
@@ -383,7 +394,7 @@ function validateProjectLevelConfig(
 }
 
 function validateCliConfig(
-  projectConfig: GauntletConfig,
+  projectConfig: ValidatorConfig,
   reviews: Record<string, ReviewPromptFrontmatter>,
   reviewSourceFiles: Record<string, string>,
   ctx: ValidatorContext,
@@ -464,35 +475,27 @@ function pushYamlOrParseError(
   issues: ValidationIssue[],
 ): void {
   const err = error as { name?: string; message?: string };
-  if (err.name === 'YAMLSyntaxError' || err.message?.includes('YAML')) {
-    issues.push({
-      file: filePath,
-      severity: 'error',
-      message: `Malformed YAML: ${err.message}`,
-    });
-  } else {
-    issues.push({
-      file: filePath,
-      severity: 'error',
-      message: `Parse error: ${err.message}`,
-    });
-  }
+  const isYaml =
+    err.name === 'YAMLSyntaxError' || err.message?.includes('YAML');
+  issues.push({
+    file: filePath,
+    severity: 'error',
+    message: isYaml
+      ? `Malformed YAML: ${err.message}`
+      : `Parse error: ${err.message}`,
+  });
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(filePath);
-    return stat.isFile();
-  } catch {
-    return false;
-  }
+  return fs
+    .stat(filePath)
+    .then((s) => s.isFile())
+    .catch(() => false);
 }
 
 async function dirExists(dirPath: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(dirPath);
-    return stat.isDirectory();
-  } catch {
-    return false;
-  }
+  return fs
+    .stat(dirPath)
+    .then((s) => s.isDirectory())
+    .catch(() => false);
 }

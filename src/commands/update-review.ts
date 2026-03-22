@@ -91,7 +91,7 @@ async function updateViolation(
   try {
     if (!reason) {
       console.error(
-        `Error: Missing reason. Usage: agent-gauntlet update-review ${newStatus} <id> "<reason>"`,
+        `Error: Missing reason. Usage: agent-validate update-review ${newStatus} <id> "<reason>"`,
       );
       process.exit(1);
     }

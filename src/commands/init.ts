@@ -74,13 +74,13 @@ interface InitOptions {
   yes?: boolean;
 }
 
-/** Native CLIs that support the /gauntlet-setup skill invocation. */
+/** Native CLIs that support the /validator-setup skill invocation. */
 const NATIVE_CLIS = new Set(['claude', 'cursor']);
 
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
-    .description('Initialize .gauntlet configuration')
+    .description('Initialize .validator configuration')
     .option('-y, --yes', 'Skip prompts and use defaults')
     .action(async (options: InitOptions) => {
       await runInit(options);
@@ -106,7 +106,8 @@ async function handleRerun(
 
 async function runInit(options: InitOptions): Promise<void> {
   const projectRoot = process.cwd();
-  const targetDir = path.join(projectRoot, '.gauntlet');
+  const targetDir = path.join(projectRoot, '.validator');
+  const legacyDir = path.join(projectRoot, '.gauntlet');
   const skipPrompts = options.yes ?? false;
 
   console.log('Detecting available CLI agents...');
@@ -118,13 +119,19 @@ async function runInit(options: InitOptions): Promise<void> {
   }
 
   const detectedNames = availableAdapters.map((a) => a.name);
-  const gauntletExists = await exists(targetDir);
+  let existingConfigDir: string | null = null;
+  if (await exists(targetDir)) {
+    existingConfigDir = targetDir;
+  } else if (await exists(legacyDir)) {
+    existingConfigDir = legacyDir;
+  }
 
   let devAdapters: CLIAdapter[];
   let instructionCLINames: string[];
 
-  if (gauntletExists) {
-    console.log(chalk.dim('.gauntlet/ already exists, skipping scaffolding'));
+  if (existingConfigDir) {
+    const dirName = path.basename(existingConfigDir);
+    console.log(chalk.dim(`.${dirName}/ already exists, skipping scaffolding`));
     instructionCLINames = detectedNames;
     await handleRerun(projectRoot, availableAdapters, skipPrompts);
   } else {
@@ -148,7 +155,7 @@ async function runInit(options: InitOptions): Promise<void> {
     );
     console.log(
       chalk.cyan(
-        "Agent Gauntlet's built-in code quality reviewer will be installed.",
+        "Agent Validator's built-in code quality reviewer will be installed.",
       ),
     );
 
@@ -161,7 +168,7 @@ async function runInit(options: InitOptions): Promise<void> {
     instructionCLINames = devCLINames;
     await installExternalFiles(projectRoot, devAdapters, skipPrompts);
   }
-  await addToGitignore(projectRoot, 'gauntlet_logs');
+  await addToGitignore(projectRoot, 'validator_logs');
   await printPostInitInstructions(instructionCLINames);
 }
 
@@ -181,7 +188,7 @@ async function scaffoldGauntletDir(
   numReviews: number,
 ): Promise<void> {
   if (await exists(targetDir)) {
-    console.log(chalk.dim('.gauntlet/ already exists, skipping scaffolding'));
+    console.log(chalk.dim('.validator/ already exists, skipping scaffolding'));
     return;
   }
 
@@ -195,7 +202,7 @@ async function scaffoldGauntletDir(
     path.join(targetDir, 'reviews', 'code-quality.yml'),
     `builtin: code-quality\nnum_reviews: ${numReviews}\n`,
   );
-  console.log(chalk.green('Created .gauntlet/reviews/code-quality.yml'));
+  console.log(chalk.green('Created .validator/reviews/code-quality.yml'));
 }
 
 async function copyDirRecursive(opts: {
@@ -363,14 +370,14 @@ async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
   if (hasNative) {
     console.log(
       chalk.bold(
-        'To complete setup, run /gauntlet-setup in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run.',
+        'To complete setup, run /validator-setup in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
       ),
     );
   }
   if (hasCodex) {
     console.log(
       chalk.bold(
-        'To complete setup in Codex, reference the setup skill: .agents/skills/gauntlet-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run.',
+        'To complete setup in Codex, reference the setup skill: .agents/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
       ),
     );
     console.log();
@@ -382,7 +389,7 @@ async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
   if (hasOtherNonNative) {
     console.log(
       chalk.bold(
-        'To complete setup, reference the setup skill in your CLI: @.claude/skills/gauntlet-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Gauntlet will run.',
+        'To complete setup, reference the setup skill in your CLI: @.claude/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
       ),
     );
     console.log();
@@ -406,7 +413,7 @@ cli:
   default_preference:
 ${cliList}
 ${adapterSettings}
-# entry_points configured by /gauntlet-setup
+# entry_points configured by /validator-setup
 entry_points: []
 
 # -------------------------------------------------------------------
@@ -416,8 +423,8 @@ entry_points: []
 # Git ref for detecting local changes via git diff (default: origin/main)
 # base_branch: ${baseBranch}
 
-# Directory for per-job logs (default: gauntlet_logs)
-# log_dir: gauntlet_logs
+# Directory for per-job logs (default: validator_logs)
+# log_dir: validator_logs
 
 # Run gates in parallel when possible (default: true)
 # allow_parallel: true
@@ -448,7 +455,7 @@ entry_points: []
 #     format: text                # Options: text, json
 `;
   await fs.writeFile(path.join(targetDir, 'config.yml'), content);
-  console.log(chalk.green('Created .gauntlet/config.yml'));
+  console.log(chalk.green('Created .validator/config.yml'));
 }
 
 async function addToGitignore(

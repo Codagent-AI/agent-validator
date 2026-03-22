@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const LOCK_FILENAME = '.gauntlet-run.lock';
+const LOCK_FILENAME = '.validator-run.lock';
 const STALE_LOCK_MS = 10 * 60 * 1000;
 
 function isProcessAlive(pid: number): boolean {

@@ -323,7 +323,7 @@ export class GeminiAdapter implements CLIAdapter {
 
   transformCommand(markdownContent: string): string {
     const fmMatch = markdownContent.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-    let description = 'Run the gauntlet verification suite';
+    let description = 'Run the validator verification suite';
     const body = fmMatch ? (fmMatch[2] ?? '') : markdownContent;
 
     if (fmMatch) {
@@ -457,7 +457,7 @@ ${body.trim()}
     const tmpDir = os.tmpdir();
     const tmpFile = path.join(
       tmpDir,
-      `gauntlet-gemini-${process.pid}-${Date.now()}.txt`,
+      `validator-gemini-${process.pid}-${Date.now()}.txt`,
     );
     await fs.writeFile(tmpFile, fullContent);
 
@@ -465,7 +465,7 @@ ${body.trim()}
     // to the project directory, so os.tmpdir() would fail with EPERM.
     const telemetryFile = path.join(
       process.cwd(),
-      `.gauntlet-gemini-telemetry-${process.pid}-${Date.now()}.log`,
+      `.validator-gemini-telemetry-${process.pid}-${Date.now()}.log`,
     );
 
     const telemetryEnv = this.buildTelemetryEnv(telemetryFile);

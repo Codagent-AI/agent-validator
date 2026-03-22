@@ -44,7 +44,7 @@ export async function addMarketplace(): Promise<ClaudeCliResult> {
     'plugin',
     'marketplace',
     'add',
-    'pcaplan/agent-gauntlet',
+    'pacaplan/agent-validator',
   ]);
 }
 
@@ -54,7 +54,7 @@ export async function installPlugin(
   return runClaudePluginCommand([
     'plugin',
     'install',
-    'agent-gauntlet',
+    'agent-validator',
     '--scope',
     scope,
   ]);
@@ -82,7 +82,7 @@ export async function updateMarketplace(): Promise<ClaudeCliResult> {
     'plugin',
     'marketplace',
     'update',
-    'agent-gauntlet',
+    'agent-validator',
   ]);
 }
 
@@ -90,6 +90,6 @@ export async function updatePlugin(): Promise<ClaudeCliResult> {
   return runClaudePluginCommand([
     'plugin',
     'update',
-    'agent-gauntlet@pcaplan/agent-gauntlet',
+    'agent-validator@pacaplan/agent-validator',
   ]);
 }

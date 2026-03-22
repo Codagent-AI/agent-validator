@@ -1,9 +1,9 @@
 # General
 
 ## Project Overview
-This project is "Agent Gauntlet", a configurable “feedback loop” runner for AI-assisted development workflows.
+This project is “Agent Validator”, a configurable “feedback loop” runner for AI-assisted development workflows.
 
-The user configures which paths in their repo should trigger which validations — shell commands like tests and linters, plus AI-powered code reviews. When files change, Gauntlet automatically runs the relevant validations and reports results.
+The user configures which paths in their repo should trigger which validations — shell commands like tests and linters, plus AI-powered code reviews. When files change, Agent Validator automatically runs the relevant validations and reports results.
 
 ### Structure
 - `src/`: Source code
@@ -24,8 +24,8 @@ The user configures which paths in their repo should trigger which validations �
 - Prefer functional patterns where appropriate.
 
 ## Skill source of truth
-The distributable skill source is the `skills/` directory at the repo root. Each skill lives in `skills/gauntlet-<action>/` as static files. `init.ts` copies these into consumer projects via `installSkillsWithChecksums()`.
+The distributable skill source is the `skills/` directory at the repo root. Each skill lives in `skills/validator-<action>/` as static files. `init.ts` copies these into consumer projects via `installSkillsWithChecksums()`.
 
-When updating a skill, edit the files in `skills/gauntlet-<action>/`. The local copy in `.claude/skills/` (used by this project) may differ slightly — it is not the distributable source. The step "Capture noteworthy violations for eval inventory" should exist only in  the local copy.
+When updating a skill, edit the files in `skills/validator-<action>/`. The local copy in `.claude/skills/` (used by this project) may differ slightly — it is not the distributable source. The step "Capture noteworthy violations for eval inventory" should exist only in the local copy.
 
-**IMPORTANT: Local skills must use `bun src/index.ts` to run from source, NOT `agent-gauntlet`.** The `agent-gauntlet` binary is the globally-installed package for consumer projects. In this repo we develop against source. The distributable skills in `skills/` correctly use `agent-gauntlet`, but `.claude/skills/` must always use `bun src/index.ts`. Never replace `bun src/index.ts` with `agent-gauntlet` in `.claude/skills/`.
+**IMPORTANT: Local skills must use `bun src/index.ts` to run from source, NOT `agent-validate`.** The `agent-validate` binary is the globally-installed package for consumer projects. In this repo we develop against source. The distributable skills in `skills/` correctly use `agent-validate`, but `.claude/skills/` must always use `bun src/index.ts`. Never replace `bun src/index.ts` with `agent-validate` in `.claude/skills/`.

@@ -1,6 +1,6 @@
 {
-  "name": "agent-gauntlet",
+  "name": "agent-validator",
   "version": "1.3.0",
-  "description": "A CLI tool for testing AI coding agents",
+  "description": "A CLI tool for validating AI coding agents",
   "license": "MIT"
 }

@@ -68,7 +68,7 @@ describe("Global Configuration", () => {
 			);
 			const configPath = getGlobalConfigPath();
 			expect(configPath).toContain(".config");
-			expect(configPath).toContain("agent-gauntlet");
+			expect(configPath).toContain("agent-validator");
 			expect(configPath).toContain("config.yml");
 		});
 	});

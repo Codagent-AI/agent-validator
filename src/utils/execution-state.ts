@@ -172,7 +172,7 @@ export async function createWorkingTreeRef(): Promise<string> {
       'push',
       '--include-untracked',
       '-m',
-      'gauntlet-snapshot',
+      'validator-snapshot',
     ]);
   } catch {
     return getCurrentCommit();
@@ -188,7 +188,7 @@ export async function createWorkingTreeRef(): Promise<string> {
     // push state — avoid destructive pop of an unrelated user stash.
     if (prevTop && !newTop) {
       console.error(
-        'gauntlet: unable to verify stash snapshot; leaving stash untouched. Run `git stash pop` manually if needed.',
+        'validator: unable to verify stash snapshot; leaving stash untouched. Run `git stash pop` manually if needed.',
       );
     }
     return getCurrentCommit();
@@ -198,7 +198,7 @@ export async function createWorkingTreeRef(): Promise<string> {
     await runGit(['stash', 'pop']);
   } catch {
     console.error(
-      'gauntlet: stash pop failed — run `git stash pop` manually to restore your working tree',
+      'validator: stash pop failed — run `git stash pop` manually to restore your working tree',
     );
   }
 

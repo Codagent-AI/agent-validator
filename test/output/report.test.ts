@@ -211,7 +211,7 @@ describe('generateReport', () => {
         workingDirectory: '/project/src',
         fixInstructions: 'Run `bun run lint --fix`',
         fixWithSkill: 'lint-fixer',
-        logPath: 'gauntlet_logs/check_src_lint.1.log',
+        logPath: 'validator_logs/check_src_lint.1.log',
       },
     ];
 
@@ -224,7 +224,7 @@ describe('generateReport', () => {
     expect(report).toContain('Directory: /project/src');
     expect(report).toContain('Fix instructions: Run `bun run lint --fix`');
     expect(report).toContain('Fix skill: lint-fixer');
-    expect(report).toContain('Log: gauntlet_logs/check_src_lint.1.log');
+    expect(report).toContain('Log: validator_logs/check_src_lint.1.log');
   });
 
   it('includes review violations with numeric IDs', async () => {
@@ -292,7 +292,7 @@ describe('generateReport', () => {
         duration: 1000,
         command: 'bun run lint',
         workingDirectory: '/project/src',
-        logPath: 'gauntlet_logs/check.1.log',
+        logPath: 'validator_logs/check.1.log',
       },
     ];
 

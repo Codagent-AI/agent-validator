@@ -55,7 +55,7 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 		it("returns 'user' when user-scoped plugin is found", async () => {
 			mockListPlugins.mockImplementation(() =>
 				Promise.resolve([
-					{ name: "agent-gauntlet", scope: "user" },
+					{ name: "agent-validator", scope: "user" },
 				]),
 			);
 			const result = await adapter.detectPlugin("/some/project");
@@ -66,7 +66,7 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 			mockListPlugins.mockImplementation(() =>
 				Promise.resolve([
 					{
-						name: "agent-gauntlet",
+						name: "agent-validator",
 						scope: "project",
 						projectPath: "/some/project",
 					},
@@ -87,7 +87,7 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 		it("matches plugin entries with id field", async () => {
 			mockListPlugins.mockImplementation(() =>
 				Promise.resolve([
-					{ id: "agent-gauntlet", scope: "user" },
+					{ id: "agent-validator", scope: "user" },
 				]),
 			);
 			const result = await adapter.detectPlugin("/some/project");
@@ -97,7 +97,7 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 		it("matches plugin entries with versioned name", async () => {
 			mockListPlugins.mockImplementation(() =>
 				Promise.resolve([
-					{ name: "agent-gauntlet@1.0.0", scope: "user" },
+					{ name: "agent-validator@1.0.0", scope: "user" },
 				]),
 			);
 			const result = await adapter.detectPlugin("/some/project");
@@ -153,8 +153,8 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 		it("returns correct CLI commands for user scope", () => {
 			const instructions = adapter.getManualInstallInstructions("user");
 			expect(instructions).toEqual([
-				"claude plugin marketplace add pcaplan/agent-gauntlet",
-				"claude plugin install agent-gauntlet --scope user",
+				"claude plugin marketplace add pacaplan/agent-validator",
+				"claude plugin install agent-validator --scope user",
 			]);
 		});
 
@@ -162,8 +162,8 @@ describe("ClaudeAdapter plugin lifecycle", () => {
 			const instructions =
 				adapter.getManualInstallInstructions("project");
 			expect(instructions).toEqual([
-				"claude plugin marketplace add pcaplan/agent-gauntlet",
-				"claude plugin install agent-gauntlet --scope project",
+				"claude plugin marketplace add pacaplan/agent-validator",
+				"claude plugin install agent-validator --scope project",
 			]);
 		});
 	});

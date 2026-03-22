@@ -31,7 +31,7 @@ afterAll(async () => {
 	}
 });
 
-describe("agent-gauntlet init (E2E)", () => {
+describe("agent-validator init (E2E)", () => {
 	it("should exit successfully", () => {
 		if (!canRun) return; // skip
 		expect(initResult.exitCode).toBe(0);
@@ -44,12 +44,12 @@ describe("agent-gauntlet init (E2E)", () => {
 		expect(stat).toBeNull();
 	});
 
-	it("should scaffold .gauntlet/ with config and review", async () => {
+	it("should scaffold .validator/ with config and review", async () => {
 		if (!canRun) return;
-		const configPath = path.join(tempDir, ".gauntlet", "config.yml");
+		const configPath = path.join(tempDir, ".validator", "config.yml");
 		const reviewPath = path.join(
 			tempDir,
-			".gauntlet",
+			".validator",
 			"reviews",
 			"code-quality.yml",
 		);
@@ -57,12 +57,12 @@ describe("agent-gauntlet init (E2E)", () => {
 		expect((await fs.stat(reviewPath).catch(() => null))?.isFile()).toBe(true);
 	});
 
-	it("should add gauntlet_logs to .gitignore", async () => {
+	it("should add validator_logs to .gitignore", async () => {
 		if (!canRun) return;
 		const gitignore = await fs.readFile(
 			path.join(tempDir, ".gitignore"),
 			"utf-8",
 		);
-		expect(gitignore).toContain("gauntlet_logs");
+		expect(gitignore).toContain("validator_logs");
 	});
 });
