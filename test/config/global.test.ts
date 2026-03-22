@@ -27,6 +27,8 @@ describe("Global Configuration", () => {
 		// Restore original env
 		if (originalHome !== undefined) {
 			process.env.HOME = originalHome;
+		} else {
+			delete process.env.HOME;
 		}
 		if (originalXdgConfigHome !== undefined) {
 			process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
