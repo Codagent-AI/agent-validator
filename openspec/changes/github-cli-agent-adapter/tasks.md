@@ -1,0 +1,1 @@
+- [ ] Update GitHub Copilot adapter for gh copilot invocation and plugin support (`tasks/update-copilot-adapter.md`)
