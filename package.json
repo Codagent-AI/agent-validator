@@ -1,6 +1,6 @@
 {
   "name": "agent-validator",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "A CLI tool for validating AI coding agents",
   "license": "MIT",
   "author": "Paul Caplan",
