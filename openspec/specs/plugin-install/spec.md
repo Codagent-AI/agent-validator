@@ -44,13 +44,30 @@ The `init` command SHALL support plugin installation for any adapter that provid
 - **AND** SHALL print adapter-specific manual installation instructions
 - **AND** SHALL continue with remaining init steps
 
+#### Scenario: Copilot adapter dispatched for plugin install
+- **GIVEN** the user selects `github-copilot` as a development CLI
+- **WHEN** init delegates to the Copilot adapter's `installPlugin()`
+- **THEN** the adapter SHALL run the Copilot CLI plugin install command targeting `Codagent-AI/agent-validator`
+- **AND** the Copilot CLI SHALL discover the plugin via the existing `.claude-plugin/plugin.json` manifest
+
+#### Scenario: Copilot adapter manual install instructions
+- **GIVEN** the Copilot adapter's `installPlugin()` has failed
+- **WHEN** init prints manual installation instructions
+- **THEN** the instructions SHALL include the `copilot plugin install Codagent-AI/agent-validator` command
+
 ### Requirement: Plugin manifest
 
-The npm package SHALL include a `.claude-plugin/plugin.json` manifest so the package can be discovered as a Claude Code plugin.
+The npm package SHALL include a `.claude-plugin/plugin.json` manifest so the package can be discovered as both a Claude Code plugin and a Copilot CLI plugin. No separate `.github/plugin/plugin.json` is needed since Copilot CLI checks the `.claude-plugin/` directory.
 
 #### Scenario: Plugin manifest contents
 - **GIVEN** the agent-validator npm package is built
 - **WHEN** the package is published
 - **THEN** `.claude-plugin/plugin.json` SHALL contain `name`, `version`, `description`, and `license` fields
 - **AND** the `version` field SHALL match the version in `package.json`
+
+#### Scenario: Copilot CLI discovers plugin via .claude-plugin/
+- **GIVEN** a user runs `copilot plugin install Codagent-AI/agent-validator`
+- **WHEN** the Copilot CLI fetches the repository
+- **THEN** it SHALL discover `plugin.json` at `.claude-plugin/plugin.json`
+- **AND** it SHALL use the default `skills/` directory for skill discovery
 
