@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 1.5.0
+
+### Minor Changes
+
+- [#113](https://github.com/Codagent-AI/agent-validator/pull/113) Update GitHub Copilot adapter to invoke `gh copilot` directly, enabling native plugin support and streamlined integration
+
 ## 1.4.0
 
 ### Minor Changes
