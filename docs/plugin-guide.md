@@ -4,9 +4,9 @@ Agent Validator delivers skills and hooks to AI coding agents via **plugins**. B
 
 ## How It Works
 
-The agent-validator npm package includes plugin assets for both Claude Code and Cursor:
+The agent-validator npm package includes plugin assets for Claude Code, Cursor, and GitHub Copilot:
 
-- `.claude-plugin/plugin.json` — Plugin manifest for Claude Code
+- `.claude-plugin/plugin.json` — Plugin manifest for Claude Code and GitHub Copilot (Copilot discovers this same manifest)
 - `.cursor-plugin/plugin.json` — Plugin manifest for Cursor
 - `hooks/hooks.json` — Claude Code hook definitions (installed destination)
 - `hooks/cursor-hooks.json` — Cursor hook definitions (source; installed as `hooks/hooks.json`)
@@ -21,6 +21,16 @@ When you run `agent-validator init` with Claude Code selected, it:
 2. Installs the plugin: `claude plugin install agent-validator --scope <project|user>`
 
 Claude Code then discovers and loads the plugin's skills and hooks automatically.
+
+### GitHub Copilot
+
+When you run `agent-validator init` with GitHub Copilot selected, it:
+
+1. Installs the plugin: `gh copilot -- plugin install Codagent-AI/agent-validator`
+
+Copilot discovers the plugin via the existing `.claude-plugin/plugin.json` manifest — no separate manifest is needed. Plugins always install to user scope (`~/.copilot/installed-plugins/`).
+
+Plugin detection reads `~/.copilot/config.json` to check the `installed_plugins` array.
 
 ### Cursor
 
@@ -60,9 +70,11 @@ This command:
 
 1. Detects where the Claude plugin is installed (`claude plugin list --json`)
 2. If Claude plugin found → updates the marketplace registry and plugin
-3. Detects where the Cursor plugin is installed (file-system check)
-4. If Cursor plugin found → re-copies plugin assets from the npm package
-5. Refreshes Codex skills if installed (checksum-based)
+3. Detects where the GitHub Copilot plugin is installed (reads `~/.copilot/config.json`)
+4. If Copilot plugin found → re-runs `gh copilot -- plugin install` to update
+5. Detects where the Cursor plugin is installed (file-system check)
+6. If Cursor plugin found → re-copies plugin assets from the npm package
+7. Refreshes Codex skills if installed (checksum-based)
 
 ### Scope Detection
 

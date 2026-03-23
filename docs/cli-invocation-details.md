@@ -82,19 +82,27 @@ cat "<tmpFile>" | claude -p \
 **Adapter**: `src/cli-adapters/github-copilot.ts`
 
 ```bash
-cat "<tmpFile>" | copilot \
-  --allow-tool "shell(cat)" "shell(grep)" "shell(ls)" "shell(find)" "shell(head)" "shell(tail)"
+cat "<tmpFile>" | gh copilot -- -s \
+  --allow-tool 'shell(cat)' --allow-tool 'shell(grep)' \
+  --allow-tool 'shell(ls)' --allow-tool 'shell(find)' \
+  --allow-tool 'shell(head)' --allow-tool 'shell(tail)' \
+  --model "<model>" --effort <level>
 ```
 
 ### Flags Explanation
-- **No `-p` flag**: When no `-p` flag is provided, `copilot` reads the prompt from stdin.
-- **`--allow-tool "shell(cat)" ...`**: Explicitly whitelists read-only shell tools. Tool names must use the `shell(command)` format. Any attempt to use other tools (like `shell(touch)`, `shell(chmod)`, `shell(node)`, `shell(git)`, `write`) will fail, ensuring read-only safety.
+- **`gh copilot --`**: Invokes Copilot via the GitHub CLI wrapper. The `--` prevents `gh` from intercepting flags meant for Copilot.
+- **`-s` (silent)**: Suppresses UI output and stats, returning only the agent response for clean output parsing.
+- **`--allow-tool 'shell(cat)' ...`**: Explicitly whitelists read-only shell tools. Tool names must use the `shell(command)` format. Any attempt to use other tools will fail, ensuring read-only safety. When `allow_tool_use` is `false` in the adapter config, no `--allow-tool` flags are passed.
+- **`--model "<model>"`**: Passes the configured model name directly (free-form, no resolution). If omitted, Copilot uses its default model. Invalid model names produce a clear error.
+- **`--effort <level>`**: Maps from the `thinking_budget` adapter config (`low`→`low`, `medium`→`medium`, `high`→`high`). Omitted when `thinking_budget` is `off`.
 - **Repo Scoping**: Implicitly scoped to the Current Working Directory (CWD) where the command is executed (repository root).
-- **Model**: Uses the default model configured by the user. Model selection is not supported in this adapter.
+- **Availability**: Checked via `gh copilot -- --help` with a 10-second timeout. The `gh copilot` wrapper auto-downloads the Copilot binary on first use.
 
-### Notes
-- GitHub Copilot CLI does not support custom commands from `.github/prompts/` directory (active feature request [#618](https://github.com/github/copilot-cli/issues/618))
-- Users can configure their preferred model interactively via the `/model` command
+### Plugin Support
+- **Detection**: Reads `~/.copilot/config.json` to check the `installed_plugins` array
+- **Installation**: `gh copilot -- plugin install Codagent-AI/agent-validator`
+- **Skill directories**: `.github/skills/` (project), `~/.copilot/skills/` (user)
+- **Hooks**: Supported via the Copilot CLI plugin system
 
 ---
 

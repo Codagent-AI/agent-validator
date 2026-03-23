@@ -87,8 +87,8 @@ This walks you through an interactive setup:
 3. **Prompts for install scope** — local (project) or global (user) installation
 4. **Prompts for review CLIs** — the tools used for AI code reviews (sets `cli.default_preference`)
 5. **Creates `.validator/`** with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout))
-6. **Installs skills and hooks** — for Claude Code, installs as a Claude Code plugin (skills and hooks delivered via plugin). For Cursor, installs by copying plugin files (`.cursor-plugin/`, skills, hooks) to `.cursor/plugins/agent-validator/` or `~/.cursor/plugins/agent-validator/`. For Codex, copies skill files to `.agents/skills/`.
-7. **Prints next steps** with context-aware instructions for your selected CLIs
+6. **Installs skills and hooks** — for Claude Code, installs as a Claude Code plugin (skills and hooks delivered via plugin). For GitHub Copilot, installs via `gh copilot -- plugin install` (discovers the same `.claude-plugin/` manifest). For Cursor, installs by copying plugin files (`.cursor-plugin/`, skills, hooks) to `.cursor/plugins/agent-validator/` or `~/.cursor/plugins/agent-validator/`. For Codex, copies skill files to `.agents/skills/`.
+7. **Prints next steps** with context-aware instructions for your selected CLIs (Claude Code, Cursor, and GitHub Copilot users get `/validator-setup` instructions)
 
 Use `--yes` to skip all prompts (selects all detected CLIs, overwrites changed files).
 
@@ -279,7 +279,7 @@ To update Agent Validator after upgrading the npm package:
 agent-validator update
 ```
 
-This updates the Claude Code plugin (via marketplace), refreshes the Cursor plugin (via file copy) if installed, and refreshes Codex skills if installed. The command auto-detects where each plugin is installed.
+This updates the Claude Code plugin (via marketplace), the GitHub Copilot plugin (via `gh copilot -- plugin install`), refreshes the Cursor plugin (via file copy) if installed, and refreshes Codex skills if installed. The command auto-detects where each plugin is installed.
 
 ## Documentation
 
