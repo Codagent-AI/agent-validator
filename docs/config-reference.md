@@ -23,8 +23,16 @@ This document lists the configuration files Agent Validator loads and all suppor
 - **log_dir**: string (default: `validator_logs`)  
   Directory where per-job logs are written. Each gate run writes a log file named from the job id (sanitized).
 - **cli**: object (required)
-  - **default_preference**: string[] (required)  
+  - **default_preference**: string[] (required)
     Default ordered list of review CLI tools to try when a review gate doesn't specify its own `cli_preference`.
+  - **adapters**: object (optional)
+    Per-adapter configuration overrides. Keys are adapter names (e.g., `claude`, `codex`, `gemini`, `github-copilot`, `cursor`).
+    - **model**: string (optional)
+      Model name to pass to the adapter. Behavior varies by adapter — Claude uses `--model`, Codex uses `--model`, Copilot uses `--model` (free-form, no resolution). Adapters that don't support model selection ignore this.
+    - **allow_tool_use**: boolean (default: `true`)
+      Whether to grant the adapter read-only tool access during reviews. When `false`, no tool-use flags are passed.
+    - **thinking_budget**: string (optional)
+      Reasoning effort level. Valid values: `off`, `low`, `medium`, `high`. For Copilot, maps to the `--effort` flag. For Claude, maps to `--thinking-budget`.
 - **allow_parallel**: boolean (default: `true`)
   If `true`, gates with `parallel: true` run concurrently, while `parallel: false` gates run sequentially. If `false`, all gates run sequentially regardless of per-gate settings.
 - **max_retries**: number (default: `3`)
@@ -73,6 +81,13 @@ cli:
     - codex
     - claude
     - github-copilot
+  adapters:
+    claude:
+      allow_tool_use: false
+      thinking_budget: high
+    github-copilot:
+      model: gpt-4o
+      thinking_budget: medium
 debug_log:
   enabled: true
   max_size_mb: 10

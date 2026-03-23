@@ -1,25 +1,9 @@
-# plugin-install Specification
+# plugin-install Specification (Delta)
 
 ## Purpose
-Plugin installation during `agent-validate init`. Covers Claude plugin marketplace registration, plugin installation with scope, and plugin manifest requirements.
-## Requirements
-### Requirement: Plugin marketplace registration
+Add Copilot CLI plugin installation strategy to the init flow alongside the existing Claude plugin installation.
 
-The `init` command SHALL run `claude plugin marketplace add Codagent-AI/agent-validator` before attempting plugin installation. The command SHALL be run unconditionally (no pre-check).
-
-#### Scenario: Marketplace add succeeds
-- **GIVEN** the user runs `agent-validate init` with Claude selected
-- **WHEN** `init` runs the marketplace add command
-- **AND** the command succeeds
-- **THEN** init SHALL proceed to plugin installation
-
-#### Scenario: Marketplace add fails
-- **GIVEN** the user runs `agent-validate init` with Claude selected
-- **WHEN** `init` runs the marketplace add command
-- **AND** the command fails
-- **THEN** init SHALL warn the user that plugin installation failed
-- **AND** SHALL print manual installation instructions (the marketplace add and plugin install commands)
-- **AND** SHALL continue with remaining init steps (Codex skills, other CLIs)
+## MODIFIED Requirements
 
 ### Requirement: Plugin installation with scope
 
@@ -70,4 +54,3 @@ The npm package SHALL include a `.claude-plugin/plugin.json` manifest so the pac
 - **WHEN** the Copilot CLI fetches the repository
 - **THEN** it SHALL discover `plugin.json` at `.claude-plugin/plugin.json`
 - **AND** it SHALL use the default `skills/` directory for skill discovery
-

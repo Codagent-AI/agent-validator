@@ -75,7 +75,7 @@ interface InitOptions {
 }
 
 /** Native CLIs that support the /validator-setup skill invocation. */
-const NATIVE_CLIS = new Set(['claude', 'cursor']);
+const NATIVE_CLIS = new Set(['claude', 'cursor', 'github-copilot']);
 
 export function registerInitCommand(program: Command): void {
   program
@@ -308,7 +308,12 @@ async function installOtherAdapterSkills(
 ): Promise<void> {
   const seen = new Set<string>();
   for (const adapter of devAdapters) {
-    if (adapter.name === 'claude' || adapter.name === 'codex') continue;
+    if (
+      adapter.name === 'claude' ||
+      adapter.name === 'codex' ||
+      adapter.name === 'github-copilot'
+    )
+      continue;
     const dir = adapter.getProjectSkillDir();
     if (dir && !seen.has(dir)) {
       seen.add(dir);
