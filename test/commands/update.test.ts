@@ -72,6 +72,8 @@ describe("update command", () => {
 		listPluginsMock.mockClear();
 		updateMarketplaceMock.mockClear();
 		updatePluginMock.mockClear();
+		addMarketplaceMock.mockClear();
+		installPluginMock.mockClear();
 
 		// Set up prototype spies with default implementations
 		cursorDetectPluginSpy = spyOn(
@@ -226,9 +228,13 @@ describe("update command", () => {
 		listPluginsMock.mockImplementationOnce(async () => [
 			{ name: "agent-validator", scope: "user" },
 		]);
-		updateMarketplaceMock.mockImplementationOnce(async () => ({
+		updateMarketplaceMock.mockImplementation(async () => ({
 			success: false,
 			stderr: "marketplace unavailable",
+		}));
+		addMarketplaceMock.mockImplementationOnce(async () => ({
+			success: false,
+			stderr: "add failed",
 		}));
 
 		await expect(runPluginUpdate()).rejects.toThrow("marketplace unavailable");
@@ -239,6 +245,46 @@ describe("update command", () => {
 		expect(output).toContain(
 			"claude plugin update agent-validator@Codagent-AI/agent-validator",
 		);
+
+		// Restore default so other tests aren't affected
+		updateMarketplaceMock.mockImplementation(async () => ({ success: true }));
+	});
+
+	it("re-adds marketplace and retries when marketplace update fails", async () => {
+		listPluginsMock.mockImplementationOnce(async () => [
+			{ name: "agent-validator", scope: "user" },
+		]);
+		// First call fails, second (after re-add) succeeds
+		updateMarketplaceMock
+			.mockImplementationOnce(async () => ({
+				success: false,
+				stderr: "Marketplace 'agent-validator' not found",
+			}))
+			.mockImplementationOnce(async () => ({ success: true }));
+
+		await runPluginUpdate();
+
+		expect(addMarketplaceMock).toHaveBeenCalledTimes(1);
+		expect(updateMarketplaceMock).toHaveBeenCalledTimes(2);
+		expect(updatePluginMock).toHaveBeenCalledTimes(1);
+		const output = logs.join("\n");
+		expect(output).toContain("re-adding");
+	});
+
+	it("reinstalls plugin when plugin update fails", async () => {
+		listPluginsMock.mockImplementationOnce(async () => [
+			{ name: "agent-validator", scope: "user" },
+		]);
+		updatePluginMock.mockImplementationOnce(async () => ({
+			success: false,
+			stderr: 'Plugin "agent-validator" not found',
+		}));
+
+		await runPluginUpdate();
+
+		expect(installPluginMock).toHaveBeenCalledWith("user");
+		const output = logs.join("\n");
+		expect(output).toContain("reinstalling");
 	});
 
 	it("fails when no Claude plugin and no Cursor plugin are installed", async () => {
@@ -336,19 +382,42 @@ describe("update command", () => {
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 	});
 
-	it("throws when Claude update fails (Cursor update is not reached)", async () => {
-		// Claude marketplace update fails fast — Cursor update never runs
+	it("throws when Claude marketplace update fails completely (Cursor update is not reached)", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
 			{ name: "agent-validator", scope: "user" },
 		]);
 		cursorDetectPluginSpy.mockResolvedValueOnce("user");
-		updateMarketplaceMock.mockImplementationOnce(async () => ({
+		updateMarketplaceMock.mockImplementation(async () => ({
 			success: false,
 			stderr: "marketplace down",
 		}));
+		addMarketplaceMock.mockImplementationOnce(async () => ({
+			success: false,
+			stderr: "add failed",
+		}));
 
-		// Claude failure propagates; Cursor update is never reached
 		await expect(runPluginUpdate()).rejects.toThrow("marketplace down");
+		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
+
+		// Restore default
+		updateMarketplaceMock.mockImplementation(async () => ({ success: true }));
+	});
+
+	it("throws when Claude plugin update and reinstall both fail", async () => {
+		listPluginsMock.mockImplementationOnce(async () => [
+			{ name: "agent-validator", scope: "user" },
+		]);
+		cursorDetectPluginSpy.mockResolvedValueOnce("user");
+		updatePluginMock.mockImplementationOnce(async () => ({
+			success: false,
+			stderr: "plugin not found",
+		}));
+		installPluginMock.mockImplementationOnce(async () => ({
+			success: false,
+			stderr: "install failed",
+		}));
+
+		await expect(runPluginUpdate()).rejects.toThrow("install failed");
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 	});
 });
