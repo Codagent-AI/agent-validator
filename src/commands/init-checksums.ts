@@ -19,14 +19,16 @@ export async function computeSkillChecksum(skillDir: string): Promise<string> {
 }
 
 /**
- * Compute checksum over gauntlet-specific hook entries only.
+ * Compute checksum over validator-specific hook entries only.
  */
 export function computeHookChecksum(
   entries: Record<string, unknown>[],
 ): string {
-  const gauntletEntries = entries.filter((entry) => isGauntletHookEntry(entry));
+  const validatorEntries = entries.filter((entry) =>
+    isValidatorHookEntry(entry),
+  );
   const hash = createHash('sha256');
-  hash.update(JSON.stringify(gauntletEntries));
+  hash.update(JSON.stringify(validatorEntries));
   return hash.digest('hex');
 }
 
@@ -39,21 +41,28 @@ export function computeExpectedHookChecksum(
   return computeHookChecksum(hookEntries);
 }
 
+/** @deprecated Use isValidatorHookEntry */
+export const isGauntletHookEntry = isValidatorHookEntry;
+
 /**
- * Returns true if the hook entry contains an "agent-gauntlet" command.
+ * Returns true if the hook entry contains an "agent-validate" or "agent-gauntlet" command.
  */
-export function isGauntletHookEntry(entry: Record<string, unknown>): boolean {
-  if (
-    typeof entry.command === 'string' &&
-    entry.command.startsWith('agent-gauntlet')
-  ) {
-    return true;
+export function isValidatorHookEntry(entry: Record<string, unknown>): boolean {
+  if (typeof entry.command === 'string') {
+    if (
+      entry.command.startsWith('agent-validate') ||
+      entry.command.startsWith('agent-gauntlet')
+    ) {
+      return true;
+    }
   }
   const nested = entry.hooks as { command?: string }[] | undefined;
   if (Array.isArray(nested)) {
     return nested.some(
       (h) =>
-        typeof h.command === 'string' && h.command.startsWith('agent-gauntlet'),
+        typeof h.command === 'string' &&
+        (h.command.startsWith('agent-validate') ||
+          h.command.startsWith('agent-gauntlet')),
     );
   }
   return false;

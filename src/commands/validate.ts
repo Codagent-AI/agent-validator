@@ -5,7 +5,7 @@ import { loadConfig } from '../config/loader.js';
 export function registerValidateCommand(program: Command): void {
   program
     .command('validate')
-    .description('Validate .gauntlet/ config files against schemas')
+    .description('Validate config files against schemas')
     .action(async () => {
       try {
         await loadConfig();

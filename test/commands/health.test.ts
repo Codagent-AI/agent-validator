@@ -13,7 +13,7 @@ import { Command } from "commander";
 import { registerHealthCommand } from "../../src/commands/health.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-health-${Date.now()}`);
-const GAUNTLET_DIR = path.join(TEST_DIR, ".gauntlet");
+const GAUNTLET_DIR = path.join(TEST_DIR, ".validator");
 const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
 
 describe("Health Command", () => {
@@ -33,7 +33,7 @@ describe("Health Command", () => {
 			path.join(GAUNTLET_DIR, "config.yml"),
 			`
 base_branch: origin/main
-log_dir: gauntlet_logs
+log_dir: validator_logs
 cli:
   default_preference:
     - gemini

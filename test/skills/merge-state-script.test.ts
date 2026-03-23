@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const SCRIPT_PATH = path.resolve(
-	"skills/gauntlet-merge/merge-state.sh",
+	"skills/validator-merge/merge-state.sh",
 );
 
 function runScript(args: string, cwd: string): { stdout: string; stderr: string; exitCode: number } {
@@ -79,8 +79,8 @@ describe("merge-state.sh", () => {
 			execSync("git checkout main", { cwd: mainRepo });
 			execSync(`git worktree add "${worktreeDir}" feature-branch`, { cwd: mainRepo });
 
-			// Set up execution state in the worktree's log dir (default: gauntlet_logs)
-			const sourceLogDir = path.join(worktreeDir, "gauntlet_logs");
+			// Set up execution state in the worktree's log dir (default: validator_logs)
+			const sourceLogDir = path.join(worktreeDir, "validator_logs");
 			await fs.mkdir(sourceLogDir, { recursive: true });
 			await fs.writeFile(
 				path.join(sourceLogDir, ".execution_state"),
@@ -92,7 +92,7 @@ describe("merge-state.sh", () => {
 			expect(result.exitCode).toBe(0);
 
 			// Execution state should be copied to main repo's log dir
-			const destStatePath = path.join(mainRepo, "gauntlet_logs", ".execution_state");
+			const destStatePath = path.join(mainRepo, "validator_logs", ".execution_state");
 			const destContent = await fs.readFile(destStatePath, "utf-8");
 			expect(destContent).toBe(JSON.stringify({ status: "passed", run: 1 }));
 		});
@@ -114,7 +114,7 @@ describe("merge-state.sh", () => {
 			execSync(`git worktree add "${worktreeDir}" custom-src-branch`, { cwd: mainRepo });
 
 			// Set up custom log_dir in worktree config
-			const worktreeGauntletDir = path.join(worktreeDir, ".gauntlet");
+			const worktreeGauntletDir = path.join(worktreeDir, ".validator");
 			await fs.mkdir(worktreeGauntletDir, { recursive: true });
 			await fs.writeFile(
 				path.join(worktreeGauntletDir, "config.yml"),
@@ -133,7 +133,7 @@ describe("merge-state.sh", () => {
 
 			expect(result.exitCode).toBe(0);
 
-			const destStatePath = path.join(mainRepo, "gauntlet_logs", ".execution_state");
+			const destStatePath = path.join(mainRepo, "validator_logs", ".execution_state");
 			const destContent = await fs.readFile(destStatePath, "utf-8");
 			expect(destContent).toBe(JSON.stringify({ status: "passed", custom: true }));
 		});
@@ -155,7 +155,7 @@ describe("merge-state.sh", () => {
 			execSync(`git worktree add "${worktreeDir}" dest-config-branch`, { cwd: mainRepo });
 
 			// Set up custom log_dir in main repo config
-			const mainGauntletDir = path.join(mainRepo, ".gauntlet");
+			const mainGauntletDir = path.join(mainRepo, ".validator");
 			await fs.mkdir(mainGauntletDir, { recursive: true });
 			await fs.writeFile(
 				path.join(mainGauntletDir, "config.yml"),
@@ -163,7 +163,7 @@ describe("merge-state.sh", () => {
 			);
 
 			// Create execution state in the worktree's default log dir
-			const sourceLogDir = path.join(worktreeDir, "gauntlet_logs");
+			const sourceLogDir = path.join(worktreeDir, "validator_logs");
 			await fs.mkdir(sourceLogDir, { recursive: true });
 			await fs.writeFile(
 				path.join(sourceLogDir, ".execution_state"),
@@ -197,7 +197,7 @@ describe("merge-state.sh", () => {
 			execSync(`git worktree add "${worktreeDir}" mkdir-branch`, { cwd: mainRepo });
 
 			// Source log dir with execution state
-			const sourceLogDir = path.join(worktreeDir, "gauntlet_logs");
+			const sourceLogDir = path.join(worktreeDir, "validator_logs");
 			await fs.mkdir(sourceLogDir, { recursive: true });
 			await fs.writeFile(
 				path.join(sourceLogDir, ".execution_state"),
@@ -205,7 +205,7 @@ describe("merge-state.sh", () => {
 			);
 
 			// Destination log dir does NOT exist
-			const destLogDir = path.join(mainRepo, "gauntlet_logs");
+			const destLogDir = path.join(mainRepo, "validator_logs");
 			// Make sure it doesn't exist
 			await fs.rm(destLogDir, { recursive: true, force: true });
 
@@ -236,7 +236,7 @@ describe("merge-state.sh", () => {
 			execSync(`git worktree add "${worktreeDir}" overwrite-branch`, { cwd: mainRepo });
 
 			// Source execution state
-			const sourceLogDir = path.join(worktreeDir, "gauntlet_logs");
+			const sourceLogDir = path.join(worktreeDir, "validator_logs");
 			await fs.mkdir(sourceLogDir, { recursive: true });
 			await fs.writeFile(
 				path.join(sourceLogDir, ".execution_state"),
@@ -244,7 +244,7 @@ describe("merge-state.sh", () => {
 			);
 
 			// Existing destination execution state
-			const destLogDir = path.join(mainRepo, "gauntlet_logs");
+			const destLogDir = path.join(mainRepo, "validator_logs");
 			await fs.mkdir(destLogDir, { recursive: true });
 			await fs.writeFile(
 				path.join(destLogDir, ".execution_state"),
@@ -316,7 +316,7 @@ describe("merge-state.sh", () => {
 			execSync(`git worktree add "${featureWorktreeDir}" find-branch`, { cwd: featureBranchRepo });
 
 			// Source state
-			const sourceLogDir = path.join(featureWorktreeDir, "gauntlet_logs");
+			const sourceLogDir = path.join(featureWorktreeDir, "validator_logs");
 			await fs.mkdir(sourceLogDir, { recursive: true });
 			await fs.writeFile(
 				path.join(sourceLogDir, ".execution_state"),

@@ -160,7 +160,7 @@ export class CursorAdapter implements CLIAdapter {
     // millisecond, causing Date.now() collisions and tmp file overwrites).
     const tmpFile = path.join(
       tmpDir,
-      `gauntlet-cursor-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+      `validator-cursor-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
     );
     await fs.writeFile(tmpFile, fullContent);
 
@@ -217,33 +217,37 @@ export class CursorAdapter implements CLIAdapter {
   }
 
   async detectPlugin(projectRoot: string): Promise<'user' | 'project' | null> {
-    // Check project scope: <projectRoot>/.cursor/plugins/agent-gauntlet/.cursor-plugin/plugin.json
-    const projectPluginPath = path.join(
-      projectRoot,
-      '.cursor',
-      'plugins',
-      'agent-gauntlet',
-      '.cursor-plugin',
-      'plugin.json',
-    );
-    try {
-      await fs.access(projectPluginPath);
-      return 'project';
-    } catch {}
+    // Check project scope — new and legacy plugin directory names
+    for (const pluginName of ['agent-validator', 'agent-gauntlet']) {
+      const projectPluginPath = path.join(
+        projectRoot,
+        '.cursor',
+        'plugins',
+        pluginName,
+        '.cursor-plugin',
+        'plugin.json',
+      );
+      try {
+        await fs.access(projectPluginPath);
+        return 'project';
+      } catch {}
+    }
 
-    // Check user scope: ~/.cursor/plugins/agent-gauntlet/.cursor-plugin/plugin.json
-    const userPluginPath = path.join(
-      os.homedir(),
-      '.cursor',
-      'plugins',
-      'agent-gauntlet',
-      '.cursor-plugin',
-      'plugin.json',
-    );
-    try {
-      await fs.access(userPluginPath);
-      return 'user';
-    } catch {}
+    // Check user scope — new and legacy plugin directory names
+    for (const pluginName of ['agent-validator', 'agent-gauntlet']) {
+      const userPluginPath = path.join(
+        os.homedir(),
+        '.cursor',
+        'plugins',
+        pluginName,
+        '.cursor-plugin',
+        'plugin.json',
+      );
+      try {
+        await fs.access(userPluginPath);
+        return 'user';
+      } catch {}
+    }
 
     return null;
   }
@@ -255,12 +259,12 @@ export class CursorAdapter implements CLIAdapter {
     try {
       const baseDir =
         scope === 'user'
-          ? path.join(os.homedir(), '.cursor', 'plugins', 'agent-gauntlet')
+          ? path.join(os.homedir(), '.cursor', 'plugins', 'agent-validator')
           : path.join(
               projectRoot ?? '.',
               '.cursor',
               'plugins',
-              'agent-gauntlet',
+              'agent-validator',
             );
 
       // Find package root (where .cursor-plugin/ lives)
@@ -287,8 +291,8 @@ export class CursorAdapter implements CLIAdapter {
   getManualInstallInstructions(scope: 'user' | 'project'): string[] {
     const targetDir =
       scope === 'user'
-        ? '~/.cursor/plugins/agent-gauntlet/'
-        : '.cursor/plugins/agent-gauntlet/';
+        ? '~/.cursor/plugins/agent-validator/'
+        : '.cursor/plugins/agent-validator/';
     return [
       `Copy plugin files to ${targetDir}`,
       'Or install via /add-plugin in Cursor or at the Cursor marketplace',

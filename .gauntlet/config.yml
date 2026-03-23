@@ -1,4 +1,4 @@
-name: agent-gauntlet
+name: agent-validator
 base_branch: main
 log_dir: gauntlet_logs
 debug_log:

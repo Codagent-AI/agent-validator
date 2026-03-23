@@ -1,57 +1,62 @@
-![Agent Gauntlet logo](docs/images/logo2.png)
+![Agent Validator logo](docs/images/agent-validator-logo.png)
 
-[![CI](https://github.com/pacaplan/agent-gauntlet/actions/workflows/gauntlet.yml/badge.svg)](https://github.com/pacaplan/agent-gauntlet/actions/workflows/gauntlet.yml)
-[![npm](https://img.shields.io/npm/v/agent-gauntlet)](https://www.npmjs.com/package/agent-gauntlet)
-[![npm downloads](https://img.shields.io/npm/dm/agent-gauntlet)](https://www.npmjs.com/package/agent-gauntlet)
+[![CI](https://github.com/Codagent-AI/agent-validator/actions/workflows/validator.yml/badge.svg)](https://github.com/Codagent-AI/agent-validator/actions/workflows/validator.yml)
+[![npm](https://img.shields.io/npm/v/agent-validator)](https://www.npmjs.com/package/agent-validator)
+[![npm downloads](https://img.shields.io/npm/dm/agent-validator)](https://www.npmjs.com/package/agent-validator)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![CodeRabbit](https://img.shields.io/coderabbit/prs/github/pacaplan/agent-gauntlet)](https://coderabbit.ai)
-[![OpenSpec](https://raw.githubusercontent.com/pacaplan/flokay/gh-pages/badges/number_of_specs.svg)](https://github.com/pacaplan/flokay)
+[![CodeRabbit](https://img.shields.io/coderabbit/prs/github/Codagent-AI/agent-validator)](https://coderabbit.ai)
+[![OpenSpec](https://raw.githubusercontent.com/Codagent-AI/flokay/gh-pages/badges/number_of_specs.svg)](https://github.com/Codagent-AI/flokay)
 
 > Don't just review the agent's code — put it through the gauntlet.
 
-Agent Gauntlet is a configurable “feedback loop” runner for AI-assisted development workflows.
+Agent Validator (formerly Agent Gauntlet) is a configurable “feedback loop” runner for AI-assisted development workflows.
 
-You configure which paths in your repo should trigger which validations — shell commands like tests and linters, plus AI-powered local code reviews. When files change, Gauntlet automatically runs the relevant validations and reports results.
+You configure which paths in your repo should trigger which validations — shell commands like tests and linters, plus AI-powered local code reviews. When files change, Agent Validator automatically runs the relevant validations and reports results.
 
 For AI reviews, it uses the CLI tool of your choice: Gemini, Codex, Claude Code, GitHub Copilot, or Cursor. 
 
 ## Features
 
-- **Agent validation loop**: Keep your coding agent on track with automated feedback loops. Detect problems — deterministically and/or non-deterministically — and let your agent fix and Gauntlet verify.
-- **Local cross-agent code reviews**: Enable one AI agent to automatically request code reviews from another. For example, if Claude made changes, Gauntlet can request a review from Codex — spreading token usage across your subscriptions instead of burning through one.
+- **Agent validation loop**: Keep your coding agent on track with automated feedback loops. Detect problems — deterministically and/or non-deterministically — and let your agent fix and Agent Validator verify.
+- **Local cross-agent code reviews**: Enable one AI agent to automatically request code reviews from another. For example, if Claude made changes, Agent Validator can request a review from Codex — spreading token usage across your subscriptions instead of burning through one.
   - Multiple AI review adapters have been evaluated for quality and efficiency. Claude and Codex deliver optimal review quality with superior token efficiency. For detailed metrics, see [Eval Results](docs/eval-results.md).
-- **Leverage existing subscriptions**: Agent Gauntlet is *free* and tool-agnostic, leveraging the AI CLI tools you already have installed.
+- **Leverage existing subscriptions**: Agent Validator is *free* and tool-agnostic, leveraging the AI CLI tools you already have installed.
 - **Easy CI setup**: Define your CI gates once, run them locally and in GitHub.
 
-## Common Workflows
-
-Agent Gauntlet supports three workflows, ranging from simple CLI execution to fully autonomous agentic integration:
-
-- **CLI Mode** — Run checks via command line; ideal for CI pipelines and scripts.
-- **Assistant Mode** — AI assistant runs validation loop, fixing issues iteratively.
-- **Agentic Mode** — Autonomous agent validates and fixes in real-time, delivered as a Claude Code or Cursor plugin.
-
-![Agent Gauntlet Workflows](docs/images/workflows.png)
 
 ### Example Workflow
 
 1. Claude implements a feature
-2. Agent Gauntlet reports quality issues detected by static code analysis and Codex reviewer agent
+2. Agent Validator reports linter failures and bugs detected by Codex reviewer agent
 3. Claude fixes issues
-4. Agent Gauntlet verifies
+4. Agent Validator reports linter issue remaining
+5. Claude fixes issue
+6. Agent Validator confirms all issues fixed
+
+![Agent Validator Demo](docs/images/agent-validator-demo.gif)
+
+## Common Workflows
+
+Agent Validator supports three workflows, ranging from simple CLI execution to fully autonomous agentic integration:
+
+- **CLI Mode** — Run checks via command line; ideal for CI pipelines and scripts.
+- **Assistant Mode** — AI assistant runs validation loop, fixing issues iteratively.
+- **Agentic Mode** — Autonomous agent validates and fixes in real-time, delivered as a Claude Code or Cursor plugin. *(Coming soon with [Agent Runner](https://www.codagent.dev/).)*
+
+![Agent Validator Workflows](docs/images/workflows2.png)
 
 ### Comparison vs Other Tools
 
 ### AI Code Review Tools
 
-Agent Gauntlet is not a replacement for tools that provide AI pull request code reviews. It provides real-time feedback loops for autonomous coding agents, combining deterministic static checks (build, lint, test) with multi-agent AI reviews in a single pipeline. This enables agents to iterate and self-correct until all checks and reviews pass, without human intervention.
+Agent Validator is not a replacement for tools that provide AI pull request code reviews. It provides real-time feedback loops for autonomous coding agents, combining deterministic static checks (build, lint, test) with multi-agent AI reviews in a single pipeline. This enables agents to iterate and self-correct until all checks and reviews pass, without human intervention.
 
 [Full comparison →](docs/feature_comparison.md)
 
 ### Spec-Driven Workflow Tools
 
-It is recommended to use Agent Gauntlet in conjunction with other spec-driven development tools. We believe is the ideal implementation of the validation step in any Spec → Implement → Validate workflow.
+It is recommended to use Agent Validator in conjunction with other spec-driven development tools. We believe is the ideal implementation of the validation step in any Spec → Implement → Validate workflow.
 
 ## Quick Start
 
@@ -64,5 +69,5 @@ For basic usage and configuration guide, see the [Quick Start Guide](docs/quick-
 - [Configuration Reference](docs/config-reference.md) — all configuration fields + defaults
 - [Plugin & Update Guide](docs/plugin-guide.md) — Claude Code and Cursor plugin delivery and updating
 - [CLI Invocation Details](docs/cli-invocation-details.md) — how we securely invoke AI CLIs
-- [Feature Comparison](docs/feature_comparison.md) — how Agent Gauntlet compares to other tools
+- [Feature Comparison](docs/feature_comparison.md) — how Agent Validator compares to other tools
 - [Development Guide](docs/development.md) — how to build and develop this project

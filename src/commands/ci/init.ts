@@ -2,25 +2,27 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import chalk from 'chalk';
 import YAML from 'yaml';
-import { loadCIConfig } from '../../config/ci-loader.js';
+import { loadCIConfig, resolveConfigDir } from '../../config/ci-loader.js';
 import type { CIConfig } from '../../config/types.js';
 import workflowTemplate from '../../templates/workflow.yml' with {
   type: 'text',
 };
 
 export async function initCI(): Promise<void> {
-  const workflowDir = path.join(process.cwd(), '.github', 'workflows');
-  const workflowPath = path.join(workflowDir, 'gauntlet.yml');
-  const gauntletDir = path.join(process.cwd(), '.gauntlet');
-  const ciConfigPath = path.join(gauntletDir, 'ci.yml');
+  const cwd = process.cwd();
+  const workflowDir = path.join(cwd, '.github', 'workflows');
+  const workflowPath = path.join(workflowDir, 'validator.yml');
+  const configDir = resolveConfigDir(cwd);
+  const ciConfigPath = path.join(configDir, 'ci.yml');
+  const configDirName = path.basename(configDir);
 
-  // 1. Ensure .gauntlet/ci.yml exists
+  // 1. Ensure <config-dir>/ci.yml exists
   if (await fileExists(ciConfigPath)) {
-    console.log(chalk.dim('Found existing .gauntlet/ci.yml'));
+    console.log(chalk.dim(`Found existing ${configDirName}/ci.yml`));
   } else {
-    console.log(chalk.yellow('Creating starter .gauntlet/ci.yml...'));
-    await fs.mkdir(gauntletDir, { recursive: true });
-    const starterContent = `# CI Configuration for Agent Gauntlet
+    console.log(chalk.yellow(`Creating starter ${configDirName}/ci.yml...`));
+    await fs.mkdir(configDir, { recursive: true });
+    const starterContent = `# CI Configuration for Agent Validator
 # Define runtimes, services, and which checks to run in CI.
 
 runtimes:
@@ -72,12 +74,12 @@ checks:
       .join('\n');
 
     templateContent = templateContent.replace(
-      '    # Services will be injected here by agent-gauntlet',
+      '    # Services will be injected here by agent-validator',
       indentedServices,
     );
   } else {
     templateContent = templateContent.replace(
-      '    # Services will be injected here by agent-gauntlet\n',
+      '    # Services will be injected here by agent-validator\n',
       '',
     );
   }

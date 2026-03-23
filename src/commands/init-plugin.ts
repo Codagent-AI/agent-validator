@@ -26,8 +26,11 @@ export async function detectInstalledPlugin(
       const e = entry as { name?: unknown; id?: unknown };
       const name = e.name ?? e.id;
       return (
+        name === 'agent-validator' ||
         name === 'agent-gauntlet' ||
-        (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
+        (typeof name === 'string' &&
+          (name.startsWith('agent-validator@') ||
+            name.startsWith('agent-gauntlet@')))
       );
     });
     const resolved = path.resolve(projectRoot);
@@ -70,8 +73,11 @@ export function detectClaudePluginScope(): 'user' | 'project' {
       const e = entry as { name?: unknown; id?: unknown };
       const name = e.name ?? e.id;
       return (
+        name === 'agent-validator' ||
         name === 'agent-gauntlet' ||
-        (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
+        (typeof name === 'string' &&
+          (name.startsWith('agent-validator@') ||
+            name.startsWith('agent-gauntlet@')))
       );
     });
     if (
@@ -118,9 +124,9 @@ function warnClaudePluginInstallFailure(
     console.warn(chalk.yellow(stderr.trim()));
   }
   console.warn('Run these commands manually:');
-  console.warn('  claude plugin marketplace add pcaplan/agent-gauntlet');
+  console.warn('  claude plugin marketplace add Codagent-AI/agent-validator');
   console.warn(
-    `  claude plugin install agent-gauntlet --scope ${installScope}`,
+    `  claude plugin install agent-validator --scope ${installScope}`,
   );
 }
 

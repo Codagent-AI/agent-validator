@@ -1,0 +1,90 @@
+name: Validator CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  discover:  
+    name: Discover Jobs
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      runtimes: ${{ steps.discover.outputs.runtimes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          ~/.bun/bin/bun install
+
+      - name: Discover validator jobs
+        id: discover
+        run: |
+          output=$(~/.bun/bin/bun run src/index.ts ci list-jobs)
+          echo "matrix=$(echo "$output" | jq -c '.matrix')" >> $GITHUB_OUTPUT
+          echo "runtimes=$(echo "$output" | jq -c '.runtimes')" >> $GITHUB_OUTPUT
+
+  checks:
+    name: ${{ matrix.job.name }} (${{ matrix.job.entry_point }})
+    runs-on: ubuntu-latest
+    needs: discover
+    if: ${{ needs.discover.outputs.matrix != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job: ${{ fromJson(needs.discover.outputs.matrix) }}
+
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        if: contains(matrix.job.runtimes, 'ruby')
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ fromJson(needs.discover.outputs.runtimes).ruby.version }}
+          bundler-cache: ${{ fromJson(needs.discover.outputs.runtimes).ruby.bundler_cache }}
+          working-directory: ${{ matrix.job.working_directory }}
+
+      - name: Set up Node
+        if: contains(matrix.job.runtimes, 'node')
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ fromJson(needs.discover.outputs.runtimes).node.version }}
+
+      - name: Set up Bun
+        if: contains(matrix.job.runtimes, 'bun')
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: ${{ fromJson(needs.discover.outputs.runtimes).bun.version }}
+
+      - name: Run global setup
+        if: ${{ matrix.job.global_setup != '' }}
+        run: ${{ matrix.job.global_setup }}
+
+      - name: Run check setup
+        if: ${{ matrix.job.setup != '' }}
+        working-directory: ${{ matrix.job.working_directory }}
+        run: ${{ matrix.job.setup }}
+
+      - name: Run check
+        working-directory: ${{ matrix.job.working_directory }}
+        run: ${{ matrix.job.command }}
+
+  e2e:
+    name: Integration Tests (E2E)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run E2E tests
+        run: bun run test:e2e

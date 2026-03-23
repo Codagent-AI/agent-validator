@@ -44,3 +44,4 @@ bin/
 docs/plans/
 docs/design/
 .gauntlet/current-task-context.md
+validator_logs

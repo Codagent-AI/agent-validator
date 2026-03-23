@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import chalk from 'chalk';
 import {
   getDebugLogBackupFilename,
   getDebugLogFilename,
@@ -14,7 +15,7 @@ import {
   readExecutionState,
 } from '../utils/execution-state.js';
 
-const LOCK_FILENAME = '.gauntlet-run.lock';
+const LOCK_FILENAME = '.validator-run.lock';
 const SESSION_REF_FILENAME = '.session_ref';
 
 export interface AutoCleanResult {
@@ -99,6 +100,24 @@ export function getLockFilename(): string {
   return LOCK_FILENAME;
 }
 
+export async function addToGitignore(
+  projectRoot: string,
+  entry: string,
+): Promise<void> {
+  const gitignorePath = path.join(projectRoot, '.gitignore');
+
+  let content = '';
+  if (await exists(gitignorePath)) {
+    content = await fs.readFile(gitignorePath, 'utf-8');
+    const lines = content.split('\n').map((l) => l.trim());
+    if (lines.includes(entry)) return;
+  }
+
+  const suffix = content.length > 0 && !content.endsWith('\n') ? '\n' : '';
+  await fs.appendFile(gitignorePath, `${suffix}${entry}\n`);
+  console.log(chalk.green(`Added ${entry} to .gitignore`));
+}
+
 export async function exists(filePath: string): Promise<boolean> {
   try {
     await fs.stat(filePath);
@@ -121,7 +140,7 @@ export async function acquireLock(logDir: string): Promise<void> {
       (err as { code: string }).code === 'EEXIST'
     ) {
       console.error(
-        `Error: A gauntlet run is already in progress (lock file: ${lockPath}).`,
+        `Error: A validator run is already in progress (lock file: ${lockPath}).`,
       );
       console.error(
         'If no run is actually in progress, delete the lock file manually.',

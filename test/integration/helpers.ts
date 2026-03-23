@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const GAUNTLET_ROOT = path.resolve(import.meta.dir, "../..");
@@ -8,12 +9,21 @@ export function isDistBuilt(): boolean {
 	return fs.existsSync(DIST_BIN);
 }
 
-export async function isClaudeAvailable(): Promise<boolean> {
-	const proc = Bun.spawn(["which", "claude"], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	return (await proc.exited) === 0;
+export async function createClaudeStub(): Promise<{
+	binDir: string;
+	cleanup: () => Promise<void>;
+}> {
+	const binDir = await fs.promises.mkdtemp(
+		path.join(os.tmpdir(), "claude-stub-"),
+	);
+	const claudePath = path.join(binDir, "claude");
+	await fs.promises.writeFile(claudePath, "#!/bin/sh\necho '[]'\nexit 0\n");
+	await fs.promises.chmod(claudePath, 0o755);
+	return {
+		binDir,
+		cleanup: () =>
+			fs.promises.rm(binDir, { recursive: true, force: true }),
+	};
 }
 
 export async function initGitRepo(dir: string): Promise<void> {

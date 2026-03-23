@@ -31,7 +31,7 @@ describe("Lock file", () => {
 
 	it("acquireLock creates lock file when absent", async () => {
 		await acquireLock(TEST_DIR);
-		const lockPath = path.join(TEST_DIR, ".gauntlet-run.lock");
+		const lockPath = path.join(TEST_DIR, ".validator-run.lock");
 		const stat = await fs.stat(lockPath);
 		expect(stat.isFile()).toBe(true);
 		await releaseLock(TEST_DIR);
@@ -40,7 +40,7 @@ describe("Lock file", () => {
 	it("acquireLock creates logDir if missing", async () => {
 		const subDir = path.join(TEST_DIR, "sub", "dir");
 		await acquireLock(subDir);
-		const lockPath = path.join(subDir, ".gauntlet-run.lock");
+		const lockPath = path.join(subDir, ".validator-run.lock");
 		const stat = await fs.stat(lockPath);
 		expect(stat.isFile()).toBe(true);
 		await releaseLock(subDir);
@@ -49,7 +49,7 @@ describe("Lock file", () => {
 	it("releaseLock removes lock file", async () => {
 		await acquireLock(TEST_DIR);
 		await releaseLock(TEST_DIR);
-		const lockPath = path.join(TEST_DIR, ".gauntlet-run.lock");
+		const lockPath = path.join(TEST_DIR, ".validator-run.lock");
 		try {
 			await fs.stat(lockPath);
 			expect(true).toBe(false); // should not reach
@@ -256,7 +256,7 @@ describe("cleanLogs", () => {
 		);
 		await fs.writeFile(path.join(TEST_DIR, ".debug.log"), "debug entries");
 		await fs.writeFile(
-			path.join(TEST_DIR, ".gauntlet-run.lock"),
+			path.join(TEST_DIR, ".validator-run.lock"),
 			"12345",
 		);
 
@@ -267,7 +267,7 @@ describe("cleanLogs", () => {
 		const rootFiles = await fs.readdir(TEST_DIR);
 		expect(rootFiles).toContain(stateFile);
 		expect(rootFiles).toContain(".debug.log");
-		expect(rootFiles).toContain(".gauntlet-run.lock");
+		expect(rootFiles).toContain(".validator-run.lock");
 
 		// Current logs should NOT be in root
 		expect(rootFiles).not.toContain("check_src_build.1.log");
@@ -369,7 +369,7 @@ describe("cleanLogs rotation", () => {
 
 describe("getLockFilename", () => {
 	it("returns the correct lock filename", () => {
-		expect(getLockFilename()).toBe(".gauntlet-run.lock");
+		expect(getLockFilename()).toBe(".validator-run.lock");
 	});
 });
 

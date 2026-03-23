@@ -11,10 +11,10 @@ import type {
   checkGateSchema,
   cliConfigSchema,
   entryPointSchema,
-  gauntletConfigSchema,
   reviewGateSchema,
   reviewPromptFrontmatterSchema,
   reviewYamlSchema,
+  validatorConfigSchema,
 } from './schema.js';
 
 export type CheckGateConfig = z.infer<typeof checkGateSchema>;
@@ -23,7 +23,7 @@ export type ReviewPromptFrontmatter = z.infer<
   typeof reviewPromptFrontmatterSchema
 >;
 export type EntryPointConfig = z.infer<typeof entryPointSchema>;
-export type GauntletConfig = z.infer<typeof gauntletConfigSchema>;
+export type ValidatorConfig = z.infer<typeof validatorConfigSchema>;
 export type CLIConfig = z.infer<typeof cliConfigSchema>;
 export type AdapterConfig = z.infer<typeof adapterConfigSchema>;
 
@@ -60,7 +60,7 @@ export interface LoadedReviewGateConfig {
 
 // Combined type for the fully loaded configuration
 export interface LoadedConfig {
-  project: GauntletConfig;
+  project: ValidatorConfig;
   checks: Record<string, LoadedCheckGateConfig>;
   reviews: Record<string, LoadedReviewGateConfig>;
 }

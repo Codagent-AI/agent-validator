@@ -11,7 +11,7 @@ import {
   updatePlugin,
 } from '../plugin/claude-cli.js';
 import { computeSkillChecksum } from './init-checksums.js';
-import { exists } from './shared.js';
+import { addToGitignore, exists } from './shared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,17 +85,38 @@ function normalizePathForMatch(inputPath: string): string {
   }
 }
 
+function isPluginEntry(entry: PluginEntry): boolean {
+  const name = entry.name ?? entry.id;
+  return (
+    name === 'agent-validator' ||
+    (typeof name === 'string' && name.startsWith('agent-validator@')) ||
+    // Legacy: also detect old installs so we can update them
+    name === 'agent-gauntlet' ||
+    (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
+  );
+}
+
+interface DetectedPlugin {
+  scope: 'project' | 'user';
+  installedName: string;
+}
+
+function extractPluginBaseName(entry: PluginEntry): string {
+  // Prefer `name` over `id` — `id` may be a marketplace slug like "agent-validator@org/repo"
+  const raw =
+    typeof entry.name === 'string' ? entry.name : String(entry.id ?? '');
+  // Strip version/source suffix: "agent-validator@org/repo" → "agent-validator"
+  const atIdx = raw.indexOf('@');
+  const base = atIdx > 0 ? raw.slice(0, atIdx) : raw;
+  // Reject slugs containing "/" — fall back to the canonical name
+  return base && !base.includes('/') ? base : 'agent-validator';
+}
+
 function detectInstalledScope(
   entries: PluginEntry[],
   cwd: string,
-): 'project' | 'user' | null {
-  const pluginEntries = entries.filter((entry) => {
-    const name = entry.name ?? entry.id;
-    return (
-      name === 'agent-gauntlet' ||
-      (typeof name === 'string' && name.startsWith('agent-gauntlet@'))
-    );
-  });
+): DetectedPlugin | null {
+  const pluginEntries = entries.filter(isPluginEntry);
 
   const projectEntries = pluginEntries.filter(
     (entry) =>
@@ -103,31 +124,84 @@ function detectInstalledScope(
       typeof entry.projectPath === 'string' &&
       isInProjectScope(cwd, entry.projectPath),
   );
-  if (projectEntries.length > 0) {
-    return 'project';
+  const firstProject = projectEntries[0];
+  if (firstProject) {
+    return {
+      scope: 'project',
+      installedName: extractPluginBaseName(firstProject),
+    };
   }
 
-  const hasUserInstall = pluginEntries.some((entry) => entry.scope === 'user');
-  if (hasUserInstall) {
-    return 'user';
+  const userEntry = pluginEntries.find((entry) => entry.scope === 'user');
+  if (userEntry) {
+    return {
+      scope: 'user',
+      installedName: extractPluginBaseName(userEntry),
+    };
   }
 
   return null;
 }
 
-function printManualUpdateInstructions(): void {
+function printManualUpdateInstructions(installedName: string): void {
   console.error('Run these commands manually:');
-  console.error('  claude plugin marketplace update agent-gauntlet');
-  console.error('  claude plugin update agent-gauntlet@pcaplan/agent-gauntlet');
+  console.error(`  claude plugin marketplace update ${installedName}`);
+  console.error(
+    `  claude plugin update ${installedName}@Codagent-AI/agent-validator`,
+  );
+}
+
+async function warnAndRemoveOldGauntletSkills(
+  targetBase: string,
+): Promise<void> {
+  try {
+    const existing = await fs.readdir(targetBase, { withFileTypes: true });
+    const oldSkills = existing
+      .filter(
+        (entry) => entry.isDirectory() && entry.name.startsWith('gauntlet-'),
+      )
+      .map((entry) => entry.name);
+
+    if (oldSkills.length === 0) return;
+
+    console.log(
+      chalk.yellow(
+        `\nRenamed ${oldSkills.length} skill(s) from "gauntlet-*" to "validator-*":`,
+      ),
+    );
+    for (const name of oldSkills) {
+      const newName = name.replace(/^gauntlet-/, 'validator-');
+      console.log(chalk.yellow(`  ${name} → ${newName}`));
+    }
+    console.log(
+      chalk.yellow(
+        'If you reference these skills by name (e.g. in AGENTS.md), please update to the new names.\n',
+      ),
+    );
+
+    for (const name of oldSkills) {
+      await fs.rm(path.join(targetBase, name), {
+        recursive: true,
+        force: true,
+      });
+    }
+  } catch {
+    // Best effort — ignore errors reading the directory
+  }
 }
 
 async function refreshCodexSkills(cwd: string): Promise<void> {
   const localBase = path.join(cwd, '.agents', 'skills');
-  const localMarker = path.join(localBase, 'gauntlet-run');
+  // Check for new name first, then legacy name
+  const localMarker = (await exists(path.join(localBase, 'validator-run')))
+    ? path.join(localBase, 'validator-run')
+    : path.join(localBase, 'gauntlet-run');
 
   const homeDir = process.env.HOME?.trim() || os.homedir();
   const globalBase = path.join(homeDir, '.agents', 'skills');
-  const globalMarker = path.join(globalBase, 'gauntlet-run');
+  const globalMarker = (await exists(path.join(globalBase, 'validator-run')))
+    ? path.join(globalBase, 'validator-run')
+    : path.join(globalBase, 'gauntlet-run');
 
   let targetBase: string | null = null;
   if (await exists(localMarker)) {
@@ -157,6 +231,9 @@ async function refreshCodexSkills(cwd: string): Promise<void> {
     await fs.rm(targetDir, { recursive: true, force: true });
     await copyDirRecursive({ src: sourceDir, dest: targetDir });
   }
+
+  // Warn about and remove old gauntlet-* skill directories
+  await warnAndRemoveOldGauntletSkills(targetBase);
 }
 
 function isCliUnavailableError(err: unknown): boolean {
@@ -173,9 +250,7 @@ function isCliUnavailableError(err: unknown): boolean {
   return msg.includes('command not found') || msg.includes('not installed');
 }
 
-async function detectClaudeScope(
-  cwd: string,
-): Promise<'project' | 'user' | null> {
+async function detectClaudePlugin(cwd: string): Promise<DetectedPlugin | null> {
   try {
     const parsedPlugins = (await listPlugins()) as PluginEntry[];
     return detectInstalledScope(parsedPlugins, cwd);
@@ -190,30 +265,32 @@ async function detectClaudeScope(
   }
 }
 
-async function updateClaudePlugin(scope: 'project' | 'user'): Promise<void> {
+async function updateClaudePlugin(detected: DetectedPlugin): Promise<void> {
   console.log(
-    chalk.cyan(`Updating agent-gauntlet Claude plugin (${scope} scope)...`),
+    chalk.cyan(
+      `Updating agent-validator Claude plugin (${detected.scope} scope)...`,
+    ),
   );
 
-  const marketplaceResult = await updateMarketplace();
+  const marketplaceResult = await updateMarketplace(detected.installedName);
   if (!marketplaceResult.success) {
     console.error(chalk.red('Plugin update failed.'));
     if (marketplaceResult.stderr) {
       console.error(chalk.red(marketplaceResult.stderr.trim()));
     }
-    printManualUpdateInstructions();
+    printManualUpdateInstructions(detected.installedName);
     throw new Error(
       marketplaceResult.stderr ?? 'Failed to update plugin marketplace entry',
     );
   }
 
-  const pluginResult = await updatePlugin();
+  const pluginResult = await updatePlugin(detected.installedName);
   if (!pluginResult.success) {
     console.error(chalk.red('Plugin update failed.'));
     if (pluginResult.stderr) {
       console.error(chalk.red(pluginResult.stderr.trim()));
     }
-    printManualUpdateInstructions();
+    printManualUpdateInstructions(detected.installedName);
     throw new Error(pluginResult.stderr ?? 'Failed to update plugin');
   }
 }
@@ -224,7 +301,7 @@ async function updateCursorPlugin(
   cwd: string,
 ): Promise<void> {
   console.log(
-    chalk.cyan(`Updating agent-gauntlet Cursor plugin (${scope} scope)...`),
+    chalk.cyan(`Updating agent-validator Cursor plugin (${scope} scope)...`),
   );
 
   const cursorResult = await adapter.updatePlugin(scope, cwd);
@@ -250,21 +327,21 @@ export async function runPluginUpdate(
   void options?.skipPrompts;
 
   const cwd = process.cwd();
-  const claudeScope = await detectClaudeScope(cwd);
+  const claudeDetected = await detectClaudePlugin(cwd);
 
   // Detect Cursor plugin installation
   const cursorAdapter = new CursorAdapter();
   const cursorScope = await cursorAdapter.detectPlugin(cwd);
 
   // Error if nothing is installed at all
-  if (!(claudeScope || cursorScope)) {
+  if (!(claudeDetected || cursorScope)) {
     throw new Error(
-      'No agent-gauntlet plugin is installed for this project. Please run `agent-gauntlet init` first.',
+      'No agent-validator plugin is installed for this project. Please run `agent-validate init` first.',
     );
   }
 
-  if (claudeScope) {
-    await updateClaudePlugin(claudeScope);
+  if (claudeDetected) {
+    await updateClaudePlugin(claudeDetected);
   }
 
   if (cursorScope) {
@@ -272,6 +349,9 @@ export async function runPluginUpdate(
   }
 
   await refreshCodexSkills(cwd);
+
+  // Ensure validator_logs is in .gitignore (backwards compat: log dir was renamed)
+  await addToGitignore(cwd, 'validator_logs');
 
   console.log(chalk.green('Plugin update completed successfully.'));
   console.log(

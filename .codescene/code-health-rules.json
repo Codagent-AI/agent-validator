@@ -1,5 +1,5 @@
 {
-  "usage": "Custom code health rules for agent-gauntlet. See docs/code-health-improvements.md for deferred issues.",
+  "usage": "Custom code health rules for agent-validator. See docs/code-health-improvements.md for deferred issues.",
   "rule_sets": [
     {
       "matching_content_path": "test/**",

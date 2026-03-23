@@ -261,7 +261,7 @@ export class CodexAdapter implements CLIAdapter {
     // millisecond, causing Date.now() collisions and tmp file overwrites).
     const tmpFile = path.join(
       tmpDir,
-      `gauntlet-codex-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+      `validator-codex-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
     );
     await fs.writeFile(tmpFile, fullContent);
 

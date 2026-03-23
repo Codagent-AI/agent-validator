@@ -153,7 +153,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     // millisecond, causing Date.now() collisions and tmp file overwrites).
     const tmpFile = path.join(
       tmpDir,
-      `gauntlet-copilot-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+      `validator-copilot-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
     );
     await fs.writeFile(tmpFile, fullContent);
 

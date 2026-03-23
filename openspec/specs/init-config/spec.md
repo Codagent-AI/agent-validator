@@ -1,41 +1,41 @@
 # init-config Specification
 
 ## Purpose
-Configuration generation during `agent-gauntlet init`. Covers config file creation, review config setup, and post-init guidance.
+Configuration generation during `agent-validate init`. Covers config file creation, review config setup, and post-init guidance.
 ## Requirements
 ### Requirement: Init generates YAML review config with built-in reference
-The `init` command SHALL generate a `.gauntlet/reviews/code-quality.yml` file that references the built-in code-quality review prompt.
+The `init` command SHALL generate a `.validator/reviews/code-quality.yml` file that references the built-in code-quality review prompt.
 
 #### Scenario: Default init creates YAML review config
-- **GIVEN** a user runs `agent-gauntlet init`
-- **WHEN** the `.gauntlet/` directory is scaffolded
-- **THEN** `.gauntlet/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
+- **GIVEN** a user runs `agent-validate init`
+- **WHEN** the `.validator/` directory is scaffolded
+- **THEN** `.validator/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
 - **AND** the YAML file SHALL include default settings (`num_reviews: 1`)
 
 #### Scenario: Init with --yes flag creates YAML review config
-- **GIVEN** a user runs `agent-gauntlet init --yes`
-- **WHEN** the `.gauntlet/` directory is scaffolded
-- **THEN** `.gauntlet/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
+- **GIVEN** a user runs `agent-validate init --yes`
+- **WHEN** the `.validator/` directory is scaffolded
+- **THEN** `.validator/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
 - **AND** the YAML file SHALL include default settings (`num_reviews: 1`)
 
 #### Scenario: Init re-run preserves existing review config
-- **GIVEN** `.gauntlet/reviews/code-quality.yml` already exists
-- **WHEN** the user runs `agent-gauntlet init`
+- **GIVEN** `.validator/reviews/code-quality.yml` already exists
+- **WHEN** the user runs `agent-validate init`
 - **THEN** the existing review config SHALL be preserved (not overwritten)
 
 ### Requirement: Init outputs next-step message
 
-After completing setup, `init` SHALL print context-aware instructions based on the selected development CLIs. Native CLI users (Claude Code, Cursor) SHALL receive `/gauntlet-setup` slash-command instructions. Non-native CLI users SHALL receive `@file_path` reference instructions. Codex users SHALL receive Codex-native `.agents/skills/` path references.
+After completing setup, `init` SHALL print context-aware instructions based on the selected development CLIs. Native CLI users (Claude Code, Cursor) SHALL receive `/validator-setup` slash-command instructions. Non-native CLI users SHALL receive `@file_path` reference instructions. Codex users SHALL receive Codex-native `.agents/skills/` path references.
 
 #### Scenario: Claude Code user instructions
 - **GIVEN** the user selected `claude` as a development CLI
 - **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/gauntlet-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run."
+- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
 
 #### Scenario: Cursor user instructions
 - **GIVEN** the user selected `cursor` as a development CLI
 - **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/gauntlet-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Gauntlet will run."
+- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
 
 #### Scenario: Codex user instructions
 - **GIVEN** the user selected `codex` as a development CLI
@@ -52,35 +52,35 @@ After completing setup, `init` SHALL print context-aware instructions based on t
 #### Scenario: Mixed CLI selection instructions
 - **GIVEN** the user selected both `claude` and `codex` as development CLIs
 - **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include BOTH the `/gauntlet-setup` instructions AND the Codex `.agents/skills/` instructions
+- **THEN** the output SHALL include BOTH the `/validator-setup` instructions AND the Codex `.agents/skills/` instructions
 - **AND** the instructions SHALL be grouped by CLI type
 
 #### Scenario: --yes flag still shows instructions
-- **GIVEN** the user runs `agent-gauntlet init --yes`
+- **GIVEN** the user runs `agent-validate init --yes`
 - **WHEN** the init command completes (Phase 6)
 - **THEN** the post-init instructions SHALL still be displayed (instructions are never skipped)
 
 ### Requirement: Init config skeleton with empty entry_points
 
-The `init` command SHALL generate a `config.yml` with an empty `entry_points` array and `cli.default_preference` populated from review CLI selection. Entry point configuration SHALL be delegated to the `/gauntlet-setup` skill.
+The `init` command SHALL generate a `config.yml` with an empty `entry_points` array and `cli.default_preference` populated from review CLI selection. Entry point configuration SHALL be delegated to the `/validator-setup` skill.
 
 #### Scenario: Config generated with empty entry_points
-- **GIVEN** the user runs `agent-gauntlet init`
-- **AND** no `.gauntlet/config.yml` exists
-- **WHEN** `.gauntlet/config.yml` is created
+- **GIVEN** the user runs `agent-validate init`
+- **AND** no `.validator/config.yml` exists
+- **WHEN** `.validator/config.yml` is created
 - **THEN** the config SHALL include `entry_points: []`
 - **AND** the config SHALL include `base_branch`, `log_dir`, and `cli` sections
 - **AND** the config SHALL NOT include any check or review references in entry_points
 
 #### Scenario: Init re-run preserves existing config
-- **GIVEN** `.gauntlet/config.yml` already exists
-- **WHEN** the user runs `agent-gauntlet init` (with or without `--yes`)
+- **GIVEN** `.validator/config.yml` already exists
+- **WHEN** the user runs `agent-validate init` (with or without `--yes`)
 - **THEN** the existing `config.yml` SHALL be preserved entirely (not overwritten)
 
 #### Scenario: Config with --yes flag
-- **GIVEN** the user runs `agent-gauntlet init --yes`
-- **AND** no `.gauntlet/config.yml` exists
-- **WHEN** `.gauntlet/config.yml` is created
+- **GIVEN** the user runs `agent-validate init --yes`
+- **AND** no `.validator/config.yml` exists
+- **WHEN** `.validator/config.yml` is created
 - **THEN** the config SHALL include `entry_points: []`
 - **AND** the `cli.default_preference` SHALL include all detected CLIs
 
@@ -89,7 +89,7 @@ The `init` command SHALL generate a `config.yml` with an empty `entry_points` ar
 The `init` command SHALL present interactive prompts for development CLI selection, installation scope (local vs global), review CLI selection, and `num_reviews` configuration. All other config values SHALL remain non-interactive with auto-detected defaults.
 
 #### Scenario: Development CLI multi-select prompt
-- **GIVEN** the user runs `agent-gauntlet init`
+- **GIVEN** the user runs `agent-validate init`
 - **AND** CLIs `claude`, `codex`, and `gemini` are detected as available
 - **WHEN** Phase 2 begins
 - **THEN** the user SHALL be presented with a multi-select prompt listing all detected CLIs
@@ -97,7 +97,7 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **AND** at least one CLI must be selected to proceed
 
 #### Scenario: Installation scope prompt
-- **GIVEN** the user runs `agent-gauntlet init`
+- **GIVEN** the user runs `agent-validate init`
 - **WHEN** the user has selected development CLIs in Phase 2
 - **THEN** the user SHALL be prompted to choose installation scope: local (project) or global (user)
 
@@ -113,7 +113,7 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **AND** no hook installation SHALL be queued for that CLI
 
 #### Scenario: Review CLI multi-select prompt
-- **GIVEN** the user runs `agent-gauntlet init`
+- **GIVEN** the user runs `agent-validate init`
 - **AND** CLIs `claude`, `codex`, and `gemini` are detected as available
 - **WHEN** Phase 3 begins
 - **THEN** the user SHALL be presented with a multi-select prompt listing all detected CLIs
@@ -139,18 +139,18 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **AND** the selected value SHALL be written as `num_reviews` in the default review config
 
 #### Scenario: Built-in reviewer announcement
-- **GIVEN** the user runs `agent-gauntlet init`
+- **GIVEN** the user runs `agent-validate init`
 - **WHEN** Phase 3 completes
-- **THEN** the output SHALL display: "Agent Gauntlet's built-in code quality reviewer will be installed."
+- **THEN** the output SHALL display: "Agent Validator's built-in code quality reviewer will be installed."
 
 #### Scenario: No base branch prompt
-- **GIVEN** the user runs `agent-gauntlet init`
+- **GIVEN** the user runs `agent-validate init`
 - **WHEN** the init command runs
 - **THEN** base branch SHALL be auto-detected from the git remote (falling back to `origin/main` if detection fails)
 - **AND** no prompt for base branch SHALL be shown
 
 #### Scenario: No lint or test command prompts
-- **GIVEN** the user runs `agent-gauntlet init`
+- **GIVEN** the user runs `agent-validate init`
 - **WHEN** the init command runs
 - **THEN** no prompts for lint or test commands SHALL be shown
 - **AND** no check YAML files SHALL be created by init
@@ -160,63 +160,63 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 When `--yes` is passed, `init` SHALL skip all interactive prompts and apply default selections.
 
 #### Scenario: --yes selects all detected CLIs as development CLIs
-- **GIVEN** the user runs `agent-gauntlet init --yes`
+- **GIVEN** the user runs `agent-validate init --yes`
 - **AND** CLIs `claude`, `codex`, and `gemini` are detected
 - **WHEN** Phase 2 runs
 - **THEN** all detected CLIs SHALL be selected as development CLIs without prompting
 
 #### Scenario: --yes defaults to local scope
-- **GIVEN** the user runs `agent-gauntlet init --yes`
+- **GIVEN** the user runs `agent-validate init --yes`
 - **WHEN** Phase 2 runs
 - **THEN** installation scope SHALL default to local (project) without prompting
 
 #### Scenario: --yes selects all detected CLIs as review CLIs
-- **GIVEN** the user runs `agent-gauntlet init --yes`
+- **GIVEN** the user runs `agent-validate init --yes`
 - **AND** CLIs `claude`, `codex`, and `gemini` are detected
 - **WHEN** Phase 3 runs
 - **THEN** all detected CLIs SHALL be added to `cli.default_preference`
 - **AND** `num_reviews` SHALL be set to the number of detected CLIs
 
 #### Scenario: --yes overwrites changed files without asking
-- **GIVEN** the user runs `agent-gauntlet init --yes`
+- **GIVEN** the user runs `agent-validate init --yes`
 - **AND** a Codex skill file exists with a different checksum
 - **WHEN** Phase 5 runs
 - **THEN** the file SHALL be overwritten without prompting
 
-### Requirement: Phase 4 scaffold skips when .gauntlet/ exists
+### Requirement: Phase 4 scaffold skips when .validator/ exists
 
-When `.gauntlet/` already exists, Phase 4 SHALL skip entirely without modifying any files inside the directory.
+When `.validator/` already exists, Phase 4 SHALL skip entirely without modifying any files inside the directory.
 
-#### Scenario: Fresh init creates .gauntlet/ directory
-- **GIVEN** the user runs `agent-gauntlet init`
-- **AND** no `.gauntlet/` directory exists
+#### Scenario: Fresh init creates .validator/ directory
+- **GIVEN** the user runs `agent-validate init`
+- **AND** no `.validator/` directory exists
 - **WHEN** Phase 4 runs
-- **THEN** `.gauntlet/` SHALL be created with full scaffolding (directory structure, config.yml, default review, .gitignore entry)
+- **THEN** `.validator/` SHALL be created with full scaffolding (directory structure, config.yml, default review, .gitignore entry)
 
-#### Scenario: Re-run skips .gauntlet/ scaffolding
-- **GIVEN** the user runs `agent-gauntlet init`
-- **AND** `.gauntlet/` directory already exists
+#### Scenario: Re-run skips .validator/ scaffolding
+- **GIVEN** the user runs `agent-validate init`
+- **AND** `.validator/` directory already exists
 - **WHEN** Phase 4 runs
-- **THEN** no files inside `.gauntlet/` SHALL be created or modified
+- **THEN** no files inside `.validator/` SHALL be created or modified
 - **AND** init SHALL delegate to update logic (not run Phase 5 directly)
 
 ### Requirement: Init installs Claude plugin instead of copying skills
 
-When Claude is a selected development CLI, init SHALL install the agent-gauntlet Claude plugin instead of copying skill files to `.claude/skills/`.
+When Claude is a selected development CLI, init SHALL install the agent-validator Claude plugin instead of copying skill files to `.claude/skills/`.
 
 #### Scenario: Claude selected installs plugin at local scope
 - **GIVEN** the user selects `claude` as a development CLI
 - **AND** the user selects local scope
 - **WHEN** Phase 5 runs
-- **THEN** init SHALL run `claude plugin marketplace add pcaplan/agent-gauntlet`
-- **AND** init SHALL run `claude plugin install agent-gauntlet --scope project`
+- **THEN** init SHALL run `claude plugin marketplace add Codagent-AI/agent-validator`
+- **AND** init SHALL run `claude plugin install agent-validator --scope project`
 - **AND** no skill files SHALL be copied to `.claude/skills/`
 
 #### Scenario: Claude selected installs plugin at global scope
 - **GIVEN** the user selects `claude` as a development CLI
 - **AND** the user selects global scope
 - **WHEN** Phase 5 runs
-- **THEN** init SHALL run `claude plugin install agent-gauntlet --scope user`
+- **THEN** init SHALL run `claude plugin install agent-validator --scope user`
 - **AND** no skill files SHALL be copied to `.claude/skills/`
 
 ### Requirement: Init installs Codex skills based on scope
@@ -256,18 +256,18 @@ When Codex is a selected development CLI, init SHALL install skills to the appro
 
 ### Requirement: Re-run delegates to update
 
-When `.gauntlet/` already exists, the init command SHALL skip interactive phases and delegate to the update logic.
+When `.validator/` already exists, the init command SHALL skip interactive phases and delegate to the update logic.
 
 #### Scenario: Re-run skips prompts and calls update
-- **GIVEN** a user runs `agent-gauntlet init`
-- **AND** the `.gauntlet/` directory already exists
+- **GIVEN** a user runs `agent-validate init`
+- **AND** the `.validator/` directory already exists
 - **WHEN** Phase 1 completes CLI detection
 - **THEN** Phases 2-4 SHALL be skipped
-- **AND** init SHALL execute the same logic as `agent-gauntlet update`
+- **AND** init SHALL execute the same logic as `agent-validate update`
 
 #### Scenario: Re-run with --yes flag
-- **GIVEN** `.gauntlet/` already exists
-- **WHEN** `agent-gauntlet init --yes` runs
+- **GIVEN** `.validator/` already exists
+- **WHEN** `agent-validate init --yes` runs
 - **THEN** Phases 2-4 SHALL be skipped
 - **AND** update logic SHALL run with changed files overwritten without prompting
 

@@ -27,7 +27,7 @@ export function registerCleanCommand(program: Command): void {
         );
         initDebugLogger(config.project.log_dir, debugLogConfig);
 
-        // Acquire lock BEFORE logging - prevents clean from running during active gauntlet run
+        // Acquire lock BEFORE logging - prevents clean from running during active validator run
         await acquireLock(config.project.log_dir);
         lockAcquired = true;
 

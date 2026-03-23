@@ -262,7 +262,7 @@ export function safeExtractOtelMetrics(
     return extractOtelMetrics(raw, onLog);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[gauntlet] OTel extraction failed: ${msg}\n`);
+    process.stderr.write(`[agent-validator] OTel extraction failed: ${msg}\n`);
     return raw;
   }
 }

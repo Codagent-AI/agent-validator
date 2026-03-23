@@ -57,7 +57,7 @@ describe("ConsoleReporter", () => {
 				status: "fail",
 				duration: 1234,
 				message: "Tests failed",
-				logPath: "gauntlet_logs/check_test.log",
+				logPath: "validator_logs/check_test.log",
 			};
 
 			reporter.onJobComplete(job, result);
@@ -66,7 +66,7 @@ describe("ConsoleReporter", () => {
 			expect(output).toContain("[FAIL]");
 			expect(output).toContain("check:test");
 			expect(output).toContain("Tests failed");
-			expect(output).toContain("gauntlet_logs/check_test.log");
+			expect(output).toContain("validator_logs/check_test.log");
 		});
 
 		it("should log [ERROR] for errored jobs", () => {
@@ -77,7 +77,7 @@ describe("ConsoleReporter", () => {
 				status: "error",
 				duration: 5000,
 				message: "Failed to complete",
-				logPath: "gauntlet_logs/review_test.log",
+				logPath: "validator_logs/review_test.log",
 			};
 
 			reporter.onJobComplete(job, result);
@@ -86,7 +86,7 @@ describe("ConsoleReporter", () => {
 			expect(output).toContain("[ERROR]");
 			expect(output).toContain("review:test");
 			expect(output).toContain("Failed to complete");
-			expect(output).toContain("gauntlet_logs/review_test.log");
+			expect(output).toContain("validator_logs/review_test.log");
 		});
 	});
 

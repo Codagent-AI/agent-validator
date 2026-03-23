@@ -7,7 +7,7 @@ import { ConsoleReporter } from '../output/console.js';
 import type { ConsoleLogHandle } from '../output/console-log.js';
 import type { Logger } from '../output/logger.js';
 import { generateReport } from '../output/report.js';
-import type { GauntletStatus, RunResult } from '../types/gauntlet-status.js';
+import type { RunResult, ValidatorStatus } from '../types/validator-status.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import {
   readExecutionState,
@@ -53,7 +53,7 @@ export interface RunContext {
   effectiveBaseBranch: string;
 }
 
-const statusMessages: Record<GauntletStatus, string> = {
+const statusMessages: Record<ValidatorStatus, string> = {
   passed: 'All gates passed.',
   passed_with_warnings: 'Passed with warnings -- some issues were skipped.',
   no_applicable_gates: 'No applicable gates for these changes.',
@@ -61,12 +61,13 @@ const statusMessages: Record<GauntletStatus, string> = {
   failed: 'Gates failed -- issues must be fixed.',
   retry_limit_exceeded:
     'Retry limit exceeded -- logs have been automatically archived.',
-  lock_conflict: 'Another gauntlet run is already in progress.',
+  lock_conflict: 'Another validator run is already in progress.',
   error: 'Unexpected error occurred.',
-  no_config: 'No .gauntlet/config.yml found.',
+  no_config:
+    'No validator config found (.validator/config.yml or .gauntlet/config.yml).',
 };
 
-export function getStatusMessage(status: GauntletStatus): string {
+export function getStatusMessage(status: ValidatorStatus): string {
   return statusMessages[status] || 'Unknown status';
 }
 
@@ -203,7 +204,7 @@ export async function handleNoChanges(
     const hasSkipped = await hasSkippedViolationsInLogs({
       logDir: ctx.config.project.log_dir,
     });
-    const status: GauntletStatus = hasSkipped
+    const status: ValidatorStatus = hasSkipped
       ? 'passed_with_warnings'
       : 'passed';
 
@@ -307,7 +308,7 @@ function determineStatus(outcome: {
   allPassed: boolean;
   anySkipped: boolean;
   retryLimitExceeded: boolean;
-}): GauntletStatus {
+}): ValidatorStatus {
   if (outcome.retryLimitExceeded) {
     return 'retry_limit_exceeded';
   }

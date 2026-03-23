@@ -9,7 +9,7 @@ Drop CodeScene as the `code-health` gate and replace it with extended Biome lint
 1. **Upgrade Biome** from 2.3.11 to 2.4.3 (already done during research).
 2. **Update `biome.json`** — add complexity, readability, and structural rules at `error` level.
 3. **Fix all ~94 existing violations** across the codebase.
-4. **Remove the `code-health` gate** — delete `.gauntlet/checks/code-health.yml` and remove `code-health` from entry points in `.gauntlet/config.yml`.
+4. **Remove the `code-health` gate** — delete `.validator/checks/code-health.yml` and remove `code-health` from entry points in `.validator/config.yml`.
 5. **Update openspec pre-factoring** — replace CodeScene MCP references with Biome-based analysis in `openspec/AGENTS.md`.
 
 ## New Biome Rules

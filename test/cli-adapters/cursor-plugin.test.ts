@@ -51,7 +51,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				".cursor-plugin",
 			);
 			await fs.mkdir(pluginDir, { recursive: true });
@@ -69,7 +69,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				".cursor-plugin",
 			);
 			await fs.mkdir(pluginDir, { recursive: true });
@@ -92,7 +92,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				".cursor-plugin",
 				"plugin.json",
 			);
@@ -104,7 +104,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				"skills",
 			);
 			const skillsStat = await fs.stat(skillsDir);
@@ -115,7 +115,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				"hooks",
 				"hooks.json",
 			);
@@ -135,7 +135,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 			expect(instructions.length).toBeGreaterThan(0);
 			expect(
 				instructions.some((i) =>
-					i.includes("~/.cursor/plugins/agent-gauntlet/"),
+					i.includes("~/.cursor/plugins/agent-validator/"),
 				),
 			).toBe(true);
 		});
@@ -145,7 +145,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 			expect(instructions.length).toBeGreaterThan(0);
 			expect(
 				instructions.some((i) =>
-					i.includes(".cursor/plugins/agent-gauntlet/"),
+					i.includes(".cursor/plugins/agent-validator/"),
 				),
 			).toBe(true);
 		});
@@ -162,7 +162,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				".cursor-plugin",
 				"plugin.json",
 			);
@@ -174,7 +174,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				"hooks",
 				"hooks.json",
 			);
@@ -189,7 +189,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 				tmpDir,
 				".cursor",
 				"plugins",
-				"agent-gauntlet",
+				"agent-validator",
 				".cursor-plugin",
 			);
 			await fs.mkdir(pluginDir, { recursive: true });

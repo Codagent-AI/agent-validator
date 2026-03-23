@@ -47,13 +47,13 @@ describe("computeSkillChecksum", () => {
 describe("computeHookChecksum", () => {
   it("should compute checksum over gauntlet entries only", () => {
     const entries = [
-      { hooks: [{ type: "command", command: "agent-gauntlet run", timeout: 300 }] },
+      { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
       { type: "command", command: "echo hello" },
     ];
     const c1 = computeHookChecksum(entries);
 
     const entries2 = [
-      { hooks: [{ type: "command", command: "agent-gauntlet run", timeout: 300 }] },
+      { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
       { type: "command", command: "echo world" },
     ];
     const c2 = computeHookChecksum(entries2);
@@ -62,17 +62,17 @@ describe("computeHookChecksum", () => {
 
   it("should detect changes in gauntlet entries", () => {
     const entries1 = [
-      { hooks: [{ type: "command", command: "agent-gauntlet run", timeout: 300 }] },
+      { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
     ];
     const entries2 = [
-      { hooks: [{ type: "command", command: "agent-gauntlet run", timeout: 600 }] },
+      { hooks: [{ type: "command", command: "agent-validate run", timeout: 600 }] },
     ];
     expect(computeHookChecksum(entries1)).not.toBe(computeHookChecksum(entries2));
   });
 
   it("should handle flat entries (Cursor format)", () => {
     const entries = [
-      { command: "agent-gauntlet run", loop_limit: 10 },
+      { command: "agent-validate run", loop_limit: 10 },
     ];
     const checksum = computeHookChecksum(entries);
     expect(typeof checksum).toBe("string");
@@ -82,11 +82,11 @@ describe("computeHookChecksum", () => {
 
 describe("isGauntletHookEntry", () => {
   it("should identify wrapped gauntlet entries", () => {
-    expect(isGauntletHookEntry({ hooks: [{ command: "agent-gauntlet run" }] })).toBe(true);
+    expect(isGauntletHookEntry({ hooks: [{ command: "agent-validate run" }] })).toBe(true);
   });
 
   it("should identify flat gauntlet entries", () => {
-    expect(isGauntletHookEntry({ command: "agent-gauntlet check" })).toBe(true);
+    expect(isGauntletHookEntry({ command: "agent-validate check" })).toBe(true);
   });
 
   it("should reject non-gauntlet entries", () => {

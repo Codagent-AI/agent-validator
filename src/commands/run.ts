@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { executeRun } from '../core/run-executor.js';
 import { statusLineText } from '../output/report.js';
-import { isSuccessStatus } from '../types/gauntlet-status.js';
+import { isSuccessStatus } from '../types/validator-status.js';
 
 export function registerRunCommand(program: Command): void {
   program

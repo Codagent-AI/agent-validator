@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Gauntlet Status Script
+ * Validator Status Script
  *
- * Parses the configured log_dir (default: gauntlet_logs/) to produce a structured
- * summary of the most recent gauntlet session from the .debug.log, plus a file
+ * Parses the configured log_dir (default: validator_logs/) to produce a structured
+ * summary of the most recent validator session from the .debug.log, plus a file
  * inventory of all log/JSON files for further inspection.
  *
  * This script handles structured data only (debug log events). Detailed failure
  * analysis (reading individual check logs, review JSONs) is left to the caller
- * (the /gauntlet-status skill) since log formats vary by check type.
+ * (the /validator-status skill) since log formats vary by check type.
  */
 
 import fs from 'node:fs';
@@ -252,17 +252,17 @@ function formatAllRuns(sessions: SessionRun[]): string[] {
 
 function formatSession(sessions: SessionRun[], logDir: string): string {
   if (sessions.length === 0) {
-    return 'No gauntlet runs found in logs.';
+    return 'No validator runs found in logs.';
   }
 
   const lastComplete = [...sessions].reverse().find((s) => s.end);
   const session = lastComplete ?? sessions[sessions.length - 1];
-  if (!session) return 'No gauntlet runs found in logs.';
+  if (!session) return 'No validator runs found in logs.';
 
   const lines: string[] = [];
 
   // Header
-  lines.push('## Gauntlet Session Summary');
+  lines.push('## Validator Session Summary');
   lines.push('');
 
   // Overall status
@@ -320,19 +320,25 @@ function formatSession(sessions: SessionRun[], logDir: string): string {
 // --- Main ---
 
 /**
- * Read the configured log_dir from .gauntlet/config.yml.
- * Falls back to "gauntlet_logs" if not found.
+ * Read the configured log_dir from .validator/config.yml (or .gauntlet/config.yml).
+ * Falls back to "validator_logs" if not found.
  */
 function getLogDir(cwd: string): string {
-  const configPath = path.join(cwd, '.gauntlet', 'config.yml');
-  try {
-    const content = fs.readFileSync(configPath, 'utf-8');
-    const match = content.match(/^log_dir:\s*(.+)$/m);
-    if (match?.[1]) return match[1].trim();
-  } catch {
-    // Config not found — use default
+  const candidates = [
+    path.join(cwd, '.validator', 'config.yml'),
+    path.join(cwd, '.gauntlet', 'config.yml'),
+  ];
+  for (const configPath of candidates) {
+    try {
+      const content = fs.readFileSync(configPath, 'utf-8');
+      const match = content.match(/^log_dir:\s*(.+)$/m);
+      if (match?.[1]) return match[1].trim();
+      break; // Config found but no log_dir — stop looking
+    } catch {
+      // Try next candidate
+    }
   }
-  return 'gauntlet_logs';
+  return 'validator_logs';
 }
 
 /**
@@ -357,7 +363,7 @@ function resolveLogPaths(
   }
 
   if (!fs.existsSync(previousDir)) {
-    console.log('No gauntlet_logs directory found.');
+    console.log('No validator_logs directory found.');
     return null;
   }
 
@@ -365,7 +371,7 @@ function resolveLogPaths(
   const logDir = resolvePreviousLogDir(previousDir);
   if (!logDir) return null;
 
-  // Debug log stays in the main gauntlet_logs dir, not in previous/
+  // Debug log stays in the main validator_logs dir, not in previous/
   return { logDir, debugLogPath };
 }
 
@@ -385,7 +391,7 @@ function resolvePreviousLogDir(previousDir: string): string | null {
     .reverse();
 
   if (prevDirs.length === 0) {
-    console.log('No gauntlet logs found.');
+    console.log('No validator logs found.');
     return null;
   }
 

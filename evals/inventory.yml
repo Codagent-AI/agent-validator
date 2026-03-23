@@ -18,7 +18,7 @@ issues:
     category: security
     difficulty: medium
     priority: high
-    source: 2026-02-16 reviewer-model-resolution.agent-gauntlet
+    source: 2026-02-16 reviewer-model-resolution.agent-validator
   - id: copilot-command-injection
     file: src/cli-adapters/github-copilot.ts
     line_range:
@@ -38,7 +38,7 @@ issues:
     category: security
     difficulty: medium
     priority: high
-    source: 2026-02-16 reviewer-model-resolution.agent-gauntlet
+    source: 2026-02-16 reviewer-model-resolution.agent-validator
   - id: shell-injection-via-exec-async-interpolation
     file: src/core/change-detector.ts
     line_range:
@@ -67,7 +67,7 @@ issues:
     category: security
     difficulty: medium
     priority: high
-    source: 2026-02-28 skill-review.agent-gauntlet
+    source: 2026-02-28 skill-review.agent-validator
   - id: silent-error-swallow-file-enumeration
     file: src/output/report.ts
     line_range:
@@ -94,7 +94,7 @@ issues:
     category: bug
     difficulty: medium
     priority: high
-    source: 2026-03-15 agent-gauntlet
+    source: 2026-03-15 agent-validator
   - id: blanket-catch-readdir-hides-failures
     file: src/output/report.ts
     line_range:
@@ -114,4 +114,4 @@ issues:
     category: bug
     difficulty: medium
     priority: high
-    source: 2026-03-15 agent-gauntlet
+    source: 2026-03-15 agent-validator

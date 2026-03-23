@@ -6,9 +6,9 @@ export function registerHelpCommand(program: Command): void {
     .command('help')
     .description('Show help information')
     .action(() => {
-      console.log(chalk.bold('Agent Gauntlet - AI-assisted quality gates\n'));
+      console.log(chalk.bold('Agent Validator - AI-assisted quality gates\n'));
       console.log(
-        'Agent Gauntlet runs quality gates (checks + AI reviews) for only the parts',
+        'Agent Validator runs quality gates (checks + AI reviews) for only the parts',
       );
       console.log(
         'of your repo that changed, based on a configurable set of entry points.\n',
@@ -25,24 +25,25 @@ export function registerHelpCommand(program: Command): void {
       );
       console.log('  list          List configured gates');
       console.log('  health        Check CLI tool availability');
-      console.log('  init          Initialize .gauntlet configuration');
-      console.log(
-        '  validate      Validate .gauntlet/ config files against schemas',
-      );
+      console.log('  init          Initialize .validator configuration');
+      console.log('  validate      Validate config files against schemas');
       console.log(
         '  skip          Advance execution state baseline without running gates',
       );
       console.log(
-        '  status        Show a summary of the most recent gauntlet session',
+        '  status        Show a summary of the most recent validator session',
       );
       console.log(
         '  review-audit  Audit review execution from the debug log (--date or --since)',
       );
       console.log('  ci            CI integration commands (init, list-jobs)');
+      console.log(
+        '  update        Update the agent-validator Claude plugin and refresh skills',
+      );
       console.log('  help          Show this help message\n');
       console.log(
-        'For more information, see: https://github.com/your-repo/agent-gauntlet',
+        'For more information, see: https://github.com/Codagent-AI/agent-validator',
       );
-      console.log('Or run: agent-gauntlet <command> --help');
+      console.log('Or run: agent-validate <command> --help');
     });
 }

@@ -4,7 +4,7 @@ import path from "node:path";
 import { loadConfig } from "../../src/config/loader.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-prompt-config-${Date.now()}`);
-const GAUNTLET_DIR = path.join(TEST_DIR, ".gauntlet");
+const GAUNTLET_DIR = path.join(TEST_DIR, ".validator");
 const CHECKS_DIR = path.join(GAUNTLET_DIR, "checks");
 const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
 const PROMPTS_DIR = path.join(GAUNTLET_DIR, "prompts");

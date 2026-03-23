@@ -144,7 +144,7 @@ async function writeStashFileToTemp(
 
 /** Generate a placeholder diff entry when all diff strategies fail for a file. */
 function placeholderDiff(file: string): string {
-  return `diff --git a/${file} b/${file}\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1 @@\n+[gauntlet: diff unavailable for this file]`;
+  return `diff --git a/${file} b/${file}\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1 @@\n+[validator: diff unavailable for this file]`;
 }
 
 /**
@@ -159,7 +159,7 @@ export async function collectStashUntrackedDiffs(
   if (files.length === 0) return [];
 
   const diffs: string[] = [];
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gauntlet-'));
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'validator-'));
 
   try {
     let counter = 0;

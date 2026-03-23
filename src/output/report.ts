@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ReviewFullJsonOutput } from '../gates/result.js';
-import type { GauntletStatus } from '../types/gauntlet-status.js';
+import type { ValidatorStatus } from '../types/validator-status.js';
 
 /**
  * A numbered review violation with metadata for report and update-review.
@@ -127,9 +127,9 @@ export async function enumerateNewViolations(
 }
 
 /**
- * Map gauntlet status to the report status line text.
+ * Map validator status to the report status line text.
  */
-export function statusLineText(status: GauntletStatus): string {
+export function statusLineText(status: ValidatorStatus): string {
   switch (status) {
     case 'passed':
       return 'Status: Passed';
@@ -187,7 +187,7 @@ function formatReviewViolation(v: NumberedViolation): string[] {
  * The report is self-contained and agent-actionable.
  */
 export async function generateReport(
-  status: GauntletStatus,
+  status: ValidatorStatus,
   gateResults: ReportGateResult[] | undefined,
   logDir: string,
 ): Promise<string> {

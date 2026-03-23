@@ -4,7 +4,7 @@ import path from "node:path";
 import { loadConfig } from "../../src/config/loader.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-env-${Date.now()}`);
-const GAUNTLET_DIR = path.join(TEST_DIR, ".gauntlet");
+const GAUNTLET_DIR = path.join(TEST_DIR, ".validator");
 const CHECKS_DIR = path.join(GAUNTLET_DIR, "checks");
 const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
 
@@ -154,7 +154,7 @@ describe("Built-in Reviews (YAML builtin attribute)", () => {
 
 	async function setupTestEnv(configYml: string, reviewFiles?: Record<string, string>) {
 		tmpDir = path.join(process.cwd(), `test-builtin-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		const gauntletDir = path.join(tmpDir, ".gauntlet");
+		const gauntletDir = path.join(tmpDir, ".validator");
 		const reviewsDir = path.join(gauntletDir, "reviews");
 
 		await fs.mkdir(tmpDir);

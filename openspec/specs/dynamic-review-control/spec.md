@@ -30,17 +30,17 @@ The system SHALL skip reviews with `enabled: false` during job generation unless
 - **WHEN** `--enable-review task-compliance --enable-review security` is passed
 - **THEN** both `task-compliance` and `security` reviews SHALL be activated even if their configs have `enabled: false`
 
-### Requirement: Gauntlet-run skill passes caller-requested reviews
-Both copies of the gauntlet-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review. The skill does not hardcode any specific review names.
+### Requirement: Agent Validator-run skill passes caller-requested reviews
+Both copies of the validator-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review. The skill does not hardcode any specific review names.
 
 #### Scenario: Caller requests specific reviews to be enabled
-- **GIVEN** the gauntlet-run skill is installed in the project
+- **GIVEN** the validator-run skill is installed in the project
 - **WHEN** the caller requests a specific review to be enabled
 - **THEN** the run command SHALL include `--enable-review <name>` for each requested review
 
 #### Scenario: No reviews requested by caller
-- **GIVEN** the gauntlet-run skill is installed in the project
-- **WHEN** the gauntlet-run skill is invoked without any review requests from the caller
+- **GIVEN** the validator-run skill is installed in the project
+- **WHEN** the validator-run skill is invoked without any review requests from the caller
 - **THEN** the run command SHALL NOT include any `--enable-review` flags
 
 ### Requirement: Task-compliance review defaults to disabled

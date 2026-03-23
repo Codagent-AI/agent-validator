@@ -5,6 +5,7 @@ import {
   registerCheckCommand,
   registerCICommand,
   registerCleanCommand,
+  registerDemoCommand,
   registerDetectCommand,
   registerHealthCommand,
   registerHelpCommand,
@@ -23,7 +24,7 @@ import {
 const program = new Command();
 
 program
-  .name('agent-gauntlet')
+  .name('agent-validate')
   .description('AI-assisted quality gates')
   .version(packageJson.version);
 
@@ -32,6 +33,7 @@ registerRunCommand(program);
 registerCheckCommand(program);
 registerCICommand(program);
 registerCleanCommand(program);
+registerDemoCommand(program);
 registerReviewAuditCommand(program);
 registerReviewCommand(program);
 registerDetectCommand(program);

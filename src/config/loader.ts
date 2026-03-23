@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
@@ -8,27 +9,36 @@ import {
 } from '../built-in-reviews/index.js';
 import {
   checkGateSchema,
-  gauntletConfigSchema,
   reviewPromptFrontmatterSchema,
   reviewYamlSchema,
+  validatorConfigSchema,
 } from './schema.js';
 import type {
   CheckGateConfig,
-  GauntletConfig,
   LoadedCheckGateConfig,
   LoadedConfig,
   LoadedReviewGateConfig,
+  ValidatorConfig,
 } from './types.js';
 
-const GAUNTLET_DIR = '.gauntlet';
+const VALIDATOR_DIR = '.validator';
+const LEGACY_GAUNTLET_DIR = '.gauntlet';
 const CONFIG_FILE = 'config.yml';
 const CHECKS_DIR = 'checks';
 const REVIEWS_DIR = 'reviews';
 
+function resolveConfigDir(rootDir: string): string {
+  const validatorPath = path.join(rootDir, VALIDATOR_DIR);
+  const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
+  if (existsSync(validatorPath)) return validatorPath;
+  if (existsSync(gauntletPath)) return gauntletPath;
+  return validatorPath; // default for new projects
+}
+
 export async function loadConfig(
   rootDir: string = process.cwd(),
 ): Promise<LoadedConfig> {
-  const gauntletPath = path.join(rootDir, GAUNTLET_DIR);
+  const gauntletPath = resolveConfigDir(rootDir);
   const configPath = path.join(gauntletPath, CONFIG_FILE);
 
   // 1. Load project config
@@ -38,7 +48,7 @@ export async function loadConfig(
 
   const configContent = await fs.readFile(configPath, 'utf-8');
   const projectConfigRaw = YAML.parse(configContent);
-  const projectConfig = gauntletConfigSchema.parse(projectConfigRaw);
+  const projectConfig = validatorConfigSchema.parse(projectConfigRaw);
 
   // 2. Load checks
   const checks = await loadCheckGates(gauntletPath);
@@ -262,7 +272,7 @@ async function loadYamlReview(
 
 function mergeCliPreferences(
   reviews: Record<string, LoadedReviewGateConfig>,
-  projectConfig: GauntletConfig,
+  projectConfig: ValidatorConfig,
 ): void {
   for (const [name, review] of Object.entries(reviews)) {
     if (review.cli_preference) {
@@ -281,7 +291,7 @@ function mergeCliPreferences(
 }
 
 function validateLoadedEntryPoints(
-  projectConfig: GauntletConfig,
+  projectConfig: ValidatorConfig,
   checks: Record<string, LoadedCheckGateConfig>,
   reviews: Record<string, LoadedReviewGateConfig>,
 ): void {
@@ -338,16 +348,16 @@ async function loadPromptFile(
   }
   // Warn if resolved path escapes the .gauntlet/ directory (including via relative traversal)
   const normalizedGauntletPath = path.resolve(gauntletPath);
-  const relativeToDotGauntlet = path.relative(
+  const relativeToConfigDir = path.relative(
     normalizedGauntletPath,
     resolvedPath,
   );
   if (
-    relativeToDotGauntlet.startsWith('..') ||
-    path.isAbsolute(relativeToDotGauntlet)
+    relativeToConfigDir.startsWith('..') ||
+    path.isAbsolute(relativeToConfigDir)
   ) {
     console.warn(
-      `Warning: ${source} references file outside .gauntlet/ directory: "${filePath}" (resolves to ${resolvedPath}). Review .gauntlet/ config changes carefully in PRs.`,
+      `Warning: ${source} references file outside config directory: "${filePath}" (resolves to ${resolvedPath}). Review config changes carefully in PRs.`,
     );
   }
   if (!(await fileExists(resolvedPath))) {

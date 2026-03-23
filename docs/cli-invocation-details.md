@@ -1,6 +1,6 @@
 # CLI Invocation Details
 
-This document details how Agent Gauntlet invokes supported AI CLI tools to ensure:
+This document details how Agent Validator invokes supported AI CLI tools to ensure:
 - **Non-interactive execution** (no hanging on prompts)
 - **Read-only access** (no file modifications)
 - **Repo-scoped visibility** (limited to the project root)
@@ -10,7 +10,7 @@ All adapters write the prompt (including diff) to a temporary file and pipe it t
 ## Common Behavior
 
 - **Dynamic Context**: Agents are invoked in a non-interactive, read-only mode where they can use their own file-reading and search tools to pull additional context from your repository as needed.
-- **Security**: By using standard CLI tools with strict flags (like `--sandbox` or `--allowed-tools`), Agent Gauntlet ensures that agents can read your code to review it without being able to modify your files or escape the repository scope.
+- **Security**: By using standard CLI tools with strict flags (like `--sandbox` or `--allowed-tools`), Agent Validator ensures that agents can read your code to review it without being able to modify your files or escape the repository scope.
 - **Output Parsing**: All agents are instructed to output strict JSON. The `ReviewGateExecutor` parses this JSON to determine pass/fail status.
 
 ---
@@ -124,7 +124,7 @@ Review gates dispatch work to CLI adapters via round-robin. If an adapter hits a
 ### How It Works
 
 1. **Detection**: When an adapter process exits with an error, the system checks the error output for usage-limit phrases (e.g., "usage limit", "quota exceeded", "credit balance is too low").
-2. **Marking**: If a usage limit is detected, the adapter is written to the `unhealthy_adapters` map in `gauntlet_logs/.execution_state` with a `marked_at` timestamp and `reason`.
+2. **Marking**: If a usage limit is detected, the adapter is written to the `unhealthy_adapters` map in `validator_logs/.execution_state` with a `marked_at` timestamp and `reason`.
 3. **Skipping**: On each subsequent run, before dispatching reviews, the system checks the unhealthy map. Adapters within the 1-hour cooldown are skipped.
 4. **Recovery**: After the cooldown expires, the adapter's binary is probed via `checkHealth()`. If healthy, the flag is cleared and the adapter rejoins the pool.
 5. **Round-robin fallback**: The `num_reviews` round-robin assignment uses only healthy adapters. If `num_reviews: 2` but only one adapter is healthy, both review slots are assigned to that adapter.

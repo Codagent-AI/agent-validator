@@ -2,7 +2,7 @@
 
 ## Problem
 
-Agent Gauntlet supports three code review adapters (Claude, Codex, Gemini), each with two configurable dimensions: tool use (on/off) and thinking budget (off/low/medium/high). This creates a large configuration space with no empirical data on which settings produce the best reviews. Without measurement, default configurations are guesses.
+Agent Validator supports three code review adapters (Claude, Codex, Gemini), each with two configurable dimensions: tool use (on/off) and thinking budget (off/low/medium/high). This creates a large configuration space with no empirical data on which settings produce the best reviews. Without measurement, default configurations are guesses.
 
 ## Goal
 

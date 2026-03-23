@@ -1,16 +1,16 @@
 {
-  "name": "agent-gauntlet",
+  "name": "agent-validator",
   "version": "1.3.0",
-  "description": "A CLI tool for testing AI coding agents",
+  "description": "A CLI tool for validating AI coding agents",
   "license": "MIT",
   "author": "Paul Caplan",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pacaplan/agent-gauntlet.git"
+    "url": "git+https://github.com/Codagent-AI/agent-validator.git"
   },
-  "homepage": "https://github.com/pacaplan/agent-gauntlet",
+  "homepage": "https://github.com/Codagent-AI/agent-validator",
   "bugs": {
-    "url": "https://github.com/pacaplan/agent-gauntlet/issues"
+    "url": "https://github.com/Codagent-AI/agent-validator/issues"
   },
   "keywords": [
     "cli",
@@ -29,14 +29,15 @@
     "LICENSE"
   ],
   "bin": {
-    "agent-gauntlet": "dist/index.js"
+    "agent-validate": "dist/index.js",
+    "agent-validator": "dist/index.js"
   },
   "type": "module",
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:bin": "bun build --compile --minify --sourcemap ./src/index.ts --outfile bin/agent-gauntlet",
+    "build:bin": "bun build --compile --minify --sourcemap ./src/index.ts --outfile bin/agent-validate",
     "build:npm": "bun build.ts",
     "prepublishOnly": "bun run build:npm",
     "test": "bun test",
@@ -53,7 +54,8 @@
     "detect": "bun src/index.ts detect",
     "list": "bun src/index.ts list",
     "health": "bun src/index.ts health",
-    "validate": "bun src/index.ts validate"
+    "validate": "bun src/index.ts validate",
+    "demo": "bun src/index.ts demo"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.3",

@@ -19,8 +19,8 @@ type PluginListEntry = {
 	projectPath?: string;
 };
 const listPluginsMock = mock(async () => [] as PluginListEntry[]);
-const updateMarketplaceMock = mock(async () => ({ success: true }));
-const updatePluginMock = mock(async () => ({ success: true }));
+const updateMarketplaceMock = mock(async (_name: string) => ({ success: true }));
+const updatePluginMock = mock(async (_name: string) => ({ success: true }));
 
 const addMarketplaceMock = mock(async () => ({ success: true }));
 const installPluginMock = mock(async (_scope: string) => ({ success: true }));
@@ -37,8 +37,8 @@ mock.module("../../src/plugin/claude-cli.js", () => ({
 	addMarketplace: () => addMarketplaceMock(),
 	installPlugin: (scope: string) => installPluginMock(scope),
 	listPlugins: () => listPluginsMock(),
-	updateMarketplace: () => updateMarketplaceMock(),
-	updatePlugin: () => updatePluginMock(),
+	updateMarketplace: (name: string) => updateMarketplaceMock(name),
+	updatePlugin: (name: string) => updatePluginMock(name),
 }));
 
 const { registerUpdateCommand } = await import("../../src/commands/update.js");
@@ -110,22 +110,22 @@ describe("update command", () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 
 		await expect(runPluginUpdate()).rejects.toThrow(
-			"run `agent-gauntlet init` first",
+			"run `agent-validate init` first",
 		);
 	});
 
 	it("updates project scope when installed for current project", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "project", projectPath: testDir },
+			{ name: "agent-validator", scope: "project", projectPath: testDir },
 		]);
-		await fs.mkdir(path.join(testDir, ".agents", "skills", "gauntlet-run"), {
+		await fs.mkdir(path.join(testDir, ".agents", "skills", "validator-run"), {
 			recursive: true,
 		});
-		await fs.mkdir(path.join(testDir, ".agents", "skills", "gauntlet-help"), {
+		await fs.mkdir(path.join(testDir, ".agents", "skills", "validator-help"), {
 			recursive: true,
 		});
 		await fs.writeFile(
-			path.join(testDir, ".agents", "skills", "gauntlet-help", "SKILL.md"),
+			path.join(testDir, ".agents", "skills", "validator-help", "SKILL.md"),
 			"outdated",
 		);
 
@@ -137,11 +137,11 @@ describe("update command", () => {
 		expect(updatePluginMock).toHaveBeenCalledTimes(1);
 		expect(logs.join("\n")).toContain("project scope");
 		const updated = await fs.readFile(
-			path.join(testDir, ".agents", "skills", "gauntlet-help", "SKILL.md"),
+			path.join(testDir, ".agents", "skills", "validator-help", "SKILL.md"),
 			"utf-8",
 		);
 		const source = await fs.readFile(
-			path.join(originalCwd, "skills", "gauntlet-help", "SKILL.md"),
+			path.join(originalCwd, "skills", "validator-help", "SKILL.md"),
 			"utf-8",
 		);
 		expect(updated).toBe(source);
@@ -149,30 +149,30 @@ describe("update command", () => {
 
 	it("updates global Codex skills when only global marker exists", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "user" },
 		]);
-		await fs.mkdir(path.join(homeDir, ".agents", "skills", "gauntlet-run"), {
+		await fs.mkdir(path.join(homeDir, ".agents", "skills", "validator-run"), {
 			recursive: true,
 		});
 		await fs.mkdir(
-			path.join(homeDir, ".agents", "skills", "gauntlet-status"),
+			path.join(homeDir, ".agents", "skills", "validator-status"),
 			{
 				recursive: true,
 			},
 		);
 		await fs.writeFile(
-			path.join(homeDir, ".agents", "skills", "gauntlet-status", "SKILL.md"),
+			path.join(homeDir, ".agents", "skills", "validator-status", "SKILL.md"),
 			"outdated",
 		);
 
 		await runPluginUpdate();
 
 		const updated = await fs.readFile(
-			path.join(homeDir, ".agents", "skills", "gauntlet-status", "SKILL.md"),
+			path.join(homeDir, ".agents", "skills", "validator-status", "SKILL.md"),
 			"utf-8",
 		);
 		const source = await fs.readFile(
-			path.join(originalCwd, "skills", "gauntlet-status", "SKILL.md"),
+			path.join(originalCwd, "skills", "validator-status", "SKILL.md"),
 			"utf-8",
 		);
 		expect(updated).toBe(source);
@@ -180,42 +180,42 @@ describe("update command", () => {
 
 	it("prefers local Codex skills when both local and global markers exist", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "project", projectPath: testDir },
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "project", projectPath: testDir },
+			{ name: "agent-validator", scope: "user" },
 		]);
-		await fs.mkdir(path.join(testDir, ".agents", "skills", "gauntlet-run"), {
+		await fs.mkdir(path.join(testDir, ".agents", "skills", "validator-run"), {
 			recursive: true,
 		});
-		await fs.mkdir(path.join(testDir, ".agents", "skills", "gauntlet-check"), {
+		await fs.mkdir(path.join(testDir, ".agents", "skills", "validator-check"), {
 			recursive: true,
 		});
 		await fs.writeFile(
-			path.join(testDir, ".agents", "skills", "gauntlet-check", "SKILL.md"),
+			path.join(testDir, ".agents", "skills", "validator-check", "SKILL.md"),
 			"local old",
 		);
-		await fs.mkdir(path.join(homeDir, ".agents", "skills", "gauntlet-run"), {
+		await fs.mkdir(path.join(homeDir, ".agents", "skills", "validator-run"), {
 			recursive: true,
 		});
-		await fs.mkdir(path.join(homeDir, ".agents", "skills", "gauntlet-check"), {
+		await fs.mkdir(path.join(homeDir, ".agents", "skills", "validator-check"), {
 			recursive: true,
 		});
 		await fs.writeFile(
-			path.join(homeDir, ".agents", "skills", "gauntlet-check", "SKILL.md"),
+			path.join(homeDir, ".agents", "skills", "validator-check", "SKILL.md"),
 			"global old",
 		);
 
 		await runPluginUpdate();
 
 		const localUpdated = await fs.readFile(
-			path.join(testDir, ".agents", "skills", "gauntlet-check", "SKILL.md"),
+			path.join(testDir, ".agents", "skills", "validator-check", "SKILL.md"),
 			"utf-8",
 		);
 		const globalUpdated = await fs.readFile(
-			path.join(homeDir, ".agents", "skills", "gauntlet-check", "SKILL.md"),
+			path.join(homeDir, ".agents", "skills", "validator-check", "SKILL.md"),
 			"utf-8",
 		);
 		const source = await fs.readFile(
-			path.join(originalCwd, "skills", "gauntlet-check", "SKILL.md"),
+			path.join(originalCwd, "skills", "validator-check", "SKILL.md"),
 			"utf-8",
 		);
 		expect(localUpdated).toBe(source);
@@ -224,7 +224,7 @@ describe("update command", () => {
 
 	it("prints manual update instructions when update fails", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "user" },
 		]);
 		updateMarketplaceMock.mockImplementationOnce(async () => ({
 			success: false,
@@ -235,9 +235,9 @@ describe("update command", () => {
 		expect(updatePluginMock).not.toHaveBeenCalled();
 		const output = errors.join("\n");
 		expect(output).toContain("Plugin update failed");
-		expect(output).toContain("claude plugin marketplace update agent-gauntlet");
+		expect(output).toContain("claude plugin marketplace update agent-validator");
 		expect(output).toContain(
-			"claude plugin update agent-gauntlet@pcaplan/agent-gauntlet",
+			"claude plugin update agent-validator@Codagent-AI/agent-validator",
 		);
 	});
 
@@ -246,7 +246,7 @@ describe("update command", () => {
 		// cursorDetectPluginSpy already returns null by default
 
 		await expect(runPluginUpdate()).rejects.toThrow(
-			"run `agent-gauntlet init` first",
+			"run `agent-validate init` first",
 		);
 		expect(updateMarketplaceMock).not.toHaveBeenCalled();
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
@@ -274,7 +274,7 @@ describe("update command", () => {
 
 	it("updates both Claude and Cursor when both are installed", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "user" },
 		]);
 		cursorDetectPluginSpy.mockResolvedValueOnce("project");
 
@@ -289,7 +289,7 @@ describe("update command", () => {
 
 	it("warns and continues when Cursor update fails", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "user" },
 		]);
 		cursorDetectPluginSpy.mockResolvedValueOnce("user");
 		cursorUpdatePluginSpy.mockResolvedValueOnce({
@@ -327,7 +327,7 @@ describe("update command", () => {
 
 	it("skips Cursor update silently when Cursor plugin not installed", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "user" },
 		]);
 		// cursorDetectPluginSpy already returns null by default
 
@@ -339,7 +339,7 @@ describe("update command", () => {
 	it("throws when Claude update fails (Cursor update is not reached)", async () => {
 		// Claude marketplace update fails fast — Cursor update never runs
 		listPluginsMock.mockImplementationOnce(async () => [
-			{ name: "agent-gauntlet", scope: "user" },
+			{ name: "agent-validator", scope: "user" },
 		]);
 		cursorDetectPluginSpy.mockResolvedValueOnce("user");
 		updateMarketplaceMock.mockImplementationOnce(async () => ({

@@ -35,13 +35,13 @@ describe("Status Script", () => {
 
 	afterEach(async () => {
 		await fs
-			.rm(path.join(TEST_DIR, "gauntlet_logs"), {
+			.rm(path.join(TEST_DIR, "validator_logs"), {
 				recursive: true,
 				force: true,
 			})
 			.catch(() => {});
 		await fs
-			.rm(path.join(TEST_DIR, ".gauntlet"), { recursive: true, force: true })
+			.rm(path.join(TEST_DIR, ".validator"), { recursive: true, force: true })
 			.catch(() => {});
 		await fs
 			.rm(path.join(TEST_DIR, "custom_logs"), {
@@ -53,18 +53,18 @@ describe("Status Script", () => {
 
 	it("should handle missing log directory gracefully", () => {
 		const output = runStatus(TEST_DIR);
-		expect(output).toContain("No gauntlet_logs directory found");
+		expect(output).toContain("No validator_logs directory found");
 	});
 
 	it("should handle empty log directory gracefully", async () => {
-		await fs.mkdir(path.join(TEST_DIR, "gauntlet_logs"), { recursive: true });
+		await fs.mkdir(path.join(TEST_DIR, "validator_logs"), { recursive: true });
 		const output = runStatus(TEST_DIR);
 		// No debug log and no non-hidden files => fallback to previous, then no logs
-		expect(output).toContain("No gauntlet");
+		expect(output).toContain("No validator");
 	});
 
 	it("should parse debug log with RUN_START and RUN_END", async () => {
-		const logDir = path.join(TEST_DIR, "gauntlet_logs");
+		const logDir = path.join(TEST_DIR, "validator_logs");
 		await fs.mkdir(logDir, { recursive: true });
 
 		const sessionTime = new Date("2026-02-07T10:00:00.000Z");
@@ -83,7 +83,7 @@ describe("Status Script", () => {
 
 		const output = runStatus(TEST_DIR);
 
-		expect(output).toContain("Gauntlet Session Summary");
+		expect(output).toContain("Validator Session Summary");
 		expect(output).toContain("FAILED");
 		expect(output).toContain("Iterations:** 2");
 		expect(output).toContain("30.5s");
@@ -103,7 +103,7 @@ describe("Status Script", () => {
 	});
 
 	it("should list log files in file inventory", async () => {
-		const logDir = path.join(TEST_DIR, "gauntlet_logs");
+		const logDir = path.join(TEST_DIR, "validator_logs");
 		await fs.mkdir(logDir, { recursive: true });
 
 		const sessionTime = new Date("2026-02-07T10:00:00.000Z");
@@ -144,7 +144,7 @@ describe("Status Script", () => {
 	});
 
 	it("should fall back to previous/ directory when no active logs exist", async () => {
-		const logDir = path.join(TEST_DIR, "gauntlet_logs");
+		const logDir = path.join(TEST_DIR, "validator_logs");
 		const prevDir = path.join(logDir, "previous", "2026-02-07_session1");
 		await fs.mkdir(prevDir, { recursive: true });
 
@@ -163,12 +163,12 @@ describe("Status Script", () => {
 
 		const output = runStatus(TEST_DIR);
 
-		expect(output).toContain("Gauntlet Session Summary");
+		expect(output).toContain("Validator Session Summary");
 		expect(output).toContain("PASSED");
 	});
 
 	it("should handle multiple runs in a session", async () => {
-		const logDir = path.join(TEST_DIR, "gauntlet_logs");
+		const logDir = path.join(TEST_DIR, "validator_logs");
 		await fs.mkdir(logDir, { recursive: true });
 
 		const sessionTime = new Date("2026-02-07T10:00:00.000Z");
@@ -195,7 +195,7 @@ describe("Status Script", () => {
 	});
 
 	it("should only show runs matching current session log files", async () => {
-		const logDir = path.join(TEST_DIR, "gauntlet_logs");
+		const logDir = path.join(TEST_DIR, "validator_logs");
 		await fs.mkdir(logDir, { recursive: true });
 
 		// Log file mtime = Feb 7 (current session)
@@ -228,15 +228,15 @@ describe("Status Script", () => {
 		expect(output).not.toContain("mode=verification");
 	});
 
-	it("should read log_dir from .gauntlet/config.yml", async () => {
+	it("should read log_dir from .validator/config.yml", async () => {
 		const customLogDir = path.join(TEST_DIR, "custom_logs");
 		await fs.mkdir(customLogDir, { recursive: true });
-		await fs.mkdir(path.join(TEST_DIR, ".gauntlet"), { recursive: true });
+		await fs.mkdir(path.join(TEST_DIR, ".validator"), { recursive: true });
 
 		const sessionTime = new Date("2026-02-07T10:00:00.000Z");
 
 		await fs.writeFile(
-			path.join(TEST_DIR, ".gauntlet", "config.yml"),
+			path.join(TEST_DIR, ".validator", "config.yml"),
 			"log_dir: custom_logs\n",
 		);
 
@@ -251,7 +251,7 @@ describe("Status Script", () => {
 		);
 
 		const output = runStatus(TEST_DIR);
-		expect(output).toContain("Gauntlet Session Summary");
+		expect(output).toContain("Validator Session Summary");
 		expect(output).toContain("PASSED");
 	});
 });
