@@ -1,5 +1,17 @@
 # agent-gauntlet
 
+## 1.4.0
+
+### Minor Changes
+
+- [#109](https://github.com/Codagent-AI/agent-validator/pull/109) Remove the stop hook and start hook feature, simplifying the hook lifecycle and reducing surface area for configuration errors
+
+- [#110](https://github.com/Codagent-AI/agent-validator/pull/110) Rename Agent Gauntlet to Agent Validator across the entire project, including package name, CLI binary, documentation, and plugin manifests
+
+### Patch Changes
+
+- [#108](https://github.com/Codagent-AI/agent-validator/pull/108) Write execution state after a clean run to prevent the state file from being deleted when all checks pass, ensuring subsequent runs have accurate baseline data
+
 ## 1.3.0
 
 ### Minor Changes
