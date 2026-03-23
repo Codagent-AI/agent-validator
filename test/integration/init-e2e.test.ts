@@ -30,7 +30,7 @@ beforeAll(async () => {
 		cwd: tempDir,
 		env: { ...process.env, PATH: `${stubBinDir}:${process.env.PATH}` },
 	});
-});
+}, 30_000);
 
 afterAll(async () => {
 	if (tempDir) {

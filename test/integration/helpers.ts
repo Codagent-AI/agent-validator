@@ -19,6 +19,13 @@ export async function createClaudeStub(): Promise<{
 	const claudePath = path.join(binDir, "claude");
 	await fs.promises.writeFile(claudePath, "#!/bin/sh\necho '[]'\nexit 0\n");
 	await fs.promises.chmod(claudePath, 0o755);
+
+	// Stub `gh` so that `gh copilot -- --help` (used by the github-copilot
+	// adapter's isAvailable check) exits immediately instead of hanging in CI.
+	const ghPath = path.join(binDir, "gh");
+	await fs.promises.writeFile(ghPath, "#!/bin/sh\nexit 1\n");
+	await fs.promises.chmod(ghPath, 0o755);
+
 	return {
 		binDir,
 		cleanup: () =>
