@@ -1,10 +1,10 @@
 # Feature Comparison
 
-This document compares Agent Gauntlet's features with other popular AI-powered code review tools.
+This document compares Agent Validator's features with other popular AI-powered code review tools.
 
 ## Comparison Table
 
-| Feature | Agent Gauntlet | Other Tools |
+| Feature | Agent Validator | Other Tools |
 | :--- | :--- | :--- |
 | **Agentic Feedback Loop** | ✅ Real-time feedback directly to coding agents during development | ❌ Async (PR/CI based) |
 | **Custom Static Checks** | ✅ Run your own build, lint, test commands | ❌ Pre-configured linters/SAST only |
@@ -19,9 +19,9 @@ This document compares Agent Gauntlet's features with other popular AI-powered c
 
 ## Key Differentiators
 
-### Agent Gauntlet Advantages
+### Agent Validator Advantages
 
-1. **Real-Time Feedback for Autonomous Agents**: Unlike other tools that sit in CI or PR workflows, Agent Gauntlet provides immediate feedback loops for coding agents. When an agent completes work, it gets instant validation and can iterate until checks pass—without human intervention.
+1. **Real-Time Feedback for Autonomous Agents**: Unlike other tools that sit in CI or PR workflows, Agent Validator provides immediate feedback loops for coding agents. When an agent completes work, it gets instant validation and can iterate until checks pass—without human intervention.
 
 2. **Hybrid Validation**: Combines deterministic static checks (build, lint, test) with probabilistic AI reviews (code quality, logic bugs) in a single pipeline. Other tools typically focus on one or the other.
 

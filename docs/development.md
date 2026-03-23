@@ -4,7 +4,7 @@
 
 - Uses superpowers skills for brainstorming, planning, and implementation
 - Uses [worktrunk](https://worktrunk.dev) for worktree management
-- Uses AgentGauntlet to validate changes
+- Uses Agent Validator to validate changes
 - Uses OpenSpec to preserve spec history
 
 ### 0. Create a worktree and launch an agent
@@ -31,10 +31,10 @@ Produces `docs/plans/YYYY-MM-DD-<topic>-design.md`
 
 ### 3. Spec + Review
 
-Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal and spec deltas. After validation, the gauntlet spec reviewer runs automatically.
+Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal and spec deltas. After validation, the Agent Validator spec reviewer runs automatically.
 ```
 /clear
-/openspec:proposal write proposal for docs/plans/<file>.md and then invoke `gauntlet-run` skill
+/openspec:proposal write proposal for docs/plans/<file>.md and then invoke `validator-run` skill
 ```
 
 Produces `openspec/changes/<change-name>/` containing `design.md` (moved from docs/plans/), `proposal.md`, and spec deltas. The proposal is the source of truth from this point forward.
@@ -51,7 +51,7 @@ The worktree agent writes a detailed implementation plan and immediately execute
 The agent will:
 1. Write the plan (`docs/plans/YYYY-MM-DD-<name>.plan.md`)
 2. Execute all tasks via fresh subagents with automated spec + quality reviews
-3. Run `gauntlet-run` skill to validate
+3. Run `validator-run` skill to validate
 4. Create a pull request against main
 
 **Note:** `docs/plans/` and `docs/design/` are gitignored — plan and design docs are scratch artifacts, not permanent documentation.

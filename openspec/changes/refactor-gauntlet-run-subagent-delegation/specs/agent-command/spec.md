@@ -90,7 +90,7 @@ The gauntlet-run skill SHALL include separate prompt template files for each sub
 - **WHEN** the agent reads the gauntlet-run SKILL.md
 - **THEN** it SHALL find instructions to read `extract-prompt.md` and `update-prompt.md` from the same directory and use their content as subagent prompts
 
-### Requirement: Gauntlet-Run Skill Allowed Tools
+### Requirement: Agent Validator-Run Skill Allowed Tools
 The gauntlet-run skill SHALL declare both `Bash` and `Task` in its `allowed-tools` frontmatter to enable subagent delegation.
 
 #### Scenario: Allowed tools include Task

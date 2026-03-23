@@ -1,6 +1,6 @@
 # Plugin & Update Guide
 
-Agent Gauntlet delivers skills and hooks to AI coding agents via **plugins**. Both Claude Code and Cursor are supported, each with their own plugin format and installation mechanism.
+Agent Validator delivers skills and hooks to AI coding agents via **plugins**. Both Claude Code and Cursor are supported, each with their own plugin format and installation mechanism.
 
 ## How It Works
 
@@ -37,8 +37,8 @@ During init, you choose an install scope:
 
 | Scope | Flag | Where | Use When |
 |-------|------|-------|----------|
-| Project (local) | `--scope project` | Current project only | Want gauntlet only in this repo |
-| User (global) | `--scope user` | All projects for your user | Want gauntlet everywhere |
+| Project (local) | `--scope project` | Current project only | Want Agent Validator only in this repo |
+| User (global) | `--scope user` | All projects for your user | Want Agent Validator everywhere |
 
 Both scopes can coexist — if installed at both, the project-scope installation takes precedence.
 
@@ -46,7 +46,7 @@ Both scopes can coexist — if installed at both, the project-scope installation
 
 ### Skills
 
-All gauntlet skills (`/gauntlet-run`, `/gauntlet-setup`, etc.) are bundled in the plugin's `.claude/skills/` directory. See the [Skills Guide](skills-guide.md) for the full list.
+All Agent Validator skills (`/validator-run`, `/validator-setup`, etc.) are bundled in the plugin's `.claude/skills/` directory. See the [Skills Guide](skills-guide.md) for the full list.
 
 ## Updating
 
@@ -75,7 +75,7 @@ The update command auto-detects the installed scope:
 
 ### Re-running Init
 
-Running `agent-validator init` on a project that already has `.gauntlet/` delegates to the update flow. If the plugin isn't installed yet, it falls back to a fresh install.
+Running `agent-validator init` on a project that already has `.validator/` delegates to the update flow. If the plugin isn't installed yet, it falls back to a fresh install.
 
 ## Manual Installation
 
@@ -122,7 +122,7 @@ The Cursor plugin is delivered via file copy during `agent-validator init`. Unli
 ### Plugin Contents
 
 - `.cursor-plugin/plugin.json` — Plugin manifest (name, version, description, license)
-- `skills/` — All gauntlet skill files
+- `skills/` — All Agent Validator skill files
 - `hooks/hooks.json` — Hook definitions (installed from source file `hooks/cursor-hooks.json`)
 
 ### Updating

@@ -1,11 +1,11 @@
 # Config Reference
 
-This document lists the configuration files Agent Gauntlet loads and all supported fields **as implemented**.
+This document lists the configuration files Agent Validator loads and all supported fields **as implemented**.
 
 ## Files and where they live
 
 ```text
-.gauntlet/
+.validator/
   config.yml              # project config (required)
   checks/
     *.yml                 # check gate definitions (optional)
@@ -14,13 +14,13 @@ This document lists the configuration files Agent Gauntlet loads and all support
     *.yml                 # review gate configs as YAML (optional; filename is gate name)
 ```
 
-## Project config: `.gauntlet/config.yml`
+## Project config: `.validator/config.yml`
 
 ### Schema
 
 - **base_branch**: string (default: `origin/main`)  
   The git ref used as the “base” when detecting changes locally (via `git diff base...HEAD`). In CI, the runner prefers GitHub-provided refs (e.g. `GITHUB_BASE_REF`) when available.
-- **log_dir**: string (default: `gauntlet_logs`)  
+- **log_dir**: string (default: `validator_logs`)  
   Directory where per-job logs are written. Each gate run writes a log file named from the job id (sanitized).
 - **cli**: object (required)
   - **default_preference**: string[] (required)  
@@ -52,19 +52,19 @@ This document lists the configuration files Agent Gauntlet loads and all support
     - **enabled**: boolean (default: `true`)
     - **format**: `"text"` | `"json"` (default: `"text"`)
 - **entry_points**: array (required)
-  Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-validator init`, this starts as `[]` (empty) and is populated by the `/gauntlet-setup` skill.
+  Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-validator init`, this starts as `[]` (empty) and is populated by the `/validator-setup` skill.
   - **path**: string (required)  
     The scope path for the entry point. Supports fixed paths like `apps/api` and a trailing wildcard form like `packages/*` which expands to one job per changed subdirectory.
-  - **checks**: string[] (optional; names of gates from `.gauntlet/checks/*.yml`)  
+  - **checks**: string[] (optional; names of gates from `.validator/checks/*.yml`)  
     Which check gate names to run when this entry point is active. Names must match the `name` field inside the corresponding check YAML.
-  - **reviews**: string[] (optional; names from `.gauntlet/reviews/*.md` filenames)  
+  - **reviews**: string[] (optional; names from `.validator/reviews/*.md` filenames)  
     Which review gate names to run when this entry point is active. Names come from review prompt filenames (e.g. `security.md` → `security`).
 
 ### Example
 
 ```yaml
 base_branch: origin/main
-log_dir: gauntlet_logs
+log_dir: validator_logs
 allow_parallel: true
 max_previous_logs: 3
 cli:
@@ -94,7 +94,7 @@ entry_points:
       - lint
 ```
 
-## Check gates: `.gauntlet/checks/*.yml`
+## Check gates: `.validator/checks/*.yml`
 
 Check gate names are derived from the filename (e.g. `lint.yml` → gate name `lint`).
 
@@ -117,7 +117,7 @@ Check gate names are derived from the filename (e.g. `lint.yml` → gate name `l
 - **fail_fast**: boolean (optional; can only be used when `parallel` is `false`)
   If `true`, a failure/error in this gate stops scheduling subsequent work. Note: the current implementation enforces fail-fast at scheduling time; parallel jobs may already be running.
 - **fix_instructions_file**: string (optional)
-  Path to a file containing instructions for fixing failures. Relative paths resolve from `.gauntlet/`. Absolute paths are allowed but log a security warning. Mutually exclusive with `fix_with_skill`.
+  Path to a file containing instructions for fixing failures. Relative paths resolve from `.validator/`. Absolute paths are allowed but log a security warning. Mutually exclusive with `fix_with_skill`.
 - **fix_with_skill**: string (optional)
   Name of a CLI skill to use for fixing failures. When the check fails, the skill name is included in the gate result for consumers. Mutually exclusive with `fix_instructions_file`.
 - **fix_instructions**: string (optional; **deprecated**)
@@ -136,7 +136,7 @@ fail_fast: false
 fix_instructions_file: fix-guides/test-failures.md
 ```
 
-## Review gates: `.gauntlet/reviews/*.md` and `.gauntlet/reviews/*.yml`
+## Review gates: `.validator/reviews/*.md` and `.validator/reviews/*.yml`
 
 Review gates can be defined as either Markdown files (`.md`) or YAML files (`.yml`/`.yaml`).
 
@@ -170,7 +170,7 @@ YAML review files must specify exactly one of `prompt_file`, `skill_name`, or `b
 - **model**: string (optional)
   Optional model hint passed to adapters that support it. Adapters that don't support model selection will ignore this value.
 - **prompt_file**: string (optional)
-  Path to an external file containing the review prompt. Relative paths resolve from `.gauntlet/`. Absolute paths are allowed but log a security warning. For `.md` files, this overrides the markdown body. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `skill_name` and `builtin`.
+  Path to an external file containing the review prompt. Relative paths resolve from `.validator/`. Absolute paths are allowed but log a security warning. For `.md` files, this overrides the markdown body. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `skill_name` and `builtin`.
 - **skill_name**: string (optional)
   Name of a CLI skill to delegate the review to. When set, no prompt content is loaded. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `prompt_file` and `builtin`.
 - **builtin**: string (optional, `.yml` only)

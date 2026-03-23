@@ -1,6 +1,6 @@
 ![Agent Validator logo](docs/images/agent-validator-logo.png)
 
-[![CI](https://github.com/Codagent-AI/agent-validator/actions/workflows/gauntlet.yml/badge.svg)](https://github.com/Codagent-AI/agent-validator/actions/workflows/gauntlet.yml)
+[![CI](https://github.com/Codagent-AI/agent-validator/actions/workflows/validator.yml/badge.svg)](https://github.com/Codagent-AI/agent-validator/actions/workflows/validator.yml)
 [![npm](https://img.shields.io/npm/v/agent-validator)](https://www.npmjs.com/package/agent-validator)
 [![npm downloads](https://img.shields.io/npm/dm/agent-validator)](https://www.npmjs.com/package/agent-validator)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -12,17 +12,29 @@
 
 Agent Validator (formerly Agent Gauntlet) is a configurable “feedback loop” runner for AI-assisted development workflows.
 
-You configure which paths in your repo should trigger which validations — shell commands like tests and linters, plus AI-powered local code reviews. When files change, Gauntlet automatically runs the relevant validations and reports results.
+You configure which paths in your repo should trigger which validations — shell commands like tests and linters, plus AI-powered local code reviews. When files change, Agent Validator automatically runs the relevant validations and reports results.
 
 For AI reviews, it uses the CLI tool of your choice: Gemini, Codex, Claude Code, GitHub Copilot, or Cursor. 
 
 ## Features
 
-- **Agent validation loop**: Keep your coding agent on track with automated feedback loops. Detect problems — deterministically and/or non-deterministically — and let your agent fix and Gauntlet verify.
-- **Local cross-agent code reviews**: Enable one AI agent to automatically request code reviews from another. For example, if Claude made changes, Gauntlet can request a review from Codex — spreading token usage across your subscriptions instead of burning through one.
+- **Agent validation loop**: Keep your coding agent on track with automated feedback loops. Detect problems — deterministically and/or non-deterministically — and let your agent fix and Agent Validator verify.
+- **Local cross-agent code reviews**: Enable one AI agent to automatically request code reviews from another. For example, if Claude made changes, Agent Validator can request a review from Codex — spreading token usage across your subscriptions instead of burning through one.
   - Multiple AI review adapters have been evaluated for quality and efficiency. Claude and Codex deliver optimal review quality with superior token efficiency. For detailed metrics, see [Eval Results](docs/eval-results.md).
 - **Leverage existing subscriptions**: Agent Validator is *free* and tool-agnostic, leveraging the AI CLI tools you already have installed.
 - **Easy CI setup**: Define your CI gates once, run them locally and in GitHub.
+
+
+### Example Workflow
+
+1. Claude implements a feature
+2. Agent Validator reports linter failures and bugs detected by Codex reviewer agent
+3. Claude fixes issues
+4. Agent Validator reports linter issue remaining
+5. Claude fixes issue
+6. Agent Validator confirms all issues fixed
+
+![Agent Validator Demo](docs/images/agent-validator-demo.gif)
 
 ## Common Workflows
 
@@ -33,13 +45,6 @@ Agent Validator supports three workflows, ranging from simple CLI execution to f
 - **Agentic Mode** — Autonomous agent validates and fixes in real-time, delivered as a Claude Code or Cursor plugin. *(Coming soon with [Agent Runner](https://www.codagent.dev/).)*
 
 ![Agent Validator Workflows](docs/images/workflows2.png)
-
-### Example Workflow
-
-1. Claude implements a feature
-2. Agent Validator reports quality issues detected by static code analysis and Codex reviewer agent
-3. Claude fixes issues
-4. Agent Validator verifies
 
 ### Comparison vs Other Tools
 

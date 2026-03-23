@@ -1,4 +1,4 @@
-# Gauntlet-Run Subagent Delegation
+# Agent Validator-Run Subagent Delegation
 
 ## Problem
 

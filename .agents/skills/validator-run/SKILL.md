@@ -1,1 +1,0 @@
-../../../.claude/skills/validator-run/SKILL.md

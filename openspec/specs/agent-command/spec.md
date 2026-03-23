@@ -374,12 +374,12 @@ The validator-run skill SHALL accept `--enable-review <name>` flags from the cal
 - **AND** the `description` field SHALL contain the phrase "final step after completing a coding task"
 - **AND** the `description` field SHALL contain the phrase "before committing, pushing, or creating PRs"
 
-#### Scenario: Gauntlet-run skill passes caller-requested reviews
+#### Scenario: Agent Validator-run skill passes caller-requested reviews
 - **GIVEN** the validator-run skill is installed and configured
 - **WHEN** the caller requests a specific review to be enabled
 - **THEN** the run command SHALL include `--enable-review <name>` for each requested review
 
-#### Scenario: Gauntlet-run skill omits flag when no reviews requested
+#### Scenario: Agent Validator-run skill omits flag when no reviews requested
 - **GIVEN** the validator-run skill is installed and configured
 - **WHEN** the validator-run skill is executed without any review requests from the caller
 - **THEN** the run command SHALL NOT include any `--enable-review` flags

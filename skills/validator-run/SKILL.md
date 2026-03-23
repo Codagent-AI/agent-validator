@@ -13,7 +13,7 @@ Fix issues you reasonably agree with or believe the human wants to be fixed. Ski
 
 ## Procedure
 
-### Step 1 - Run Gauntlet
+### Step 1 - Run Agent Validator
 
 If the caller requests a specific review to be enabled, append `--enable-review <name>` to the run command for each requested review.
 

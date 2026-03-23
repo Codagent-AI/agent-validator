@@ -24,6 +24,6 @@ Subagent delegation was chosen because it fully isolates file contents from the 
 
 ## Impact
 
-- Affected specs: `agent-command` (Issue Output Path Instructions, Issue Status Updates requirements are modified; Subagent Delegation Pattern, Subagent Safety Constraint, Subagent Prompt Template Files, and Gauntlet-Run Skill Allowed Tools requirements are added)
+- Affected specs: `agent-command` (Issue Output Path Instructions, Issue Status Updates requirements are modified; Subagent Delegation Pattern, Subagent Safety Constraint, Subagent Prompt Template Files, and Agent Validator-Run Skill Allowed Tools requirements are added)
 - Affected code: `src/commands/init.ts` (skill template generation), `.claude/skills/gauntlet-run/` (skill files)
 - All projects using `agent-validator init` will receive the updated skill on next init
