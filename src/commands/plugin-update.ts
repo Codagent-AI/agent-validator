@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { CursorAdapter } from '../cli-adapters/cursor.js';
 import {
+  addMarketplace,
+  installPlugin,
   listPlugins,
   updateMarketplace,
   updatePlugin,
@@ -272,7 +274,15 @@ async function updateClaudePlugin(detected: DetectedPlugin): Promise<void> {
     ),
   );
 
-  const marketplaceResult = await updateMarketplace(detected.installedName);
+  let marketplaceResult = await updateMarketplace(detected.installedName);
+  if (!marketplaceResult.success) {
+    // Marketplace entry may be missing (removed, renamed, or new machine) — re-add it
+    console.log(chalk.yellow('Marketplace entry not found, re-adding...'));
+    const addResult = await addMarketplace();
+    if (addResult.success) {
+      marketplaceResult = await updateMarketplace(detected.installedName);
+    }
+  }
   if (!marketplaceResult.success) {
     console.error(chalk.red('Plugin update failed.'));
     if (marketplaceResult.stderr) {
@@ -284,7 +294,12 @@ async function updateClaudePlugin(detected: DetectedPlugin): Promise<void> {
     );
   }
 
-  const pluginResult = await updatePlugin(detected.installedName);
+  let pluginResult = await updatePlugin(detected.installedName);
+  if (!pluginResult.success) {
+    // Plugin entry may be missing or under a different name — reinstall it
+    console.log(chalk.yellow('Plugin not found, reinstalling...'));
+    pluginResult = await installPlugin(detected.scope);
+  }
   if (!pluginResult.success) {
     console.error(chalk.red('Plugin update failed.'));
     if (pluginResult.stderr) {

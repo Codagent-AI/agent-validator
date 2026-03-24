@@ -281,10 +281,15 @@ agent-validator update
 
 This updates the Claude Code plugin (via marketplace), the GitHub Copilot plugin (via `gh copilot -- plugin install`), refreshes the Cursor plugin (via file copy) if installed, and refreshes Codex skills if installed. The command auto-detects where each plugin is installed.
 
+### Execution State & Skipping
+
+Agent Validator tracks an **execution state baseline** — the branch, commit, and working tree snapshot at which the last run completed. On subsequent runs, only changes since that baseline are reviewed, avoiding redundant and expensive re-reviews of code that already passed. When a run fails, the baseline stays put so the next run can verify fixes in a narrowed scope. If you want to advance the baseline without running reviews — for example, after manually reviewing changes, accepting flagged issues, or integrating upstream code — run `agent-validator skip` to record the current state as the new starting point. See [Execution State Tracking](docs/execution-state.md) for full details on how state is managed, when it resets, and edge cases.
+
 ## Documentation
 
 - [User Guide](docs/user-guide.md) — full usage details
 - [Configuration Reference](docs/config-reference.md) — all configuration fields + defaults
+- [Execution State Tracking](docs/execution-state.md) — how the validator avoids redundant reviews
 - [Plugin & Update Guide](docs/plugin-guide.md) — Claude Code and Cursor plugin delivery and updating
 - [CLI Invocation Details](docs/cli-invocation-details.md) — how we securely invoke AI CLIs
 - [Feature Comparison](docs/feature_comparison.md) — how Agent Validator compares to other tools

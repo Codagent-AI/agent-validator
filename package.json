@@ -30,7 +30,7 @@
   ],
   "bin": {
     "agent-validate": "dist/index.js",
-    "agent-validator": "dist/index.js"
+    "agent-gauntlet": "dist/index.js"
   },
   "type": "module",
   "engines": {
