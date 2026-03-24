@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 1.5.1
+
+### Patch Changes
+
+- [#115](https://github.com/Codagent-AI/agent-validator/pull/115) Make `update` command resilient to missing `marketplace.json` or `plugin.json` entries, preventing crashes when these files lack expected fields
+
 ## 1.5.0
 
 ### Minor Changes
