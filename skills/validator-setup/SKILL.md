@@ -153,6 +153,10 @@ Commit all validator configuration and skills so the setup is preserved in versi
 
 If there are no changes to commit (everything already committed), skip this step silently.
 
-## Step 12: Suggest next steps
+## Step 12: Advance validator baseline
+
+Run `/validator-skip` to advance the execution state baseline to the current working tree, so the next run only diffs against future changes.
+
+## Step 13: Suggest next steps
 
 Tell the user: configuration is complete. Run `/validator-run` to execute, or `/validator-setup` again to add more.
