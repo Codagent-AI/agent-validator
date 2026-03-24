@@ -126,7 +126,7 @@ agent-validator run
 
 ### Agent Skills
 
-Agent Validator can install skills (for Claude Code) and flat commands (for other CLI agents) that let you invoke Agent Validator workflows directly from your AI agent session. For example, `/validator-help` provides guidance and troubleshooting on how to use the tool. See the [Skills Guide](docs/skills-guide.md) for the full list of skills and configuration options.
+Agent Validator installs as a plugin for Claude Code, GitHub Copilot, and Cursor (and copies skill files for Codex), giving you slash-command workflows directly in your AI agent session. For example, `/validator-help` provides guidance and troubleshooting on how to use the tool. See the [Skills Guide](docs/skills-guide.md) for the full list of skills and configuration options.
 
 ### Configuration Layout
 
@@ -222,23 +222,28 @@ The check name (`lint`) is referenced in `config.yml`. When Agent Validator runs
 
 #### Review definition example
 
-Reviews are prompts defined in `.validator/reviews/`:
+Reviews are defined in `.validator/reviews/`:
 
-```markdown
-# .validator/reviews/code-quality.md
-
-# Code Review
-
-Review the diff for code quality issues. Focus on:
-- Code correctness and potential bugs
-- Code style and consistency
-- Best practices and maintainability
-- Performance considerations
+```yaml
+# .validator/reviews/code-quality.yml
+builtin: code-quality
+num_reviews: 1
 ```
 
-The filename (`code-quality.md`) becomes the review name referenced in `config.yml`. Agent Validator passes this prompt — along with the diff of changed files — to the AI CLI.
+Review definitions can be **YAML** (`.yml`) or **Markdown** (`.md`). The filename (minus extension) becomes the review name referenced in `config.yml`.
 
-**Per-review CLI preference:** You can override the default CLI preference for specific reviews using YAML frontmatter:
+**Built-in reviews** use YAML with a `builtin` key that references a review prompt shipped with Agent Validator. The built-in `code-quality` review is a general-purpose code review that checks for bugs, style issues, and best practices. `num_reviews` controls how many review passes to run.
+
+**Custom reviews** are Markdown files containing your own review prompt. Agent Validator passes the prompt — along with the diff of changed files — to the AI CLI:
+
+```markdown
+<!-- .validator/reviews/plan-review.md -->
+
+# Plan Review
+Review this plan for completeness and potential issues.
+```
+
+**Per-review settings:** Both YAML and Markdown reviews support optional frontmatter to override defaults like `cli_preference`. This is useful when you want a specific LLM for certain types of reviews — for example, using Gemini for plan reviews but Codex for code reviews:
 
 ```markdown
 ---
@@ -250,8 +255,6 @@ cli_preference:
 # Plan Review
 Review this plan for completeness and potential issues.
 ```
-
-This is useful when you want a specific LLM for certain types of reviews — for example, using Gemini for plan reviews but Codex for code reviews.
 
 ### Logs
 
