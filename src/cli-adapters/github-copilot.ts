@@ -3,18 +3,40 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MAX_BUFFER_BYTES } from '../constants.js';
+import { getCategoryLogger } from '../output/app-logger.js';
 import {
   detectPlugin as detectCopilotPlugin,
   installPlugin as installCopilotPlugin,
 } from '../plugin/copilot-cli.js';
-import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
+import {
+  resolveModelFromList,
+  SAFE_MODEL_ID_PATTERN,
+} from './model-resolution.js';
 import { type CLIAdapter, runStreamingCommand } from './shared.js';
 
 // Module-level counter for unique tmp file names across parallel invocations
 let _tmpCounter = 0;
 
+const log = getCategoryLogger('github-copilot');
+
 /** Effort levels supported by `gh copilot -- --effort`. */
 const EFFORT_LEVELS = new Set(['low', 'medium', 'high']);
+
+/**
+ * Parse `gh copilot -- --list-models` output into an array of model IDs.
+ * Each line has the format: "model-id - Display Name"
+ */
+export function parseModelList(output: string): string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const dashIndex = line.indexOf(' - ');
+      return dashIndex >= 0 ? line.substring(0, dashIndex).trim() : line.trim();
+    })
+    .filter((id) => id.length > 0);
+}
 
 export class GitHubCopilotAdapter implements CLIAdapter {
   name = 'github-copilot';
@@ -112,6 +134,52 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     return ['gh copilot -- plugin install Codagent-AI/agent-validator'];
   }
 
+  /**
+   * Resolve a base model name to a specific model ID using `gh copilot -- --list-models`.
+   * Returns undefined if resolution fails or no matching model is found.
+   *
+   * Uses exec() directly (instead of promisify) so that
+   * spyOn(childProcess, "exec") can intercept calls in tests.
+   */
+  private async resolveModel(
+    baseName: string,
+    thinkingBudget?: string,
+  ): Promise<string | undefined> {
+    try {
+      const stdout = await new Promise<string>((resolve, reject) => {
+        exec(
+          'gh copilot -- --list-models',
+          { timeout: 10000 },
+          (error, stdout) => {
+            if (error) reject(error);
+            else resolve(stdout);
+          },
+        );
+      });
+      const models = parseModelList(stdout);
+      const preferThinking =
+        thinkingBudget !== undefined && thinkingBudget !== 'off';
+      const resolved = resolveModelFromList(models, {
+        baseName,
+        preferThinking,
+      });
+      if (resolved === undefined) {
+        log.warn(`No matching model found for "${baseName}"`);
+        return undefined;
+      }
+      if (!SAFE_MODEL_ID_PATTERN.test(resolved)) {
+        log.warn(`Resolved model "${resolved}" contains unsafe characters`);
+        return undefined;
+      }
+      return resolved;
+    } catch (err) {
+      log.warn(
+        `Failed to resolve model "${baseName}": ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return undefined;
+    }
+  }
+
   /** Build CLI args: -s, optional --allow-tool, --model, --effort flags. */
   private buildArgs(opts: {
     allowToolUse?: boolean;
@@ -167,7 +235,16 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     );
     await fs.writeFile(tmpFile, fullContent);
 
-    const args = this.buildArgs(opts);
+    // Resolve model if a base name is provided
+    let resolvedModel: string | undefined;
+    if (opts.model) {
+      resolvedModel = await this.resolveModel(opts.model, opts.thinkingBudget);
+    }
+
+    const args = this.buildArgs({
+      ...opts,
+      model: resolvedModel,
+    });
     const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
     if (opts.onOutput) {
