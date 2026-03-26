@@ -1,6 +1,6 @@
 {
   "name": "agent-validator",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "A CLI tool for validating AI coding agents",
   "license": "MIT"
 }
