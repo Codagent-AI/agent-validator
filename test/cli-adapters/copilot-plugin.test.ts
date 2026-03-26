@@ -204,13 +204,25 @@ describe("GitHubCopilotAdapter execution", () => {
 	});
 
 	describe("execute", () => {
-		it("passes model directly without resolution", async () => {
+		it("resolves model via --list-models before passing to command", async () => {
+			let callIndex = 0;
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
 					const callback = args[args.length - 1];
 					if (typeof callback === "function") {
-						callback(null, "review output", "");
+						if (callIndex === 0) {
+							// First call: --list-models for model resolution
+							callback(
+								null,
+								"gpt-5.3-codex - GPT 5.3 Codex\ngpt-5.2-codex - GPT 5.2 Codex\n",
+								"",
+							);
+						} else {
+							// Second call: actual review command
+							callback(null, "review output", "");
+						}
+						callIndex++;
 					}
 					// biome-ignore lint/suspicious/noExplicitAny: mock typing
 					return {} as any;
@@ -221,11 +233,15 @@ describe("GitHubCopilotAdapter execution", () => {
 			await adapter.execute({
 				prompt: "Review this",
 				diff: "some diff",
-				model: "gpt-5.3-codex",
+				model: "codex",
 			});
 
-			const cmd = execSpy.mock.calls[0][0] as string;
-			expect(cmd).toContain("--model gpt-5.3-codex");
+			// First call should be --list-models
+			const listCmd = execSpy.mock.calls[0][0] as string;
+			expect(listCmd).toContain("--list-models");
+			// Second call should use the resolved model
+			const reviewCmd = execSpy.mock.calls[1][0] as string;
+			expect(reviewCmd).toContain("--model gpt-5.3-codex");
 		});
 
 		it("uses gh copilot command with -s flag", async () => {
