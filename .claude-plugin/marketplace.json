@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "agent-validator",
-      "version": "1.5.1",
+      "version": "1.6.0",
       "source": "./",
       "description": "A configurable feedback loop runner for AI-assisted development workflows.",
       "license": "MIT",

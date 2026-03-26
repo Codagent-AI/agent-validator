@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 1.6.0
+
+### Minor Changes
+
+- [#117](https://github.com/Codagent-AI/agent-validator/pull/117) Add model resolution to GitHub Copilot adapter, allowing users to specify which LLM model Copilot should use when executing checks and reviews
+
 ## 1.5.1
 
 ### Patch Changes
