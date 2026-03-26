@@ -7,7 +7,6 @@ debug_log:
 allow_parallel: true
 cli:
   default_preference:
-    - github-copilot
     - codex
     - claude
     - gemini
@@ -19,10 +18,6 @@ cli:
       allow_tool_use: false
       thinking_budget: low
     gemini:
-      allow_tool_use: false
-      thinking_budget: low
-    github-copilot:
-      model: codex
       allow_tool_use: false
       thinking_budget: low
 entry_points:
