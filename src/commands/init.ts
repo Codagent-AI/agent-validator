@@ -450,9 +450,9 @@ entry_points: []
 # Options: critical, high, medium, low
 # rerun_new_issue_threshold: medium
 
-# Debug log — persistent debug logging to .debug.log
+# Debug log — persistent debug logging to .debug.log (default: enabled)
 # debug_log:
-#   enabled: false
+#   enabled: true
 #   max_size_mb: 10               # Max size before rotation to .debug.log.1
 
 # Structured logging via LogTape

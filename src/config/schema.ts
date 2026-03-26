@@ -125,7 +125,7 @@ export const entryPointSchema = z.object({
 });
 
 export const debugLogConfigSchema = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   max_size_mb: z.number().default(10),
 });
 
