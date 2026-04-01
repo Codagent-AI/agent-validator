@@ -4,7 +4,7 @@
 TBD - created by archiving change add-prompt-configurability. Update Purpose after archive.
 ## Requirements
 ### Requirement: Reviews support YAML configuration files
-The system MUST load review configurations from both `.md` and `.yml`/`.yaml` files in the `.validator/reviews/` directory. The review name MUST be derived from the filename (without extension). If both a `.md` and `.yml`/`.yaml` file exist with the same base name, the system MUST reject the configuration with an error.
+The system MUST load review configurations from both `.md` and `.yml`/`.yaml` files in the `.validator/reviews/` directory. The review name MUST be derived from the filename (without extension). If both a `.md` and `.yml`/`.yaml` file exist with the same base name, the system MUST reject the configuration with an error. Reviews MAY also be defined inline in `config.yml` under the top-level `reviews` map (see inline-review-config capability). File-based reviews and inline reviews are merged; a name present in both sources MUST cause a validation error.
 
 YAML review files MUST specify exactly one of `prompt_file`, `skill_name`, or `builtin`. These three attributes are mutually exclusive. When `builtin` is specified, the prompt content MUST be loaded from the package's built-in review registry.
 
@@ -99,6 +99,12 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **GIVEN** a file `.validator/reviews/task-compliance.md` with frontmatter containing `enabled: false`
 - **WHEN** the configuration is loaded
 - **THEN** the review "task-compliance" is available with `enabled` set to `false`
+
+#### Scenario: Name collision between inline and file-based review
+- **WHEN** `config.yml` defines an inline review named `code-quality`
+- **AND** `.validator/reviews/code-quality.yml` also exists
+- **WHEN** the configuration is loaded
+- **THEN** the system MUST reject with a validation error naming the conflicting review
 
 ### Requirement: Markdown reviews support prompt_file and skill_name in frontmatter
 Existing `.md` review files MUST support optional `prompt_file` or `skill_name` fields in their YAML frontmatter. These fields are mutually exclusive. When `prompt_file` is specified, the file content MUST override the markdown body. When `skill_name` is specified, the markdown body MUST be ignored and the skill MUST be used instead.

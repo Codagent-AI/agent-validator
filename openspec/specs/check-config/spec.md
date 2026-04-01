@@ -4,7 +4,7 @@
 TBD - created by archiving change remove-check-name-attribute. Update Purpose after archive.
 ## Requirements
 ### Requirement: Checks must be defined in YAML files without a name attribute
-The system MUST load checks from `.validator/checks/*.yml`. The identification of the check MUST be derived solely from the filename.
+The system MUST load checks from `.validator/checks/*.yml`. The identification of the check MUST be derived solely from the filename. Checks MAY also be defined inline in `config.yml` under the top-level `checks` map (see inline-check-config capability). File-based checks and inline checks are merged; a name present in both sources MUST cause a validation error.
 
 #### Scenario: Valid Check Definition
 Given a file `.validator/checks/my-check.yml` with content:
