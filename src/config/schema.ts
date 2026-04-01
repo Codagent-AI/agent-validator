@@ -156,6 +156,8 @@ export const validatorConfigSchema = z.object({
     .default('medium'),
   cli: cliConfigSchema,
   entry_points: z.array(entryPointSchema).min(1),
+  checks: z.record(z.string(), checkGateSchema).optional(),
+  reviews: z.record(z.string(), reviewYamlSchema).optional(),
   debug_log: debugLogConfigSchema.optional(),
   logging: loggingConfigSchema.optional(),
 });

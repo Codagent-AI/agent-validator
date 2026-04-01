@@ -148,7 +148,7 @@ Static application security testing (SAST). Scans source code for security vulne
 
 ## Check YAML Schema
 
-Check files are stored at `.validator/checks/<name>.yml`. Each file defines a single check gate.
+Checks can be defined inline in `config.yml` under the top-level `checks` map (preferred) or as separate files at `.validator/checks/<name>.yml`.
 
 ### Fields
 
@@ -310,7 +310,7 @@ entry_points:
   - path: "src"                    # Directory path to monitor for changes.
                                    # Use "." for the entire project root.
     checks:                        # List of check names (optional).
-                                   # Each name must match a file at .validator/checks/<name>.yml.
+                                   # Each name must match an inline check in config.yml or a file at .validator/checks/<name>.yml.
       - build
       - lint
       - typecheck
@@ -400,6 +400,6 @@ When parts share the same command for a category (e.g., both run `npm test`), us
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `path` | string | Yes | Directory path to monitor. Relative to project root. Supports single-level wildcards (e.g., `packages/*`). |
-| `checks` | string[] | No | List of check names matching `.validator/checks/<name>.yml` files. |
-| `reviews` | string[] | No | List of review names matching `.validator/reviews/<name>.yml` or `.md` files. |
+| `checks` | string[] | No | List of check names matching inline checks in `config.yml` or `.validator/checks/<name>.yml` files. |
+| `reviews` | string[] | No | List of review names matching inline reviews in `config.yml` or `.validator/reviews/<name>.yml`/`.md` files. |
 | `exclude` | string[] | No | Glob patterns for files to exclude from change detection within this path. |

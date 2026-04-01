@@ -32,8 +32,8 @@ Agent Validator determines what feedback to run based on a configuration file.
 
 #### Definitions
 Each Check and Review has a definition:
-- **Check Definition**: Specifies the shell command to run (`.validator/checks/*.yml`).
-- **Review Definition**: Specifies the prompt for the AI to process (`.validator/reviews/*.md`).
+- **Check Definition**: Specifies the shell command to run. Defined inline in `config.yml` under `checks` (preferred) or as `.validator/checks/*.yml` files.
+- **Review Definition**: Specifies the prompt for the AI to process. Simple configs (e.g. built-in references) can be defined inline in `config.yml` under `reviews`. Custom prompts use `.validator/reviews/*.md` files.
 
 ### Configuration Examples
 
@@ -41,21 +41,38 @@ Here are simple specific examples of the configuration files described above.
 
 #### Main Configuration (`.validator/config.yml`)
 
-This file maps your project structure to specific checks and reviews.
+This file maps your project structure to specific checks and reviews. Checks and reviews can be defined inline (preferred) or as separate files (also supported).
 
 ```yaml
+# Inline check definitions (preferred)
+checks:
+  build:
+    command: npm run build
+    parallel: true
+  test:
+    command: npm run test
+    parallel: true
+
+# Inline review definitions (preferred for simple configs)
+reviews:
+  code-quality:
+    builtin: code-quality
+    num_reviews: 1
+
 entry_points:
   # Run these validations for any changes in the 'src' directory
   - path: "src"
     checks:
       - build
+      - test
     reviews:
+      - code-quality
       - code-review
 ```
 
-#### Check Definition (`.validator/checks/test.yml`)
+#### File-based Check Definition (`.validator/checks/test.yml`)
 
-A deterministic command that either passes (exit code 0) or fails.
+Also supported: define checks as separate files. The gate name is the filename without extension.
 
 ```yaml
 # The shell command to execute
@@ -104,8 +121,7 @@ This walks you through a guided setup:
 ```text
 .validator/
   config.yml              # entry_points: [] (empty)
-  reviews/
-    code-quality.yml      # built-in code-quality review
+                          # reviews: { code-quality: { builtin: code-quality, num_reviews: 1 } }
 ```
 
 5. **Installs skills and hooks** — always runs, even on re-init. Uses checksums to skip unchanged files and prompt before overwriting changed ones.
@@ -125,7 +141,16 @@ The setup skill scans your project, discovers available tooling (linters, test r
 
 You can manually add check or review gates at any time, or re-run `/validator-setup` to add more.
 
-**Check gate example** (`.validator/checks/lint.yml`):
+**Inline check gate example** (in `config.yml`):
+
+```yaml
+checks:
+  lint:
+    command: npx eslint .
+    parallel: true
+```
+
+**File-based check gate** (`.validator/checks/lint.yml`, also supported):
 
 ```yaml
 command: npx eslint .
@@ -286,8 +311,8 @@ Uses diff for current uncommitted changes only (both staged and unstaged, plus u
 ### `agent-validator list`
 
 Prints:
-- Loaded check gate names (from `.validator/checks/*.yml`)
-- Loaded review gate names (from `.validator/reviews/*.md`)
+- Loaded check gate names (from inline `checks` in `config.yml` and `.validator/checks/*.yml`)
+- Loaded review gate names (from inline `reviews` in `config.yml` and `.validator/reviews/*.md`/`.yml`)
 - Configured entry points (from `.validator/config.yml`)
 
 ### `agent-validator health`
@@ -300,10 +325,9 @@ Guided interactive setup that creates `.validator/`, installs skills, and config
 
 ```text
 .validator/
-  config.yml              # Entry points and settings (entry_points starts empty)
-  checks/                 # Check gate definitions (populated by /validator-setup)
-  reviews/
-    code-quality.yml      # Built-in code-quality review (num_reviews: 1)
+  config.yml              # Entry points, settings, and inline gate definitions
+                          # checks: (populated by /validator-setup)
+                          # reviews: { code-quality: { builtin: code-quality } }
 ```
 
 The `init` command walks you through the following steps:
@@ -518,25 +542,25 @@ Key configuration sections:
   checks: ["lint"]             # expands to one job per changed package
 ```
 
-## Check gates (`.validator/checks/*.yml`)
+## Check gates
 
-Each file is parsed as a check gate definition. The gate is keyed by its `name`.
+Check gates are defined inline in `config.yml` under the `checks` map (preferred) or as separate `.validator/checks/*.yml` files. Both styles use the same schema.
 
-For the full field reference, see [Check gates in the Config Reference](config-reference.md#check-gates-validatorchecksyml).
+For the full field reference, see [Check gates in the Config Reference](config-reference.md#check-gates).
 
 Behavior:
 - Passes when the command exits `0`
 - Fails when it exits non-zero
 - Fails on timeout (if `timeout` is set)
 
-## Review gates (`.validator/reviews/*.md`)
+## Review gates
 
-Review gates are defined by Markdown files with YAML frontmatter.
+Review gates can be defined inline in `config.yml` under the `reviews` map (preferred for simple configs) or as separate files in `.validator/reviews/` (`.md` for custom prompts, `.yml` for YAML configs).
 
-- The gate name is the filename without `.md` (e.g. `security.md` → `security`)
-- The prompt body is the Markdown content after the frontmatter
+- For inline reviews, the gate name is the map key
+- For file-based reviews, the gate name is the filename without extension (e.g. `security.md` → `security`)
 
-For the full frontmatter schema, see [Review gates in the Config Reference](config-reference.md#review-gates-validatorreviewsmd-and-validatorreviewsyml).
+For the full schema, see [Review gates in the Config Reference](config-reference.md#review-gates).
 
 ### Pass/fail detection
 
