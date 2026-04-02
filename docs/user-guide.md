@@ -321,7 +321,7 @@ Guided interactive setup that creates `.validator/`, installs skills, and config
 .validator/
   config.yml              # Entry points, settings, and inline gate definitions
                           # checks: (populated by /validator-setup)
-                          # reviews: { code-quality: { builtin: code-quality } }
+                          # reviews: { code-quality: { builtin: code-quality, num_reviews: <N> } }
 ```
 
 The `init` command walks you through the following steps:

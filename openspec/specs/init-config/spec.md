@@ -201,7 +201,8 @@ When `.validator/` already exists, Phase 4 SHALL skip entirely without modifying
 - **GIVEN** the user runs `agent-validate init`
 - **AND** no `.validator/` directory exists
 - **WHEN** Phase 4 runs
-- **THEN** `.validator/` SHALL be created with full scaffolding (directory structure, config.yml, default review, .gitignore entry)
+- **THEN** `.validator/` SHALL be created with `config.yml` (inline code-quality review, empty entry_points) and a `.gitignore` entry
+- **AND** `.validator/reviews/` and `.validator/checks/` SHALL NOT be created
 
 #### Scenario: Re-run skips .validator/ scaffolding
 - **GIVEN** the user runs `agent-validate init`

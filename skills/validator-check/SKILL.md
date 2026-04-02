@@ -132,4 +132,5 @@ Fix Instructions: Replace all `var` declarations with `const` or `let`.
 
 - Do NOT summarize or editorialize — copy error details verbatim where possible
 - Do NOT skip any `[FAIL]` entries
-- Keep the output compact — one entry per check failure (3 lines each)
+- Keep the output compact — one entry per check failure
+- Include `Fix Instructions` / `Fix Skill` lines only when present

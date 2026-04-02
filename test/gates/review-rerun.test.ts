@@ -2,39 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Logger } from "../../src/output/logger";
+import type { ReviewGateExecutor as ReviewGateExecutorType } from "../../src/gates/review.js";
 
 // Mock adapter execution
 const mockExecute = mock(async () => "");
 
-mock.module("../../src/cli-adapters/index.js", () => ({
-	getAdapter: (name: string) => ({
-		name,
-		isAvailable: async () => true,
-		checkHealth: async () => ({ status: "healthy" }),
-		execute: mockExecute,
-		getProjectCommandDir: () => null,
-		getUserCommandDir: () => null,
-		getCommandExtension: () => "md",
-		canUseSymlink: () => false,
-		transformCommand: (c: string) => c,
-	}),
-	getAllAdapters: () => [],
-	getProjectCommandAdapters: () => [],
-	getUserCommandAdapters: () => [],
-	getValidCLITools: () => ["mock-adapter"],
-	isUsageLimit: (output: string) =>
-		output.toLowerCase().includes("usage limit"),
-	runStreamingCommand: async () => "",
-	collectStderr: () => () => "",
-	processExitError: () => new Error("mock"),
-	finalizeProcessClose: async () => {},
-}));
-
-// We need to import after mocking
-const { ReviewGateExecutor } = await import("../../src/gates/review.js");
-
 describe("ReviewGateExecutor Rerun Logic", () => {
-	let executor: InstanceType<typeof ReviewGateExecutor>;
+	let executor: ReviewGateExecutorType;
 	let logger: Logger;
 	const logDir = path.join(
 		"/tmp",
@@ -42,6 +16,32 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 	);
 
 	beforeEach(async () => {
+		mock.module("../../src/cli-adapters/index.js", () => ({
+			getAdapter: (name: string) => ({
+				name,
+				isAvailable: async () => true,
+				checkHealth: async () => ({ status: "healthy" }),
+				execute: mockExecute,
+				getProjectCommandDir: () => null,
+				getUserCommandDir: () => null,
+				getCommandExtension: () => "md",
+				canUseSymlink: () => false,
+				transformCommand: (c: string) => c,
+			}),
+			getAllAdapters: () => [],
+			getProjectCommandAdapters: () => [],
+			getUserCommandAdapters: () => [],
+			getValidCLITools: () => ["mock-adapter"],
+			isUsageLimit: (output: string) =>
+				output.toLowerCase().includes("usage limit"),
+			runStreamingCommand: async () => "",
+			collectStderr: () => () => "",
+			processExitError: () => new Error("mock"),
+			finalizeProcessClose: async () => {},
+		}));
+
+		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
+
 		await fs.mkdir(logDir, { recursive: true });
 		logger = new Logger(logDir);
 		executor = new ReviewGateExecutor();
@@ -50,6 +50,7 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 	afterEach(async () => {
 		await fs.rm(logDir, { recursive: true, force: true });
 		mockExecute.mockClear();
+		mock.restore();
 	});
 
 	// Note: Tests for getDiff with fixBase require real git commands or dependency injection.

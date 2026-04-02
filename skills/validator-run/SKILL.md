@@ -222,7 +222,7 @@ For each decision:
 
 - Do NOT modify any fields other than `status` and `result`
 - Do NOT modify violations that don't match the provided decisions
-- Preserve all other JSON structure and formatting
+- Preserve all other JSON structure and key ordering
 - If a violation cannot be found, report it in your response but continue with other decisions
 - Write the JSON with 2-space indentation
 
