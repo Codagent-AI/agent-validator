@@ -6,8 +6,64 @@ import type {
 	ReviewGateConfig,
 	ReviewPromptFrontmatter,
 } from "../../src/config/types.js";
-import type { ReviewGateExecutor } from "../../src/gates/review.js";
+import type { ReviewGateExecutor as ReviewGateExecutorType } from "../../src/gates/review.js";
 import { Logger } from "../../src/output/logger.js";
+
+// ---------------------------------------------------------------------------
+// Shared mutable delegates for mock.module()
+//
+// Bun runs all test files in the same process. Top-level mock.module() calls
+// in other files (e.g. init.test.ts) can override per-test mocks set in
+// beforeEach. To avoid this, we register the mock ONCE at the top level with
+// delegates that each describe block sets in its own beforeEach.
+// ---------------------------------------------------------------------------
+
+let currentGetAdapter: (name: string) => CLIAdapter;
+let currentGetAllAdapters: () => CLIAdapter[];
+let currentGetValidCLITools: () => string[];
+let currentIsUsageLimit: (output: string) => boolean;
+let currentExecute: (...args: unknown[]) => Promise<string>;
+
+function defaultMockAdapter(name: string): CLIAdapter {
+	return {
+		name,
+		isAvailable: async () => true,
+		checkHealth: async () => ({ status: "healthy" as const }),
+		execute: async (...args: unknown[]) => currentExecute(...args),
+		getProjectCommandDir: () => null,
+		getUserCommandDir: () => null,
+		getCommandExtension: () => "md",
+		canUseSymlink: () => false,
+		transformCommand: (c: string) => c,
+	} as unknown as CLIAdapter;
+}
+
+function resetDefaults() {
+	currentExecute = async () => JSON.stringify({ status: "pass", message: "OK" });
+	currentGetAdapter = (name) => defaultMockAdapter(name);
+	currentGetAllAdapters = () => [defaultMockAdapter("codex"), defaultMockAdapter("claude")];
+	currentGetValidCLITools = () => ["codex", "claude"];
+	currentIsUsageLimit = (output) => output.toLowerCase().includes("usage limit");
+}
+
+resetDefaults();
+
+mock.module("../../src/cli-adapters/index.js", () => ({
+	getAdapter: (name: string) => currentGetAdapter(name),
+	getAllAdapters: () => currentGetAllAdapters(),
+	getProjectCommandAdapters: () => currentGetAllAdapters(),
+	getUserCommandAdapters: () => currentGetAllAdapters(),
+	getValidCLITools: () => currentGetValidCLITools(),
+	isUsageLimit: (output: string) => currentIsUsageLimit(output),
+	runStreamingCommand: async () => "",
+	collectStderr: () => () => "",
+	processExitError: () => new Error("mock"),
+	finalizeProcessClose: async () => {},
+}));
+
+const { ReviewGateExecutor } = await import("../../src/gates/review.js");
+
+// ---------------------------------------------------------------------------
 
 const TEST_DIR = path.join(process.cwd(), `test-review-logs-${Date.now()}`);
 const COOLDOWN_STATE_DIR = path.join(
@@ -17,61 +73,23 @@ const COOLDOWN_STATE_DIR = path.join(
 
 describe("ReviewGateExecutor Logging", () => {
 	let logger: Logger;
-	let executor: ReviewGateExecutor;
+	let executor: ReviewGateExecutorType;
 
 	beforeEach(async () => {
-		await fs.mkdir(TEST_DIR, { recursive: true });
+		resetDefaults();
 
-		// Create the log directory and logger
+		// Simulate async work in execute
+		currentExecute = async () => {
+			await new Promise((r) => setTimeout(r, 1));
+			return JSON.stringify({ status: "pass", message: "OK" });
+		};
+
+		await fs.mkdir(TEST_DIR, { recursive: true });
 		const logsDir = path.join(TEST_DIR, "logs");
 		await fs.mkdir(logsDir, { recursive: true });
 		logger = new Logger(logsDir);
 
-		// Create a factory function for mock adapters that returns the correct name
-		const createMockAdapter = (name: string): CLIAdapter =>
-			({
-				name,
-				isAvailable: async () => true,
-				checkHealth: async () => ({ status: "healthy" }),
-				execute: async () => {
-					await new Promise((r) => setTimeout(r, 1)); // Simulate async work
-					return JSON.stringify({ status: "pass", message: "OK" });
-				},
-				getProjectCommandDir: () => null,
-				getUserCommandDir: () => null,
-				getCommandExtension: () => "md",
-				canUseSymlink: () => false,
-				transformCommand: (c: string) => c,
-			}) as unknown as CLIAdapter;
-
-		// Mock getAdapter and other exports
-		mock.module("../../src/cli-adapters/index.js", () => ({
-			getAdapter: (name: string) => createMockAdapter(name),
-			getAllAdapters: () => [
-				createMockAdapter("codex"),
-				createMockAdapter("claude"),
-			],
-			getProjectCommandAdapters: () => [
-				createMockAdapter("codex"),
-				createMockAdapter("claude"),
-			],
-			getUserCommandAdapters: () => [
-				createMockAdapter("codex"),
-				createMockAdapter("claude"),
-			],
-			getValidCLITools: () => ["codex", "claude", "gemini"],
-			isUsageLimit: (output: string) =>
-				output.toLowerCase().includes("usage limit"),
-			runStreamingCommand: async () => "",
-			collectStderr: () => () => "",
-			processExitError: () => new Error("mock"),
-			finalizeProcessClose: async () => {},
-		}));
-
-		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
 		executor = new ReviewGateExecutor();
-
-		// Mock getDiff to return a simple diff without needing a real git repo
 		// biome-ignore lint/suspicious/noExplicitAny: Mocking private method for testing
 		(executor as any).getDiff = async () => {
 			return `diff --git a/src/test.ts b/src/test.ts
@@ -86,7 +104,6 @@ index abc123..def456 100644
 
 	afterEach(async () => {
 		await fs.rm(TEST_DIR, { recursive: true, force: true });
-		mock.restore();
 	});
 
 	it("should only create adapter-specific logs and no generic log", async () => {
@@ -293,7 +310,7 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 			name,
 			isAvailable: async () => true,
 			checkHealth: async () => ({ status: "healthy" as const }),
-			execute: async () => JSON.stringify({ status: "pass", message: "OK" }),
+			execute: async (...args: unknown[]) => currentExecute(...args),
 			getProjectCommandDir: () => null,
 			getUserCommandDir: () => null,
 			getCommandExtension: () => "md",
@@ -303,36 +320,23 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 		} as unknown as CLIAdapter;
 	}
 
-	function mockAdapterModule(
-		factory: (name: string) => CLIAdapter,
-		names: string[],
-	) {
+	function setAdapterNames(names: string[], overrides?: Partial<CLIAdapter>) {
+		const factory = (name: string) => createMockAdapter(name, overrides);
 		const adapters = names.map((n) => factory(n));
-		mock.module("../../src/cli-adapters/index.js", () => ({
-			getAdapter: (name: string) => factory(name),
-			getAllAdapters: () => adapters,
-			getProjectCommandAdapters: () => adapters,
-			getUserCommandAdapters: () => adapters,
-			getValidCLITools: () => names,
-			isUsageLimit: (output: string) =>
-				output.toLowerCase().includes("usage limit"),
-			runStreamingCommand: async () => "",
-			collectStderr: () => () => "",
-			processExitError: () => new Error("mock"),
-			finalizeProcessClose: async () => {},
-		}));
+		currentGetAdapter = factory;
+		currentGetAllAdapters = () => adapters;
+		currentGetValidCLITools = () => names;
 	}
 
-	async function createExecutor(): Promise<ReviewGateExecutor> {
-		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
+	function createExecutor(): ReviewGateExecutorType {
 		const exec = new ReviewGateExecutor();
 		// biome-ignore lint/suspicious/noExplicitAny: Mocking private method for testing
 		(exec as any).getDiff = async () => FAKE_DIFF;
 		return exec;
 	}
 
-	async function runReview(
-		executor: ReviewGateExecutor,
+	function runReview(
+		executor: ReviewGateExecutorType,
 		preferences: string[],
 	) {
 		const config = {
@@ -374,6 +378,7 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 	}
 
 	beforeEach(async () => {
+		resetDefaults();
 		await fs.mkdir(COOLDOWN_STATE_DIR, { recursive: true });
 		const logsDir = path.join(COOLDOWN_STATE_DIR, "logs");
 		await fs.mkdir(logsDir, { recursive: true });
@@ -382,20 +387,14 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 
 	afterEach(async () => {
 		await fs.rm(COOLDOWN_STATE_DIR, { recursive: true, force: true });
-		mock.restore();
 	});
 
-	async function runWithExecuteBehavior(overrides: Partial<CLIAdapter>) {
-		mockAdapterModule((name) => createMockAdapter(name, overrides), ["codex"]);
-		const executor = await createExecutor();
-		return runReview(executor, ["codex"]);
-	}
-
 	it("6.3: usage limit in review output marks adapter unhealthy and returns error", async () => {
-		const result = await runWithExecuteBehavior({
-			execute: async () =>
-				"You've hit your usage limit. Please try again later.",
-		});
+		currentExecute = async () =>
+			"You've hit your usage limit. Please try again later.";
+		setAdapterNames(["codex"]);
+		const executor = createExecutor();
+		const result = await runReview(executor, ["codex"]);
 
 		expect(result.status).toBe("error");
 		const stateContent = await fs.readFile(
@@ -415,8 +414,8 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 				reason: "Usage limit exceeded",
 			},
 		});
-		mockAdapterModule((name) => createMockAdapter(name), ["codex", "claude"]);
-		const executor = await createExecutor();
+		setAdapterNames(["codex", "claude"]);
+		const executor = createExecutor();
 		const result = await runReview(executor, ["codex", "claude"]);
 
 		expect(result.status).toBe("pass");
@@ -437,8 +436,8 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 				reason: "Usage limit exceeded",
 			},
 		});
-		mockAdapterModule((name) => createMockAdapter(name), ["codex"]);
-		const executor = await createExecutor();
+		setAdapterNames(["codex"]);
+		const executor = createExecutor();
 		const result = await runReview(executor, ["codex"]);
 
 		expect(result.status).toBe("pass");
@@ -458,18 +457,14 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 				reason: "Usage limit exceeded",
 			},
 		});
-		mockAdapterModule(
-			(name) =>
-				createMockAdapter(name, {
-					checkHealth: async () => ({
-						status: "missing" as const,
-						available: false,
-						message: "Command not found",
-					}),
-				}),
-			["codex"],
-		);
-		const executor = await createExecutor();
+		setAdapterNames(["codex"], {
+			checkHealth: async () => ({
+				status: "missing" as const,
+				available: false,
+				message: "Command not found",
+			}),
+		});
+		const executor = createExecutor();
 		const result = await runReview(executor, ["codex"]);
 
 		expect(result.status).toBe("error");
@@ -487,8 +482,8 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 				reason: "Usage limit exceeded",
 			},
 		});
-		mockAdapterModule((name) => createMockAdapter(name), ["codex", "claude"]);
-		const executor = await createExecutor();
+		setAdapterNames(["codex", "claude"]);
+		const executor = createExecutor();
 		const result = await runReview(executor, ["codex", "claude"]);
 
 		expect(result.status).toBe("error");
@@ -496,11 +491,12 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 	});
 
 	it("6.8: non-usage-limit adapter error does not mark adapter unhealthy", async () => {
-		const result = await runWithExecuteBehavior({
-			execute: async () => {
-				throw new Error("Network timeout");
-			},
-		});
+		currentExecute = async () => {
+			throw new Error("Network timeout");
+		};
+		setAdapterNames(["codex"]);
+		const executor = createExecutor();
+		const result = await runReview(executor, ["codex"]);
 
 		expect(result.status).toBe("error");
 		try {
@@ -523,68 +519,20 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 		`test-review-rerun-${Date.now()}`,
 	);
 
-	const mockExecute = mock(async () => "");
-
-	function mockRerunAdapterModule() {
-		mock.module("../../src/cli-adapters/index.js", () => ({
-			getAdapter: (name: string) => ({
-				name,
-				isAvailable: async () => true,
-				checkHealth: async () => ({ status: "healthy" }),
-				execute: mockExecute,
-				getProjectCommandDir: () => null,
-				getUserCommandDir: () => null,
-				getCommandExtension: () => "md",
-				canUseSymlink: () => false,
-				transformCommand: (c: string) => c,
-			}),
-			getAllAdapters: () => [],
-			getProjectCommandAdapters: () => [],
-			getUserCommandAdapters: () => [],
-			getValidCLITools: () => ["mock-adapter"],
-			isUsageLimit: (output: string) =>
-				output.toLowerCase().includes("usage limit"),
-			runStreamingCommand: async () => "",
-			collectStderr: () => () => "",
-			processExitError: () => new Error("mock"),
-			finalizeProcessClose: async () => {},
-		}));
-	}
-
 	beforeEach(async () => {
+		resetDefaults();
+		currentGetAllAdapters = () => [];
+		currentGetValidCLITools = () => ["mock-adapter"];
 		await fs.mkdir(RERUN_DIR, { recursive: true });
 		logger = new Logger(RERUN_DIR);
-		mockRerunAdapterModule();
 	});
 
 	afterEach(async () => {
 		await fs.rm(RERUN_DIR, { recursive: true, force: true });
-		mockExecute.mockClear();
-		mock.restore();
 	});
 
 	it("should filter low priority new violations in rerun mode", async () => {
-		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
-		const executor = new ReviewGateExecutor();
-
-		const jobId = "job-id";
-		const config = {
-			name: "test-review",
-			cli_preference: ["mock-adapter"],
-			num_reviews: 1,
-		};
-
-		const previousFailures = new Map();
-		previousFailures.set("1", [
-			{
-				file: "file.ts",
-				line: 1,
-				issue: "old issue",
-				status: "fixed",
-			},
-		]);
-
-		mockExecute.mockResolvedValue(
+		currentExecute = async () =>
 			JSON.stringify({
 				status: "fail",
 				violations: [
@@ -617,11 +565,22 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 						status: "new",
 					},
 				],
-			}),
-		);
+			});
+
+		const executor = new ReviewGateExecutor();
+		const jobId = "job-id";
+		const config = {
+			name: "test-review",
+			cli_preference: ["mock-adapter"],
+			num_reviews: 1,
+		};
+
+		const previousFailures = new Map();
+		previousFailures.set("1", [
+			{ file: "file.ts", line: 1, issue: "old issue", status: "fixed" },
+		]);
 
 		const loggerFactory = logger.createLoggerFactory(jobId);
-
 		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
 		(executor as any).getDiff = async () => "mock diff content";
 
@@ -634,38 +593,17 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 			"main",
 			previousFailures,
 			{ uncommitted: true },
-			"high", // threshold
+			"high",
 		);
 
 		expect(result.status).toBe("fail");
-
 		const subResult = result.subResults?.[0];
 		expect(subResult).toBeDefined();
 		expect(subResult?.errorCount).toBe(2); // Critical + High
 	});
 
 	it("should pass if all new violations are filtered", async () => {
-		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
-		const executor = new ReviewGateExecutor();
-
-		const jobId = "job-id-pass";
-		const config = {
-			name: "test-review",
-			cli_preference: ["mock-adapter"],
-			num_reviews: 1,
-		};
-
-		const previousFailures = new Map();
-		previousFailures.set("1", [
-			{
-				file: "file.ts",
-				line: 1,
-				issue: "old issue",
-				status: "fixed",
-			},
-		]);
-
-		mockExecute.mockResolvedValue(
+		currentExecute = async () =>
 			JSON.stringify({
 				status: "fail",
 				violations: [
@@ -684,11 +622,22 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 						status: "new",
 					},
 				],
-			}),
-		);
+			});
+
+		const executor = new ReviewGateExecutor();
+		const jobId = "job-id-pass";
+		const config = {
+			name: "test-review",
+			cli_preference: ["mock-adapter"],
+			num_reviews: 1,
+		};
+
+		const previousFailures = new Map();
+		previousFailures.set("1", [
+			{ file: "file.ts", line: 1, issue: "old issue", status: "fixed" },
+		]);
 
 		const loggerFactory = logger.createLoggerFactory(jobId);
-
 		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
 		(executor as any).getDiff = async () => "mock diff content";
 
@@ -701,7 +650,7 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 			"main",
 			previousFailures,
 			{ uncommitted: true },
-			"high", // threshold
+			"high",
 		);
 
 		expect(result.status).toBe("pass");
