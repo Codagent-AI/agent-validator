@@ -20,6 +20,30 @@ cli:
     gemini:
       allow_tool_use: false
       thinking_budget: low
+checks:
+  build:
+    command: bun run build
+  lint:
+    command: bunx biome check src
+  test:
+    command: bun test
+  typecheck:
+    command: bun run typecheck
+  security-code:
+    command: semgrep scan --config auto --error src
+  security-deps:
+    command: bun audit --audit-level=moderate
+  schema-validate:
+    command: bun run src/index.ts validate
+  openspec-validate:
+    command: openspec validate --changes
+    run_in_ci: false
+  no-orphaned-design-docs:
+    command: bun .gauntlet/scripts/check-no-orphaned-design-docs.ts
+reviews:
+  code-quality:
+    builtin: code-quality
+    num_reviews: 1
 entry_points:
   - path: "."
     exclude:

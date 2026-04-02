@@ -54,17 +54,14 @@ describe("agent-validator init (E2E)", () => {
 		expect(stat).toBeNull();
 	});
 
-	it("should scaffold .validator/ with config and review", async () => {
+	it("should scaffold .validator/ with config containing inline code-quality review", async () => {
 		if (!canRun) return;
 		const configPath = path.join(tempDir, ".validator", "config.yml");
-		const reviewPath = path.join(
-			tempDir,
-			".validator",
-			"reviews",
-			"code-quality.yml",
-		);
 		expect((await fs.stat(configPath).catch(() => null))?.isFile()).toBe(true);
-		expect((await fs.stat(reviewPath).catch(() => null))?.isFile()).toBe(true);
+		const configContent = await fs.readFile(configPath, "utf-8");
+		expect(configContent).toContain("reviews:");
+		expect(configContent).toContain("code-quality:");
+		expect(configContent).toContain("builtin: code-quality");
 	});
 
 	it("should add validator_logs to .gitignore", async () => {

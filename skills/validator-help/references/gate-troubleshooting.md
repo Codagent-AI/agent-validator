@@ -80,7 +80,7 @@ No files changed relative to `base_branch`.
 ## Parallel vs Sequential Execution
 
 ### Check Gates
-- Each check gate has a `parallel` setting (default: `false`)
+- Each check gate has a `parallel` setting (default: `true`)
 - Parallel checks run concurrently; sequential checks run one at a time
 - `allow_parallel` in `config.yml` (default: `true`) is the global switch
 

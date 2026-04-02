@@ -7,11 +7,13 @@ This document lists the configuration files Agent Validator loads and all suppor
 ```text
 .validator/
   config.yml              # project config (required)
+                          #   checks:   inline check gate definitions (preferred)
+                          #   reviews:  inline review gate definitions (preferred)
   checks/
-    *.yml                 # check gate definitions (optional)
+    *.yml                 # check gate definitions (also supported; file-per-gate)
   reviews/
-    *.md                  # review gate prompts as markdown (optional; filename is gate name)
-    *.yml                 # review gate configs as YAML (optional; filename is gate name)
+    *.md                  # review gate prompts as markdown (also supported; filename is gate name)
+    *.yml                 # review gate configs as YAML (also supported; filename is gate name)
 ```
 
 ## Project config: `.validator/config.yml`
@@ -63,10 +65,14 @@ This document lists the configuration files Agent Validator loads and all suppor
   Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-validator init`, this starts as `[]` (empty) and is populated by the `/validator-setup` skill.
   - **path**: string (required)  
     The scope path for the entry point. Supports fixed paths like `apps/api` and a trailing wildcard form like `packages/*` which expands to one job per changed subdirectory.
-  - **checks**: string[] (optional; names of gates from `.validator/checks/*.yml`)  
-    Which check gate names to run when this entry point is active. Names must match the `name` field inside the corresponding check YAML.
-  - **reviews**: string[] (optional; names from `.validator/reviews/*.md` filenames)  
-    Which review gate names to run when this entry point is active. Names come from review prompt filenames (e.g. `security.md` → `security`).
+  - **checks**: string[] (optional; names of check gates)  
+    Which check gate names to run when this entry point is active. Names reference gates defined inline under the `checks` map or as files in `.validator/checks/`.
+  - **reviews**: string[] (optional; names of review gates)  
+    Which review gate names to run when this entry point is active. Names reference gates defined inline under the `reviews` map or as files in `.validator/reviews/`.
+- **checks**: record (optional)
+  Inline check gate definitions. Each key is a check name and each value is a check configuration object using the same schema as `.validator/checks/*.yml` files (see [Check gates](#check-gates) below). Inline checks and file-based checks are merged at load time; if the same name appears in both sources, the system rejects with a validation error. This is the preferred way to define checks.
+- **reviews**: record (optional)
+  Inline review gate definitions. Each key is a review name and each value is a review configuration object using the same schema as `.validator/reviews/*.yml` files (see [Review gates](#review-gates) below). Inline reviews and file-based reviews are merged at load time; if the same name appears in both sources, the system rejects with a validation error. This is the preferred way to define simple reviews (e.g. built-in references). Reviews with long custom prompts are better as separate `.md` files.
 
 ### Example
 
@@ -92,6 +98,19 @@ debug_log:
   enabled: true
   max_size_mb: 10
 
+# Inline check definitions (preferred)
+checks:
+  test:
+    command: npm run test
+  lint:
+    command: npx eslint .
+
+# Inline review definitions (preferred for simple configs)
+reviews:
+  code-quality:
+    builtin: code-quality
+    num_reviews: 1
+
 entry_points:
   - path: "."
     reviews:
@@ -109,9 +128,9 @@ entry_points:
       - lint
 ```
 
-## Check gates: `.validator/checks/*.yml`
+## Check gates
 
-Check gate names are derived from the filename (e.g. `lint.yml` → gate name `lint`).
+Check gates can be defined inline in `config.yml` under the `checks` map (preferred) or as separate files in `.validator/checks/*.yml` (also supported). Both styles use the same schema. For file-based checks, the gate name is derived from the filename (e.g. `lint.yml` → `lint`). For inline checks, the gate name is the map key.
 
 ### Schema
 
@@ -121,13 +140,13 @@ Check gate names are derived from the filename (e.g. `lint.yml` → gate name `l
   Alternate shell command to use when the system is in rerun mode (log files exist from a previous run and no explicit `--commit` target is specified). Supports the same variable substitution as `command` (e.g. `${BASE_BRANCH}`). When not defined, `command` is used for both first runs and reruns.
 - **working_directory**: string (optional; default: entry point path)
   Directory to run the command in (`cwd`). If omitted, the command runs in the entry point directory for the job.
-- **parallel**: boolean (default: `false`)
+- **parallel**: boolean (default: `true`)
   If `true` (and project-level `allow_parallel` is enabled), this gate may run concurrently with other parallel gates. If `false`, it runs in the sequential lane.
 - **run_in_ci**: boolean (default: `true`)
   Whether this check gate runs when CI mode is detected (e.g. GitHub Actions). If `false`, the gate is skipped in CI.
 - **run_locally**: boolean (default: `true`)
   Whether this check gate runs in local (non-CI) execution. If `false`, the gate is skipped locally.
-- **timeout**: number seconds (optional)
+- **timeout**: number seconds (default: `300`)
   Maximum time allowed for the command; if exceeded, the check is marked as failed due to timeout. Timeouts are enforced per job.
 - **fail_fast**: boolean (optional; can only be used when `parallel` is `false`)
   If `true`, a failure/error in this gate stops scheduling subsequent work. Note: the current implementation enforces fail-fast at scheduling time; parallel jobs may already be running.
@@ -143,20 +162,20 @@ Check gate names are derived from the filename (e.g. `lint.yml` → gate name `l
 ```yaml
 command: bun test
 working_directory: .
-parallel: false
 run_in_ci: true
 run_locally: true
-timeout: 300
-fail_fast: false
 fix_instructions_file: fix-guides/test-failures.md
 ```
 
-## Review gates: `.validator/reviews/*.md` and `.validator/reviews/*.yml`
+## Review gates
 
-Review gates can be defined as either Markdown files (`.md`) or YAML files (`.yml`/`.yaml`).
+Review gates can be defined inline in `config.yml` under the `reviews` map (preferred for simple configs like built-in references), or as separate files in `.validator/reviews/`:
 
-- The gate name is the **filename without extension** (e.g. `security.md` or `security.yml` → `security`).
-- If both a `.md` and `.yml`/`.yaml` file share the same base name, the system rejects the configuration with an error.
+- **Inline** (in `config.yml`): Same schema as `.validator/reviews/*.yml` files. Gate name is the map key.
+- **Markdown files** (`.md`): Gate name is the filename without extension. Best for reviews with custom prompts.
+- **YAML files** (`.yml`/`.yaml`): Gate name is the filename without extension.
+
+If both a `.md` and `.yml`/`.yaml` file share the same base name, the system rejects the configuration with an error. If the same name appears inline and as a file, the system also rejects with an error.
 
 ### Markdown reviews (`.md`)
 
@@ -207,7 +226,6 @@ cli_preference:
   - claude
   - github-copilot
 num_reviews: 1
-timeout: 120
 ---
 
 # Code quality review

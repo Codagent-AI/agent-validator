@@ -4,16 +4,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
+import { getCategoryLogger } from '../output/app-logger.js';
 import {
   addMarketplace,
   installPlugin as installPluginCli,
   listPlugins,
 } from '../plugin/claude-cli.js';
 import { buildOtelEnv, safeExtractOtelMetrics } from './claude-otel.js';
+import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import { type CLIAdapter, runStreamingCommand } from './shared.js';
 import { CLAUDE_THINKING_TOKENS } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
+
+const log = getCategoryLogger('claude');
 
 // Re-export OTel functions for consumers that import from claude.ts
 export {
@@ -206,6 +210,15 @@ export class ClaudeAdapter implements CLIAdapter {
       args.push('--allowedTools', 'Read,Glob,Grep,Task');
     }
     args.push('--max-turns', '25');
+
+    // Claude CLI natively resolves model aliases (e.g. "sonnet" → latest sonnet).
+    if (opts.model) {
+      if (SAFE_MODEL_ID_PATTERN.test(opts.model)) {
+        args.push('--model', opts.model);
+      } else {
+        log.warn(`Model "${opts.model}" contains unsafe characters, skipping`);
+      }
+    }
 
     const otelEnv = buildOtelEnv();
     const thinkingEnv: Record<string, string> = {};

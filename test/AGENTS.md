@@ -6,35 +6,66 @@ This document provides guidelines for writing tests that work reliably in both l
 
 ### 1. Module Mocking Issues
 
-**Problem**: Tests pass locally but fail in CI because `mock.module()` doesn't work reliably with dynamic imports or when modules are cached before mocking.
+**Problem**: Bun runs ALL test files in a single process. `mock.module()` replaces modules in the **global** module registry. A top-level `mock.module()` in one file can silently break tests in other files that import the same module. Tests pass locally (where file order may differ) but fail in CI.
 
-**Solutions**:
+**Rule: Never use `mock.module()` for modules that other test files also import. Use dependency injection instead.**
+
+**Solutions (in order of preference)**:
 
 1. **Prefer dependency injection over module mocking**:
    ```typescript
-   // ❌ Unreliable: Module mocking
-   mock.module("node:child_process", () => ({
-     exec: mockExec,
+   // ❌ DANGEROUS: Global module mock — breaks other test files
+   mock.module("../../src/gates/review.js", () => ({
+     ReviewGateExecutor: class { execute = mockFn; },
    }));
-   
-   // ✅ Reliable: Dependency injection
-   // In your source file:
-   export let execFn = promisify(exec);
-   export function setExecFn(fn) { execFn = fn; }
-   
-   // In your test:
-   setExecFn(mockExecFn);
+   const runner = new Runner(config, logger, reporter);
+
+   // ✅ SAFE: Inject mock via constructor parameter
+   const runner = new Runner(
+     config, logger, reporter,
+     undefined, undefined, undefined, undefined, undefined, undefined,
+     mockCheckExecutor,  // injected
+     mockReviewExecutor, // injected
+   );
    ```
 
 2. **Patch instance methods instead of module mocking**:
    ```typescript
    // ✅ Reliable: Patch the private method directly
    const executor = new ReviewGateExecutor();
-   // biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
    (executor as any).getDiff = async () => "mock diff content";
    ```
 
-3. **When using `mock.module()`, always use full paths from the test file location**:
+3. **If `mock.module()` is unavoidable, use a single top-level mock with mutable delegates**:
+   ```typescript
+   // Top level — register ONCE, delegate to mutable vars
+   let currentExecute = async () => JSON.stringify({ status: "pass" });
+   
+   mock.module("../../src/cli-adapters/index.js", () => ({
+     getAdapter: (name: string) => ({
+       name,
+       execute: async (...args: unknown[]) => currentExecute(...args),
+       // ...other methods
+     }),
+     // ...other exports
+   }));
+   
+   const { ReviewGateExecutor } = await import("../../src/gates/review.js");
+   
+   // Per-test customization via the delegate
+   beforeEach(() => {
+     currentExecute = async () => JSON.stringify({ status: "pass" });
+   });
+   
+   it("handles usage limit", async () => {
+     currentExecute = async () => "You've hit your usage limit.";
+     // ...test
+   });
+   ```
+
+   **Why**: Calling `mock.module()` multiple times (e.g. in `beforeEach`) does NOT invalidate already-loaded modules that import the target. The first `await import()` caches the module; subsequent `mock.module()` calls replace the factory but the cached module keeps its old bindings. A single top-level mock with mutable delegates avoids this.
+
+4. **When using `mock.module()`, always use full paths from the test file location**:
    ```typescript
    // ❌ Wrong: Relative to source file
    mock.module("../cli-adapters/index.js", () => ({...}));
@@ -42,6 +73,16 @@ This document provides guidelines for writing tests that work reliably in both l
    // ✅ Correct: Relative to test file in test/ directory
    mock.module("../../src/cli-adapters/index.js", () => ({...}));
    ```
+
+### Known cross-file mock conflicts
+
+| Module path | Mocked by | Pattern |
+|---|---|---|
+| `cli-adapters/index.js` | `init.test.ts`, `init-copilot.test.ts`, `review.test.ts` | init files use top-level mock (needed before static import of init.js); review.test.ts uses top-level mock with mutable delegates |
+| `gates/review.js` | ~~`runner.test.ts`~~ | **Removed** — replaced with DI via Runner constructor |
+| `gates/check.js` | ~~`runner.test.ts`~~ | **Removed** — replaced with DI via Runner constructor |
+
+Before adding a new `mock.module()`, check this table. If the module is already mocked by another file, use DI or the delegate pattern instead.
 
 ### 2. Shell Command and Git Operations
 

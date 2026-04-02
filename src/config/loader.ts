@@ -18,6 +18,7 @@ import type {
   LoadedCheckGateConfig,
   LoadedConfig,
   LoadedReviewGateConfig,
+  ReviewYamlConfig,
   ValidatorConfig,
 } from './types.js';
 
@@ -50,11 +51,11 @@ export async function loadConfig(
   const projectConfigRaw = YAML.parse(configContent);
   const projectConfig = validatorConfigSchema.parse(projectConfigRaw);
 
-  // 2. Load checks
-  const checks = await loadCheckGates(gauntletPath);
+  // 2. Load checks (file-based + inline)
+  const checks = await loadCheckGates(gauntletPath, projectConfig.checks);
 
-  // 3. Load reviews
-  const reviews = await loadReviewGates(gauntletPath);
+  // 3. Load reviews (file-based + inline)
+  const reviews = await loadReviewGates(gauntletPath, projectConfig.reviews);
 
   // 3b. Merge default CLI preference if not specified
   mergeCliPreferences(reviews, projectConfig);
@@ -69,57 +70,100 @@ export async function loadConfig(
   };
 }
 
+async function buildLoadedCheck(
+  name: string,
+  parsed: CheckGateConfig,
+  gauntletPath: string,
+): Promise<LoadedCheckGateConfig> {
+  const fixFile = parsed.fix_instructions_file || parsed.fix_instructions;
+  const loadedCheck: LoadedCheckGateConfig = { ...parsed, name };
+
+  if (fixFile) {
+    loadedCheck.fixInstructionsContent = await loadPromptFile(
+      fixFile,
+      gauntletPath,
+      `check "${name}"`,
+    );
+  }
+  if (parsed.fix_with_skill) {
+    loadedCheck.fixWithSkill = parsed.fix_with_skill;
+  }
+  return loadedCheck;
+}
+
 async function loadCheckGates(
   gauntletPath: string,
+  inlineChecks?: Record<string, CheckGateConfig>,
 ): Promise<Record<string, LoadedCheckGateConfig>> {
   const checksPath = path.join(gauntletPath, CHECKS_DIR);
   const checks: Record<string, LoadedCheckGateConfig> = {};
 
-  if (!(await dirExists(checksPath))) {
-    return checks;
+  // Load file-based checks
+  if (await dirExists(checksPath)) {
+    const checkFiles = await fs.readdir(checksPath);
+    for (const file of checkFiles) {
+      if (!(file.endsWith('.yml') || file.endsWith('.yaml'))) {
+        continue;
+      }
+      const filePath = path.join(checksPath, file);
+      const content = await fs.readFile(filePath, 'utf-8');
+      const raw = YAML.parse(content);
+      const name = path.basename(file, path.extname(file));
+      const parsed: CheckGateConfig = checkGateSchema.parse(raw);
+      checks[name] = await buildLoadedCheck(name, parsed, gauntletPath);
+    }
   }
 
-  const checkFiles = await fs.readdir(checksPath);
-  for (const file of checkFiles) {
-    if (!(file.endsWith('.yml') || file.endsWith('.yaml'))) {
-      continue;
+  // Merge inline checks
+  if (inlineChecks) {
+    for (const [name, parsed] of Object.entries(inlineChecks)) {
+      if (checks[name]) {
+        throw new Error(
+          `Check "${name}" is defined both inline in config.yml and as a file in ${CHECKS_DIR}/. Remove one to resolve the conflict.`,
+        );
+      }
+      checks[name] = await buildLoadedCheck(name, parsed, gauntletPath);
     }
-
-    const filePath = path.join(checksPath, file);
-    const content = await fs.readFile(filePath, 'utf-8');
-    const raw = YAML.parse(content);
-    const name = path.basename(file, path.extname(file));
-    const parsed: CheckGateConfig = checkGateSchema.parse(raw);
-
-    // Normalize deprecated alias in loader (not schema) for reliability
-    const fixFile = parsed.fix_instructions_file || parsed.fix_instructions;
-
-    const loadedCheck: LoadedCheckGateConfig = {
-      ...parsed,
-      name,
-    };
-
-    // Load fix instructions file if specified
-    if (fixFile) {
-      loadedCheck.fixInstructionsContent = await loadPromptFile(
-        fixFile,
-        gauntletPath,
-        `check "${name}"`,
-      );
-    }
-
-    // Store fix_with_skill if specified
-    if (parsed.fix_with_skill) {
-      loadedCheck.fixWithSkill = parsed.fix_with_skill;
-    }
-
-    checks[name] = loadedCheck;
   }
 
   return checks;
 }
 
-async function loadReviewGates(
+async function buildInlineReview(
+  name: string,
+  parsed: ReviewYamlConfig,
+  gauntletPath: string,
+): Promise<LoadedReviewGateConfig> {
+  const review: LoadedReviewGateConfig = {
+    name,
+    prompt: 'inline',
+    model: parsed.model,
+    cli_preference: parsed.cli_preference,
+    num_reviews: parsed.num_reviews,
+    parallel: parsed.parallel,
+    run_in_ci: parsed.run_in_ci,
+    run_locally: parsed.run_locally,
+    timeout: parsed.timeout,
+    enabled: parsed.enabled,
+  };
+
+  if (parsed.prompt_file) {
+    review.promptContent = await loadPromptFile(
+      parsed.prompt_file,
+      gauntletPath,
+      `review "${name}"`,
+    );
+  }
+  if (parsed.skill_name) {
+    review.skillName = parsed.skill_name;
+  }
+  if (parsed.builtin) {
+    review.promptContent = loadBuiltInReview(parsed.builtin);
+  }
+  return review;
+}
+
+async function loadFileBasedReviews(
   gauntletPath: string,
 ): Promise<Record<string, LoadedReviewGateConfig>> {
   const reviewsPath = path.join(gauntletPath, REVIEWS_DIR);
@@ -145,6 +189,26 @@ async function loadReviewGates(
         reviewsPath,
         gauntletPath,
       );
+    }
+  }
+
+  return reviews;
+}
+
+async function loadReviewGates(
+  gauntletPath: string,
+  inlineReviews?: Record<string, ReviewYamlConfig>,
+): Promise<Record<string, LoadedReviewGateConfig>> {
+  const reviews = await loadFileBasedReviews(gauntletPath);
+
+  if (inlineReviews) {
+    for (const [name, parsed] of Object.entries(inlineReviews)) {
+      if (reviews[name]) {
+        throw new Error(
+          `Review "${name}" is defined both inline in config.yml and as a file in ${REVIEWS_DIR}/. Remove one to resolve the conflict.`,
+        );
+      }
+      reviews[name] = await buildInlineReview(name, parsed, gauntletPath);
     }
   }
 

@@ -80,7 +80,7 @@ Check gates support only one fix method. These are mutually exclusive:
 - `fix_with_skill` (skill name)
 
 ### Entry Point References Non-Existent Gate
-If an entry point lists a check or review name that doesn't exist in `.validator/checks/` or `.validator/reviews/`, validation fails.
+If an entry point lists a check or review name that doesn't exist (inline in `config.yml` or in `.validator/checks/`/`.validator/reviews/`), validation fails.
 
 ### Review Gate Uses Tool Not in `default_preference`
 Review gates can specify `cli_preference` but the tools must also appear in `default_preference`.

@@ -26,8 +26,9 @@ Read the `entry_points` field from `.validator/config.yml`.
 
   1. **Add checks** — Scan for tools not already configured. Proceed to Step 3, but filter out any checks that already appear in `entry_points`.
   2. **Add custom** — User describes what they want to add. Skip to Step 7.
-  3. **Reconfigure** — Start fresh. Back up existing files first:
-     - Rename each `.validator/checks/*.yml` file to `.yml.bak` (overwrite any previous `.bak` files)
+  3. **Reconfigure** — Start fresh. Back up existing config first:
+     - If a `checks` map exists in `config.yml`, rename it to `checks_bak` (commented out or preserved as a YAML comment)
+     - Rename each `.validator/checks/*.yml` file to `.yml.bak` (overwrite any previous `.bak` files) — these are legacy file-based checks
      - Rename each custom `.validator/reviews/*.md` file to `.md.bak` (overwrite any previous `.bak` files)
      - Do NOT rename `.validator/reviews/*.yml` files (these are built-in review configs)
      - Clear `entry_points` to `[]` in `config.yml`
@@ -110,17 +111,27 @@ After confirmation, proceed to Step 8 (create files).
 
 Ask the user: **check** (shell command) or **review** (AI code review)?
 
-**For checks:** Ask for command, name, and optional settings (timeout, parallel, run_in_ci, run_locally).
+**For checks:** Ask for command, name, and optional settings (run_in_ci, run_locally).
 
 **For reviews:** Built-in (`code-quality`) or custom prompt? Ask for name and write the review content.
 
 ## Step 8: Create files and update config
 
-**Checks** — Create `.validator/checks/<name>.yml` with `command`, `parallel: true`, `run_in_ci: true`, `run_locally: true`. Add optional fields only when specified. See `references/check-catalog.md` for schema.
+**Checks** — Add checks inline in `config.yml` under the top-level `checks` map. Each check is a key (check name) with its config object. Include `command`. Add optional fields (`run_in_ci`, `run_locally`) only when they differ from defaults. See `references/check-catalog.md` for schema.
+
+Example inline checks in `config.yml`:
+
+```yaml
+checks:
+  build:
+    command: npm run build
+  lint:
+    command: npx eslint .
+```
 
 **Custom reviews** — Create `.validator/reviews/<name>.md` with YAML frontmatter (`num_reviews: 1`) and review prompt.
 
-**Built-in reviews** — Create `.validator/reviews/<name>.yml` with `builtin: code-quality` and `num_reviews: 1`.
+**Built-in reviews** — The `code-quality` review is already defined inline in `config.yml` by `init`. Do not create a separate file for it.
 
 **Update entry_points** in `.validator/config.yml`:
 

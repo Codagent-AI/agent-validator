@@ -199,16 +199,8 @@ async function scaffoldGauntletDir(
   }
 
   await fs.mkdir(targetDir);
-  await fs.mkdir(path.join(targetDir, 'checks'));
-  await fs.mkdir(path.join(targetDir, 'reviews'));
 
-  await writeConfigYml(targetDir, reviewCLINames);
-
-  await fs.writeFile(
-    path.join(targetDir, 'reviews', 'code-quality.yml'),
-    `builtin: code-quality\nnum_reviews: ${numReviews}\n`,
-  );
-  console.log(chalk.green('Created .validator/reviews/code-quality.yml'));
+  await writeConfigYml(targetDir, reviewCLINames, numReviews);
 }
 
 async function copyDirRecursive(opts: {
@@ -414,6 +406,7 @@ async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
 async function writeConfigYml(
   targetDir: string,
   reviewCLINames: string[],
+  numReviews: number,
 ): Promise<void> {
   const baseBranch = await detectBaseBranch();
   const cliList = reviewCLINames.map((name) => `    - ${name}`).join('\n');
@@ -426,6 +419,12 @@ ${cliList}
 ${adapterSettings}
 # entry_points configured by /validator-setup
 entry_points: []
+
+# Built-in code-quality review
+reviews:
+  code-quality:
+    builtin: code-quality
+    num_reviews: ${numReviews}
 
 # -------------------------------------------------------------------
 # All settings below are optional. Uncomment and change as needed.
