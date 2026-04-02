@@ -91,7 +91,7 @@ entry_points:
 
 		const check = config.checks.minimal!;
 		expect(check.command).toBe("echo hello");
-		expect(check.parallel).toBe(false);
+		expect(check.parallel).toBe(true);
 		expect(check.run_in_ci).toBe(true);
 		expect(check.run_locally).toBe(true);
 	});

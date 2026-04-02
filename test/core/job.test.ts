@@ -16,6 +16,7 @@ function makeCheckConfig(
 		parallel: true,
 		run_locally: true,
 		run_in_ci: true,
+		timeout: 300,
 		...overrides,
 	};
 }

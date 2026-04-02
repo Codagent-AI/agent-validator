@@ -48,10 +48,8 @@ This file maps your project structure to specific checks and reviews. Checks and
 checks:
   build:
     command: npm run build
-    parallel: true
   test:
     command: npm run test
-    parallel: true
 
 # Inline review definitions (preferred for simple configs)
 reviews:
@@ -77,9 +75,6 @@ Also supported: define checks as separate files. The gate name is the filename w
 ```yaml
 # The shell command to execute
 command: npm run test
-
-# Optional: Run in parallel with other checks
-parallel: true
 ```
 
 #### Review Definition (`.validator/reviews/code-review.md`)
@@ -147,7 +142,6 @@ You can manually add check or review gates at any time, or re-run `/validator-se
 checks:
   lint:
     command: npx eslint .
-    parallel: true
 ```
 
 **File-based check gate** (`.validator/checks/lint.yml`, also supported):
@@ -551,7 +545,7 @@ For the full field reference, see [Check gates in the Config Reference](config-r
 Behavior:
 - Passes when the command exits `0`
 - Fails when it exits non-zero
-- Fails on timeout (if `timeout` is set)
+- Fails on timeout (default: 300s)
 
 ## Review gates
 

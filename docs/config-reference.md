@@ -102,11 +102,8 @@ debug_log:
 checks:
   test:
     command: npm run test
-    parallel: true
   lint:
     command: npx eslint .
-    parallel: true
-    timeout: 60
 
 # Inline review definitions (preferred for simple configs)
 reviews:
@@ -143,13 +140,13 @@ Check gates can be defined inline in `config.yml` under the `checks` map (prefer
   Alternate shell command to use when the system is in rerun mode (log files exist from a previous run and no explicit `--commit` target is specified). Supports the same variable substitution as `command` (e.g. `${BASE_BRANCH}`). When not defined, `command` is used for both first runs and reruns.
 - **working_directory**: string (optional; default: entry point path)
   Directory to run the command in (`cwd`). If omitted, the command runs in the entry point directory for the job.
-- **parallel**: boolean (default: `false`)
+- **parallel**: boolean (default: `true`)
   If `true` (and project-level `allow_parallel` is enabled), this gate may run concurrently with other parallel gates. If `false`, it runs in the sequential lane.
 - **run_in_ci**: boolean (default: `true`)
   Whether this check gate runs when CI mode is detected (e.g. GitHub Actions). If `false`, the gate is skipped in CI.
 - **run_locally**: boolean (default: `true`)
   Whether this check gate runs in local (non-CI) execution. If `false`, the gate is skipped locally.
-- **timeout**: number seconds (optional)
+- **timeout**: number seconds (default: `300`)
   Maximum time allowed for the command; if exceeded, the check is marked as failed due to timeout. Timeouts are enforced per job.
 - **fail_fast**: boolean (optional; can only be used when `parallel` is `false`)
   If `true`, a failure/error in this gate stops scheduling subsequent work. Note: the current implementation enforces fail-fast at scheduling time; parallel jobs may already be running.
@@ -165,11 +162,8 @@ Check gates can be defined inline in `config.yml` under the `checks` map (prefer
 ```yaml
 command: bun test
 working_directory: .
-parallel: false
 run_in_ci: true
 run_locally: true
-timeout: 300
-fail_fast: false
 fix_instructions_file: fix-guides/test-failures.md
 ```
 
@@ -232,7 +226,6 @@ cli_preference:
   - claude
   - github-copilot
 num_reviews: 1
-timeout: 120
 ---
 
 # Code quality review

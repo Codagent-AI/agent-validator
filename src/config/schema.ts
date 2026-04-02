@@ -16,10 +16,10 @@ export const checkGateSchema = z
     command: z.string().min(1),
     rerun_command: z.string().min(1).optional(),
     working_directory: z.string().optional(),
-    parallel: z.boolean().default(false),
+    parallel: z.boolean().default(true),
     run_in_ci: z.boolean().default(true),
     run_locally: z.boolean().default(true),
-    timeout: z.number().optional(),
+    timeout: z.number().default(300),
     fail_fast: z.boolean().optional(),
     fix_instructions: z.string().optional(), // Deprecated alias for fix_instructions_file
     fix_instructions_file: z.string().optional(),

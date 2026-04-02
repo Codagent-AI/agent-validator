@@ -23,36 +23,23 @@ cli:
 checks:
   build:
     command: bun run build
-    parallel: true
   lint:
     command: bunx biome check src
-    parallel: true
-    timeout: 60
   test:
     command: bun test
-    parallel: true
   typecheck:
     command: bun run typecheck
-    parallel: true
-    timeout: 60
   security-code:
     command: semgrep scan --config auto --error src
-    parallel: true
-    timeout: 180
   security-deps:
     command: bun audit --audit-level=moderate
-    parallel: true
-    timeout: 120
   schema-validate:
     command: bun run src/index.ts validate
-    parallel: true
   openspec-validate:
     command: openspec validate --changes
-    parallel: true
     run_in_ci: false
   no-orphaned-design-docs:
     command: bun .gauntlet/scripts/check-no-orphaned-design-docs.ts
-    parallel: true
 reviews:
   code-quality:
     builtin: code-quality

@@ -111,13 +111,13 @@ After confirmation, proceed to Step 8 (create files).
 
 Ask the user: **check** (shell command) or **review** (AI code review)?
 
-**For checks:** Ask for command, name, and optional settings (timeout, parallel, run_in_ci, run_locally).
+**For checks:** Ask for command, name, and optional settings (run_in_ci, run_locally).
 
 **For reviews:** Built-in (`code-quality`) or custom prompt? Ask for name and write the review content.
 
 ## Step 8: Create files and update config
 
-**Checks** — Add checks inline in `config.yml` under the top-level `checks` map. Each check is a key (check name) with its config object. Include `command` and `parallel: true`. Add optional fields (`timeout`, `run_in_ci`, `run_locally`) only when they differ from defaults. See `references/check-catalog.md` for schema.
+**Checks** — Add checks inline in `config.yml` under the top-level `checks` map. Each check is a key (check name) with its config object. Include `command`. Add optional fields (`run_in_ci`, `run_locally`) only when they differ from defaults. See `references/check-catalog.md` for schema.
 
 Example inline checks in `config.yml`:
 
@@ -125,11 +125,8 @@ Example inline checks in `config.yml`:
 checks:
   build:
     command: npm run build
-    parallel: true
   lint:
     command: npx eslint .
-    parallel: true
-    timeout: 60
 ```
 
 **Custom reviews** — Create `.validator/reviews/<name>.md` with YAML frontmatter (`num_reviews: 1`) and review prompt.
