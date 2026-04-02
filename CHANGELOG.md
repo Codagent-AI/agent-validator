@@ -1,5 +1,11 @@
 # agent-gauntlet
 
+## 1.7.0
+
+### Minor Changes
+
+- [#120](https://github.com/Codagent-AI/agent-validator/pull/120) Add support for inline gate configs directly in `config.yml`, removing the need for separate per-gate config files
+
 ## 1.6.0
 
 ### Minor Changes
