@@ -212,10 +212,8 @@ Checks are shell commands defined in `.validator/checks/`:
 name: lint
 command: bunx biome check src
 working_directory: .
-parallel: true
 run_in_ci: true
 run_locally: true
-timeout: 60
 ```
 
 The check name (`lint`) is referenced in `config.yml`. When Agent Validator runs this check, it executes the `command` and reports pass/fail based on exit code.
