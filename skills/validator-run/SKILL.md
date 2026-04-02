@@ -211,7 +211,7 @@ You receive:
 #### Process
 
 For each decision:
-1. Find the matching `.json` file in the log directory by scanning for a violation that matches on `file` (exact) AND `line` (exact) AND where `issue` starts with the provided `issue_prefix`
+1. Find the matching `.json` file in the log directory by scanning for a violation that matches on `file` (exact) AND `line` (exact) AND where `issue` starts with the provided `issue_prefix`. If multiple violations match, use the first unprocessed one (status still `"new"`)
 2. Read the JSON file
 3. Find the matching violation in the `violations` array
 4. Set `"status"` to the provided status value
