@@ -515,3 +515,198 @@ describe("ReviewGateExecutor Cooldown and Usage Limit", () => {
 		}
 	});
 });
+
+describe("ReviewGateExecutor Rerun Logic", () => {
+	let logger: Logger;
+	const RERUN_DIR = path.join(
+		process.cwd(),
+		`test-review-rerun-${Date.now()}`,
+	);
+
+	const mockExecute = mock(async () => "");
+
+	function mockRerunAdapterModule() {
+		mock.module("../../src/cli-adapters/index.js", () => ({
+			getAdapter: (name: string) => ({
+				name,
+				isAvailable: async () => true,
+				checkHealth: async () => ({ status: "healthy" }),
+				execute: mockExecute,
+				getProjectCommandDir: () => null,
+				getUserCommandDir: () => null,
+				getCommandExtension: () => "md",
+				canUseSymlink: () => false,
+				transformCommand: (c: string) => c,
+			}),
+			getAllAdapters: () => [],
+			getProjectCommandAdapters: () => [],
+			getUserCommandAdapters: () => [],
+			getValidCLITools: () => ["mock-adapter"],
+			isUsageLimit: (output: string) =>
+				output.toLowerCase().includes("usage limit"),
+			runStreamingCommand: async () => "",
+			collectStderr: () => () => "",
+			processExitError: () => new Error("mock"),
+			finalizeProcessClose: async () => {},
+		}));
+	}
+
+	beforeEach(async () => {
+		await fs.mkdir(RERUN_DIR, { recursive: true });
+		logger = new Logger(RERUN_DIR);
+		mockRerunAdapterModule();
+	});
+
+	afterEach(async () => {
+		await fs.rm(RERUN_DIR, { recursive: true, force: true });
+		mockExecute.mockClear();
+		mock.restore();
+	});
+
+	it("should filter low priority new violations in rerun mode", async () => {
+		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
+		const executor = new ReviewGateExecutor();
+
+		const jobId = "job-id";
+		const config = {
+			name: "test-review",
+			cli_preference: ["mock-adapter"],
+			num_reviews: 1,
+		};
+
+		const previousFailures = new Map();
+		previousFailures.set("1", [
+			{
+				file: "file.ts",
+				line: 1,
+				issue: "old issue",
+				status: "fixed",
+			},
+		]);
+
+		mockExecute.mockResolvedValue(
+			JSON.stringify({
+				status: "fail",
+				violations: [
+					{
+						file: "file.ts",
+						line: 10,
+						issue: "Critical issue",
+						priority: "critical",
+						status: "new",
+					},
+					{
+						file: "file.ts",
+						line: 11,
+						issue: "High issue",
+						priority: "high",
+						status: "new",
+					},
+					{
+						file: "file.ts",
+						line: 12,
+						issue: "Medium issue",
+						priority: "medium",
+						status: "new",
+					},
+					{
+						file: "file.ts",
+						line: 13,
+						issue: "Low issue",
+						priority: "low",
+						status: "new",
+					},
+				],
+			}),
+		);
+
+		const loggerFactory = logger.createLoggerFactory(jobId);
+
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async () => "mock diff content";
+
+		const result = await executor.execute(
+			jobId,
+			// biome-ignore lint/suspicious/noExplicitAny: Mock config
+			config as any,
+			"src/",
+			loggerFactory,
+			"main",
+			previousFailures,
+			{ uncommitted: true },
+			"high", // threshold
+		);
+
+		expect(result.status).toBe("fail");
+
+		const subResult = result.subResults?.[0];
+		expect(subResult).toBeDefined();
+		expect(subResult?.errorCount).toBe(2); // Critical + High
+	});
+
+	it("should pass if all new violations are filtered", async () => {
+		const { ReviewGateExecutor } = await import("../../src/gates/review.js");
+		const executor = new ReviewGateExecutor();
+
+		const jobId = "job-id-pass";
+		const config = {
+			name: "test-review",
+			cli_preference: ["mock-adapter"],
+			num_reviews: 1,
+		};
+
+		const previousFailures = new Map();
+		previousFailures.set("1", [
+			{
+				file: "file.ts",
+				line: 1,
+				issue: "old issue",
+				status: "fixed",
+			},
+		]);
+
+		mockExecute.mockResolvedValue(
+			JSON.stringify({
+				status: "fail",
+				violations: [
+					{
+						file: "file.ts",
+						line: 12,
+						issue: "Medium issue",
+						priority: "medium",
+						status: "new",
+					},
+					{
+						file: "file.ts",
+						line: 13,
+						issue: "Low issue",
+						priority: "low",
+						status: "new",
+					},
+				],
+			}),
+		);
+
+		const loggerFactory = logger.createLoggerFactory(jobId);
+
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async () => "mock diff content";
+
+		const result = await executor.execute(
+			jobId,
+			// biome-ignore lint/suspicious/noExplicitAny: Mock config
+			config as any,
+			"src/",
+			loggerFactory,
+			"main",
+			previousFailures,
+			{ uncommitted: true },
+			"high", // threshold
+		);
+
+		expect(result.status).toBe("pass");
+		const subResult = result.subResults?.[0];
+		expect(subResult?.errorCount).toBe(0);
+		expect(subResult?.status).toBe("pass");
+	});
+});
