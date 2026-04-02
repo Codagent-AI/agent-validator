@@ -30,33 +30,44 @@ const mockConfig = {
 	},
 } as unknown as LoadedConfig;
 
-// Mock ReviewGateExecutor
+// Mock executors via dependency injection (not mock.module)
 const mockExecuteReview = mock(async () => ({
 	status: "pass",
 	duration: 100,
 	jobId: "review-job",
 }));
 
-mock.module("../../src/gates/review.js", () => ({
-	ReviewGateExecutor: class {
-		execute = mockExecuteReview;
-	},
+const mockExecuteCheck = mock(async () => ({
+	status: "pass",
+	duration: 100,
+	jobId: "check-job",
 }));
 
-// Mock CheckGateExecutor
-mock.module("../../src/gates/check.js", () => ({
-	CheckGateExecutor: class {
-		execute = mock(async () => ({
-			status: "pass",
-			duration: 100,
-			jobId: "check-job",
-		}));
-	},
-}));
+// biome-ignore lint/suspicious/noExplicitAny: Mock executor for DI
+const mockCheckExecutor = { execute: mockExecuteCheck } as any;
+// biome-ignore lint/suspicious/noExplicitAny: Mock executor for DI
+const mockReviewExecutor = { execute: mockExecuteReview } as any;
+
+function createRunner(overrides?: { logger?: Logger }) {
+	return new Runner(
+		mockConfig,
+		overrides?.logger ?? mockLogger,
+		mockReporter,
+		undefined, // previousFailuresMap
+		undefined, // changeOptions
+		undefined, // baseBranchOverride
+		undefined, // passedSlotsMap
+		undefined, // debugLogger
+		undefined, // isRerun
+		mockCheckExecutor,
+		mockReviewExecutor,
+	);
+}
 
 describe("Runner", () => {
 	afterEach(() => {
 		(mockExecuteReview as ReturnType<typeof mock>).mockClear();
+		(mockExecuteCheck as ReturnType<typeof mock>).mockClear();
 		(mockReporter.onJobStart as ReturnType<typeof mock>).mockClear();
 		(mockReporter.onJobComplete as ReturnType<typeof mock>).mockClear();
 	});
@@ -67,7 +78,7 @@ describe("Runner", () => {
 			throw new Error("Crash!");
 		});
 
-		const runner = new Runner(mockConfig, mockLogger, mockReporter);
+		const runner = createRunner();
 
 		const job: Job = {
 			id: "review-job",
@@ -105,7 +116,7 @@ describe("Runner", () => {
 
 	describe("iteration statistics", () => {
 		it("returns stats object with fixed, skipped, and failed counts", async () => {
-			const runner = new Runner(mockConfig, mockLogger, mockReporter);
+			const runner = createRunner();
 
 			const job: Job = {
 				id: "review-job",
@@ -130,7 +141,7 @@ describe("Runner", () => {
 		});
 
 		it("returns zero stats when no violations exist", async () => {
-			const runner = new Runner(mockConfig, mockLogger, mockReporter);
+			const runner = createRunner();
 
 			const job: Job = {
 				id: "review-job",
@@ -160,7 +171,7 @@ describe("Runner", () => {
 				getRunNumber: mock(() => 5), // Exceeds default max_retries + 1 = 4
 			} as unknown as Logger;
 
-			const runner = new Runner(mockConfig, exceedLimitLogger, mockReporter);
+			const runner = createRunner({ logger: exceedLimitLogger });
 
 			// Suppress console.error and save exitCode during this test to prevent
 			// the expected error handling from affecting the test runner
@@ -182,7 +193,7 @@ describe("Runner", () => {
 	});
 
 	it("passes logDir to review executor", async () => {
-		const runner = new Runner(mockConfig, mockLogger, mockReporter);
+		const runner = createRunner();
 
 		const job: Job = {
 			id: "review-job",

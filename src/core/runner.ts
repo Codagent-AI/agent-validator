@@ -79,8 +79,8 @@ function calculateStats(results: GateResult[]): IterationStats {
 }
 
 export class Runner {
-  private checkExecutor = new CheckGateExecutor();
-  private reviewExecutor = new ReviewGateExecutor();
+  private checkExecutor: CheckGateExecutor;
+  private reviewExecutor: ReviewGateExecutor;
   private results: GateResult[] = [];
   private shouldStop = false;
 
@@ -97,7 +97,12 @@ export class Runner {
     >,
     private debugLogger?: DebugLogger,
     private isRerun?: boolean,
-  ) {}
+    checkExecutor?: CheckGateExecutor,
+    reviewExecutor?: ReviewGateExecutor,
+  ) {
+    this.checkExecutor = checkExecutor ?? new CheckGateExecutor();
+    this.reviewExecutor = reviewExecutor ?? new ReviewGateExecutor();
+  }
 
   async run(jobs: Job[]): Promise<RunnerOutcome> {
     // Note: logger.init() is called by the caller (run-executor, check, review)
