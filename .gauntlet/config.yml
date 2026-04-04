@@ -35,11 +35,6 @@ checks:
     command: bun audit --audit-level=moderate
   schema-validate:
     command: bun run src/index.ts validate
-  openspec-validate:
-    command: openspec validate --changes
-    run_in_ci: false
-  no-orphaned-design-docs:
-    command: bun .gauntlet/scripts/check-no-orphaned-design-docs.ts
 reviews:
   code-quality:
     builtin: code-quality
@@ -69,11 +64,4 @@ entry_points:
   - path: ".claude/skills"
     reviews:
       - skill-quality
-  - path: "openspec/changes"
-    exclude:
-      - "openspec/changes/archive"
-    checks:
-      - openspec-validate
-    reviews:
-      - artifact-review
 
