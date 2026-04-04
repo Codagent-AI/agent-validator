@@ -1,11 +1,24 @@
 // @ts-expect-error Bun text import
 import codeQualityContent from './code-quality.md' with { type: 'text' };
+// @ts-expect-error Bun text import
+import errorHandlingContent from './error-handling.md' with { type: 'text' };
+// @ts-expect-error Bun text import
+import securityContent from './security.md' with { type: 'text' };
 
 const BUILT_IN_PREFIX = 'built-in:';
 
 const builtInSources: Record<string, string> = {
   'code-quality': codeQualityContent,
+  security: securityContent,
+  'error-handling': errorHandlingContent,
 };
+
+/**
+ * Return the names of all available built-in reviews.
+ */
+export function getBuiltInReviewNames(): string[] {
+  return Object.keys(builtInSources);
+}
 
 /**
  * Check if a review name uses the built-in prefix.

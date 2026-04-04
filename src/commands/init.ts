@@ -10,6 +10,7 @@ import { computeSkillChecksum } from './init-checksums.js';
 import { getCodexSkillsBaseDir, installAdapterPlugin } from './init-plugin.js';
 import {
   type OverwriteChoice,
+  promptBuiltInReviews,
   promptDevCLIs,
   promptFileOverwrite,
   promptInstallScope,
@@ -159,17 +160,14 @@ async function runInit(options: InitOptions): Promise<void> {
       reviewCLINames.length,
       skipPrompts,
     );
-    console.log(
-      chalk.cyan(
-        "Agent Validator's built-in code quality reviewer will be installed.",
-      ),
-    );
+    const selectedBuiltIns = await promptBuiltInReviews(skipPrompts);
 
     await scaffoldGauntletDir(
       projectRoot,
       targetDir,
       reviewCLINames,
       numReviews,
+      selectedBuiltIns,
     );
     instructionCLINames = devCLINames;
     await installExternalFiles(projectRoot, devAdapters, skipPrompts);
@@ -192,6 +190,7 @@ async function scaffoldGauntletDir(
   targetDir: string,
   reviewCLINames: string[],
   numReviews: number,
+  selectedBuiltIns: string[],
 ): Promise<void> {
   if (await exists(targetDir)) {
     console.log(chalk.dim('.validator/ already exists, skipping scaffolding'));
@@ -200,7 +199,7 @@ async function scaffoldGauntletDir(
 
   await fs.mkdir(targetDir);
 
-  await writeConfigYml(targetDir, reviewCLINames, numReviews);
+  await writeConfigYml(targetDir, reviewCLINames, numReviews, selectedBuiltIns);
 }
 
 async function copyDirRecursive(opts: {
@@ -407,10 +406,23 @@ async function writeConfigYml(
   targetDir: string,
   reviewCLINames: string[],
   numReviews: number,
+  selectedBuiltIns: string[],
 ): Promise<void> {
   const baseBranch = await detectBaseBranch();
   const cliList = reviewCLINames.map((name) => `    - ${name}`).join('\n');
   const adapterSettings = buildAdapterSettingsBlock(reviewCLINames);
+
+  const reviewEntries = selectedBuiltIns
+    .map(
+      (name) =>
+        `  ${name}:\n    builtin: ${name}\n    num_reviews: ${numReviews}`,
+    )
+    .join('\n');
+
+  const reviewsBlock =
+    selectedBuiltIns.length > 0
+      ? `# Built-in reviews\nreviews:\n${reviewEntries}`
+      : `# No built-in reviews selected\nreviews: {}`;
 
   const content = `# Ordered list of CLI agents to try for reviews
 cli:
@@ -420,11 +432,7 @@ ${adapterSettings}
 # entry_points configured by /validator-setup
 entry_points: []
 
-# Built-in code-quality review
-reviews:
-  code-quality:
-    builtin: code-quality
-    num_reviews: ${numReviews}
+${reviewsBlock}
 
 # -------------------------------------------------------------------
 # All settings below are optional. Uncomment and change as needed.

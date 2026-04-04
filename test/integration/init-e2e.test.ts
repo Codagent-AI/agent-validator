@@ -54,7 +54,7 @@ describe("agent-validator init (E2E)", () => {
 		expect(stat).toBeNull();
 	});
 
-	it("should scaffold .validator/ with config containing inline code-quality review", async () => {
+	it("should scaffold .validator/ with config containing all built-in reviews", async () => {
 		if (!canRun) return;
 		const configPath = path.join(tempDir, ".validator", "config.yml");
 		expect((await fs.stat(configPath).catch(() => null))?.isFile()).toBe(true);
@@ -62,6 +62,10 @@ describe("agent-validator init (E2E)", () => {
 		expect(configContent).toContain("reviews:");
 		expect(configContent).toContain("code-quality:");
 		expect(configContent).toContain("builtin: code-quality");
+		expect(configContent).toContain("security:");
+		expect(configContent).toContain("builtin: security");
+		expect(configContent).toContain("error-handling:");
+		expect(configContent).toContain("builtin: error-handling");
 	});
 
 	it("should add validator_logs to .gitignore", async () => {

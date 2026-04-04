@@ -11,6 +11,7 @@ mock.module("@inquirer/prompts", () => ({
 }));
 
 const {
+	promptBuiltInReviews,
 	promptDevCLIs,
 	promptInstallScope,
 	promptReviewCLIs,
@@ -90,6 +91,18 @@ describe("promptFileOverwrite", () => {
 	it("should call select when skipPrompts is false", async () => {
 		const result = await promptFileOverwrite("validator-run", false);
 		expect(result).toBe("yes"); // mocked select returns "yes"
+	});
+});
+
+describe("promptBuiltInReviews", () => {
+	it("should return all built-in names when skipPrompts is true", async () => {
+		const result = await promptBuiltInReviews(true);
+		expect(result).toEqual(["code-quality", "security", "error-handling"]);
+	});
+
+	it("should call checkbox when skipPrompts is false", async () => {
+		const result = await promptBuiltInReviews(false);
+		expect(result).toEqual(["claude", "codex"]); // mocked checkbox return
 	});
 });
 

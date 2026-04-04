@@ -1,8 +1,5 @@
-# init-config Specification
+## MODIFIED Requirements
 
-## Purpose
-Configuration generation during `agent-validate init`. Covers config file creation, review config setup, and post-init guidance.
-## Requirements
 ### Requirement: Init generates YAML review config with built-in reference
 The `init` command SHALL write review entries inline in `config.yml` under the top-level `reviews` map for each built-in review the user selects. Each entry SHALL reference the built-in by name with `builtin: <name>` and `num_reviews: 1`. The `init` command SHALL NOT create `.validator/reviews/` directory files, SHALL NOT create the `.validator/reviews/` directory, and SHALL NOT create the `.validator/checks/` directory.
 
@@ -37,75 +34,8 @@ The `init` command SHALL write review entries inline in `config.yml` under the t
 - **THEN** the existing `reviews` map SHALL be preserved as-is
 - **AND** `security` and `error-handling` SHALL NOT be added automatically
 
-### Requirement: Init outputs next-step message
-
-After completing setup, `init` SHALL print context-aware instructions based on the selected development CLIs. Native CLI users (Claude Code, Cursor, GitHub Copilot) SHALL receive `/validator-setup` slash-command instructions. Non-native CLI users SHALL receive `@file_path` reference instructions. Codex users SHALL receive Codex-native `.agents/skills/` path references.
-
-#### Scenario: Claude Code user instructions
-- **GIVEN** the user selected `claude` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
-
-#### Scenario: Cursor user instructions
-- **GIVEN** the user selected `cursor` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
-
-#### Scenario: GitHub Copilot user instructions
-- **GIVEN** the user selected `github-copilot` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
-
-#### Scenario: Codex user instructions
-- **GIVEN** the user selected `codex` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL reference skills using `.agents/skills/` paths
-- **AND** the output SHALL list all available skills with `.agents/skills/<skill-name>/SKILL.md` syntax
-
-#### Scenario: Non-native non-codex CLI user instructions
-- **GIVEN** the user selected a non-native, non-codex CLI (e.g., `gemini`) as a development CLI
-- **AND** the user did NOT select `claude`, `cursor`, `github-copilot`, or `codex`
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include `@.claude/skills/` path references (existing behavior)
-
-#### Scenario: Mixed CLI selection instructions
-- **GIVEN** the user selected both `claude` and `codex` as development CLIs
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include BOTH the `/validator-setup` instructions AND the Codex `.agents/skills/` instructions
-- **AND** the instructions SHALL be grouped by CLI type
-
-#### Scenario: --yes flag still shows instructions
-- **GIVEN** the user runs `agent-validate init --yes`
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the post-init instructions SHALL still be displayed (instructions are never skipped)
-
-### Requirement: Init config skeleton with empty entry_points
-
-The `init` command SHALL generate a `config.yml` with an empty `entry_points` array and `cli.default_preference` populated from review CLI selection. Entry point configuration SHALL be delegated to the `/validator-setup` skill.
-
-#### Scenario: Config generated with empty entry_points
-- **GIVEN** the user runs `agent-validate init`
-- **AND** no `.validator/config.yml` exists
-- **WHEN** `.validator/config.yml` is created
-- **THEN** the config SHALL include `entry_points: []`
-- **AND** the config SHALL include `base_branch`, `log_dir`, and `cli` sections
-- **AND** the config SHALL NOT include any check or review references in entry_points
-
-#### Scenario: Init re-run preserves existing config
-- **GIVEN** `.validator/config.yml` already exists
-- **WHEN** the user runs `agent-validate init` (with or without `--yes`)
-- **THEN** the existing `config.yml` SHALL be preserved entirely (not overwritten)
-
-#### Scenario: Config with --yes flag
-- **GIVEN** the user runs `agent-validate init --yes`
-- **AND** no `.validator/config.yml` exists
-- **WHEN** `.validator/config.yml` is created
-- **THEN** the config SHALL include `entry_points: []`
-- **AND** the `cli.default_preference` SHALL include all detected CLIs
-
 ### Requirement: Init uses non-interactive config defaults
-
-The `init` command SHALL present interactive prompts for development CLI selection, installation scope (local vs global), review CLI selection, and `num_reviews` configuration. All other config values SHALL remain non-interactive with auto-detected defaults.
+The `init` command SHALL present interactive prompts for development CLI selection, installation scope (local vs global), review CLI selection, `num_reviews` configuration, and built-in review selection. All other config values SHALL remain non-interactive with auto-detected defaults.
 
 #### Scenario: Development CLI multi-select prompt
 - **GIVEN** the user runs `agent-validate init`
@@ -185,7 +115,6 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **AND** no check YAML files SHALL be created by init
 
 ### Requirement: --yes flag skips all interactive prompts with defaults
-
 When `--yes` is passed, `init` SHALL skip all interactive prompts and apply default selections.
 
 #### Scenario: --yes selects all detected CLIs as development CLIs
@@ -218,7 +147,6 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **THEN** the file SHALL be overwritten without prompting
 
 ### Requirement: Phase 4 scaffold skips when .validator/ exists
-
 When `.validator/` already exists, Phase 4 SHALL skip entirely without modifying any files inside the directory.
 
 #### Scenario: Fresh init creates .validator/ directory with selected reviews
@@ -236,96 +164,3 @@ When `.validator/` already exists, Phase 4 SHALL skip entirely without modifying
 - **WHEN** Phase 4 runs
 - **THEN** no files inside `.validator/` SHALL be created or modified
 - **AND** init SHALL delegate to update logic (not run Phase 5 directly)
-
-### Requirement: Init installs Claude plugin instead of copying skills
-
-When Claude is a selected development CLI, init SHALL install the agent-validator Claude plugin instead of copying skill files to `.claude/skills/`.
-
-#### Scenario: Claude selected installs plugin at local scope
-- **GIVEN** the user selects `claude` as a development CLI
-- **AND** the user selects local scope
-- **WHEN** Phase 5 runs
-- **THEN** init SHALL run `claude plugin marketplace add Codagent-AI/agent-validator`
-- **AND** init SHALL run `claude plugin install agent-validator --scope project`
-- **AND** no skill files SHALL be copied to `.claude/skills/`
-
-#### Scenario: Claude selected installs plugin at global scope
-- **GIVEN** the user selects `claude` as a development CLI
-- **AND** the user selects global scope
-- **WHEN** Phase 5 runs
-- **THEN** init SHALL run `claude plugin install agent-validator --scope user`
-- **AND** no skill files SHALL be copied to `.claude/skills/`
-
-### Requirement: Init installs Codex skills based on scope
-
-When Codex is a selected development CLI, init SHALL install skills to the appropriate directory based on the selected scope.
-
-#### Scenario: Codex selected with local scope
-- **GIVEN** the user selects `codex` as a development CLI
-- **AND** the user selects local scope
-- **WHEN** Phase 5 runs
-- **THEN** gauntlet skills SHALL be copied to `.agents/skills/<skill-name>/`
-
-#### Scenario: Codex selected with global scope
-- **GIVEN** the user selects `codex` as a development CLI
-- **AND** the user selects global scope
-- **WHEN** Phase 5 runs
-- **THEN** gauntlet skills SHALL be copied to `$HOME/.agents/skills/<skill-name>/`
-
-#### Scenario: Codex skill checksum matches skips update
-- **GIVEN** a skill already exists at the target Codex skill location
-- **WHEN** its checksum matches the source skill
-- **THEN** the skill SHALL be skipped without prompting
-
-#### Scenario: Codex skill checksum differs prompts for overwrite
-- **GIVEN** a skill already exists at the target Codex skill location
-- **WHEN** its checksum differs from the source skill
-- **THEN** the user SHALL be prompted to overwrite (unless `--yes` is passed)
-
-### Requirement: CodexAdapter reports project skill directory
-
-`CodexAdapter.getProjectSkillDir()` SHALL return `.agents/skills` so the adapter system correctly reflects Codex's native skill location.
-
-#### Scenario: CodexAdapter returns .agents/skills for project skill dir
-- **GIVEN** a `CodexAdapter` instance exists
-- **WHEN** `getProjectSkillDir()` is called
-- **THEN** it SHALL return `.agents/skills`
-
-### Requirement: Re-run delegates to update
-
-When `.validator/` already exists, the init command SHALL skip interactive phases and delegate to the update logic.
-
-#### Scenario: Re-run skips prompts and calls update
-- **GIVEN** a user runs `agent-validate init`
-- **AND** the `.validator/` directory already exists
-- **WHEN** Phase 1 completes CLI detection
-- **THEN** Phases 2-4 SHALL be skipped
-- **AND** init SHALL execute the same logic as `agent-validate update`
-
-#### Scenario: Re-run with --yes flag
-- **GIVEN** `.validator/` already exists
-- **WHEN** `agent-validate init --yes` runs
-- **THEN** Phases 2-4 SHALL be skipped
-- **AND** update logic SHALL run with changed files overwritten without prompting
-
-### Requirement: Non-Claude non-Codex CLIs keep current behavior
-
-CLIs that are not Claude, Codex, Cursor, or GitHub Copilot SHALL continue using the existing skill-copy installation approach during init.
-
-#### Scenario: Gemini selected copies skills to .claude/skills/
-- **GIVEN** the user selects `gemini` as a development CLI
-- **WHEN** Phase 5 runs
-- **THEN** skills SHALL be copied to `.claude/skills/` with `@file_path` references (existing behavior)
-
-#### Scenario: Cursor selected copies skills only (no hooks)
-- **GIVEN** the user selects `cursor` as a development CLI
-- **WHEN** Phase 5 runs
-- **THEN** skills SHALL be installed using the existing Cursor adapter behavior
-- **AND** no Cursor hook configuration SHALL be performed (Cursor hook support is deferred)
-
-#### Scenario: GitHub Copilot is NOT in the file-copy bucket
-- **GIVEN** the user selects `github-copilot` as a development CLI
-- **WHEN** Phase 5 runs
-- **THEN** skills SHALL NOT be copied to `.claude/skills/` or `.github/skills/` via file copy
-- **AND** the plugin install mechanism SHALL be used instead
-

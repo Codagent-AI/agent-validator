@@ -13,6 +13,7 @@ import { Command } from "commander";
 
 let selectedDevCliNames: string[] = ["claude", "codex", "gemini", "cursor"];
 let selectedReviewCliNames: string[] = ["claude", "codex", "gemini", "cursor"];
+let selectedBuiltInReviews: string[] = ["code-quality", "security", "error-handling"];
 let selectedInstallScope: "project" | "user" = "project";
 let selectedNumReviews = 1;
 
@@ -118,6 +119,7 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 mock.module("@inquirer/prompts", () => ({
 	checkbox: async (opts: { message?: string }) => {
 		if (opts.message?.includes("Development")) return selectedDevCliNames;
+		if (opts.message?.includes("Built-in")) return selectedBuiltInReviews;
 		return selectedReviewCliNames;
 	},
 	number: async () => selectedNumReviews,
@@ -163,6 +165,7 @@ describe("init command plugin installation", () => {
 		process.chdir(testDir);
 		selectedDevCliNames = ["claude", "codex", "gemini", "cursor"];
 		selectedReviewCliNames = ["claude", "codex", "gemini", "cursor"];
+		selectedBuiltInReviews = ["code-quality", "security", "error-handling"];
 		selectedInstallScope = "project";
 		selectedNumReviews = 1;
 		addMarketplaceMock.mockClear();
