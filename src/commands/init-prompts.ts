@@ -1,5 +1,6 @@
 import { checkbox, confirm, number, select } from '@inquirer/prompts';
 import chalk from 'chalk';
+import { getBuiltInReviewNames } from '../built-in-reviews/index.js';
 
 export async function promptDevCLIs(
   detectedNames: string[],
@@ -88,6 +89,42 @@ export async function promptFileOverwrite(
       { name: 'Yes to all remaining', value: 'all' as const },
     ],
   });
+}
+
+export async function promptBuiltInReviews(
+  skipPrompts: boolean,
+): Promise<string[]> {
+  const allNames = getBuiltInReviewNames();
+  if (skipPrompts) return allNames;
+
+  console.log();
+  console.log(
+    chalk.bold(
+      'Select the built-in review prompts to enable. These run as independent AI code review passes.',
+    ),
+  );
+
+  let selected: string[] = [];
+  let confirmed = false;
+
+  while (!confirmed) {
+    selected = await checkbox({
+      message: 'Built-in reviews:',
+      choices: allNames.map((name) => ({ name, value: name, checked: true })),
+    });
+
+    if (selected.length === 0) {
+      confirmed = await confirm({
+        message:
+          'No reviews selected. Are you sure you want to continue without any built-in reviews?',
+        default: false,
+      });
+    } else {
+      confirmed = true;
+    }
+  }
+
+  return selected;
 }
 
 export async function promptHookOverwrite(

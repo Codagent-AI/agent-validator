@@ -197,9 +197,9 @@ entry_points:
 
 		const review = config.reviews["code-quality"];
 		expect(review).toBeDefined();
-		expect(review!.promptContent).toContain("code-reviewer");
-		expect(review!.promptContent).toContain("silent-failure-hunter");
-		expect(review!.promptContent).toContain("type-design-analyzer");
+		expect(review!.promptContent).toContain("Code Quality Review");
+		expect(review!.promptContent).toContain("Precondition");
+		expect(review!.promptContent).toContain("Execution trace");
 		expect(review!.num_reviews).toBe(2);
 	});
 
@@ -283,7 +283,7 @@ entry_points:
 		const config = await loadConfig(tmpDir);
 
 		expect(config.reviews["my-builtin"]).toBeDefined();
-		expect(config.reviews["my-builtin"]!.promptContent).toContain("code-reviewer");
+		expect(config.reviews["my-builtin"]!.promptContent).toContain("Code Quality Review");
 		expect(config.reviews["my-custom"]).toBeDefined();
 		expect(config.reviews["my-custom"]!.num_reviews).toBe(3);
 	});
@@ -313,7 +313,7 @@ entry_points:
 		]);
 	});
 
-	it("should load built-in prompt with pr-review-toolkit agent instructions and fallback", async () => {
+	it("should load self-contained code-quality prompt with execution-trace reasoning", async () => {
 		await setupTestEnv(
 			`
 base_branch: origin/main
@@ -335,21 +335,27 @@ entry_points:
 		// Pure markdown — no frontmatter delimiters
 		expect(content).not.toMatch(/^---/);
 
-		// Primary path: pr-review-toolkit agent instructions
-		expect(content).toContain("code-reviewer");
-		expect(content).toContain("silent-failure-hunter");
-		expect(content).toContain("type-design-analyzer");
+		// Self-contained — no external agent references
+		expect(content).not.toContain("code-reviewer");
+		expect(content).not.toContain("pr-review-toolkit");
 
-		// Fallback path: inline review framework covering three lenses
-		expect(content).toMatch(/bug|security|logic error/i);
-		expect(content).toMatch(/silent fail|swallowed error|error handling/i);
-		expect(content).toMatch(/type design|type invariant|encapsulation/i);
+		// Execution-trace reasoning format (soft, not a gate)
+		expect(content).toMatch(/precondition/i);
+		expect(content).toMatch(/execution trace/i);
+		expect(content).toContain("not a gate");
 
-		// Should NOT contain project-specific documentation references
-		expect(content).not.toContain("docs/");
+		// Categories
+		expect(content).toMatch(/logic error/i);
+		expect(content).toMatch(/performance/i);
+		expect(content).toMatch(/resource leak/i);
+		expect(content).toMatch(/type safety/i);
+
+		// Recall-oriented: no exclusion of hypothetical/unlikely issues
+		expect(content).not.toMatch(/hypothetical/i);
+		expect(content).toMatch(/when uncertain, report/i);
 	});
 
-	it("should instruct reviewer to use available agents and fall back for missing ones", async () => {
+	it("should load security prompt with taint-flow reasoning", async () => {
 		await setupTestEnv(
 			`
 base_branch: origin/main
@@ -359,17 +365,57 @@ cli:
 entry_points:
   - path: "."
     reviews:
-      - code-quality
+      - security
 `,
 			{
-				"code-quality.yml": `builtin: code-quality\n`,
+				"security.yml": `builtin: security\n`,
 			},
 		);
 		const config = await loadConfig(tmpDir);
-		const content = config.reviews["code-quality"]!.promptContent!;
+		const content = config.reviews["security"]!.promptContent!;
 
-		// Partial availability: use available agents, fall back for missing
-		expect(content).toMatch(/available|unavailable|not available|fall\s?back/i);
+		// Taint-flow reasoning format
+		expect(content).toMatch(/source/i);
+		expect(content).toMatch(/flow/i);
+		expect(content).toMatch(/sink/i);
+		expect(content).toContain("not a gate");
+
+		// Security categories
+		expect(content).toMatch(/injection/i);
+		expect(content).toMatch(/auth/i);
+		expect(content).toMatch(/secrets/i);
+		expect(content).toMatch(/when uncertain, report/i);
+	});
+
+	it("should load error-handling prompt with counterfactual reasoning", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - error-handling
+`,
+			{
+				"error-handling.yml": `builtin: error-handling\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+		const content = config.reviews["error-handling"]!.promptContent!;
+
+		// Counterfactual reasoning format
+		expect(content).toMatch(/what can fail/i);
+		expect(content).toMatch(/what happens when it fails/i);
+		expect(content).toMatch(/the gap/i);
+		expect(content).toContain("not a gate");
+
+		// Error-handling categories
+		expect(content).toMatch(/swallowed error/i);
+		expect(content).toMatch(/observability/i);
+		expect(content).toMatch(/when uncertain, report/i);
 	});
 
 	it("should reject user-defined review file with built-in: prefix in filename", async () => {

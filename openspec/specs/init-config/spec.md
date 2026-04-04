@@ -4,18 +4,25 @@
 Configuration generation during `agent-validate init`. Covers config file creation, review config setup, and post-init guidance.
 ## Requirements
 ### Requirement: Init generates YAML review config with built-in reference
-The `init` command SHALL write a `code-quality` review entry inline in `config.yml` under the top-level `reviews` map, referencing the built-in code-quality prompt. The `init` command SHALL NOT create `.validator/reviews/code-quality.yml`, SHALL NOT create the `.validator/reviews/` directory, and SHALL NOT create the `.validator/checks/` directory.
+The `init` command SHALL write review entries inline in `config.yml` under the top-level `reviews` map for each built-in review the user selects. Each entry SHALL reference the built-in by name with `builtin: <name>` and `num_reviews: 1`. The `init` command SHALL NOT create `.validator/reviews/` directory files, SHALL NOT create the `.validator/reviews/` directory, and SHALL NOT create the `.validator/checks/` directory.
 
-#### Scenario: Default init writes code-quality review inline
+#### Scenario: Default init writes all selected built-in reviews inline
 - **WHEN** a user runs `agent-validate init`
-- **THEN** `config.yml` SHALL contain a `reviews` map with `code-quality: {builtin: code-quality, num_reviews: 1}`
-- **AND** `.validator/reviews/code-quality.yml` SHALL NOT be created
+- **AND** the user accepts the default selection of all three built-in reviews
+- **THEN** `config.yml` SHALL contain a `reviews` map with entries for `code-quality`, `security`, and `error-handling`
+- **AND** each entry SHALL have `builtin: <name>` and `num_reviews: 1`
 - **AND** `.validator/reviews/` SHALL NOT be created
 - **AND** `.validator/checks/` SHALL NOT be created
 
-#### Scenario: Init with --yes flag writes code-quality inline
+#### Scenario: Init with subset of built-in reviews selected
+- **WHEN** a user runs `agent-validate init`
+- **AND** the user deselects `error-handling` from the built-in review prompt
+- **THEN** `config.yml` SHALL contain a `reviews` map with entries for `code-quality` and `security` only
+- **AND** no `error-handling` entry SHALL be present
+
+#### Scenario: Init with --yes flag writes all built-in reviews inline
 - **WHEN** a user runs `agent-validate init --yes`
-- **THEN** `config.yml` SHALL contain a `reviews` map with `code-quality: {builtin: code-quality, num_reviews: 1}`
+- **THEN** `config.yml` SHALL contain a `reviews` map with entries for `code-quality`, `security`, and `error-handling`
 - **AND** no separate review file SHALL be created
 
 #### Scenario: Init re-run preserves existing inline reviews
@@ -23,10 +30,12 @@ The `init` command SHALL write a `code-quality` review entry inline in `config.y
 - **AND** the user runs `agent-validate init`
 - **THEN** the existing `reviews` map SHALL be preserved (not overwritten)
 
-#### Scenario: Init re-run does not delete existing reviews or checks directories
-- **WHEN** `.validator/reviews/` or `.validator/checks/` already exist
-- **AND** the user runs `agent-validate init`
-- **THEN** both directories SHALL be left as-is
+#### Scenario: Init re-run does not add new built-in reviews
+- **GIVEN** `config.yml` contains only a `code-quality` review entry
+- **AND** a newer version of agent-validator ships `security` and `error-handling` built-ins
+- **WHEN** the user runs `agent-validate init`
+- **THEN** the existing `reviews` map SHALL be preserved as-is
+- **AND** `security` and `error-handling` SHALL NOT be added automatically
 
 ### Requirement: Init outputs next-step message
 
@@ -138,7 +147,7 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 #### Scenario: Single review CLI sets num_reviews automatically
 - **GIVEN** the user selects exactly 1 review CLI
 - **WHEN** Phase 3 completes
-- **THEN** `num_reviews` SHALL be set to `1` in the default review config
+- **THEN** `num_reviews` SHALL be set to `1` in each review config entry
 - **AND** no prompt for `num_reviews` SHALL be shown
 
 #### Scenario: Multiple review CLIs prompt for num_reviews
@@ -146,12 +155,22 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **WHEN** Phase 3 completes
 - **THEN** the user SHALL be prompted: "How many of these CLIs would you like to run on every review?"
 - **AND** the valid range SHALL be 1 to 3
-- **AND** the selected value SHALL be written as `num_reviews` in the default review config
+- **AND** the selected value SHALL be written as `num_reviews` in each review config entry
 
-#### Scenario: Built-in reviewer announcement
+#### Scenario: Built-in review selection prompt
 - **GIVEN** the user runs `agent-validate init`
-- **WHEN** Phase 3 completes
-- **THEN** the output SHALL display: "Agent Validator's built-in code quality reviewer will be installed."
+- **WHEN** Phase 3 completes (after review CLI and num_reviews selection)
+- **THEN** the user SHALL be presented with a multi-select prompt listing all available built-in reviews: `code-quality`, `security`, `error-handling`
+- **AND** all built-in reviews SHALL be pre-selected by default
+- **AND** the user MAY deselect any reviews they do not want
+
+#### Scenario: Zero built-in reviews selected requires confirmation
+- **GIVEN** the user runs `agent-validate init`
+- **AND** the user deselects all built-in reviews
+- **WHEN** the selection is submitted
+- **THEN** the user SHALL be prompted with a confirmation: "No reviews selected. Are you sure you want to continue without any built-in reviews?"
+- **AND** if the user confirms, `config.yml` SHALL contain an empty `reviews` map
+- **AND** if the user cancels, the built-in review selection prompt SHALL be shown again
 
 #### Scenario: No base branch prompt
 - **GIVEN** the user runs `agent-validate init`
@@ -187,6 +206,11 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **THEN** all detected CLIs SHALL be added to `cli.default_preference`
 - **AND** `num_reviews` SHALL be set to the number of detected CLIs
 
+#### Scenario: --yes selects all built-in reviews
+- **GIVEN** the user runs `agent-validate init --yes`
+- **WHEN** Phase 3 runs
+- **THEN** all built-in reviews (code-quality, security, error-handling) SHALL be selected without prompting
+
 #### Scenario: --yes overwrites changed files without asking
 - **GIVEN** the user runs `agent-validate init --yes`
 - **AND** a Codex skill file exists with a different checksum
@@ -197,11 +221,12 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 
 When `.validator/` already exists, Phase 4 SHALL skip entirely without modifying any files inside the directory.
 
-#### Scenario: Fresh init creates .validator/ directory
+#### Scenario: Fresh init creates .validator/ directory with selected reviews
 - **GIVEN** the user runs `agent-validate init`
 - **AND** no `.validator/` directory exists
+- **AND** the user selects code-quality and security built-in reviews
 - **WHEN** Phase 4 runs
-- **THEN** `.validator/` SHALL be created with `config.yml` (inline code-quality review, empty entry_points)
+- **THEN** `.validator/` SHALL be created with `config.yml` containing inline review entries for `code-quality` and `security`, and empty `entry_points`
 - **AND** the project-root `.gitignore` SHALL be updated to include `validator_logs`
 - **AND** `.validator/reviews/` and `.validator/checks/` SHALL NOT be created
 

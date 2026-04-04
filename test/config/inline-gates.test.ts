@@ -170,7 +170,7 @@ entry_points:
 
 		expect(config.reviews["code-quality"]).toBeDefined();
 		expect(config.reviews["code-quality"]!.name).toBe("code-quality");
-		expect(config.reviews["code-quality"]!.promptContent).toContain("code-reviewer");
+		expect(config.reviews["code-quality"]!.promptContent).toContain("Code Quality Review");
 	});
 
 	// 6.6: Inline review with only builtin applies correct defaults
