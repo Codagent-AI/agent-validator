@@ -14,6 +14,7 @@ import { CodexAdapter } from './codex.js';
 import { CursorAdapter } from './cursor.js';
 import { GeminiAdapter } from './gemini.js';
 import { GitHubCopilotAdapter } from './github-copilot.js';
+import { OpenCodeAdapter } from './opencode.js';
 import type { CLIAdapter } from './shared.js';
 
 export {
@@ -22,6 +23,7 @@ export {
   ClaudeAdapter,
   GitHubCopilotAdapter,
   CursorAdapter,
+  OpenCodeAdapter,
 };
 
 // Adapter registry: keys should use lowercase with hyphens for multi-word names
@@ -31,6 +33,7 @@ const adapters: Record<string, CLIAdapter> = {
   claude: new ClaudeAdapter(),
   'github-copilot': new GitHubCopilotAdapter(),
   cursor: new CursorAdapter(),
+  opencode: new OpenCodeAdapter(),
 };
 
 export function getAdapter(name: string): CLIAdapter | undefined {
