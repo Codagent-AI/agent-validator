@@ -163,6 +163,7 @@ function emitOpenCodeSummary(
 function parseOpenCodeJsonl(
   raw: string,
   onLog?: (msg: string) => void,
+  emitSummary = true,
 ): { text: string; usage: OpenCodeUsage } {
   const usage: OpenCodeUsage = {};
   const textParts: string[] = [];
@@ -174,7 +175,9 @@ function parseOpenCodeJsonl(
     if (text !== undefined) textParts.push(text);
   }
 
-  emitOpenCodeSummary(usage, onLog);
+  if (emitSummary) {
+    emitOpenCodeSummary(usage, onLog);
+  }
   return { text: textParts.join(''), usage };
 }
 
@@ -256,10 +259,8 @@ export class OpenCodeAdapter implements CLIAdapter {
       args.push('--model', opts.model);
     }
     if (opts.allowToolUse === false) {
-      // OpenCode CLI does not currently expose a flag to disable tool use.
-      // Log a warning so the policy mismatch is visible in stderr.
-      process.stderr.write(
-        '[opencode] warning: allowToolUse=false requested but OpenCode CLI has no flag to disable tools\n',
+      throw new Error(
+        'allowToolUse=false is not supported by the OpenCode CLI — it does not expose a flag to disable tools',
       );
     }
     if (opts.thinkingBudget && opts.thinkingBudget in OPENCODE_VARIANT) {
@@ -334,7 +335,7 @@ export class OpenCodeAdapter implements CLIAdapter {
       }
 
       emitOpenCodeSummary(streamingUsage, opts.onOutput);
-      const { text } = parseOpenCodeJsonl(raw);
+      const { text } = parseOpenCodeJsonl(raw, undefined, false);
       return text || raw.trimEnd();
     }
 
