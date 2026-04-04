@@ -259,8 +259,8 @@ export class OpenCodeAdapter implements CLIAdapter {
       args.push('--model', opts.model);
     }
     if (opts.allowToolUse === false) {
-      throw new Error(
-        'allowToolUse=false is not supported by the OpenCode CLI — it does not expose a flag to disable tools',
+      process.stderr.write(
+        '[opencode] warning: allowToolUse=false requested but OpenCode CLI has no flag to disable tools\n',
       );
     }
     if (opts.thinkingBudget && opts.thinkingBudget in OPENCODE_VARIANT) {
