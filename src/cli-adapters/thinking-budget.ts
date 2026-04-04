@@ -21,3 +21,11 @@ export const GEMINI_THINKING_BUDGET: Record<string, number> = {
   medium: 8192,
   high: 24576,
 };
+
+/** Maps unified thinking budget levels to OpenCode --variant values. */
+export const OPENCODE_VARIANT: Record<string, string> = {
+  off: 'minimal',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+};

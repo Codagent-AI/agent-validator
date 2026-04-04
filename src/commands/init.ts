@@ -68,6 +68,7 @@ const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
     thinking_budget: 'low',
     model: 'codex',
   },
+  opencode: { allow_tool_use: false, thinking_budget: 'low' },
 };
 
 interface InitOptions {
