@@ -1,6 +1,6 @@
 import type { TelemetrySummary } from "./types.js";
 
-const TELEMETRY_PREFIXES = ["[otel]", "[codex-telemetry]", "[telemetry]"];
+const TELEMETRY_PREFIXES = ["[otel]", "[codex-telemetry]", "[telemetry]", "[copilot-telemetry]"];
 
 export function parseTelemetry(chunks: string[]): TelemetrySummary | undefined {
 	const joined = chunks.join("\n");
@@ -24,7 +24,7 @@ function parseTelemetryLine(line: string): TelemetrySummary {
 		cacheTokens: cacheRead + cacheWrite || cacheFallback,
 		...(cost !== undefined && { cost }),
 		toolCalls: extractNumber(line, "tool_calls"),
-		apiRequests: extractNumber(line, "api_requests"),
+		apiRequests: extractNumber(line, "api_requests") || extractNumber(line, "premium_requests"),
 	};
 }
 

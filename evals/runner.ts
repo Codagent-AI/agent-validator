@@ -23,8 +23,9 @@ import type {
 
 interface EvalConfig {
 	fixture: string;
+	reviewer?: string;
 	matrix: {
-		adapters: EvalAdapterName[];
+		adapters: (EvalAdapterName | { name: EvalAdapterName; model?: string; alias?: string })[];
 		configurations: {
 			name: string;
 			allow_tool_use: boolean;
@@ -51,6 +52,7 @@ const VERSION_COMMANDS: Record<EvalAdapterName, string> = {
 	claude: "claude --version",
 	codex: "codex --version",
 	gemini: "gemini --version",
+	"github-copilot": "copilot --version",
 };
 
 const MODEL_DETECTORS: Record<EvalAdapterName, () => string | undefined> = {
@@ -84,6 +86,7 @@ const MODEL_DETECTORS: Record<EvalAdapterName, () => string | undefined> = {
 			return geminiLine ?? lines[lines.length - 1];
 		} catch { return undefined; }
 	},
+	"github-copilot": () => undefined,
 };
 
 function getAdapterVersionInfo(
@@ -119,25 +122,47 @@ export async function runEval(
 
 	const diff = readFileSync(diffPath, "utf-8");
 	const groundTruthRaw = YAML.parse(readFileSync(groundTruthPath, "utf-8"));
-	const groundTruth: GroundTruthIssue[] = groundTruthRaw.issues;
+	let groundTruth: GroundTruthIssue[] = groundTruthRaw.issues;
 
-	// Build review prompt (code-quality prompt + JSON instruction)
+	// Filter ground truth by reviewer if configured
+	if (evalConfig.reviewer) {
+		const reviewer = evalConfig.reviewer;
+		const before = groundTruth.length;
+		groundTruth = groundTruth.filter((gt) => gt.reviewer === reviewer);
+		console.log(
+			`Reviewer filter: ${reviewer} (${groundTruth.length}/${before} issues)`,
+		);
+	}
+
+	// Build review prompt — use reviewer-specific prompt if configured
+	const promptFile = evalConfig.reviewer
+		? `${evalConfig.reviewer}.md`
+		: "code-quality.md";
 	const promptPath = resolve(
 		evalsDir,
-		"../src/built-in-reviews/code-quality.md",
+		`../src/built-in-reviews/${promptFile}`,
 	);
 	const promptContent = readFileSync(promptPath, "utf-8");
 	const fullPrompt = `${promptContent}\n${JSON_SYSTEM_INSTRUCTION}`;
 
 	// Generate eval matrix
 	let matrix: EvalConfiguration[] = [];
-	for (const adapterName of evalConfig.matrix.adapters) {
+	for (const adapterEntry of evalConfig.matrix.adapters) {
+		const adapterName =
+			typeof adapterEntry === "string" ? adapterEntry : adapterEntry.name;
+		const model =
+			typeof adapterEntry === "string" ? undefined : adapterEntry.model;
+		const displayName =
+			typeof adapterEntry === "string"
+				? adapterEntry
+				: adapterEntry.alias ?? adapterEntry.name;
 		for (const config of evalConfig.matrix.configurations) {
 			matrix.push({
 				adapter: adapterName,
 				allowToolUse: config.allow_tool_use,
 				thinkingBudget: config.thinking_budget,
-				label: `${adapterName}/${config.name}`,
+				label: `${displayName}/${config.name}`,
+				model,
 			});
 		}
 	}
@@ -153,7 +178,9 @@ export async function runEval(
 
 	// Check adapter availability
 	const availableAdapters = new Set<string>();
-	for (const adapterName of evalConfig.matrix.adapters) {
+	for (const adapterEntry of evalConfig.matrix.adapters) {
+		const adapterName =
+			typeof adapterEntry === "string" ? adapterEntry : adapterEntry.name;
 		const adapter = getAdapter(adapterName);
 		if (!adapter) {
 			console.log(`  Skipping ${adapterName}: adapter not found`);
@@ -176,7 +203,12 @@ export async function runEval(
 	const versions = adapterNames.map((a) =>
 		getAdapterVersionInfo(a, options.dryRun),
 	);
+	// Override detected model with configured model if present
 	for (const v of versions) {
+		const configuredModel = matrix.find(
+			(c) => c.adapter === v.adapter && c.model,
+		)?.model;
+		if (configuredModel) v.model = configuredModel;
 		const modelStr = v.model ? `, model: ${v.model}` : "";
 		console.log(`  ${v.adapter}: ${v.cliVersion}${modelStr}`);
 	}
@@ -185,8 +217,9 @@ export async function runEval(
 		`\nEval matrix: ${matrix.length} configurations x ${evalConfig.runs_per_config} runs = ${matrix.length * evalConfig.runs_per_config} total runs`,
 	);
 	for (const config of matrix) {
+		const modelStr = config.model ? `, model=${config.model}` : "";
 		console.log(
-			`  ${config.label} (toolUse=${config.allowToolUse}, thinking=${config.thinkingBudget})`,
+			`  ${config.label} (toolUse=${config.allowToolUse}, thinking=${config.thinkingBudget}${modelStr})`,
 		);
 	}
 

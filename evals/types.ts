@@ -1,10 +1,11 @@
-export type EvalAdapterName = "claude" | "codex" | "gemini";
+export type EvalAdapterName = "claude" | "codex" | "gemini" | "github-copilot";
 
 export interface EvalConfiguration {
 	adapter: EvalAdapterName;
 	allowToolUse: boolean;
 	thinkingBudget: string;
 	label: string;
+	model?: string;
 }
 
 export interface GroundTruthIssue {
@@ -16,6 +17,7 @@ export interface GroundTruthIssue {
 	difficulty: "easy" | "medium" | "hard";
 	priority: "critical" | "high" | "medium" | "low";
 	requires_tool_use: boolean;
+	reviewer?: string;
 }
 
 export interface AdapterViolation {

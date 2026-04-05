@@ -18,6 +18,7 @@ issues:
     category: security
     difficulty: medium
     priority: high
+    reviewer: security
     source: 2026-02-16 reviewer-model-resolution.agent-validator
   - id: copilot-command-injection
     file: src/cli-adapters/github-copilot.ts
@@ -38,6 +39,7 @@ issues:
     category: security
     difficulty: medium
     priority: high
+    reviewer: security
     source: 2026-02-16 reviewer-model-resolution.agent-validator
   - id: shell-injection-via-exec-async-interpolation
     file: src/core/change-detector.ts
@@ -67,6 +69,7 @@ issues:
     category: security
     difficulty: medium
     priority: high
+    reviewer: security
     source: 2026-02-28 skill-review.agent-validator
   - id: silent-error-swallow-file-enumeration
     file: src/output/report.ts
@@ -94,6 +97,7 @@ issues:
     category: bug
     difficulty: medium
     priority: high
+    reviewer: error-handling
     source: 2026-03-15 agent-validator
   - id: blanket-catch-readdir-hides-failures
     file: src/output/report.ts
@@ -114,4 +118,5 @@ issues:
     category: bug
     difficulty: medium
     priority: high
+    reviewer: error-handling
     source: 2026-03-15 agent-validator

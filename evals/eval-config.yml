@@ -1,23 +1,20 @@
 fixture: fixtures/review-quality
+reviewer: code-quality
 
 matrix:
   adapters:
-    - claude
+    - name: github-copilot
+      model: gpt-5.4
+      alias: copilot-gpt5.4
+    - name: github-copilot
+      model: claude-sonnet-4.6
+      alias: copilot-sonnet
   configurations:
-    - name: tools-on-thinking-high
-      allow_tool_use: true
-      thinking_budget: "high"
-    - name: tools-on-thinking-low
-      allow_tool_use: true
-      thinking_budget: "low"
-    - name: tools-off-thinking-high
+    - name: tools-off-no-effort
       allow_tool_use: false
-      thinking_budget: "high"
-    - name: tools-off-thinking-low
-      allow_tool_use: false
-      thinking_budget: "low"
+      thinking_budget: "medium"
 
-runs_per_config: 3
+runs_per_config: 1
 timeout_ms: 300000
 judge:
   adapter: claude
