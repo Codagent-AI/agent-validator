@@ -40,5 +40,5 @@ bin/
 # worktrees
 .worktrees/
 
-# evals
-evals/
+# eval results
+evals/results/

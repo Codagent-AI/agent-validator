@@ -348,7 +348,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
         log.debug(`copilot session: ${summary.telemetryLine}`);
         assertModelUsed(opts.model, summary.model);
       }
-e      return stdout;
+      return stdout;
     } finally {
       await cleanup();
     }
