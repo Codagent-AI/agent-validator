@@ -1,29 +1,21 @@
 name: agent-validator
 base_branch: main
-log_dir: gauntlet_logs
+log_dir: validator_logs
 debug_log:
   enabled: true
   max_size_mb: 10
 allow_parallel: true
 cli:
   default_preference:
-    - opencode
     - codex
     - claude
-    - gemini
   adapters:
-    claude:
-      allow_tool_use: false
-      thinking_budget: high
     codex:
       allow_tool_use: false
       thinking_budget: low
-    gemini:
+    claude:
       allow_tool_use: false
-      thinking_budget: low
-    opencode:
-      allow_tool_use: false
-      thinking_budget: low
+      thinking_budget: high
 checks:
   build:
     command: bun run build
@@ -46,7 +38,7 @@ reviews:
 entry_points:
   - path: "."
     exclude:
-      - .gauntlet
+      - .validator
       - evals/results
       - openspec
       - skills

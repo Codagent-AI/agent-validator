@@ -12,17 +12,17 @@ enabled: false
 **Instructions:**
 
 > **PRECONDITION — check this before doing anything else.**
-> Read `.gauntlet/current-task-context.md`.
+> Read `.validator/current-task-context.md`.
 > - If the file **does not exist** or is **empty**: report a single medium-severity issue with the description below and **STOP. Do not read the diff. Do not report any other issues.**
-> - Description: *"No task context file found. If this change was made using the implement-task skill, the implementer should write .gauntlet/current-task-context.md before running gauntlet. If this is a manual change, this issue can be ignored."*
+> - Description: *"No task context file found. If this change was made using the implement-task skill, the implementer should write .validator/current-task-context.md before running the validator. If this is a manual change, this issue can be ignored."*
 
-Only continue to the steps below if a non-empty `.gauntlet/current-task-context.md` was found.
+Only continue to the steps below if a non-empty `.validator/current-task-context.md` was found.
 
 ---
 
 ## 1. Read the Task Context
 
-Read the task file path from `.gauntlet/current-task-context.md`, then read the task file to get the full task specification (Goal, Background, Spec with requirements and scenarios, Done When).
+Read the task file path from `.validator/current-task-context.md`, then read the task file to get the full task specification (Goal, Background, Spec with requirements and scenarios, Done When).
 
 ## 2. Compare Diff Against Task Spec
 
