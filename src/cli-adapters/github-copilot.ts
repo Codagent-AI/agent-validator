@@ -19,11 +19,11 @@ let _tmpCounter = 0;
 
 const log = getCategoryLogger('github-copilot');
 
-/** Effort levels supported by `gh copilot -- --effort`. */
+/** Effort levels supported by `copilot --effort`. */
 const EFFORT_LEVELS = new Set(['low', 'medium', 'high']);
 
 /**
- * Parse `gh copilot -- --list-models` output into an array of model IDs.
+ * Parse `copilot --list-models` output into an array of model IDs.
  * Each line has the format: "model-id - Display Name"
  */
 export function parseModelList(output: string): string[] {
@@ -38,13 +38,73 @@ export function parseModelList(output: string): string[] {
     .filter((id) => id.length > 0);
 }
 
+/**
+ * Parse the copilot session summary printed to stdout after the response.
+ * Returns a structured telemetry line or undefined if no summary is found.
+ *
+ * Example summary block:
+ *   Total usage est:        2 Premium requests
+ *   Breakdown by AI model:
+ *    gpt-5.4                  17.7k in, 45 out, 1.5k cached (Est. 1 Premium request)
+ *    claude-haiku-4.5         41.4k in, 123 out, 0 cached (Est. 1 Premium request)
+ */
+export function parseCopilotSessionSummary(
+  output: string,
+): { telemetryLine: string; model: string } | undefined {
+  const premiumMatch = output.match(/Total usage est:\s+(\d+)\s+Premium request/i);
+  if (!premiumMatch) return undefined;
+
+  const premiumRequests = Number(premiumMatch[1]);
+
+  // Parse per-model token lines: " <model>  <N>k in, <N> out, <N>k cached"
+  const modelLines = [...output.matchAll(/^\s+(\S+)\s+([\d.]+)k? in,\s*([\d.]+)k? out(?:,\s*([\d.]+)k? cached)?/gm)];
+
+  let totalIn = 0;
+  let totalOut = 0;
+  let totalCached = 0;
+  const models: string[] = [];
+
+  for (const m of modelLines) {
+    const [fullMatch, model, inRaw, outRaw, cachedRaw] = m;
+    if (!model || !inRaw || !outRaw) continue;
+    const toTokens = (val: string) =>
+      fullMatch.includes(`${val}k`) ? Math.round(Number(val) * 1000) : Number(val);
+    totalIn += toTokens(inRaw);
+    totalOut += toTokens(outRaw);
+    if (cachedRaw) totalCached += toTokens(cachedRaw);
+    models.push(model);
+  }
+
+  const model = models.join(',') || 'unknown';
+  const telemetryLine = `[copilot-telemetry] model=${model} in=${totalIn} out=${totalOut} cache=${totalCached} premium_requests=${premiumRequests}`;
+  return { telemetryLine, model };
+}
+
+/**
+ * Throws if a specific model was requested but the session summary shows a
+ * different model was actually used. Prevents silent fallback to a default
+ * model when the requested model is unavailable.
+ */
+function assertModelUsed(requested: string | undefined, actual: string): void {
+  if (!requested) return;
+  // actual may be a comma-separated list when multiple models were used in one session
+  const actualModels = actual.split(',').map((m) => m.trim().toLowerCase());
+  const req = requested.toLowerCase();
+  if (!actualModels.some((m) => m.includes(req) || req.includes(m))) {
+    throw new Error(
+      `Model mismatch: requested "${requested}" but copilot used "${actual}". ` +
+        `The requested model may not be available on this account.`,
+    );
+  }
+}
+
 export class GitHubCopilotAdapter implements CLIAdapter {
   name = 'github-copilot';
 
   async isAvailable(): Promise<boolean> {
     try {
       await new Promise<string>((resolve, reject) => {
-        exec('gh copilot -- --help', { timeout: 10_000 }, (error, stdout) => {
+        exec('copilot --help', { timeout: 10_000 }, (error, stdout) => {
           if (error) reject(error);
           else resolve(stdout);
         });
@@ -131,11 +191,11 @@ export class GitHubCopilotAdapter implements CLIAdapter {
   }
 
   getManualInstallInstructions(_scope: 'user' | 'project'): string[] {
-    return ['gh copilot -- plugin install Codagent-AI/agent-validator'];
+    return ['copilot plugin install Codagent-AI/agent-validator'];
   }
 
   /**
-   * Resolve a base model name to a specific model ID using `gh copilot -- --list-models`.
+   * Resolve a base model name to a specific model ID using `copilot --list-models`.
    * Returns undefined if resolution fails or no matching model is found.
    *
    * Uses exec() directly (instead of promisify) so that
@@ -147,14 +207,10 @@ export class GitHubCopilotAdapter implements CLIAdapter {
   ): Promise<string | undefined> {
     try {
       const stdout = await new Promise<string>((resolve, reject) => {
-        exec(
-          'gh copilot -- --list-models',
-          { timeout: 10000 },
-          (error, stdout) => {
-            if (error) reject(error);
-            else resolve(stdout);
-          },
-        );
+        exec('copilot --list-models', { timeout: 10000 }, (error, stdout) => {
+          if (error) reject(error);
+          else resolve(stdout);
+        });
       });
       const models = parseModelList(stdout);
       const preferThinking =
@@ -186,8 +242,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     model?: string;
     thinkingBudget?: string;
   }): string[] {
-    // The -s (silent) flag suppresses UI output and returns only the agent response.
-    const args = ['-s'];
+    const args: string[] = [];
 
     // Tool whitelist: cat/grep/ls/find/head/tail are read-only tools for code review.
     if (opts.allowToolUse !== false) {
@@ -235,27 +290,40 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     );
     await fs.writeFile(tmpFile, fullContent);
 
-    // Resolve model if a base name is provided
-    let resolvedModel: string | undefined;
-    if (opts.model) {
-      resolvedModel = await this.resolveModel(opts.model, opts.thinkingBudget);
-    }
-
+    // Use model directly if provided — resolveModel() relies on copilot --list-models
+    // which is not available in all CLI versions. Pass the model name as-is and let
+    // the CLI reject it with a clear error if the model is unavailable.
     const args = this.buildArgs({
       ...opts,
-      model: resolvedModel,
+      model: opts.model,
     });
     const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
+    log.debug(`copilot args: ${args.join(' ')}`);
+
     if (opts.onOutput) {
-      return runStreamingCommand({
-        command: 'gh',
-        args: ['copilot', '--', ...args],
+      // Collect stderr separately to parse the session summary (printed to stderr by copilot).
+      // stderr is also forwarded to onOutput by runStreamingCommand via collectStderr.
+      const stderrChunks: string[] = [];
+      const wrappedOnOutput = (chunk: string) => {
+        stderrChunks.push(chunk);
+        opts.onOutput!(chunk);
+      };
+      const raw = await runStreamingCommand({
+        command: 'copilot',
+        args,
         tmpFile,
         timeoutMs: opts.timeoutMs,
-        onOutput: opts.onOutput,
+        onOutput: wrappedOnOutput,
         cleanup,
       });
+      const summary = parseCopilotSessionSummary(stderrChunks.join(''));
+      if (summary) {
+        opts.onOutput(summary.telemetryLine);
+        log.debug(`copilot session: ${summary.telemetryLine}`);
+        assertModelUsed(opts.model, summary.model);
+      }
+      return raw;
     }
 
     // Uses exec() directly (instead of promisify) so that
@@ -264,18 +332,23 @@ export class GitHubCopilotAdapter implements CLIAdapter {
       const argsStr = args
         .map((a) => (a.includes('(') ? `"${a}"` : a))
         .join(' ');
-      const cmd = `cat "${tmpFile}" | gh copilot -- ${argsStr}`;
-      const stdout = await new Promise<string>((resolve, reject) => {
+      const cmd = `cat "${tmpFile}" | copilot ${argsStr}`;
+      const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
         exec(
           cmd,
           { timeout: opts.timeoutMs, maxBuffer: MAX_BUFFER_BYTES },
-          (error, stdout) => {
+          (error, stdout, stderr) => {
             if (error) reject(error);
-            else resolve(stdout);
+            else resolve({ stdout, stderr });
           },
         );
       });
-      return stdout;
+      const summary = parseCopilotSessionSummary(stderr);
+      if (summary) {
+        log.debug(`copilot session: ${summary.telemetryLine}`);
+        assertModelUsed(opts.model, summary.model);
+      }
+e      return stdout;
     } finally {
       await cleanup();
     }
