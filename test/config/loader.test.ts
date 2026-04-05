@@ -4,21 +4,21 @@ import path from "node:path";
 import { loadConfig } from "../../src/config/loader.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-env-${Date.now()}`);
-const GAUNTLET_DIR = path.join(TEST_DIR, ".validator");
-const CHECKS_DIR = path.join(GAUNTLET_DIR, "checks");
-const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
+const VALIDATOR_DIR = path.join(TEST_DIR, ".validator");
+const CHECKS_DIR = path.join(VALIDATOR_DIR, "checks");
+const REVIEWS_DIR = path.join(VALIDATOR_DIR, "reviews");
 
 describe("Config Loader", () => {
 	beforeAll(async () => {
 		// Setup directory structure
 		await fs.mkdir(TEST_DIR);
-		await fs.mkdir(GAUNTLET_DIR);
+		await fs.mkdir(VALIDATOR_DIR);
 		await fs.mkdir(CHECKS_DIR);
 		await fs.mkdir(REVIEWS_DIR);
 
 		// Write config.yml
 		await fs.writeFile(
-			path.join(GAUNTLET_DIR, "config.yml"),
+			path.join(VALIDATOR_DIR, "config.yml"),
 			`
 base_branch: origin/dev
 log_dir: test_logs
@@ -154,13 +154,13 @@ describe("Built-in Reviews (YAML builtin attribute)", () => {
 
 	async function setupTestEnv(configYml: string, reviewFiles?: Record<string, string>) {
 		tmpDir = path.join(process.cwd(), `test-builtin-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		const gauntletDir = path.join(tmpDir, ".validator");
-		const reviewsDir = path.join(gauntletDir, "reviews");
+		const configDir = path.join(tmpDir, ".validator");
+		const reviewsDir = path.join(configDir, "reviews");
 
 		await fs.mkdir(tmpDir);
-		await fs.mkdir(gauntletDir);
+		await fs.mkdir(configDir);
 		await fs.mkdir(reviewsDir);
-		await fs.writeFile(path.join(gauntletDir, "config.yml"), configYml);
+		await fs.writeFile(path.join(configDir, "config.yml"), configYml);
 
 		if (reviewFiles) {
 			for (const [name, content] of Object.entries(reviewFiles)) {

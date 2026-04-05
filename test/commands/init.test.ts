@@ -150,7 +150,7 @@ describe("init command plugin installation", () => {
 	const originalConsoleWarn = console.warn;
 
 	beforeEach(async () => {
-		testDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-init-test-"));
+		testDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-init-test-"));
 		program = new Command();
 		registerInitCommand(program);
 		logs = [];
@@ -201,7 +201,7 @@ describe("init command plugin installation", () => {
 		selectedDevCliNames = ["claude"];
 		selectedReviewCliNames = ["claude"];
 		selectedNumReviews = 1;
-		const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-home-"));
+		const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "validator-home-"));
 		process.env.HOME = fakeHome;
 
 		await program.parseAsync(["node", "test", "init"]);
@@ -280,7 +280,7 @@ describe("init command plugin installation", () => {
 
 	it("installs Codex skills globally when user scope is selected", async () => {
 		selectedInstallScope = "user";
-		const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-home-"));
+		const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "validator-home-"));
 		process.env.HOME = fakeHome;
 
 		await program.parseAsync(["node", "test", "init"]);
@@ -324,7 +324,7 @@ describe("init command plugin installation", () => {
 		expect(installPluginMock).not.toHaveBeenCalled();
 	});
 
-	it("on re-run with existing .gauntlet, delegates to plugin update logic", async () => {
+	it("on re-run with existing .validator, delegates to plugin update logic", async () => {
 		await fs.mkdir(path.join(testDir, ".validator"), { recursive: true });
 		listPluginsMock.mockImplementation(async () => [
 			{ name: "agent-validator", scope: "project", projectPath: testDir },

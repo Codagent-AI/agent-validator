@@ -17,7 +17,7 @@ describe("Global Configuration", () => {
 		originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
 
 		// Create a temp directory to isolate from real user config
-		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-test-"));
+		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-test-"));
 		process.env.HOME = tempDir;
 		// Clear XDG_CONFIG_HOME so it doesn't override HOME-based resolution
 		delete process.env.XDG_CONFIG_HOME;

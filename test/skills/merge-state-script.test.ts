@@ -114,10 +114,10 @@ describe("merge-state.sh", () => {
 			execSync(`git worktree add "${worktreeDir}" custom-src-branch`, { cwd: mainRepo });
 
 			// Set up custom log_dir in worktree config
-			const worktreeGauntletDir = path.join(worktreeDir, ".validator");
-			await fs.mkdir(worktreeGauntletDir, { recursive: true });
+			const worktreeConfigDir = path.join(worktreeDir, ".validator");
+			await fs.mkdir(worktreeConfigDir, { recursive: true });
 			await fs.writeFile(
-				path.join(worktreeGauntletDir, "config.yml"),
+				path.join(worktreeConfigDir, "config.yml"),
 				"log_dir: custom_src_logs\n",
 			);
 
@@ -155,10 +155,10 @@ describe("merge-state.sh", () => {
 			execSync(`git worktree add "${worktreeDir}" dest-config-branch`, { cwd: mainRepo });
 
 			// Set up custom log_dir in main repo config
-			const mainGauntletDir = path.join(mainRepo, ".validator");
-			await fs.mkdir(mainGauntletDir, { recursive: true });
+			const mainConfigDir = path.join(mainRepo, ".validator");
+			await fs.mkdir(mainConfigDir, { recursive: true });
 			await fs.writeFile(
-				path.join(mainGauntletDir, "config.yml"),
+				path.join(mainConfigDir, "config.yml"),
 				"log_dir: custom_dest_logs\n",
 			);
 

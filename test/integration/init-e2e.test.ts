@@ -6,7 +6,7 @@ import {
 	createClaudeStub,
 	initGitRepo,
 	isDistBuilt,
-	spawnGauntlet,
+	spawnValidator,
 } from "./helpers.js";
 
 let tempDir: string;
@@ -21,12 +21,12 @@ beforeAll(async () => {
 	const stub = await createClaudeStub();
 	stubBinDir = stub.binDir;
 
-	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-init-e2e-"));
+	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-init-e2e-"));
 	await fs.mkdir(path.join(tempDir, "src"), { recursive: true });
 	await fs.writeFile(path.join(tempDir, "src", "index.ts"), "export {};\n");
 	await initGitRepo(tempDir);
 
-	initResult = await spawnGauntlet(["init", "--yes"], {
+	initResult = await spawnValidator(["init", "--yes"], {
 		cwd: tempDir,
 		env: { ...process.env, PATH: `${stubBinDir}:${process.env.PATH}` },
 	});

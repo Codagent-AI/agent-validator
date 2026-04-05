@@ -15,13 +15,13 @@ describe("Inline Gate Configs", () => {
 			process.cwd(),
 			`test-inline-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 		);
-		const gauntletDir = path.join(tmpDir, ".validator");
-		const checksDir = path.join(gauntletDir, "checks");
-		const reviewsDir = path.join(gauntletDir, "reviews");
+		const configDir = path.join(tmpDir, ".validator");
+		const checksDir = path.join(configDir, "checks");
+		const reviewsDir = path.join(configDir, "reviews");
 
 		await fs.mkdir(tmpDir);
-		await fs.mkdir(gauntletDir);
-		await fs.writeFile(path.join(gauntletDir, "config.yml"), opts.configYml);
+		await fs.mkdir(configDir);
+		await fs.writeFile(path.join(configDir, "config.yml"), opts.configYml);
 
 		if (opts.checkFiles) {
 			await fs.mkdir(checksDir);

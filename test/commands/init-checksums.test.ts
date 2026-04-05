@@ -45,7 +45,7 @@ describe("computeSkillChecksum", () => {
 });
 
 describe("computeHookChecksum", () => {
-  it("should compute checksum over gauntlet entries only", () => {
+  it("should compute checksum over validator entries only", () => {
     const entries = [
       { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
       { type: "command", command: "echo hello" },
@@ -60,7 +60,7 @@ describe("computeHookChecksum", () => {
     expect(c1).toBe(c2);
   });
 
-  it("should detect changes in gauntlet entries", () => {
+  it("should detect changes in validator entries", () => {
     const entries1 = [
       { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
     ];
@@ -81,15 +81,15 @@ describe("computeHookChecksum", () => {
 });
 
 describe("isGauntletHookEntry", () => {
-  it("should identify wrapped gauntlet entries", () => {
+  it("should identify wrapped validator entries", () => {
     expect(isGauntletHookEntry({ hooks: [{ command: "agent-validate run" }] })).toBe(true);
   });
 
-  it("should identify flat gauntlet entries", () => {
+  it("should identify flat validator entries", () => {
     expect(isGauntletHookEntry({ command: "agent-validate check" })).toBe(true);
   });
 
-  it("should reject non-gauntlet entries", () => {
+  it("should reject non-validator entries", () => {
     expect(isGauntletHookEntry({ command: "echo hello" })).toBe(false);
   });
 });

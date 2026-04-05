@@ -55,8 +55,8 @@ describe("update command", () => {
 	const originalConsoleError = console.error;
 
 	beforeEach(async () => {
-		testDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-update-test-"));
-		homeDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-update-home-"));
+		testDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-update-test-"));
+		homeDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-update-home-"));
 		originalCwd = process.cwd();
 		originalHome = process.env.HOME;
 		process.chdir(testDir);

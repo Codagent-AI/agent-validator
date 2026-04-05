@@ -29,7 +29,7 @@ describe("copilot-cli plugin module", () => {
 	});
 
 	describe("installPlugin", () => {
-		it("runs gh copilot -- plugin install Codagent-AI/agent-validator", async () => {
+		it("runs copilot plugin install Codagent-AI/agent-validator", async () => {
 			const spy = spyOn(childProcess, "execFileSync").mockReturnValue("" as string & Buffer);
 
 			const { installPlugin } = await import(
@@ -38,10 +38,8 @@ describe("copilot-cli plugin module", () => {
 			const result = await installPlugin();
 
 			expect(spy).toHaveBeenCalledTimes(1);
-			expect(spy.mock.calls[0][0]).toBe("gh");
+			expect(spy.mock.calls[0][0]).toBe("copilot");
 			expect(spy.mock.calls[0][1]).toEqual([
-				"copilot",
-				"--",
 				"plugin",
 				"install",
 				"Codagent-AI/agent-validator",
