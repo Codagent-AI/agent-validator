@@ -39,7 +39,7 @@ If an adapter reports `unhealthy`:
 ## Usage Limits and 1-Hour Cooldown
 
 ### How Usage Limits Are Detected
-The gauntlet checks adapter output for these keywords:
+The validator checks adapter output for these keywords:
 - "usage limit"
 - "quota exceeded"
 - "quota will reset"

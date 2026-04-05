@@ -2,12 +2,12 @@
 
 ## `lock_conflict` — Another Run in Progress
 
-The gauntlet uses a lock file to prevent concurrent runs from interfering with each other.
+Agent Validator uses a lock file to prevent concurrent runs from interfering with each other.
 
 ### Lock File Details
 - **File**: `<log_dir>/.validator-run.lock`
 - **Content**: PID of the process holding the lock
-- **Created**: At the start of a gauntlet run (exclusive write — fails if file exists)
+- **Created**: At the start of a validator run (exclusive write — fails if file exists)
 - **Released**: Always in a `finally` block (guaranteed cleanup on success, failure, or error)
 
 ### Diagnosing Lock Conflicts
@@ -15,12 +15,12 @@ The gauntlet uses a lock file to prevent concurrent runs from interfering with e
 1. Check if the lock file exists: `<log_dir>/.validator-run.lock`
 2. Read the PID from the file
 3. Check if that process is alive:
-   - If alive: a gauntlet run is genuinely in progress — wait for it to finish
+   - If alive: a validator run is genuinely in progress — wait for it to finish
    - If dead: the lock is stale (see below)
 
 ## Stale Lock Detection
 
-The gauntlet automatically detects and cleans stale locks:
+Agent Validator automatically detects and cleans stale locks:
 
 | Condition | Detection | Action |
 |-----------|-----------|--------|
@@ -28,17 +28,17 @@ The gauntlet automatically detects and cleans stale locks:
 | PID unparseable, lock > 10 min old | File age check | Lock removed, retry once |
 | PID alive | Process exists | Lock kept (genuine conflict) |
 
-**The gauntlet never steals a lock from a live process**, regardless of lock age.
+**Agent Validator never steals a lock from a live process**, regardless of lock age.
 
 ## `allow_parallel` Config
 
-The `allow_parallel` config setting (default: `true`) controls whether gates can run in parallel **within** a single gauntlet run. It does **not** control concurrent gauntlet runs — that's what the lock file prevents.
+The `allow_parallel` config setting (default: `true`) controls whether gates can run in parallel **within** a single validator run. It does **not** control concurrent validator runs — that's what the lock file prevents.
 
 ## Marker Files
 
 ### `.validator-run.lock`
 - **Location**: `<log_dir>/.validator-run.lock`
-- **Purpose**: Prevent concurrent gauntlet runs
+- **Purpose**: Prevent concurrent validator runs
 - **Lifecycle**: Created at run start, removed at run end (always in `finally`)
 
 ## Manual Cleanup
@@ -59,6 +59,6 @@ This command:
 ## Troubleshooting Checklist
 
 1. **Is another run actually in progress?** Check the PID in the lock file.
-2. **Is the process alive?** The gauntlet should auto-clean stale locks on retry.
+2. **Is the process alive?** Agent Validator should auto-clean stale locks on retry.
 3. **Did a crash leave a stale lock?** Run `agent-validate clean` to reset.
-4. **Is this happening repeatedly?** Check for processes spawning concurrent gauntlet runs (e.g., multiple IDE hooks firing simultaneously).
+4. **Is this happening repeatedly?** Check for processes spawning concurrent validator runs (e.g., multiple IDE hooks firing simultaneously).

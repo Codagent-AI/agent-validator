@@ -8,7 +8,7 @@
 <!-- [![npm downloads](https://img.shields.io/npm/dm/agent-validator)](https://www.npmjs.com/package/agent-validator) -->
 <!-- [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/Codagent-AI/agent-validator)](https://coderabbit.ai) -->
 
-> Don't just review the agent's code — put it through the gauntlet.
+> Don't just review the agent's code — put it through the validator.
 
 Agent Validator (formerly Agent Gauntlet) is a configurable “feedback loop” runner for AI-assisted development workflows.
 

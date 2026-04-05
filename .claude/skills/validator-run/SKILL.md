@@ -1,7 +1,7 @@
 ---
 name: validator-run
 description: >-
-  Runs the full validator workflow after coding tasks, including requests such as "run the validator", "run final verification", "validate before commit", or "run the gauntlet". Executes checks and reviews before commit, push, or PR creation.
+  Runs the full validator workflow after coding tasks, including requests such as "run the validator", "run final verification", "validate before commit", or "run the validator". Executes checks and reviews before commit, push, or PR creation.
 disable-model-invocation: false
 allowed-tools: Bash, Task
 ---
@@ -26,7 +26,7 @@ Run `bun src/index.ts run` using `Bash` with `timeout: 300000`. **ALWAYS wait fo
 - `Status: Passed with warnings` → Go to Step 8.
 - `Status: Failed` → Continue to Step 3. **You MUST continue — do not stop here.**
 - `Status: Retry limit exceeded` → Go to Step 8.
-- No status line visible → **Known issue:** Bun can drop all stdout/stderr when LLM review subprocesses run. Read the console log file to get the status: find the latest `console.*.log` in the gauntlet log directory (e.g., `validator_logs/console.1.log`) and look for the `Status:` line there. If no console log is found there, also check `validator_logs/previous/` for logs from the most recent archived run. If no console log exists in either location, the command may have timed out or failed to run — re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
+- No status line visible → **Known issue:** Bun can drop all stdout/stderr when LLM review subprocesses run. Read the console log file to get the status: find the latest `console.*.log` in the validator log directory (e.g., `validator_logs/console.1.log`) and look for the `Status:` line there. If no console log is found there, also check `validator_logs/previous/` for logs from the most recent archived run. If no console log exists in either location, the command may have timed out or failed to run — re-run with a longer timeout or investigate the error. Do NOT proceed as if it passed.
 
 ### Step 3 - Extract Failures
 

@@ -419,14 +419,14 @@ The skip logic SHALL NOT apply when `num_reviews == 1`. Skip decisions are evalu
 The `run`, `check`, and `review` commands MUST acquire the run lock before starting console logging. This ensures that failed lock acquisitions do not create orphaned console log files.
 
 #### Scenario: Lock acquisition fails - no console log created
-- **GIVEN** another gauntlet run is in progress (lock file exists)
+- **GIVEN** another validator run is in progress (lock file exists)
 - **WHEN** the user executes `agent-validate run`
 - **THEN** the lock acquisition SHALL fail with an error message
 - **AND** no console log file SHALL be created
 - **AND** the command SHALL exit with a non-zero exit code
 
 #### Scenario: Lock acquisition succeeds - console log created
-- **GIVEN** no gauntlet run is in progress (lock file does not exist)
+- **GIVEN** no validator run is in progress (lock file does not exist)
 - **WHEN** the user executes `agent-validate run`
 - **THEN** the lock SHALL be acquired first
 - **AND** the console log file SHALL be created after lock acquisition
@@ -640,7 +640,7 @@ CLI commands (`run`, `check`, `review`) SHALL always execute immediately without
 #### Scenario: Run command executes immediately
 - **GIVEN** the user runs `agent-validate run`
 - **WHEN** the command executes
-- **THEN** the gauntlet SHALL run immediately regardless of last run time
+- **THEN** the validator SHALL run immediately regardless of last run time
 
 ### Requirement: Adapter Health Tracking in Global State
 The system MUST store unhealthy adapter cooldown state in a global state file located in the global config directory (default: `~/.config/agent-validator/unhealthy_adapters.json`). Each entry is keyed by adapter name and contains the timestamp when the adapter was marked unhealthy and the reason. The global state file SHALL be used to determine adapter cooldown across projects.
@@ -658,7 +658,7 @@ The system MUST store unhealthy adapter cooldown state in a global state file lo
 - **THEN** all adapters SHALL be considered healthy
 
 #### Scenario: Global state directory override
-- **GIVEN** the `GAUNTLET_GLOBAL_STATE_DIR` environment variable is set
+- **GIVEN** the `VALIDATOR_GLOBAL_STATE_DIR` environment variable is set
 - **WHEN** the system resolves the unhealthy adapter state path
 - **THEN** it SHALL use that directory instead of the default global config directory
 
@@ -672,7 +672,7 @@ The system MUST store unhealthy adapter cooldown state in a global state file lo
 All ConsoleReporter output (gate start/complete messages, results summary, status line) MUST be written to stdout via `console.log`. This ensures agents can see gate results through the Bash tool without requiring `2>&1` redirection.
 
 #### Scenario: Status line on stdout
-- **GIVEN** a gauntlet run completes (all gates executed)
+- **GIVEN** a validator run completes (all gates executed)
 - **WHEN** `printSummary` renders the results
 - **THEN** the `Status: <status>` line SHALL be written to stdout via `console.log`
 

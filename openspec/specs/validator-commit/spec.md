@@ -27,7 +27,7 @@ The `validator-commit` skill SHALL parse its ARGUMENTS string for a validation i
 #### Scenario: ARGUMENTS contains no clear intent
 
 - **WHEN** ARGUMENTS is empty or does not contain a recognizable validation intent
-- **THEN** the skill SHALL present the user with three choices: run all gates, run checks only, or skip gauntlet
+- **THEN** the skill SHALL present the user with three choices: run all gates, run checks only, or skip validator
 
 ---
 
