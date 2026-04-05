@@ -25,9 +25,9 @@ const REVIEWS_DIR = 'reviews';
 
 function resolveConfigDir(rootDir: string): string {
   const validatorPath = path.join(rootDir, VALIDATOR_DIR);
-  const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
+  const legacyPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
   if (existsSync(validatorPath)) return validatorPath;
-  if (existsSync(gauntletPath)) return gauntletPath;
+  if (existsSync(legacyPath)) return legacyPath;
   return validatorPath;
 }
 
@@ -45,7 +45,7 @@ export interface ValidationResult {
 }
 
 interface ValidatorContext {
-  gauntletPath: string;
+  configDir: string;
   configPath: string;
   issues: ValidationIssue[];
   filesChecked: string[];
@@ -54,10 +54,10 @@ interface ValidatorContext {
 export async function validateConfig(
   rootDir: string = process.cwd(),
 ): Promise<ValidationResult> {
-  const gauntletPath = resolveConfigDir(rootDir);
-  const configPath = path.join(gauntletPath, CONFIG_FILE);
+  const configDir = resolveConfigDir(rootDir);
+  const configPath = path.join(configDir, CONFIG_FILE);
   const ctx: ValidatorContext = {
-    gauntletPath,
+    configDir,
     configPath,
     issues: [],
     filesChecked: [],
@@ -142,7 +142,7 @@ async function validateCheckGates(ctx: ValidatorContext): Promise<{
 }> {
   const checks: Record<string, CheckGateConfig> = {};
   const existingCheckNames = new Set<string>();
-  const checksPath = path.join(ctx.gauntletPath, CHECKS_DIR);
+  const checksPath = path.join(ctx.configDir, CHECKS_DIR);
 
   if (!(await dirExists(checksPath))) {
     return { checks, existingCheckNames };
@@ -214,7 +214,7 @@ async function validateReviewGatesWrapper(ctx: ValidatorContext): Promise<{
   reviewSourceFiles: Record<string, string>;
   existingReviewNames: Set<string>;
 }> {
-  const reviewsPath = path.join(ctx.gauntletPath, REVIEWS_DIR);
+  const reviewsPath = path.join(ctx.configDir, REVIEWS_DIR);
 
   if (!(await dirExists(reviewsPath))) {
     return {
@@ -446,7 +446,7 @@ function validateReviewPreferencesAgainstDefaults(
   reviewSourceFiles: Record<string, string>,
   ctx: ValidatorContext,
 ): void {
-  const reviewsPath = path.join(ctx.gauntletPath, REVIEWS_DIR);
+  const reviewsPath = path.join(ctx.configDir, REVIEWS_DIR);
   const allowedTools = new Set(defaults);
   for (const [reviewName, reviewConfig] of Object.entries(reviews)) {
     const pref = reviewConfig.cli_preference;
