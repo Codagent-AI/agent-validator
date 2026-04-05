@@ -4,19 +4,19 @@
 The command template SHALL instruct the agent to infer the log directory from console output paths and delegate file reading to a subagent, rather than reading log and JSON files directly.
 
 #### Scenario: Check failure output
-- **GIVEN** the gauntlet run command has exited with a non-zero code
+- **GIVEN** the validator run command has exited with a non-zero code
 - **WHEN** a check gate failure appears in the console output
 - **THEN** the console output includes the log file path
 - **AND** the template instructs the agent to pass the log directory path to an EXTRACT subagent that reads the log file and returns a compact error summary
 
 #### Scenario: Review failure output
-- **GIVEN** the gauntlet run command has exited with a non-zero code
+- **GIVEN** the validator run command has exited with a non-zero code
 - **WHEN** a review gate failure appears in the console output
 - **THEN** the console output includes the JSON result file path
 - **AND** the template instructs the agent to pass the log directory path to an EXTRACT subagent that reads the JSON file and returns a compact violation summary
 
 #### Scenario: Log directory inference
-- **GIVEN** the gauntlet run command has produced console output
+- **GIVEN** the validator run command has produced console output
 - **WHEN** the output contains file paths referencing log or JSON files
 - **THEN** the agent SHALL infer the log directory from the path prefix of any referenced log or JSON file
 - **AND** pass the inferred directory to subagents rather than hardcoding a log directory path
@@ -44,10 +44,10 @@ The command template SHALL instruct the agent to delegate status updates in revi
 ## ADDED Requirements
 
 ### Requirement: Subagent Delegation Pattern
-The gauntlet-run skill SHALL use a two-phase subagent delegation pattern to keep the main agent's context window free of log and JSON file contents. All log and JSON file access SHALL be performed via subagent Task calls.
+The validator-run skill SHALL use a two-phase subagent delegation pattern to keep the main agent's context window free of log and JSON file contents. All log and JSON file access SHALL be performed via subagent Task calls.
 
 #### Scenario: EXTRACT subagent reads failures
-- **GIVEN** the gauntlet run command has exited with a non-zero code
+- **GIVEN** the validator run command has exited with a non-zero code
 - **WHEN** the agent detects the failure
 - **THEN** the agent SHALL spawn a synchronous EXTRACT subagent (Task tool, general-purpose, cost-optimized model) with the log directory path
 - **AND** the EXTRACT subagent SHALL find the highest-numbered `console.N.log`, identify `[FAIL]` lines, read the referenced log and JSON files, and return a compact plain-text summary
@@ -69,31 +69,31 @@ The gauntlet-run skill SHALL use a two-phase subagent delegation pattern to keep
 - **AND** the UPDATE subagent SHALL match violations by exact equality on `file` and `line` fields and by prefix match on the `issue` field, then update `status` and `result` fields
 
 ### Requirement: Subagent Safety Constraint
-The gauntlet-run skill SHALL explicitly prohibit background subagent execution to prevent context pollution from the TaskOutput truncation bug.
+The validator-run skill SHALL explicitly prohibit background subagent execution to prevent context pollution from the TaskOutput truncation bug.
 
 #### Scenario: Synchronous subagent calls only
-- **GIVEN** the gauntlet-run skill template contains subagent dispatch instructions
+- **GIVEN** the validator-run skill template contains subagent dispatch instructions
 - **WHEN** the agent reads the skill instructions
 - **THEN** the template SHALL include an explicit warning that `run_in_background: true` MUST NOT be used
 - **AND** all subagent Task calls SHALL be synchronous (blocking)
 
 ### Requirement: Subagent Prompt Template Files
-The gauntlet-run skill SHALL include separate prompt template files for each subagent role, generated alongside SKILL.md during init.
+The validator-run skill SHALL include separate prompt template files for each subagent role, generated alongside SKILL.md during init.
 
 #### Scenario: Prompt files generated during init
 - **GIVEN** a user runs `agent-validator init`
-- **WHEN** the init command generates the gauntlet-run skill
-- **THEN** it SHALL create three files: `SKILL.md`, `extract-prompt.md`, and `update-prompt.md` in the gauntlet-run skill directory
+- **WHEN** the init command generates the validator-run skill
+- **THEN** it SHALL create three files: `SKILL.md`, `extract-prompt.md`, and `update-prompt.md` in the validator-run skill directory
 
 #### Scenario: SKILL.md references prompt templates
-- **GIVEN** the gauntlet-run skill has been installed
-- **WHEN** the agent reads the gauntlet-run SKILL.md
+- **GIVEN** the validator-run skill has been installed
+- **WHEN** the agent reads the validator-run SKILL.md
 - **THEN** it SHALL find instructions to read `extract-prompt.md` and `update-prompt.md` from the same directory and use their content as subagent prompts
 
 ### Requirement: Agent Validator-Run Skill Allowed Tools
-The gauntlet-run skill SHALL declare both `Bash` and `Task` in its `allowed-tools` frontmatter to enable subagent delegation.
+The validator-run skill SHALL declare both `Bash` and `Task` in its `allowed-tools` frontmatter to enable subagent delegation.
 
 #### Scenario: Allowed tools include Task
-- **GIVEN** `agent-validator init` generates the gauntlet-run skill
+- **GIVEN** `agent-validator init` generates the validator-run skill
 - **WHEN** the skill frontmatter is written
 - **THEN** the `allowed-tools` field SHALL include both `Bash` and `Task`

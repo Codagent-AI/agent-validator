@@ -134,6 +134,6 @@ if not      -> no flag, CLI uses its own default
 ## Not In Scope
 
 - Claude, Codex, Gemini adapters — unchanged
-- No new CLI commands or flags for gauntlet itself
+- No new CLI commands or flags for agent-validator itself
 - No caching of model lists
 - No changes to the `model` field in review prompt frontmatter (that's a separate path)

@@ -2,7 +2,7 @@
 
 ## Problem
 
-The `/gauntlet-run` skill fills the main agent's context window with large log files (check gate output) and JSON files (review gate output including raw AI reviewer responses). This is wasteful since most of the content is ephemeral processing detail that the main agent doesn't need to retain.
+The `/validator-run` skill fills the main agent's context window with large log files (check gate output) and JSON files (review gate output including raw AI reviewer responses). This is wasteful since most of the content is ephemeral processing detail that the main agent doesn't need to retain.
 
 ## Solution
 
@@ -50,7 +50,7 @@ Two synchronous subagent calls per retry cycle using the Task tool:
 ## File Structure
 
 ```
-.claude/skills/gauntlet-run/
+.claude/skills/validator-run/
 ├── SKILL.md                  # Main orchestration instructions
 ├── extract-prompt.md         # Template for EXTRACT subagent
 └── update-prompt.md          # Template for UPDATE subagent
@@ -78,8 +78,8 @@ The SKILL.md MUST include an explicit warning: "NEVER use `run_in_background: tr
 
 This change affects both the local project skill and the `init` command that generates it for all consumers:
 
-1. **`src/commands/init.ts`** — `buildGauntletSkillContent("run")` must generate the new subagent-based skill content and write the prompt template files alongside SKILL.md
-2. **`.claude/skills/gauntlet-run/`** — the local project's dev copy (3 files: SKILL.md, extract-prompt.md, update-prompt.md)
+1. **`src/commands/init.ts`** — `buildValidatorSkillContent("run")` must generate the new subagent-based skill content and write the prompt template files alongside SKILL.md
+2. **`.claude/skills/validator-run/`** — the local project's dev copy (3 files: SKILL.md, extract-prompt.md, update-prompt.md)
 
 ## Output Format
 
@@ -87,7 +87,7 @@ This change affects both the local project skill and the `init` command that gen
 
 ```
 CHECKS:
-- check:.:lint | FAIL | gauntlet_logs/check_._lint.1.log
+- check:.:lint | FAIL | validator_logs/check_._lint.1.log
   Errors: src/commands/init.ts format — Formatter would have printed different content (line 755-759)
   Fix Instructions: <extracted text if present>
   Fix Skill: <skill name if present>
@@ -97,7 +97,7 @@ CHECKS:
 
 ```
 REVIEWS:
-- review:.:code-quality (claude@1) | FAIL | gauntlet_logs/review_._code-quality_claude@1.1.json
+- review:.:code-quality (claude@1) | FAIL | validator_logs/review_._code-quality_claude@1.1.json
   [high] src/main.ts:45 — Missing error handling (fix: Add try-catch block)
   [medium] src/utils.ts:10 — Complex function (fix: Extract helper method)
 ```

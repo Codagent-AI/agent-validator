@@ -1,45 +1,45 @@
 ## MODIFIED Requirements
 
 ### Requirement: Per-Adapter Configuration
-The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.gauntlet/config.yml`. Each adapter entry is keyed by adapter name and the system MUST accept optional `allow_tool_use` (boolean, defaults to `true`), `thinking_budget` (one of `off`, `low`, `medium`, `high`), and `model` (string) when provided. When `thinking_budget` is not specified, the adapter MUST use its built-in default behavior (no thinking budget override is applied). When `model` is not specified, the adapter MUST NOT pass a `--model` flag to the CLI (preserving current default behavior). Unknown adapter names in the config are silently ignored at the schema level. When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
+The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.validator/config.yml`. Each adapter entry is keyed by adapter name and the system MUST accept optional `allow_tool_use` (boolean, defaults to `true`), `thinking_budget` (one of `off`, `low`, `medium`, `high`), and `model` (string) when provided. When `thinking_budget` is not specified, the adapter MUST use its built-in default behavior (no thinking budget override is applied). When `model` is not specified, the adapter MUST NOT pass a `--model` flag to the CLI (preserving current default behavior). Unknown adapter names in the config are silently ignored at the schema level. When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
 
 #### Scenario: Adapter with tool use disabled
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.gemini.allow_tool_use: false`
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.gemini.allow_tool_use: false`
 - **WHEN** a review is executed using the Gemini adapter
 - **THEN** the Gemini CLI MUST be invoked without the `--allowed-tools` argument
 
 #### Scenario: Adapter with tool use enabled (default)
-- **GIVEN** a `.gauntlet/config.yml` with no `allow_tool_use` setting for Claude
+- **GIVEN** a `.validator/config.yml` with no `allow_tool_use` setting for Claude
 - **WHEN** a review is executed using the Claude adapter
 - **THEN** the Claude CLI MUST be invoked with the `--allowedTools` argument containing the default tool set
 
 #### Scenario: Adapter with thinking budget configured
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.codex.thinking_budget: high`
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.codex.thinking_budget: high`
 - **WHEN** a review is executed using the Codex adapter
 - **THEN** the Codex CLI MUST be invoked with `-c model_reasoning_effort="high"`
 
 #### Scenario: Invalid thinking budget level rejected
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.claude.thinking_budget: extreme`
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.claude.thinking_budget: extreme`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error
 
 #### Scenario: Adapter with partial configuration
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.gemini.allow_tool_use: false` and no `thinking_budget` setting
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.gemini.allow_tool_use: false` and no `thinking_budget` setting
 - **WHEN** a review is executed using the Gemini adapter
 - **THEN** tools MUST be disabled AND the thinking budget MUST use the adapter's built-in default
 
 #### Scenario: No adapter config section
-- **GIVEN** a `.gauntlet/config.yml` with no `cli.adapters` section
+- **GIVEN** a `.validator/config.yml` with no `cli.adapters` section
 - **WHEN** reviews are executed
 - **THEN** all adapters MUST use their default hardcoded settings (tool use enabled, no thinking budget override, no model override)
 
 #### Scenario: Adapter with model configured
-- **GIVEN** a `.gauntlet/config.yml` with `cli.adapters.cursor.model: codex`
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.cursor.model: codex`
 - **WHEN** a review is executed using the Cursor adapter
 - **THEN** the Cursor adapter MUST resolve the model name and pass `--model <resolved-id>` to the CLI
 
 #### Scenario: Adapter with model absent
-- **GIVEN** a `.gauntlet/config.yml` with no `model` setting for the Cursor adapter
+- **GIVEN** a `.validator/config.yml` with no `model` setting for the Cursor adapter
 - **WHEN** a review is executed using the Cursor adapter
 - **THEN** the Cursor CLI MUST be invoked without a `--model` flag
 

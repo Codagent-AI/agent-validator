@@ -25,6 +25,6 @@ The `model` parameter exists in `CLIAdapterExecuteOpts` and is passed from `Revi
 
 1. **Direct model ID pass-through** — Users specify the exact model ID (e.g. `gpt-5.3-codex`) instead of a base name. Simpler to implement but brittle: users must update config every time a new model version is released. Rejected because the whole point is to auto-resolve to the latest available version.
 
-2. **Static model mapping in config** — Maintain a hardcoded version map (e.g. `codex → gpt-5.3-codex`) that ships with gauntlet. Avoids runtime CLI queries but requires gauntlet releases to track upstream model changes. Rejected because querying the CLI at runtime is self-maintaining and always reflects the user's actual available models.
+2. **Static model mapping in config** — Maintain a hardcoded version map (e.g. `codex → gpt-5.3-codex`) that ships with agent-validator. Avoids runtime CLI queries but requires agent-validator releases to track upstream model changes. Rejected because querying the CLI at runtime is self-maintaining and always reflects the user's actual available models.
 
 3. **No resolution, just pass-through** — Pass the configured string directly as `--model <value>` without any resolution. The CLI would either accept or reject it. Simplest option but provides no version auto-selection, no thinking variant selection, and poor error messages when the model name doesn't match an exact ID. Rejected because it doesn't solve the core problem of automatic version tracking.
