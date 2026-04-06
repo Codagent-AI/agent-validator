@@ -6,20 +6,10 @@ debug_log:
   max_size_mb: 10
 allow_parallel: true
 cli:
-  default_preference:
-    - github-copilot
-    - codex
-    - claude
   adapters:
     github-copilot:
       allow_tool_use: false
       thinking_budget: low
-    codex:
-      allow_tool_use: false
-      thinking_budget: medium
-    claude:
-      allow_tool_use: false
-      thinking_budget: high
 checks:
   build:
     command: bun run build
