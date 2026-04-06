@@ -10,13 +10,17 @@ import { computeSkillChecksum } from './init-checksums.js';
 import { getCodexSkillsBaseDir, installAdapterPlugin } from './init-plugin.js';
 import {
   type OverwriteChoice,
-  promptBuiltInReviews,
   promptDevCLIs,
   promptFileOverwrite,
   promptInstallScope,
   promptNumReviews,
   promptReviewCLIs,
 } from './init-prompts.js';
+import {
+  printReviewConfigExplanation,
+  type ReviewConfig,
+  selectReviewConfig,
+} from './init-reviews.js';
 import { runPluginUpdate } from './plugin-update.js';
 import { addToGitignore, exists } from './shared.js';
 
@@ -47,10 +51,10 @@ async function getSkillDirNames(): Promise<string[]> {
 }
 
 const CLI_PREFERENCE_ORDER = [
+  'github-copilot',
   'codex',
   'claude',
   'cursor',
-  'github-copilot',
   'gemini',
 ];
 
@@ -161,14 +165,15 @@ async function runInit(options: InitOptions): Promise<void> {
       reviewCLINames.length,
       skipPrompts,
     );
-    const selectedBuiltIns = await promptBuiltInReviews(skipPrompts);
+    const reviewConfig = selectReviewConfig(reviewCLINames);
+    printReviewConfigExplanation(reviewConfig);
 
     await scaffoldValidatorDir(
       projectRoot,
       targetDir,
       reviewCLINames,
       numReviews,
-      selectedBuiltIns,
+      reviewConfig,
     );
     instructionCLINames = devCLINames;
     await installExternalFiles(projectRoot, devAdapters, skipPrompts);
@@ -191,7 +196,7 @@ async function scaffoldValidatorDir(
   targetDir: string,
   reviewCLINames: string[],
   numReviews: number,
-  selectedBuiltIns: string[],
+  reviewConfig: ReviewConfig,
 ): Promise<void> {
   if (await exists(targetDir)) {
     console.log(chalk.dim('.validator/ already exists, skipping scaffolding'));
@@ -200,7 +205,7 @@ async function scaffoldValidatorDir(
 
   await fs.mkdir(targetDir);
 
-  await writeConfigYml(targetDir, reviewCLINames, numReviews, selectedBuiltIns);
+  await writeConfigYml(targetDir, reviewCLINames, numReviews, reviewConfig);
 }
 
 async function copyDirRecursive(opts: {
@@ -407,17 +412,25 @@ async function writeConfigYml(
   targetDir: string,
   reviewCLINames: string[],
   numReviews: number,
-  selectedBuiltIns: string[],
+  reviewConfig: ReviewConfig,
 ): Promise<void> {
   const baseBranch = await detectBaseBranch();
   const cliList = reviewCLINames.map((name) => `    - ${name}`).join('\n');
   const adapterSettings = buildAdapterSettingsBlock(reviewCLINames);
 
-  // Build inline review entries for the entry_points comment hint
-  const reviewHint =
-    selectedBuiltIns.length > 0
-      ? `# Selected built-in reviews: ${selectedBuiltIns.join(', ')} (num_reviews: ${numReviews})\n# These will be added inline to entry_points by /validator-setup`
-      : `# No built-in reviews selected`;
+  // Build review entries block from the recommended config
+  const reviewEntries = reviewConfig.reviews
+    .map((r) => {
+      let entry = `  ${r.name}:\n    builtin: ${r.builtin}\n    num_reviews: ${numReviews}`;
+      if (r.cli_preference) {
+        entry += `\n    cli_preference: [${r.cli_preference.join(', ')}]`;
+      }
+      if (r.model) {
+        entry += `\n    model: ${r.model}`;
+      }
+      return entry;
+    })
+    .join('\n');
 
   const content = `# Ordered list of CLI agents to try for reviews
 cli:
@@ -427,7 +440,8 @@ ${adapterSettings}
 # entry_points configured by /validator-setup
 entry_points: []
 
-${reviewHint}
+reviews:
+${reviewEntries}
 
 # -------------------------------------------------------------------
 # All settings below are optional. Uncomment and change as needed.
