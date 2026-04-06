@@ -204,47 +204,7 @@ describe("GitHubCopilotAdapter execution", () => {
 	});
 
 	describe("execute", () => {
-		it("resolves model via --list-models before passing to command", async () => {
-			let callIndex = 0;
-			execSpy = spyOn(childProcess, "exec").mockImplementation(
-				// biome-ignore lint/suspicious/noExplicitAny: mock typing
-				((...args: any[]) => {
-					const callback = args[args.length - 1];
-					if (typeof callback === "function") {
-						if (callIndex === 0) {
-							// First call: --list-models for model resolution
-							callback(
-								null,
-								"gpt-5.3-codex - GPT 5.3 Codex\ngpt-5.2-codex - GPT 5.2 Codex\n",
-								"",
-							);
-						} else {
-							// Second call: actual review command
-							callback(null, "review output", "");
-						}
-						callIndex++;
-					}
-					// biome-ignore lint/suspicious/noExplicitAny: mock typing
-					return {} as any;
-					// biome-ignore lint/suspicious/noExplicitAny: mock typing
-				}) as any,
-			);
-
-			await adapter.execute({
-				prompt: "Review this",
-				diff: "some diff",
-				model: "codex",
-			});
-
-			// First call should be --list-models
-			const listCmd = execSpy.mock.calls[0][0] as string;
-			expect(listCmd).toContain("--list-models");
-			// Second call should use the resolved model
-			const reviewCmd = execSpy.mock.calls[1][0] as string;
-			expect(reviewCmd).toContain("--model gpt-5.3-codex");
-		});
-
-		it("uses copilot command with -s flag", async () => {
+		it("uses copilot command (not gh copilot)", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
@@ -266,7 +226,6 @@ describe("GitHubCopilotAdapter execution", () => {
 			const cmd = execSpy.mock.calls[0][0] as string;
 			expect(cmd).toContain("copilot");
 			expect(cmd).not.toContain("gh copilot");
-			expect(cmd).toContain("-s");
 		});
 
 		it("includes --allow-tool flags when allowToolUse is not false", async () => {

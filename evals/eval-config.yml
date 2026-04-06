@@ -1,18 +1,21 @@
-fixture: fixtures/review-quality
-reviewer: code-quality
+fixture: fixtures/code-quality
 
-matrix:
-  adapters:
-    - name: github-copilot
-      model: gpt-5.4
-      alias: copilot-gpt5.4
-    - name: github-copilot
-      model: claude-sonnet-4.6
-      alias: copilot-sonnet
-  configurations:
-    - name: tools-off-no-effort
-      allow_tool_use: false
-      thinking_budget: "medium"
+adapters:
+  - name: codex
+    model: gpt-5.3-codex
+    alias: codex-gpt5.3
+    allow_tool_use: false
+    thinking_budget: "medium"
+  - name: github-copilot
+    model: gpt-5.3-codex
+    alias: copilot-gpt5.3
+    allow_tool_use: false
+    thinking_budget: "medium"
+  - name: github-copilot
+    model: claude-sonnet-4.6
+    alias: copilot-sonnet
+    allow_tool_use: false
+    thinking_budget: "low"
 
 runs_per_config: 1
 timeout_ms: 300000

@@ -7,12 +7,16 @@ debug_log:
 allow_parallel: true
 cli:
   default_preference:
+    - github-copilot
     - codex
     - claude
   adapters:
-    codex:
+    github-copilot:
       allow_tool_use: false
       thinking_budget: low
+    codex:
+      allow_tool_use: false
+      thinking_budget: medium
     claude:
       allow_tool_use: false
       thinking_budget: high
@@ -34,7 +38,14 @@ checks:
 reviews:
   code-quality:
     builtin: code-quality
-    num_reviews: 1
+    cli_preference:
+      - github-copilot
+    model: claude-sonnet-4.6
+  security-and-errors:
+    builtin: security-and-errors
+    cli_preference:
+      - github-copilot
+    model: gpt-5.3-codex
 entry_points:
   - path: "."
     exclude:
@@ -53,11 +64,10 @@ entry_points:
       - schema-validate
     reviews:
       - code-quality
-      - task-compliance
+      - security-and-errors
   - path: "skills"
     reviews:
       - skill-quality
   - path: ".claude/skills"
     reviews:
       - skill-quality
-

@@ -8,10 +8,7 @@ import {
   detectPlugin as detectCopilotPlugin,
   installPlugin as installCopilotPlugin,
 } from '../plugin/copilot-cli.js';
-import {
-  resolveModelFromList,
-  SAFE_MODEL_ID_PATTERN,
-} from './model-resolution.js';
+import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import { type CLIAdapter, runStreamingCommand } from './shared.js';
 
 // Module-level counter for unique tmp file names across parallel invocations
@@ -21,22 +18,6 @@ const log = getCategoryLogger('github-copilot');
 
 /** Effort levels supported by `copilot --effort`. */
 const EFFORT_LEVELS = new Set(['low', 'medium', 'high']);
-
-/**
- * Parse `copilot --list-models` output into an array of model IDs.
- * Each line has the format: "model-id - Display Name"
- */
-export function parseModelList(output: string): string[] {
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => {
-      const dashIndex = line.indexOf(' - ');
-      return dashIndex >= 0 ? line.substring(0, dashIndex).trim() : line.trim();
-    })
-    .filter((id) => id.length > 0);
-}
 
 /**
  * Parse the copilot session summary printed to stdout after the response.
@@ -51,13 +32,19 @@ export function parseModelList(output: string): string[] {
 export function parseCopilotSessionSummary(
   output: string,
 ): { telemetryLine: string; model: string } | undefined {
-  const premiumMatch = output.match(/Total usage est:\s+(\d+)\s+Premium request/i);
+  const premiumMatch = output.match(
+    /Total usage est:\s+(\d+)\s+Premium request/i,
+  );
   if (!premiumMatch) return undefined;
 
   const premiumRequests = Number(premiumMatch[1]);
 
   // Parse per-model token lines: " <model>  <N>k in, <N> out, <N>k cached"
-  const modelLines = [...output.matchAll(/^\s+(\S+)\s+([\d.]+)k? in,\s*([\d.]+)k? out(?:,\s*([\d.]+)k? cached)?/gm)];
+  const modelLines = [
+    ...output.matchAll(
+      /^\s+(\S+)\s+([\d.]+)k? in,\s*([\d.]+)k? out(?:,\s*([\d.]+)k? cached)?/gm,
+    ),
+  ];
 
   let totalIn = 0;
   let totalOut = 0;
@@ -66,9 +53,11 @@ export function parseCopilotSessionSummary(
 
   for (const m of modelLines) {
     const [fullMatch, model, inRaw, outRaw, cachedRaw] = m;
-    if (!model || !inRaw || !outRaw) continue;
+    if (!(model && inRaw && outRaw)) continue;
     const toTokens = (val: string) =>
-      fullMatch.includes(`${val}k`) ? Math.round(Number(val) * 1000) : Number(val);
+      fullMatch.includes(`${val}k`)
+        ? Math.round(Number(val) * 1000)
+        : Number(val);
     totalIn += toTokens(inRaw);
     totalOut += toTokens(outRaw);
     if (cachedRaw) totalCached += toTokens(cachedRaw);
@@ -194,48 +183,6 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     return ['copilot plugin install Codagent-AI/agent-validator'];
   }
 
-  /**
-   * Resolve a base model name to a specific model ID using `copilot --list-models`.
-   * Returns undefined if resolution fails or no matching model is found.
-   *
-   * Uses exec() directly (instead of promisify) so that
-   * spyOn(childProcess, "exec") can intercept calls in tests.
-   */
-  private async resolveModel(
-    baseName: string,
-    thinkingBudget?: string,
-  ): Promise<string | undefined> {
-    try {
-      const stdout = await new Promise<string>((resolve, reject) => {
-        exec('copilot --list-models', { timeout: 10000 }, (error, stdout) => {
-          if (error) reject(error);
-          else resolve(stdout);
-        });
-      });
-      const models = parseModelList(stdout);
-      const preferThinking =
-        thinkingBudget !== undefined && thinkingBudget !== 'off';
-      const resolved = resolveModelFromList(models, {
-        baseName,
-        preferThinking,
-      });
-      if (resolved === undefined) {
-        log.warn(`No matching model found for "${baseName}"`);
-        return undefined;
-      }
-      if (!SAFE_MODEL_ID_PATTERN.test(resolved)) {
-        log.warn(`Resolved model "${resolved}" contains unsafe characters`);
-        return undefined;
-      }
-      return resolved;
-    } catch (err) {
-      log.warn(
-        `Failed to resolve model "${baseName}": ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return undefined;
-    }
-  }
-
   /** Build CLI args: -s, optional --allow-tool, --model, --effort flags. */
   private buildArgs(opts: {
     allowToolUse?: boolean;
@@ -290,9 +237,6 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     );
     await fs.writeFile(tmpFile, fullContent);
 
-    // Use model directly if provided — resolveModel() relies on copilot --list-models
-    // which is not available in all CLI versions. Pass the model name as-is and let
-    // the CLI reject it with a clear error if the model is unavailable.
     const args = this.buildArgs({
       ...opts,
       model: opts.model,
@@ -307,7 +251,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
       const stderrChunks: string[] = [];
       const wrappedOnOutput = (chunk: string) => {
         stderrChunks.push(chunk);
-        opts.onOutput!(chunk);
+        opts.onOutput?.(chunk);
       };
       const raw = await runStreamingCommand({
         command: 'copilot',
@@ -333,7 +277,10 @@ export class GitHubCopilotAdapter implements CLIAdapter {
         .map((a) => (a.includes('(') ? `"${a}"` : a))
         .join(' ');
       const cmd = `cat "${tmpFile}" | copilot ${argsStr}`;
-      const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      const { stdout, stderr } = await new Promise<{
+        stdout: string;
+        stderr: string;
+      }>((resolve, reject) => {
         exec(
           cmd,
           { timeout: opts.timeoutMs, maxBuffer: MAX_BUFFER_BYTES },

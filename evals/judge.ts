@@ -27,7 +27,7 @@ export async function judgeRun(
 		diff: "",
 		allowToolUse: false,
 		thinkingBudget,
-		timeoutMs: 120_000,
+		timeoutMs: 300_000,
 		onOutput: (chunk) => judgeTelemetry.push(chunk),
 	});
 

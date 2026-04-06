@@ -21,17 +21,18 @@ import type {
 	RunScore,
 } from "./types.js";
 
+interface AdapterConfig {
+	name: EvalAdapterName;
+	model?: string;
+	alias?: string;
+	allow_tool_use?: boolean;
+	thinking_budget?: string;
+}
+
 interface EvalConfig {
 	fixture: string;
 	reviewer?: string;
-	matrix: {
-		adapters: (EvalAdapterName | { name: EvalAdapterName; model?: string; alias?: string })[];
-		configurations: {
-			name: string;
-			allow_tool_use: boolean;
-			thinking_budget: string;
-		}[];
-	};
+	adapters: (EvalAdapterName | AdapterConfig)[];
 	runs_per_config: number;
 	timeout_ms: number;
 	judge: {
@@ -134,10 +135,9 @@ export async function runEval(
 		);
 	}
 
-	// Build review prompt — use reviewer-specific prompt if configured
-	const promptFile = evalConfig.reviewer
-		? `${evalConfig.reviewer}.md`
-		: "code-quality.md";
+	// Build review prompt — use reviewer config, or infer from fixture directory name
+	const fixtureBasename = evalConfig.fixture.split("/").pop() ?? "code-quality";
+	const promptFile = `${evalConfig.reviewer ?? fixtureBasename}.md`;
 	const promptPath = resolve(
 		evalsDir,
 		`../src/built-in-reviews/${promptFile}`,
@@ -145,26 +145,24 @@ export async function runEval(
 	const promptContent = readFileSync(promptPath, "utf-8");
 	const fullPrompt = `${promptContent}\n${JSON_SYSTEM_INSTRUCTION}`;
 
-	// Generate eval matrix
+	// Generate eval matrix — one entry per adapter config (no cross-product)
 	let matrix: EvalConfiguration[] = [];
-	for (const adapterEntry of evalConfig.matrix.adapters) {
-		const adapterName =
-			typeof adapterEntry === "string" ? adapterEntry : adapterEntry.name;
-		const model =
-			typeof adapterEntry === "string" ? undefined : adapterEntry.model;
-		const displayName =
-			typeof adapterEntry === "string"
-				? adapterEntry
-				: adapterEntry.alias ?? adapterEntry.name;
-		for (const config of evalConfig.matrix.configurations) {
-			matrix.push({
-				adapter: adapterName,
-				allowToolUse: config.allow_tool_use,
-				thinkingBudget: config.thinking_budget,
-				label: `${displayName}/${config.name}`,
-				model,
-			});
-		}
+	for (const adapterEntry of evalConfig.adapters) {
+		const isString = typeof adapterEntry === "string";
+		const adapterName = isString ? adapterEntry : adapterEntry.name;
+		const model = isString ? undefined : adapterEntry.model;
+		const displayName = isString
+			? adapterEntry
+			: adapterEntry.alias ?? adapterEntry.name;
+		const allowToolUse = isString ? false : (adapterEntry.allow_tool_use ?? false);
+		const thinkingBudget = isString ? "off" : (adapterEntry.thinking_budget ?? "off");
+		matrix.push({
+			adapter: adapterName,
+			allowToolUse,
+			thinkingBudget,
+			label: displayName,
+			model,
+		});
 	}
 
 	// Apply filters
@@ -178,7 +176,7 @@ export async function runEval(
 
 	// Check adapter availability
 	const availableAdapters = new Set<string>();
-	for (const adapterEntry of evalConfig.matrix.adapters) {
+	for (const adapterEntry of evalConfig.adapters) {
 		const adapterName =
 			typeof adapterEntry === "string" ? adapterEntry : adapterEntry.name;
 		const adapter = getAdapter(adapterName);
@@ -214,7 +212,7 @@ export async function runEval(
 	}
 
 	console.log(
-		`\nEval matrix: ${matrix.length} configurations x ${evalConfig.runs_per_config} runs = ${matrix.length * evalConfig.runs_per_config} total runs`,
+		`\nEval matrix: ${matrix.length} adapters x ${evalConfig.runs_per_config} runs = ${matrix.length * evalConfig.runs_per_config} total runs`,
 	);
 	for (const config of matrix) {
 		const modelStr = config.model ? `, model=${config.model}` : "";

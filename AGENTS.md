@@ -25,7 +25,3 @@ The user configures which paths in their repo should trigger which validations â
 
 ## Skill source of truth
 The distributable skill source is the `skills/` directory at the repo root. Each skill lives in `skills/validator-<action>/` as static files. `init.ts` copies these into consumer projects via `installSkillsWithChecksums()`.
-
-When updating a skill, edit the files in `skills/validator-<action>/`. The local copy in `.claude/skills/` (used by this project) may differ slightly â€” it is not the distributable source. The step "Capture noteworthy violations for eval inventory" should exist only in the local copy.
-
-**IMPORTANT: Local skills must use `bun src/index.ts` to run from source, NOT `agent-validate`.** The `agent-validate` binary is the globally-installed package for consumer projects. In this repo we develop against source. The distributable skills in `skills/` correctly use `agent-validate`, but `.claude/skills/` must always use `bun src/index.ts`. Never replace `bun src/index.ts` with `agent-validate` in `.claude/skills/`.
