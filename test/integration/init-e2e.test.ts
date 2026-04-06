@@ -59,9 +59,10 @@ describe("agent-validator init (E2E)", () => {
 		const configPath = path.join(tempDir, ".validator", "config.yml");
 		expect((await fs.stat(configPath).catch(() => null))?.isFile()).toBe(true);
 		const configContent = await fs.readFile(configPath, "utf-8");
-		expect(configContent).toContain("entry_points: []");
-		expect(configContent).toContain("reviews:");
-		expect(configContent).toContain("builtin:");
+		// Reviews should be inline under entry_points, not top-level
+		expect(configContent).toContain("- path: .");
+		expect(configContent).toContain("builtin: all-reviewers");
+		expect(configContent).not.toMatch(/^reviews:/m);
 	});
 
 	it("should add validator_logs to .gitignore", async () => {

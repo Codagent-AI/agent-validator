@@ -1,5 +1,10 @@
 import chalk from 'chalk';
 
+const MODELS = {
+  SONNET: 'claude-sonnet-4.6',
+  GPT_CODEX: 'gpt-5.3-codex',
+} as const;
+
 export type ReviewEntry = {
   name: string;
   builtin: string;
@@ -21,13 +26,13 @@ export function selectReviewConfig(reviewCLINames: string[]): ReviewConfig {
           name: 'code-quality',
           builtin: 'code-quality',
           cli_preference: ['github-copilot'],
-          model: 'claude-sonnet-4.6',
+          model: MODELS.SONNET,
         },
         {
           name: 'security-and-errors',
           builtin: 'security-and-errors',
           cli_preference: ['github-copilot'],
-          model: 'gpt-5.3-codex',
+          model: MODELS.GPT_CODEX,
         },
       ],
     };
@@ -39,7 +44,7 @@ export function selectReviewConfig(reviewCLINames: string[]): ReviewConfig {
         {
           name: 'all-reviewers',
           builtin: 'all-reviewers',
-          model: 'gpt-5.3-codex',
+          model: MODELS.GPT_CODEX,
         },
       ],
     };

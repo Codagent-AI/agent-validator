@@ -30,15 +30,17 @@ async function buildReviewFromYaml(
     timeout: parsed.timeout,
     enabled: parsed.enabled,
   };
-  if (parsed.prompt_file) {
+  if (parsed.skill_name) {
+    review.skillName = parsed.skill_name;
+  } else if (parsed.builtin) {
+    review.promptContent = loadBuiltInReview(parsed.builtin);
+  } else if (parsed.prompt_file) {
     review.promptContent = await loadPromptFile(
       parsed.prompt_file,
       configDir,
       `review "${name}"`,
     );
   }
-  if (parsed.skill_name) review.skillName = parsed.skill_name;
-  if (parsed.builtin) review.promptContent = loadBuiltInReview(parsed.builtin);
   return review;
 }
 

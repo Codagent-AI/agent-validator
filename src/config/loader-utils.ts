@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+// console.warn is used here intentionally: config loading runs before the
+// structured logger is initialised, so console is the only available channel.
 export async function loadPromptFile(
   filePath: string,
   configDir: string,

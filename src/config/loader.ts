@@ -11,6 +11,7 @@ import type {
   LoadedCheckGateConfig,
   LoadedConfig,
   LoadedReviewGateConfig,
+  NormalizedEntryPoint,
   NormalizedValidatorConfig,
   ReviewYamlConfig,
   ValidatorConfig,
@@ -54,10 +55,12 @@ export async function loadConfig(
   }
 
   // 2. Extract inline gates from entry_points and normalize arrays to strings.
-  //    After this call, entry_points arrays contain only gate-name strings.
-  const { inlineChecks, inlineReviews } = extractInlineGates(projectConfig);
-  const normalizedConfig =
-    projectConfig as unknown as NormalizedValidatorConfig;
+  const { inlineChecks, inlineReviews, normalizedEntryPoints } =
+    extractInlineGates(projectConfig);
+  const normalizedConfig: NormalizedValidatorConfig = {
+    ...projectConfig,
+    entry_points: normalizedEntryPoints,
+  };
 
   // 3. Load checks (file-based + entry-point inline)
   const checks = await loadCheckGates(configDir, inlineChecks);
@@ -112,35 +115,28 @@ function extractInlineItems<T>(
 }
 
 /**
- * Walk entry_points, pull out inline check/review objects, and normalise
- * each array to contain only gate-name strings.  Mutates projectConfig
- * in-place so downstream code sees string-only arrays.
+ * Walk entry_points, pull out inline check/review objects, and return
+ * normalised entry points where each array contains only gate-name strings.
  */
 function extractInlineGates(projectConfig: ValidatorConfig): {
   inlineChecks: Record<string, CheckGateConfig>;
   inlineReviews: Record<string, ReviewYamlConfig>;
+  normalizedEntryPoints: NormalizedEntryPoint[];
 } {
   const inlineChecks: Record<string, CheckGateConfig> = {};
   const inlineReviews: Record<string, ReviewYamlConfig> = {};
 
-  for (const ep of projectConfig.entry_points) {
-    if (ep.checks) {
-      (ep as { checks: string[] }).checks = extractInlineItems(
-        ep.checks,
-        'Check',
-        inlineChecks,
-      );
-    }
-    if (ep.reviews) {
-      (ep as { reviews: string[] }).reviews = extractInlineItems(
-        ep.reviews,
-        'Review',
-        inlineReviews,
-      );
-    }
-  }
+  const normalizedEntryPoints = projectConfig.entry_points.map((ep) => ({
+    ...ep,
+    checks: ep.checks
+      ? extractInlineItems(ep.checks, 'Check', inlineChecks)
+      : undefined,
+    reviews: ep.reviews
+      ? extractInlineItems(ep.reviews, 'Review', inlineReviews)
+      : undefined,
+  }));
 
-  return { inlineChecks, inlineReviews };
+  return { inlineChecks, inlineReviews, normalizedEntryPoints };
 }
 
 function mergeCliPreferences(

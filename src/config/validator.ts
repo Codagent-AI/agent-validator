@@ -286,7 +286,12 @@ function validateEntryPointReferences(
   }
 }
 
-/** Extract gate name from a union item (string or single-key object). */
+/**
+ * Extract gate name from a union item (string or single-key object).
+ * The single-key invariant is enforced by entryPointCheckItemSchema /
+ * entryPointReviewItemSchema via `.refine()`, so the throw here is
+ * a defensive guard that should never be reached after schema validation.
+ */
 function gateItemName(item: string | Record<string, unknown>): string {
   if (typeof item === 'string') return item;
   const keys = Object.keys(item);

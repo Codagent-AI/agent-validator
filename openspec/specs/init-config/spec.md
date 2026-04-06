@@ -148,20 +148,14 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **AND** the valid range SHALL be 1 to 3
 - **AND** the selected value SHALL be written as `num_reviews` in each review config entry
 
-#### Scenario: Built-in review selection prompt
+#### Scenario: Automatic review configuration selection
 - **GIVEN** the user runs `agent-validate init`
 - **WHEN** Phase 3 completes (after review CLI and num_reviews selection)
-- **THEN** the user SHALL be presented with a multi-select prompt listing all available built-in reviews: `code-quality`, `security`, `error-handling`
-- **AND** all built-in reviews SHALL be pre-selected by default
-- **AND** the user MAY deselect any reviews they do not want
-
-#### Scenario: Zero built-in reviews selected requires confirmation
-- **GIVEN** the user runs `agent-validate init`
-- **AND** the user deselects all built-in reviews
-- **WHEN** the selection is submitted
-- **THEN** the user SHALL be prompted with a confirmation: "No reviews selected. Are you sure you want to continue without any built-in reviews?"
-- **AND** if the user confirms, `config.yml` SHALL contain an empty `reviews` map
-- **AND** if the user cancels, the built-in review selection prompt SHALL be shown again
+- **THEN** review configuration SHALL be selected automatically by `selectReviewConfig()` based on detected reviewer CLIs
+- **AND** if `github-copilot` is among the selected review CLIs, the primary config SHALL be used: two-pass hybrid with `code-quality` (Sonnet) and `security-and-errors` (GPT)
+- **AND** if `codex` is among the selected review CLIs (without `github-copilot`), the secondary config SHALL be used: single `all-reviewers` pass (GPT)
+- **AND** otherwise, the fallback config SHALL be used: `all-reviewers` with no model override
+- **AND** the selected reviews SHALL be written as inline review definitions under the root entry point in `config.yml`
 
 #### Scenario: No base branch prompt
 - **GIVEN** the user runs `agent-validate init`
@@ -197,10 +191,11 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **THEN** all detected CLIs SHALL be added to `cli.default_preference`
 - **AND** `num_reviews` SHALL be set to the number of detected CLIs
 
-#### Scenario: --yes selects all built-in reviews
+#### Scenario: --yes applies auto-selected review configuration
 - **GIVEN** the user runs `agent-validate init --yes`
 - **WHEN** Phase 3 runs
-- **THEN** all built-in reviews (code-quality, security, error-handling) SHALL be selected without prompting
+- **THEN** the auto-selected review configuration SHALL be applied without prompting
+- **AND** the review config SHALL be determined by `selectReviewConfig()` based on detected CLIs
 
 #### Scenario: --yes overwrites changed files without asking
 - **GIVEN** the user runs `agent-validate init --yes`

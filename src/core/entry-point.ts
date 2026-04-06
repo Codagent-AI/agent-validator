@@ -32,9 +32,9 @@ export class EntryPointExpander {
   ): void {
     if (changedFiles.length === 0) return;
 
-    const rootConfig = entryPoints.find((ep) => ep.path === '.') ?? {
-      path: '.',
-    };
+    const rootConfig: NormalizedEntryPoint = entryPoints.find(
+      (ep) => ep.path === '.',
+    ) ?? { path: '.' };
     const filteredRootChanges = this.filterExcludedFiles(
       changedFiles,
       rootConfig.exclude,

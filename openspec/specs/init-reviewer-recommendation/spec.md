@@ -1,7 +1,7 @@
 # init-reviewer-recommendation Specification
 
 ## Purpose
-TBD - created by archiving change init-reviewer-recommendations. Update Purpose after archive.
+Defines automatic review configuration selection based on detected reviewer CLIs during the init flow.
 ## Requirements
 ### Requirement: Init recommends review config based on detected reviewer CLIs
 The init command SHALL select a review configuration automatically based on which reviewer CLIs the user selected in `promptReviewCLIs()`, following this priority:
