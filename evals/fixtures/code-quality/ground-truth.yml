@@ -1,0 +1,351 @@
+issues:
+  # --- Code-quality issues in handler.ts ---
+
+  - id: null-deref
+    file: src/api/handler.ts
+    line_range: [77, 78]
+    description: >
+      Null dereference on findUser() return value. findUser() returns
+      Record<string, unknown> | null, but the result is accessed with .email
+      without a null check, causing a runtime error when user is not found.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: missing-await
+    file: src/api/handler.ts
+    line_range: [37, 37]
+    description: >
+      Missing await on async cache.set() call. The cache write is fire-and-forget,
+      so subsequent reads may not see the cached value, and errors are silently lost.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  # --- Code-quality issues in batch.ts ---
+
+  - id: off-by-one-pagination
+    file: src/api/batch.ts
+    line_range: [42, 42]
+    description: >
+      The slice end index is start + pageSize + 1, which returns one extra item
+      per page. Array.slice(start, end) already excludes the end index, so
+      the +1 causes each page to contain pageSize+1 items, leading to duplicate
+      items across page boundaries (the last item of page N equals the first
+      item of page N+1).
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: n-plus-one-batch-lookup
+    file: src/api/batch.ts
+    line_range: [66, 69]
+    description: >
+      handleBatchLookup fetches users one-by-one in a sequential loop, issuing
+      a separate database query per user ID. For a request with N user IDs, this
+      produces N sequential queries instead of a single batch query. This is an
+      N+1 performance problem that degrades linearly with input size.
+    category: performance
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: wrong-filter-logic
+    file: src/api/batch.ts
+    line_range: [86, 88]
+    description: >
+      The filter for inactive users uses || (OR) instead of && (AND). The
+      function is documented as finding "active users who have NOT logged in
+      within the last N days" but the condition u.active || u.lastLoginAt < cutoff
+      matches ALL active users regardless of login time, plus all inactive users
+      with old logins. The correct condition is u.active && u.lastLoginAt < cutoff
+      to find active users with stale logins.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: unsafe-type-assertion
+    file: src/api/batch.ts
+    line_range: [100, 100]
+    description: >
+      The request body is cast directly to UserRecord[] with 'as' without any
+      runtime validation. If the client sends malformed data (missing fields,
+      wrong types, extra properties), the cast silently succeeds and invalid
+      objects are written to the database. This is a type safety issue at a
+      system boundary where untrusted input enters the application.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: event-listener-leak
+    file: src/api/batch.ts
+    line_range: [115, 126]
+    description: >
+      setupNotifications is called per WebSocket client connection. Each call
+      adds a new handler to eventSource and pushes it to the module-level
+      notificationListeners array. Neither the eventSource handler nor the array
+      entry is ever removed when clients disconnect. Over time this leaks
+      listeners proportional to total connections, with each event invoking all
+      accumulated handlers.
+    category: performance
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: csv-field-corruption
+    file: src/api/batch.ts
+    line_range: [137, 138]
+    description: >
+      handleExportUsers interpolates user fields directly into CSV rows using
+      template literals without escaping. A user whose name or email contains
+      a comma, double quote, or newline will produce corrupt CSV output —
+      fields will shift into the wrong columns and rows will split. CSV fields
+      containing special characters must be quoted and internal quotes escaped.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  # --- Code-quality issues in batch_processor.py ---
+
+  - id: py-unvalidated-int-cast
+    file: src/batch_processor.py
+    line_range: [41, 41]
+    description: >
+      int(record["age"]) will raise ValueError if the age field contains a
+      non-numeric string (e.g., "N/A", "", or "twenty-five") from the external
+      API response. There is no try/except or pre-validation, so a single bad
+      record crashes the entire batch and loses all previously parsed results.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-mutable-default-arg
+    file: src/batch_processor.py
+    line_range: [55, 55]
+    description: >
+      Mutable default argument default_tags=[] is shared across all calls to
+      build_email_index. The function also mutates this list via append on line 68,
+      so each invocation accumulates tags from previous calls, corrupting results
+      for all subsequent callers.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-late-binding-closure
+    file: src/batch_processor.py
+    line_range: [80, 81]
+    description: >
+      The lambda inside the loop captures the variable uid by reference, not by
+      value. All generated closures will use the final value of uid after the loop
+      completes, so every task will build a report for the last user ID only.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-file-handle-leak
+    file: src/batch_processor.py
+    line_range: [97, 97]
+    description: >
+      The file opened with open() is never closed. If a database error occurs
+      during CSV processing (e.g., on cursor.execute or conn.commit), the file
+      handle is leaked. Should use a with statement or try/finally to ensure the
+      file is closed on all code paths.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-dict-mutation-during-iteration
+    file: src/batch_processor.py
+    line_range: [123, 127]
+    description: >
+      cleanup_inactive_users iterates over users.items() and deletes keys from
+      the dict inside the loop body with del users[uid]. In Python, mutating a
+      dict while iterating over it raises RuntimeError: dictionary changed size
+      during iteration. The function will crash on the first deletion.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-off-by-one-pagination
+    file: src/batch_processor.py
+    line_range: [139, 139]
+    description: >
+      The offset calculation uses page * page_size, but the docstring states pages
+      are 1-indexed. For page=1 the offset is page_size (skipping the first page
+      of results entirely). The correct formula for 1-indexed pages is
+      (page - 1) * page_size.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-race-condition-counter
+    file: src/batch_processor.py
+    line_range: [186, 186]
+    description: >
+      _send_count is incremented from multiple threads without synchronization.
+      A threading.Lock (_count_lock) is defined at module scope but never acquired
+      around the read-modify-write of _send_count. Under concurrent execution this
+      is a data race that can produce an incorrect final count.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-silent-exception-swallow
+    file: src/batch_processor.py
+    line_range: [187, 188]
+    description: >
+      The bare except Exception with pass silently swallows all database errors
+      during notification dispatch. Failed inserts are never logged or reported,
+      making it impossible to diagnose delivery failures in production. At minimum
+      the exception should be logged.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  # --- Code-quality issues in batch_handler.go ---
+
+  - id: go-mutex-missing-read
+    file: src/batch_handler.go
+    line_range: [59, 61]
+    description: >
+      JobStore.Get() reads the jobs map without holding the mutex, while Add()
+      and List() both lock before accessing the map. Concurrent calls to Get()
+      and Add() produce a data race on the map, which in Go causes undefined
+      behaviour and can crash the process.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-http-body-leak
+    file: src/batch_handler.go
+    line_range: [167, 179]
+    description: >
+      notifyWebhook never closes the HTTP response body. Every call leaks a
+      network connection (the underlying TCP socket stays open until the OS
+      reclaims it). Under load this exhausts file descriptors and causes
+      subsequent HTTP requests to fail.
+    category: performance
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-defer-in-loop
+    file: src/batch_handler.go
+    line_range: [192, 192]
+    description: >
+      defer resp.Body.Close() is called inside a for loop. Deferred calls do
+      not execute at the end of each iteration — they pile up until the
+      enclosing function returns. For a long URL list, all response bodies
+      remain open simultaneously, leaking file descriptors and memory.
+    category: performance
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-loop-var-capture
+    file: src/batch_handler.go
+    line_range: [213, 218]
+    description: >
+      The goroutine closure captures loop variables i and job by reference.
+      By the time each goroutine executes, the loop has advanced and all
+      goroutines share the final iteration's values of i and job, causing
+      all results to be written to the same index and processing only the
+      last job. This is the classic pre-Go-1.22 loop variable capture bug.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-goroutine-leak
+    file: src/batch_handler.go
+    line_range: [244, 272]
+    description: >
+      CollectResults spawns goroutines to fetch from worker nodes but returns
+      immediately without waiting for them to finish. The caller always
+      receives an empty slice. The goroutines become leaks that hold open
+      HTTP connections indefinitely. Additionally, the function accepts a
+      ctx parameter but uses context.Background() instead, so cancellation
+      by the caller has no effect.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-inverted-error-check
+    file: src/batch_handler.go
+    line_range: [276, 278]
+    description: >
+      FetchJobResult checks err == nil (no error) but enters the error-handling
+      branch, returning an error on success and proceeding to read the response
+      body on failure. The condition is inverted — it should be err != nil.
+      On a successful HTTP call the function returns an error; on a failed call
+      it dereferences the nil resp, causing a nil pointer panic.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-slice-bounds-panic
+    file: src/batch_handler.go
+    line_range: [317, 323]
+    description: >
+      ParseJobPage calculates end = start + pageSize but never clamps it to
+      len(jobs). When the last page is a partial page (fewer items than
+      pageSize remaining), the slice expression jobs[start:end] panics with
+      an out-of-range index because end exceeds the slice length.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-division-by-zero
+    file: src/batch_handler.go
+    line_range: [498, 500]
+    description: >
+      FormatJobSummary divides by total to compute the success rate, but
+      total is zero when the input slice is empty or contains only jobs
+      with unrecognised status values. This causes a divide-by-zero panic
+      at runtime.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality

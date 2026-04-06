@@ -1,0 +1,248 @@
+issues:
+  - id: sql-injection
+    file: src/api/handler.ts
+    line_range: [31, 31]
+    description: >
+      SQL injection via string concatenation. User-supplied userId is interpolated
+      directly into a SQL query string without parameterization or escaping.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: hardcoded-api-key
+    file: src/api/handler.ts
+    line_range: [132, 132]
+    description: >
+      Hardcoded live API key (sk-live-...) exposed in source code. The config
+      object contains a live API key that will be committed to version control.
+      Secrets should be loaded from environment variables or a secrets manager.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: hardcoded-db-password
+    file: src/api/handler.ts
+    line_range: [133, 133]
+    description: >
+      Hardcoded database connection string with plaintext credentials
+      (admin:password123) exposed in source code. Database credentials should
+      be loaded from environment variables or a secrets manager.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: sanitize-bypass
+    file: src/api/handler.ts
+    line_range: [43, 43]
+    description: >
+      The sanitize() function (in utils/sanitize.ts) strips HTML tags and encodes
+      entities but does not normalize unicode before sanitization. Fullwidth angle
+      brackets and other unicode lookalikes bypass the tag stripper, then get
+      normalized to real angle brackets by downstream systems, enabling XSS.
+    category: security
+    difficulty: hard
+    priority: high
+    requires_tool_use: true
+    reviewer: security
+
+  - id: input-validation
+    file: src/api/handler.ts
+    line_range: [60, 60]
+    description: >
+      The age field from the request body is passed directly to updateUser without
+      type checking or validation. A malicious client could send a non-numeric value,
+      negative number, or unreasonable value.
+    category: security
+    difficulty: medium
+    priority: medium
+    requires_tool_use: false
+    reviewer: security
+
+  - id: auth-bypass
+    file: src/api/handler.ts
+    line_range: [24, 24]
+    description: >
+      The checkAuth() function (in api/middleware.ts) only validates session expiry
+      but never checks the session's revoked flag. A revoked session will pass
+      authentication until it naturally expires, allowing continued access after
+      logout or security revocation.
+    category: security
+    difficulty: hard
+    priority: critical
+    requires_tool_use: true
+    reviewer: security
+
+  # --- Python security issues ---
+
+  - id: py-sql-injection
+    file: src/batch_processor.py
+    line_range: [225, 225]
+    description: >
+      search_users_by_name interpolates the name parameter directly into a SQL
+      query using an f-string. An attacker can inject arbitrary SQL by passing a
+      crafted name like "'; DROP TABLE users; --". The query should use
+      parameterized placeholders instead of string interpolation.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-path-traversal
+    file: src/batch_processor.py
+    line_range: [234, 234]
+    description: >
+      export_user_report joins a user-controlled filename directly into a file
+      path with os.path.join("/var/reports", filename). A filename containing
+      "../" sequences (e.g. "../../etc/cron.d/backdoor") can write to arbitrary
+      locations outside the reports directory. The filename must be sanitized or
+      validated to contain no path separators.
+    category: security
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-pickle-deserialization
+    file: src/batch_processor.py
+    line_range: [243, 243]
+    description: >
+      load_cached_batch uses pickle.load() to deserialize data from a file path.
+      Pickle deserialization executes arbitrary code embedded in the serialized
+      data. If an attacker can control or tamper with the cache file, they achieve
+      remote code execution. Use a safe format like JSON instead of pickle.
+    category: security
+    difficulty: medium
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-command-injection
+    file: src/batch_processor.py
+    line_range: [249, 253]
+    description: >
+      run_data_export passes user-controlled table_name and output_dir into
+      an f-string shell command executed via subprocess.call with shell=True.
+      A malicious table_name like "users; rm -rf /" or output_dir with shell
+      metacharacters enables arbitrary command execution. Use subprocess with
+      a list of arguments and shell=False, or validate inputs against an
+      allowlist of known table names.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-hardcoded-api-secret
+    file: src/batch_processor.py
+    line_range: [25, 25]
+    description: >
+      API_SECRET_KEY is hardcoded in source code. This credential will be
+      committed to version control and visible to anyone with repository
+      access. Secrets should be loaded from environment variables or a
+      secrets manager at runtime.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-hardcoded-webhook-token
+    file: src/batch_processor.py
+    line_range: [26, 26]
+    description: >
+      WEBHOOK_TOKEN is hardcoded in source code. This credential will be
+      committed to version control and visible to anyone with repository
+      access. Secrets should be loaded from environment variables or a
+      secrets manager at runtime.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  # --- Go security issues ---
+
+  - id: go-ssrf
+    file: src/batch_handler.go
+    line_range: [341, 341]
+    description: >
+      FetchUserAvatar takes a user-provided avatarURL and fetches it directly
+      with the HTTP client. An attacker can supply internal network URLs
+      (e.g. http://169.254.169.254/latest/meta-data/ for cloud metadata,
+      or http://localhost:6379/ for internal services) to probe or exfiltrate
+      data from the internal network. The URL must be validated against an
+      allowlist of permitted domains or schemes.
+    category: security
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-path-traversal
+    file: src/batch_handler.go
+    line_range: [351, 352]
+    description: >
+      ServeJobArtifact reads a filename from the query string and joins it
+      directly with filepath.Join("/var/artifacts", filename). filepath.Join
+      resolves ".." components, so a filename like "../../etc/passwd" resolves
+      to "/etc/passwd", allowing an attacker to read arbitrary files on the
+      server. The filename must be validated to ensure it does not escape the
+      base directory.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-weak-random-token
+    file: src/batch_handler.go
+    line_range: [362, 366]
+    description: >
+      GenerateJobID uses math/rand to generate job identifiers. math/rand
+      is a deterministic PRNG seeded with a predictable value — an attacker
+      who knows the seed or observes a few IDs can predict all future IDs.
+      For identifiers that must be unguessable, crypto/rand must be used
+      instead.
+    category: security
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-open-redirect
+    file: src/batch_handler.go
+    line_range: [379, 380]
+    description: >
+      HandleLoginCallback reads "return_to" from the query string and passes
+      it directly to http.Redirect without validation. An attacker can craft
+      a login link with return_to=https://evil.com to redirect users to a
+      phishing site after authentication, stealing session tokens or
+      credentials. The redirect target must be validated against a list of
+      allowed domains or restricted to same-origin paths.
+    category: security
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-idor-export
+    file: src/batch_handler.go
+    line_range: [224, 225]
+    description: >
+      HandleExport reads user_id from the query string and returns all jobs
+      for that user without any authentication or authorization check. Any
+      unauthenticated caller can export any user's job data by supplying
+      their user_id. The handler must authenticate the request and verify
+      the caller is authorized to access the requested user's data.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security

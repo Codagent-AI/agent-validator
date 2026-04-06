@@ -1,0 +1,836 @@
+issues:
+  - id: sql-injection
+    file: src/api/handler.ts
+    line_range: [31, 31]
+    description: >
+      SQL injection via string concatenation. User-supplied userId is interpolated
+      directly into a SQL query string without parameterization or escaping.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: hardcoded-api-key
+    file: src/api/handler.ts
+    line_range: [133, 133]
+    description: >
+      Hardcoded live API key (sk-live-...) exposed in source code. The config
+      object contains a live API key that will be committed to version control.
+      Secrets should be loaded from environment variables or a secrets manager.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: hardcoded-db-password
+    file: src/api/handler.ts
+    line_range: [134, 134]
+    description: >
+      Hardcoded database connection string with plaintext credentials
+      (admin:password123) exposed in source code. Database credentials should
+      be loaded from environment variables or a secrets manager.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: null-deref
+    file: src/api/handler.ts
+    line_range: [66, 67]
+    description: >
+      Null dereference on findUser() return value. findUser() returns
+      Record<string, unknown> | null, but the result is accessed with .email
+      without a null check, causing a runtime error when user is not found.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: missing-await
+    file: src/api/handler.ts
+    line_range: [34, 34]
+    description: >
+      Missing await on async cache.set() call. The cache write is fire-and-forget,
+      so subsequent reads may not see the cached value, and errors are silently lost.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: csv-field-corruption
+    file: src/api/batch.ts
+    line_range: [137, 138]
+    description: >
+      handleExportUsers interpolates user fields directly into CSV rows using
+      template literals without escaping. A user whose name or email contains
+      a comma, double quote, or newline will produce corrupt CSV output —
+      fields will shift into the wrong columns and rows will split. CSV fields
+      containing special characters must be quoted and internal quotes escaped.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: input-validation
+    file: src/api/handler.ts
+    line_range: [57, 57]
+    description: >
+      The age field from the request body is passed directly to updateUser without
+      type checking or validation. A malicious client could send a non-numeric value,
+      negative number, or unreasonable value.
+    category: security
+    difficulty: medium
+    priority: medium
+    requires_tool_use: false
+    reviewer: security
+
+  - id: error-swallow
+    file: src/api/handler.ts
+    line_range: [73, 74]
+    description: >
+      The catch block in handleDeleteUser returns HTTP 200 success even when the
+      delete operation throws an error. The caller believes the deletion succeeded
+      when it may have failed.
+    category: bug
+    difficulty: medium
+    priority: medium
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: sanitize-bypass
+    file: src/api/handler.ts
+    line_range: [43, 43]
+    description: >
+      The sanitize() function (in utils/sanitize.ts) strips HTML tags and encodes
+      entities but does not normalize unicode before sanitization. Fullwidth angle
+      brackets and other unicode lookalikes bypass the tag stripper, then get
+      normalized to real angle brackets by downstream systems, enabling XSS.
+    category: security
+    difficulty: hard
+    priority: high
+    requires_tool_use: true
+    reviewer: security
+
+  # --- Code-quality issues in batch.ts ---
+
+  - id: off-by-one-pagination
+    file: src/api/batch.ts
+    line_range: [44, 44]
+    description: >
+      The slice end index is start + pageSize + 1, which returns one extra item
+      per page. Array.slice(start, end) already excludes the end index, so
+      the +1 causes each page to contain pageSize+1 items, leading to duplicate
+      items across page boundaries (the last item of page N equals the first
+      item of page N+1).
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: n-plus-one-batch-lookup
+    file: src/api/batch.ts
+    line_range: [67, 70]
+    description: >
+      handleBatchLookup fetches users one-by-one in a sequential loop, issuing
+      a separate database query per user ID. For a request with N user IDs, this
+      produces N sequential queries instead of a single batch query. This is an
+      N+1 performance problem that degrades linearly with input size.
+    category: performance
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: wrong-filter-logic
+    file: src/api/batch.ts
+    line_range: [89, 90]
+    description: >
+      The filter for inactive users uses || (OR) instead of && (AND). The
+      function is documented as finding "active users who have NOT logged in
+      within the last N days" but the condition u.active || u.lastLoginAt < cutoff
+      matches ALL active users regardless of login time, plus all inactive users
+      with old logins. The correct condition is u.active && u.lastLoginAt < cutoff
+      to find active users with stale logins.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: unsafe-type-assertion
+    file: src/api/batch.ts
+    line_range: [100, 100]
+    description: >
+      The request body is cast directly to UserRecord[] with 'as' without any
+      runtime validation. If the client sends malformed data (missing fields,
+      wrong types, extra properties), the cast silently succeeds and invalid
+      objects are written to the database. This is a type safety issue at a
+      system boundary where untrusted input enters the application.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: event-listener-leak
+    file: src/api/batch.ts
+    line_range: [115, 121]
+    description: >
+      setupNotifications is called per WebSocket client connection. Each call
+      adds a new handler to eventSource and pushes it to the module-level
+      notificationListeners array. Neither the eventSource handler nor the array
+      entry is ever removed when clients disconnect. Over time this leaks
+      listeners proportional to total connections, with each event invoking all
+      accumulated handlers.
+    category: performance
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  # --- Code-quality issues in batch_processor.py ---
+
+  - id: py-mutable-default-arg
+    file: src/batch_processor.py
+    line_range: [50, 50]
+    description: >
+      Mutable default argument default_tags=[] is shared across all calls to
+      build_email_index. The function also mutates this list via append on line 63,
+      so each invocation accumulates tags from previous calls, corrupting results
+      for all subsequent callers.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-late-binding-closure
+    file: src/batch_processor.py
+    line_range: [75, 76]
+    description: >
+      The lambda inside the loop captures the variable uid by reference, not by
+      value. All generated closures will use the final value of uid after the loop
+      completes, so every task will build a report for the last user ID only.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-file-handle-leak
+    file: src/batch_processor.py
+    line_range: [92, 92]
+    description: >
+      The file opened with open() is never closed. If a database error occurs
+      during CSV processing (e.g., on cursor.execute or conn.commit), the file
+      handle is leaked. Should use a with statement or try/finally to ensure the
+      file is closed on all code paths.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-off-by-one-pagination
+    file: src/batch_processor.py
+    line_range: [142, 142]
+    description: >
+      The offset calculation uses page * page_size, but the docstring states pages
+      are 1-indexed. For page=1 the offset is page_size (skipping the first page
+      of results entirely). The correct formula for 1-indexed pages is
+      (page - 1) * page_size.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-race-condition-counter
+    file: src/batch_processor.py
+    line_range: [189, 189]
+    description: >
+      _send_count is incremented from multiple threads without synchronization.
+      A threading.Lock (_count_lock) is defined at module scope but never acquired
+      around the read-modify-write of _send_count. Under concurrent execution this
+      is a data race that can produce an incorrect final count.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-silent-exception-swallow
+    file: src/batch_processor.py
+    line_range: [190, 191]
+    description: >
+      The bare except Exception with pass silently swallows all database errors
+      during notification dispatch. Failed inserts are never logged or reported,
+      making it impossible to diagnose delivery failures in production. At minimum
+      the exception should be logged.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-dict-mutation-during-iteration
+    file: src/batch_processor.py
+    line_range: [118, 120]
+    description: >
+      cleanup_inactive_users iterates over users.items() and deletes keys from
+      the dict inside the loop body with del users[uid]. In Python, mutating a
+      dict while iterating over it raises RuntimeError: dictionary changed size
+      during iteration. The function will crash on the first deletion.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: py-unvalidated-int-cast
+    file: src/batch_processor.py
+    line_range: [36, 36]
+    description: >
+      int(record["age"]) will raise ValueError if the age field contains a
+      non-numeric string (e.g., "N/A", "", or "twenty-five") from the external
+      API response. There is no try/except or pre-validation, so a single bad
+      record crashes the entire batch and loses all previously parsed results.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  # --- Code-quality issues in batch_handler.go ---
+
+  - id: go-mutex-missing-read
+    file: src/batch_handler.go
+    line_range: [53, 55]
+    description: >
+      JobStore.Get() reads the jobs map without holding the mutex, while Add()
+      and List() both lock before accessing the map. Concurrent calls to Get()
+      and Add() produce a data race on the map, which in Go causes undefined
+      behaviour and can crash the process.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-http-body-leak
+    file: src/batch_handler.go
+    line_range: [155, 161]
+    description: >
+      notifyWebhook never closes the HTTP response body. Every call leaks a
+      network connection (the underlying TCP socket stays open until the OS
+      reclaims it). Under load this exhausts file descriptors and causes
+      subsequent HTTP requests to fail.
+    category: performance
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-defer-in-loop
+    file: src/batch_handler.go
+    line_range: [174, 174]
+    description: >
+      defer resp.Body.Close() is called inside a for loop. Deferred calls do
+      not execute at the end of each iteration — they pile up until the
+      enclosing function returns. For a long URL list, all response bodies
+      remain open simultaneously, leaking file descriptors and memory.
+    category: performance
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-loop-var-capture
+    file: src/batch_handler.go
+    line_range: [195, 200]
+    description: >
+      The goroutine closure captures loop variables i and job by reference.
+      By the time each goroutine executes, the loop has advanced and all
+      goroutines share the final iteration's values of i and job, causing
+      all results to be written to the same index and processing only the
+      last job. This is the classic pre-Go-1.22 loop variable capture bug.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-goroutine-leak
+    file: src/batch_handler.go
+    line_range: [219, 246]
+    description: >
+      CollectResults spawns goroutines to fetch from worker nodes but returns
+      immediately without waiting for them to finish. The caller always
+      receives an empty slice. The goroutines become leaks that hold open
+      HTTP connections indefinitely. Additionally, the function accepts a
+      ctx parameter but uses context.Background() instead, so cancellation
+      by the caller has no effect.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-inverted-error-check
+    file: src/batch_handler.go
+    line_range: [252, 253]
+    description: >
+      FetchJobResult checks err == nil (no error) but enters the error-handling
+      branch, returning an error on success and proceeding to read the response
+      body on failure. The condition is inverted — it should be err != nil.
+      On a successful HTTP call the function returns an error; on a failed call
+      it dereferences the nil resp, causing a nil pointer panic.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-slice-bounds-panic
+    file: src/batch_handler.go
+    line_range: [290, 292]
+    description: >
+      ParseJobPage calculates end = start + pageSize but never clamps it to
+      len(jobs). When the last page is a partial page (fewer items than
+      pageSize remaining), the slice expression jobs[start:end] panics with
+      an out-of-range index because end exceeds the slice length.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: go-division-by-zero
+    file: src/batch_handler.go
+    line_range: [321, 323]
+    description: >
+      FormatJobSummary divides by total to compute the success rate, but
+      total is zero when the input slice is empty or contains only jobs
+      with unrecognised status values. This causes a divide-by-zero panic
+      at runtime.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: code-quality
+
+  - id: auth-bypass
+    file: src/api/handler.ts
+    line_range: [24, 24]
+    description: >
+      The checkAuth() function (in api/middleware.ts) only validates session expiry
+      but never checks the session's revoked flag. A revoked session will pass
+      authentication until it naturally expires, allowing continued access after
+      logout or security revocation.
+    category: security
+    difficulty: hard
+    priority: critical
+    requires_tool_use: true
+    reviewer: security
+
+  # --- Python security issues ---
+
+  - id: py-sql-injection
+    file: src/batch_processor.py
+    line_range: [215, 215]
+    description: >
+      search_users_by_name interpolates the name parameter directly into a SQL
+      query using an f-string. An attacker can inject arbitrary SQL by passing a
+      crafted name like "'; DROP TABLE users; --". The query should use
+      parameterized placeholders instead of string interpolation.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-path-traversal
+    file: src/batch_processor.py
+    line_range: [224, 224]
+    description: >
+      export_user_report joins a user-controlled filename directly into a file
+      path with os.path.join("/var/reports", filename). A filename containing
+      "../" sequences (e.g. "../../etc/cron.d/backdoor") can write to arbitrary
+      locations outside the reports directory. The filename must be sanitized or
+      validated to contain no path separators.
+    category: security
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-pickle-deserialization
+    file: src/batch_processor.py
+    line_range: [233, 233]
+    description: >
+      load_cached_batch uses pickle.load() to deserialize data from a file path.
+      Pickle deserialization executes arbitrary code embedded in the serialized
+      data. If an attacker can control or tamper with the cache file, they achieve
+      remote code execution. Use a safe format like JSON instead of pickle.
+    category: security
+    difficulty: medium
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-command-injection
+    file: src/batch_processor.py
+    line_range: [239, 243]
+    description: >
+      run_data_export passes user-controlled table_name and output_dir into
+      an f-string shell command executed via subprocess.call with shell=True.
+      A malicious table_name like "users; rm -rf /" or output_dir with shell
+      metacharacters enables arbitrary command execution. Use subprocess with
+      a list of arguments and shell=False, or validate inputs against an
+      allowlist of known table names.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-hardcoded-api-secret
+    file: src/batch_processor.py
+    line_range: [23, 23]
+    description: >
+      API_SECRET_KEY is hardcoded in source code. This credential will be
+      committed to version control and visible to anyone with repository
+      access. Secrets should be loaded from environment variables or a
+      secrets manager at runtime.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: py-hardcoded-webhook-token
+    file: src/batch_processor.py
+    line_range: [24, 24]
+    description: >
+      WEBHOOK_TOKEN is hardcoded in source code. This credential will be
+      committed to version control and visible to anyone with repository
+      access. Secrets should be loaded from environment variables or a
+      secrets manager at runtime.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  # --- Go security issues ---
+
+  - id: go-ssrf
+    file: src/batch_handler.go
+    line_range: [318, 318]
+    description: >
+      FetchUserAvatar takes a user-provided avatarURL and fetches it directly
+      with the HTTP client. An attacker can supply internal network URLs
+      (e.g. http://169.254.169.254/latest/meta-data/ for cloud metadata,
+      or http://localhost:6379/ for internal services) to probe or exfiltrate
+      data from the internal network. The URL must be validated against an
+      allowlist of permitted domains or schemes.
+    category: security
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-path-traversal
+    file: src/batch_handler.go
+    line_range: [328, 329]
+    description: >
+      ServeJobArtifact reads a filename from the query string and joins it
+      directly with filepath.Join("/var/artifacts", filename). filepath.Join
+      resolves ".." components, so a filename like "../../etc/passwd" resolves
+      to "/etc/passwd", allowing an attacker to read arbitrary files on the
+      server. The filename must be validated to ensure it does not escape the
+      base directory.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-weak-random-token
+    file: src/batch_handler.go
+    line_range: [340, 343]
+    description: >
+      GenerateJobID uses math/rand to generate job identifiers. math/rand
+      is a deterministic PRNG seeded with a predictable value — an attacker
+      who knows the seed or observes a few IDs can predict all future IDs.
+      For identifiers that must be unguessable, crypto/rand must be used
+      instead.
+    category: security
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-open-redirect
+    file: src/batch_handler.go
+    line_range: [356, 357]
+    description: >
+      HandleLoginCallback reads "return_to" from the query string and passes
+      it directly to http.Redirect without validation. An attacker can craft
+      a login link with return_to=https://evil.com to redirect users to a
+      phishing site after authentication, stealing session tokens or
+      credentials. The redirect target must be validated against a list of
+      allowed domains or restricted to same-origin paths.
+    category: security
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: security
+
+  - id: go-idor-export
+    file: src/batch_handler.go
+    line_range: [210, 211]
+    description: >
+      HandleExport reads user_id from the query string and returns all jobs
+      for that user without any authentication or authorization check. Any
+      unauthenticated caller can export any user's job data by supplying
+      their user_id. The handler must authenticate the request and verify
+      the caller is authorized to access the requested user's data.
+    category: security
+    difficulty: easy
+    priority: critical
+    requires_tool_use: false
+    reviewer: security
+
+  # --- TypeScript error-handling issues ---
+
+  - id: ts-notification-dispatch-crash
+    file: src/api/batch.ts
+    line_range: [118, 121]
+    description: >
+      The notification dispatch handler iterates over notificationListeners
+      and calls each listener without a try/catch. If any listener throws an
+      exception, the remaining listeners in the array are never called, silently
+      dropping notifications for all subsequent subscribers. Each listener
+      invocation should be wrapped in a try/catch to isolate failures.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: ts-batch-update-error-masked
+    file: src/api/batch.ts
+    line_range: [158, 159]
+    description: >
+      In handleBatchUpdate, the catch block pushes { success: true } for
+      updates that actually failed. The caller receives an all-success
+      response even when some or all updates threw errors, making it
+      impossible to detect or retry failed updates. The catch should push
+      { success: false } and include the error reason.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: ts-deactivate-silent-drop
+    file: src/api/batch.ts
+    line_range: [180, 181]
+    description: >
+      handleDeactivateUsers catches all exceptions during deactivation and
+      silently continues. The response reports the count of deactivated users
+      but gives no indication of how many failed or why. If the database is
+      down, every deactivation fails silently and the caller receives
+      { deactivated: 0, total: N } with no error status or detail.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: ts-migration-error-swallow
+    file: src/api/batch.ts
+    line_range: [206, 208]
+    description: >
+      handleDataMigration wraps the entire migration loop in a single
+      try/catch that silently swallows any error and returns HTTP 200 with
+      a partial count. If the migration fails mid-batch (e.g. on user 3
+      of 100), the caller receives { migrated: 3, total: 100 } with a 200
+      status, with no indication that an error occurred. A data migration
+      endpoint that silently returns success on failure risks data loss
+      and inconsistent state.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  # --- Python error-handling issues ---
+
+  - id: py-bulk-update-error-swallow
+    file: src/batch_processor.py
+    line_range: [264, 265]
+    description: >
+      bulk_update_users catches all exceptions during individual updates
+      with a bare except/pass. Failed updates are silently skipped with no
+      logging or error details. The caller receives a succeeded count but
+      has no way to know which records failed or why, making it impossible
+      to retry or investigate failures.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-fetch-external-empty-on-error
+    file: src/batch_processor.py
+    line_range: [281, 282]
+    description: >
+      fetch_external_users catches all exceptions (network errors, JSON
+      decode errors, HTTP errors) and returns an empty list. The caller
+      cannot distinguish between "the API returned zero users" and "the
+      API is unreachable." This hides outages and data sync failures,
+      which can cause downstream logic to incorrectly delete or deactivate
+      users that appear to no longer exist upstream.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-sync-silent-continue
+    file: src/batch_processor.py
+    line_range: [301, 302]
+    description: >
+      sync_users_to_remote catches all exceptions per user and continues
+      to the next without logging or collecting error details. The return
+      value is only a count of synced users — the caller has no way to
+      know which users failed, making selective retry impossible. If the
+      remote service is down, every push fails silently and the function
+      returns 0 with no error.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-validate-import-error-miscount
+    file: src/batch_processor.py
+    line_range: [325, 326]
+    description: >
+      validate_and_import_users counts database insertion errors as "skipped"
+      records rather than "errors". A constraint violation (duplicate email)
+      and a missing required field are reported identically. The caller
+      cannot distinguish between records that were intentionally skipped due
+      to validation and records that failed due to database errors, hiding
+      real failures in the skip count.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-archive-error-returns-zero
+    file: src/batch_processor.py
+    line_range: [350, 351]
+    description: >
+      archive_old_notifications catches all database errors during the
+      archive-and-delete operation and returns 0. If the INSERT into the
+      archive table succeeds but the DELETE fails, the exception is caught
+      without a rollback, leaving duplicate records in both tables. Even
+      if both fail, the caller receives 0 with no error, indistinguishable
+      from "there were no old notifications to archive."
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  # --- Go error-handling issues ---
+
+  - id: go-webhook-error-swallowed
+    file: src/batch_handler.go
+    line_range: [157, 164]
+    description: >
+      notifyWebhook silently discards errors at two levels: json.Marshal
+      errors are assigned to _ on line 158, and HTTP POST errors cause an
+      immediate return with no logging or error propagation on line 161.
+      Jobs are marked as completed in executeJob before notifyWebhook is
+      called, so if the webhook is unreachable the job appears successful
+      but no notification is ever delivered, with no record of the failure.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-encode-write-ignored
+    file: src/batch_handler.go
+    line_range: [111, 111]
+    description: >
+      json.NewEncoder(w).Encode() can fail (e.g. broken client connection),
+      but its error return is ignored in HandleSubmitJobs (line 111),
+      HandleGetJob (line 122), and HandleBatchDelete (line 289). If encoding
+      fails, the client receives a partial or empty response body with a 200
+      status code. At minimum the error should be logged so broken responses
+      can be diagnosed.
+    category: bug
+    difficulty: easy
+    priority: medium
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-health-check-false-positive
+    file: src/batch_handler.go
+    line_range: [363, 375]
+    description: >
+      HandleHealthCheck pings the webhook endpoint and stores the result
+      in dbHealthy, but then discards it with _ = dbHealthy and
+      unconditionally returns {"status": "healthy"}. The health check
+      always reports healthy regardless of whether the dependency is
+      reachable, defeating the purpose of the check and hiding outages
+      from load balancers and monitoring systems.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-cleanup-notification-error-ignored
+    file: src/batch_handler.go
+    line_range: [393, 399]
+    description: >
+      CleanupExpiredJobs sends a webhook notification about the cleanup
+      but ignores the HTTP response — json.Marshal error is discarded
+      with _, the POST error causes an early return (losing the notification
+      silently), and on success the response body is assigned to _ and
+      never closed, leaking the underlying TCP connection.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-process-all-report-ignored
+    file: src/batch_handler.go
+    line_range: [420, 422]
+    description: >
+      ProcessAllUsers sends a summary report to the webhook but discards
+      both the json.Marshal error and the entire HTTP response. The POST
+      error is completely ignored (not even an early return), and the
+      response body is never closed, leaking the connection. If the
+      reporting endpoint is critical for audit or billing, failures will
+      go unnoticed.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
