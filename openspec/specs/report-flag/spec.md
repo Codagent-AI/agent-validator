@@ -65,11 +65,11 @@ The report MUST be written to a file in the log directory in addition to stdout.
 - **THEN** the file SHALL be overwritten with the new report
 
 ### Requirement: Numeric IDs are stable within a log session
-Numeric IDs assigned to review violations MUST be deterministic and stable between the `--report` output and subsequent `update-review` invocations, as long as the log files have not been modified by a gauntlet re-run. IDs SHALL be assigned by scanning JSON files in sorted filename order, then by violation array index within each file, numbering sequentially from 1, considering only violations with status `"new"`.
+Numeric IDs assigned to review violations MUST be deterministic and stable between the `--report` output and subsequent `update-review` invocations, as long as the log files have not been modified by a validator re-run. IDs SHALL be assigned by scanning JSON files in sorted filename order, then by violation array index within each file, numbering sequentially from 1, considering only violations with status `"new"`.
 
 #### Scenario: IDs match between report and update-review commands
 - **WHEN** `agent-validate run --report` assigns `#3` to a violation at `src/foo.ts:10`
-- **AND** `agent-validate update-review list` is run without any intervening gauntlet re-run
+- **AND** `agent-validate update-review list` is run without any intervening validator re-run
 - **THEN** `#3` SHALL refer to the same violation at `src/foo.ts:10`
 
 #### Scenario: IDs are sequential with no gaps

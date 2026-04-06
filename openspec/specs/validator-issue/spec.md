@@ -7,7 +7,7 @@ Specifies the `validator-issue` skill, which collects diagnostic evidence and fi
 
 ### Requirement: Diagnostic Evidence Collection
 
-The `validator-issue` skill SHALL collect runtime evidence from the gauntlet log directory before drafting a bug report.
+The `validator-issue` skill SHALL collect runtime evidence from the validator log directory before drafting a bug report.
 
 #### Scenario: Evidence collected from log directory
 

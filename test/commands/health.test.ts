@@ -13,8 +13,8 @@ import { Command } from "commander";
 import { registerHealthCommand } from "../../src/commands/health.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-health-${Date.now()}`);
-const GAUNTLET_DIR = path.join(TEST_DIR, ".validator");
-const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
+const VALIDATOR_DIR = path.join(TEST_DIR, ".validator");
+const REVIEWS_DIR = path.join(VALIDATOR_DIR, "reviews");
 
 describe("Health Command", () => {
 	let program: Command;
@@ -25,12 +25,12 @@ describe("Health Command", () => {
 	beforeAll(async () => {
 		// Setup test directory structure
 		await fs.mkdir(TEST_DIR, { recursive: true });
-		await fs.mkdir(GAUNTLET_DIR, { recursive: true });
+		await fs.mkdir(VALIDATOR_DIR, { recursive: true });
 		await fs.mkdir(REVIEWS_DIR, { recursive: true });
 
 		// Write config.yml
 		await fs.writeFile(
-			path.join(GAUNTLET_DIR, "config.yml"),
+			path.join(VALIDATOR_DIR, "config.yml"),
 			`
 base_branch: origin/main
 log_dir: validator_logs

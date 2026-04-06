@@ -59,18 +59,18 @@ The `update` command SHALL update Codex skills if they are installed, using the 
 
 #### Scenario: Codex skills installed locally
 - **GIVEN** the user runs `agent-validate update`
-- **WHEN** `.agents/skills/` exists in the current project with gauntlet skills
+- **WHEN** `.agents/skills/` exists in the current project with validator skills
 - **THEN** update SHALL refresh those skills using checksum comparison
 - **AND** changed skills SHALL be overwritten (update implies consent)
 
 #### Scenario: Codex skills installed globally
 - **GIVEN** the user runs `agent-validate update`
-- **WHEN** `$HOME/.agents/skills/` contains gauntlet skills
+- **WHEN** `$HOME/.agents/skills/` contains validator skills
 - **AND** no local Codex skills exist
 - **THEN** update SHALL refresh the global Codex skills
 
 #### Scenario: No Codex skills installed
 - **GIVEN** the user runs `agent-validate update`
-- **WHEN** no gauntlet skills are found in either Codex skill location
+- **WHEN** no validator skills are found in either Codex skill location
 - **THEN** update SHALL skip Codex skill update silently
 

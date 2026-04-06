@@ -30,17 +30,17 @@ const REVIEWS_DIR = 'reviews';
 
 function resolveConfigDir(rootDir: string): string {
   const validatorPath = path.join(rootDir, VALIDATOR_DIR);
-  const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
+  const legacyPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
   if (existsSync(validatorPath)) return validatorPath;
-  if (existsSync(gauntletPath)) return gauntletPath;
+  if (existsSync(legacyPath)) return legacyPath;
   return validatorPath; // default for new projects
 }
 
 export async function loadConfig(
   rootDir: string = process.cwd(),
 ): Promise<LoadedConfig> {
-  const gauntletPath = resolveConfigDir(rootDir);
-  const configPath = path.join(gauntletPath, CONFIG_FILE);
+  const configDir = resolveConfigDir(rootDir);
+  const configPath = path.join(configDir, CONFIG_FILE);
 
   // 1. Load project config
   if (!(await fileExists(configPath))) {
@@ -51,11 +51,21 @@ export async function loadConfig(
   const projectConfigRaw = YAML.parse(configContent);
   const projectConfig = validatorConfigSchema.parse(projectConfigRaw);
 
+  // Infer default_preference from adapter keys when not explicitly set
+  if (!projectConfig.cli.default_preference) {
+    const adapterKeys = projectConfig.cli.adapters
+      ? Object.keys(projectConfig.cli.adapters)
+      : [];
+    if (adapterKeys.length > 0) {
+      projectConfig.cli.default_preference = adapterKeys;
+    }
+  }
+
   // 2. Load checks (file-based + inline)
-  const checks = await loadCheckGates(gauntletPath, projectConfig.checks);
+  const checks = await loadCheckGates(configDir, projectConfig.checks);
 
   // 3. Load reviews (file-based + inline)
-  const reviews = await loadReviewGates(gauntletPath, projectConfig.reviews);
+  const reviews = await loadReviewGates(configDir, projectConfig.reviews);
 
   // 3b. Merge default CLI preference if not specified
   mergeCliPreferences(reviews, projectConfig);
@@ -73,7 +83,7 @@ export async function loadConfig(
 async function buildLoadedCheck(
   name: string,
   parsed: CheckGateConfig,
-  gauntletPath: string,
+  configDir: string,
 ): Promise<LoadedCheckGateConfig> {
   const fixFile = parsed.fix_instructions_file || parsed.fix_instructions;
   const loadedCheck: LoadedCheckGateConfig = { ...parsed, name };
@@ -81,7 +91,7 @@ async function buildLoadedCheck(
   if (fixFile) {
     loadedCheck.fixInstructionsContent = await loadPromptFile(
       fixFile,
-      gauntletPath,
+      configDir,
       `check "${name}"`,
     );
   }
@@ -92,10 +102,10 @@ async function buildLoadedCheck(
 }
 
 async function loadCheckGates(
-  gauntletPath: string,
+  configDir: string,
   inlineChecks?: Record<string, CheckGateConfig>,
 ): Promise<Record<string, LoadedCheckGateConfig>> {
-  const checksPath = path.join(gauntletPath, CHECKS_DIR);
+  const checksPath = path.join(configDir, CHECKS_DIR);
   const checks: Record<string, LoadedCheckGateConfig> = {};
 
   // Load file-based checks
@@ -110,7 +120,7 @@ async function loadCheckGates(
       const raw = YAML.parse(content);
       const name = path.basename(file, path.extname(file));
       const parsed: CheckGateConfig = checkGateSchema.parse(raw);
-      checks[name] = await buildLoadedCheck(name, parsed, gauntletPath);
+      checks[name] = await buildLoadedCheck(name, parsed, configDir);
     }
   }
 
@@ -122,7 +132,7 @@ async function loadCheckGates(
           `Check "${name}" is defined both inline in config.yml and as a file in ${CHECKS_DIR}/. Remove one to resolve the conflict.`,
         );
       }
-      checks[name] = await buildLoadedCheck(name, parsed, gauntletPath);
+      checks[name] = await buildLoadedCheck(name, parsed, configDir);
     }
   }
 
@@ -132,7 +142,7 @@ async function loadCheckGates(
 async function buildInlineReview(
   name: string,
   parsed: ReviewYamlConfig,
-  gauntletPath: string,
+  configDir: string,
 ): Promise<LoadedReviewGateConfig> {
   const review: LoadedReviewGateConfig = {
     name,
@@ -150,7 +160,7 @@ async function buildInlineReview(
   if (parsed.prompt_file) {
     review.promptContent = await loadPromptFile(
       parsed.prompt_file,
-      gauntletPath,
+      configDir,
       `review "${name}"`,
     );
   }
@@ -164,9 +174,9 @@ async function buildInlineReview(
 }
 
 async function loadFileBasedReviews(
-  gauntletPath: string,
+  configDir: string,
 ): Promise<Record<string, LoadedReviewGateConfig>> {
-  const reviewsPath = path.join(gauntletPath, REVIEWS_DIR);
+  const reviewsPath = path.join(configDir, REVIEWS_DIR);
   const reviews: Record<string, LoadedReviewGateConfig> = {};
 
   if (!(await dirExists(reviewsPath))) {
@@ -181,13 +191,13 @@ async function loadFileBasedReviews(
       reviews[path.basename(file, '.md')] = await loadMarkdownReview(
         file,
         reviewsPath,
-        gauntletPath,
+        configDir,
       );
     } else if (file.endsWith('.yml') || file.endsWith('.yaml')) {
       reviews[path.basename(file, path.extname(file))] = await loadYamlReview(
         file,
         reviewsPath,
-        gauntletPath,
+        configDir,
       );
     }
   }
@@ -196,10 +206,10 @@ async function loadFileBasedReviews(
 }
 
 async function loadReviewGates(
-  gauntletPath: string,
+  configDir: string,
   inlineReviews?: Record<string, ReviewYamlConfig>,
 ): Promise<Record<string, LoadedReviewGateConfig>> {
-  const reviews = await loadFileBasedReviews(gauntletPath);
+  const reviews = await loadFileBasedReviews(configDir);
 
   if (inlineReviews) {
     for (const [name, parsed] of Object.entries(inlineReviews)) {
@@ -208,7 +218,7 @@ async function loadReviewGates(
           `Review "${name}" is defined both inline in config.yml and as a file in ${REVIEWS_DIR}/. Remove one to resolve the conflict.`,
         );
       }
-      reviews[name] = await buildInlineReview(name, parsed, gauntletPath);
+      reviews[name] = await buildInlineReview(name, parsed, configDir);
     }
   }
 
@@ -250,7 +260,7 @@ function detectDuplicateReviewNames(reviewFiles: string[]): void {
 async function loadMarkdownReview(
   file: string,
   reviewsPath: string,
-  gauntletPath: string,
+  configDir: string,
 ): Promise<LoadedReviewGateConfig> {
   const filePath = path.join(reviewsPath, file);
   const content = await fs.readFile(filePath, 'utf-8');
@@ -277,7 +287,7 @@ async function loadMarkdownReview(
   if (parsedFrontmatter.prompt_file) {
     review.promptContent = await loadPromptFile(
       parsedFrontmatter.prompt_file,
-      gauntletPath,
+      configDir,
       `review "${name}"`,
     );
   }
@@ -294,7 +304,7 @@ async function loadMarkdownReview(
 async function loadYamlReview(
   file: string,
   reviewsPath: string,
-  gauntletPath: string,
+  configDir: string,
 ): Promise<LoadedReviewGateConfig> {
   const filePath = path.join(reviewsPath, file);
   const content = await fs.readFile(filePath, 'utf-8');
@@ -318,7 +328,7 @@ async function loadYamlReview(
   if (parsed.prompt_file) {
     review.promptContent = await loadPromptFile(
       parsed.prompt_file,
-      gauntletPath,
+      configDir,
       `review "${name}"`,
     );
   }
@@ -398,7 +408,7 @@ function validateGateReferences(
 
 async function loadPromptFile(
   filePath: string,
-  gauntletPath: string,
+  configDir: string,
   source: string,
 ): Promise<string> {
   let resolvedPath: string;
@@ -408,14 +418,11 @@ async function loadPromptFile(
     );
     resolvedPath = filePath;
   } else {
-    resolvedPath = path.resolve(gauntletPath, filePath);
+    resolvedPath = path.resolve(configDir, filePath);
   }
-  // Warn if resolved path escapes the .gauntlet/ directory (including via relative traversal)
-  const normalizedGauntletPath = path.resolve(gauntletPath);
-  const relativeToConfigDir = path.relative(
-    normalizedGauntletPath,
-    resolvedPath,
-  );
+  // Warn if resolved path escapes the config directory (including via relative traversal)
+  const normalizedConfigDir = path.resolve(configDir);
+  const relativeToConfigDir = path.relative(normalizedConfigDir, resolvedPath);
   if (
     relativeToConfigDir.startsWith('..') ||
     path.isAbsolute(relativeToConfigDir)

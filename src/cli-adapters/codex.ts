@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
+import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import { type CLIAdapter, runStreamingCommand } from './shared.js';
 import { CODEX_REASONING_EFFORT } from './thinking-budget.js';
 
@@ -223,7 +224,11 @@ export class CodexAdapter implements CLIAdapter {
     return false;
   }
 
-  private buildArgs(allowToolUse?: boolean, thinkingBudget?: string): string[] {
+  private buildArgs(
+    allowToolUse?: boolean,
+    thinkingBudget?: string,
+    model?: string,
+  ): string[] {
     const args = [
       'exec',
       '--cd',
@@ -239,6 +244,9 @@ export class CodexAdapter implements CLIAdapter {
     if (thinkingBudget && thinkingBudget in CODEX_REASONING_EFFORT) {
       const effort = CODEX_REASONING_EFFORT[thinkingBudget];
       args.push('-c', `model_reasoning_effort="${effort}"`);
+    }
+    if (model && SAFE_MODEL_ID_PATTERN.test(model)) {
+      args.push('-m', model);
     }
     args.push('--json', '-');
     return args;
@@ -265,7 +273,11 @@ export class CodexAdapter implements CLIAdapter {
     );
     await fs.writeFile(tmpFile, fullContent);
 
-    const args = this.buildArgs(opts.allowToolUse, opts.thinkingBudget);
+    const args = this.buildArgs(
+      opts.allowToolUse,
+      opts.thinkingBudget,
+      opts.model,
+    );
 
     const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 

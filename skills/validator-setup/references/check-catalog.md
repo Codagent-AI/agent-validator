@@ -172,7 +172,7 @@ fail_fast: false                    # Stop remaining sequential checks after thi
 
 # Fix instructions (mutually exclusive -- use at most one)
 fix_instructions_file: ".validator/fix/lint-fix.md"  # Path to a markdown file with fix instructions.
-fix_with_skill: "gauntlet-fix-lint"                 # Skill name that the agent invokes to auto-fix.
+fix_with_skill: "validator-fix-lint"                 # Skill name that the agent invokes to auto-fix.
 ```
 
 ### Constraints

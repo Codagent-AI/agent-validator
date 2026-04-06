@@ -8,7 +8,7 @@
 <!-- [![npm downloads](https://img.shields.io/npm/dm/agent-validator)](https://www.npmjs.com/package/agent-validator) -->
 <!-- [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/Codagent-AI/agent-validator)](https://coderabbit.ai) -->
 
-> Don't just review the agent's code — put it through the gauntlet.
+> Don't just review the agent's code — put it through the validator.
 
 Agent Validator (formerly Agent Gauntlet) is a configurable “feedback loop” runner for AI-assisted development workflows.
 
@@ -253,6 +253,67 @@ cli_preference:
 # Plan Review
 Review this plan for completeness and potential issues.
 ```
+
+### Recommended Reviewer Configuration
+
+> Based on [eval benchmarks](docs/eval-report-2026-04-05.md) across code-quality, security, and error-handling prompts.
+
+**Built-in review prompts available:**
+
+| Builtin | Covers | Best with |
+|---------|--------|-----------|
+| `code-quality` | Bugs, logic errors, style | Sonnet (separate) |
+| `security` | Auth, injection, data exposure | Sonnet (separate) |
+| `error-handling` | Missing error handling, silent failures | Sonnet (separate) |
+| `security-and-errors` | Security + error-handling combined | GPT (combined) |
+| `all-reviewers` | All of the above in one pass | GPT (combined) |
+
+**Primary recommendation (GitHub Copilot available):** Two-pass hybrid — Sonnet for code quality, GPT for security + error-handling combined. Best price/performance ratio.
+
+```yaml
+# .validator/config.yml
+cli:
+  default_preference:
+    - github-copilot
+    - codex
+  adapters:
+    github-copilot:
+      allow_tool_use: false
+      thinking_budget: low        # optimal for Sonnet; keeps runtime ~105s
+    codex:
+      allow_tool_use: false
+      thinking_budget: medium     # helps GPT on security/error-handling tasks
+
+reviews:
+  code-quality:
+    builtin: code-quality
+    cli_preference: [github-copilot]
+    model: claude-sonnet-4.6     # 0.71 recall, 0.87 precision
+  security-and-errors:
+    builtin: security-and-errors
+    cli_preference: [github-copilot]
+    model: gpt-5.3-codex         # 0.79 recall in single combined pass (~73s)
+```
+
+**Secondary recommendation (no Copilot, Codex only):** Single combined pass across all review types.
+
+```yaml
+# .validator/config.yml
+cli:
+  default_preference:
+    - codex
+  adapters:
+    codex:
+      allow_tool_use: false
+      thinking_budget: medium
+
+reviews:
+  all-reviewers:
+    builtin: all-reviewers
+    model: gpt-5.3-codex         # 0.69 recall, 0.96 precision across all 56 issues (~82s)
+```
+
+> **Note:** Do not use the `claude` (Claude Code CLI) adapter for reviews — it has significantly higher overhead than `github-copilot` and will timeout on most review prompts. Use `github-copilot` with `model: claude-sonnet-4.6` to run Sonnet reviews.
 
 ### Logs
 

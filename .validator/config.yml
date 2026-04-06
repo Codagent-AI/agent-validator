@@ -1,0 +1,63 @@
+name: agent-validator
+base_branch: main
+log_dir: validator_logs
+debug_log:
+  enabled: true
+  max_size_mb: 10
+allow_parallel: true
+cli:
+  adapters:
+    github-copilot:
+      allow_tool_use: false
+      thinking_budget: low
+checks:
+  build:
+    command: bun run build
+  lint:
+    command: bunx biome check src
+  test:
+    command: bun test
+  typecheck:
+    command: bun run typecheck
+  security-code:
+    command: semgrep scan --config auto --error src
+  security-deps:
+    command: bun audit --audit-level=moderate
+  schema-validate:
+    command: bun run src/index.ts validate
+reviews:
+  code-quality:
+    builtin: code-quality
+    cli_preference:
+      - github-copilot
+    model: claude-sonnet-4.6
+  security-and-errors:
+    builtin: security-and-errors
+    cli_preference:
+      - github-copilot
+    model: gpt-5.3-codex
+entry_points:
+  - path: "."
+    exclude:
+      - .validator
+      - evals/results
+      - openspec
+      - skills
+      - .claude/skills
+    checks:
+      - build
+      - lint
+      - typecheck
+      - test
+      - security-code
+      - security-deps
+      - schema-validate
+    reviews:
+      - code-quality
+      - security-and-errors
+  - path: "skills"
+    reviews:
+      - skill-quality
+  - path: ".claude/skills"
+    reviews:
+      - skill-quality

@@ -21,6 +21,7 @@ export async function runAdapter(
 		const rawOutput = await adapter.execute({
 			prompt,
 			diff,
+			model: config.model,
 			allowToolUse: config.allowToolUse,
 			thinkingBudget: config.thinkingBudget,
 			timeoutMs,

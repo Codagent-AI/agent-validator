@@ -29,16 +29,16 @@ When `github-copilot` is selected as a development CLI during init, the init flo
 
 ### Requirement: Copilot plugin detection during init
 
-The init flow SHALL detect `gh copilot` availability alongside other CLI adapters and use the adapter's plugin detection to determine existing installations.
+The init flow SHALL detect `copilot` CLI availability alongside other CLI adapters and use the adapter's plugin detection to determine existing installations.
 
-#### Scenario: gh copilot detected as available
+#### Scenario: copilot detected as available
 - **WHEN** init runs CLI detection
-- **AND** `gh copilot -- --help` succeeds
+- **AND** `copilot --help` succeeds
 - **THEN** `github-copilot` SHALL appear in the list of available adapters
 
-#### Scenario: gh copilot not available
+#### Scenario: copilot not available
 - **WHEN** init runs CLI detection
-- **AND** `gh copilot -- --help` fails or `gh` is not installed
+- **AND** `copilot --help` fails or `copilot` is not installed
 - **THEN** `github-copilot` SHALL NOT appear in the list of available adapters
 
 #### Scenario: Scope prompt included when Copilot needs install

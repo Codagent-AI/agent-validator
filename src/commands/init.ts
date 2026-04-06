@@ -163,7 +163,7 @@ async function runInit(options: InitOptions): Promise<void> {
     );
     const selectedBuiltIns = await promptBuiltInReviews(skipPrompts);
 
-    await scaffoldGauntletDir(
+    await scaffoldValidatorDir(
       projectRoot,
       targetDir,
       reviewCLINames,
@@ -186,7 +186,7 @@ function printNoCLIsMessage(): void {
   console.log();
 }
 
-async function scaffoldGauntletDir(
+async function scaffoldValidatorDir(
   _projectRoot: string,
   targetDir: string,
   reviewCLINames: string[],

@@ -5,14 +5,14 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
-	GAUNTLET_ROOT,
+	VALIDATOR_ROOT,
 	initGitRepo,
 	isDistBuilt,
-	spawnGauntlet,
+	spawnValidator,
 } from "./helpers.js";
 
-// Suppress unused import warning — GAUNTLET_ROOT is used in helpers via spawnGauntlet
-void GAUNTLET_ROOT;
+// Suppress unused import warning — VALIDATOR_ROOT is used in helpers via spawnValidator
+void VALIDATOR_ROOT;
 
 const execFileAsync = promisify(execFile);
 
@@ -24,7 +24,7 @@ async function git(args: string[], cwd: string): Promise<string> {
 	return stdout.trim();
 }
 
-// Helper: read .execution_state from the gauntlet log dir
+// Helper: read .execution_state from the validator log dir
 async function readExecutionState(
 	tempDir: string,
 ): Promise<Record<string, unknown> | null> {
@@ -39,7 +39,7 @@ async function readExecutionState(
 	}
 }
 
-// Helper: write gauntlet config with a simple echo-pass check
+// Helper: write validator config with a simple echo-pass check
 async function writeValidatorConfig(dir: string): Promise<void> {
 	await fs.mkdir(path.join(dir, ".validator", "checks"), { recursive: true });
 	await fs.writeFile(
@@ -65,11 +65,11 @@ timeout: 10
 	await fs.writeFile(path.join(dir, ".gitignore"), "validator_logs/\n");
 }
 
-// Helper: create a fresh temp git repo with gauntlet config.
+// Helper: create a fresh temp git repo with validator config.
 // Creates a 'base' branch at the initial commit, then makes one committed
 // change on 'main' so the validator always has a real diff scope to work with.
 async function createTestRepo(): Promise<string> {
-	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-wtr-e2e-"));
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-wtr-e2e-"));
 	await fs.writeFile(path.join(dir, "hello.ts"), "export const x = 1;\n");
 	await writeValidatorConfig(dir);
 	await initGitRepo(dir);
@@ -112,7 +112,7 @@ describe("working-tree-ref E2E", () => {
 
 				const headSha = await git(["rev-parse", "HEAD"], tempDir);
 
-				await spawnGauntlet(["run"], {
+				await spawnValidator(["run"], {
 					cwd: tempDir,
 					timeoutMs: TIMEOUT_MS,
 				});
@@ -150,7 +150,7 @@ describe("working-tree-ref E2E", () => {
 					"export const y = 99;\n",
 				);
 
-				await spawnGauntlet(["run"], {
+				await spawnValidator(["run"], {
 					cwd: tempDir,
 					timeoutMs: TIMEOUT_MS,
 				});
@@ -192,8 +192,8 @@ describe("working-tree-ref E2E", () => {
 				// Capture HEAD after committing — working tree is now clean
 				const headSha = await git(["rev-parse", "HEAD"], tempDir);
 
-				// Run gauntlet — working tree is clean, working_tree_ref should = HEAD
-				await spawnGauntlet(["run"], {
+				// Run validator — working tree is clean, working_tree_ref should = HEAD
+				await spawnValidator(["run"], {
 					cwd: tempDir,
 					timeoutMs: TIMEOUT_MS,
 				});
@@ -213,7 +213,7 @@ describe("working-tree-ref E2E", () => {
 				const tempDir = await createTestRepo();
 				tempDirs.push(tempDir);
 
-				// Step 1: Create an untracked file and run gauntlet
+				// Step 1: Create an untracked file and run validator
 				// This captures the file in stash ^3
 				const untrackedFile = path.join(tempDir, "newfile.ts");
 				await fs.writeFile(
@@ -221,7 +221,7 @@ describe("working-tree-ref E2E", () => {
 					"export const newThing = 42;\n",
 				);
 
-				await spawnGauntlet(["run"], {
+				await spawnValidator(["run"], {
 					cwd: tempDir,
 					timeoutMs: TIMEOUT_MS,
 				});
@@ -251,11 +251,11 @@ describe("working-tree-ref E2E", () => {
 					"export const x = 999;\n",
 				);
 
-				// Step 4: Run gauntlet again — this exercises the fixBase code path
+				// Step 4: Run validator again — this exercises the fixBase code path
 				// because execution state exists from the first run. The diff is
 				// computed against the stash ref, which exercises getFixBaseDiff
 				// and the committed-from-stash exclusion logic.
-				await spawnGauntlet(["run"], {
+				await spawnValidator(["run"], {
 					cwd: tempDir,
 					timeoutMs: TIMEOUT_MS,
 				});

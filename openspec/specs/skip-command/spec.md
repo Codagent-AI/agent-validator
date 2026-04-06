@@ -32,10 +32,10 @@ The system MUST provide an `agent-validate skip` CLI subcommand that advances th
 - **AND** the command completes successfully
 - **THEN** the command SHALL print a confirmation message that includes the abbreviated commit SHA
 
-#### Scenario: Skip while another gauntlet process holds the lock
+#### Scenario: Skip while another validator process holds the lock
 
 - **WHEN** the user executes `agent-validate skip`
-- **AND** another gauntlet process holds the run lock
+- **AND** another validator process holds the run lock
 - **THEN** the command SHALL exit with a non-zero exit code
 - **AND** the command SHALL print an error message indicating a run is already in progress
 - **AND** the command SHALL NOT modify `.execution_state` or archive logs

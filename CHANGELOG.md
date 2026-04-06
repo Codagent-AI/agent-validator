@@ -1,4 +1,4 @@
-# agent-gauntlet
+# agent-validator
 
 ## 1.7.0
 
@@ -42,17 +42,17 @@
 
 - [#102](https://github.com/pacaplan/agent-gauntlet/pull/102) Add Codex as a supported coding agent with skill installation and an `update-all` prompt for batch-updating agent configurations
 
-- [#103](https://github.com/pacaplan/agent-gauntlet/pull/103) Deliver gauntlet skills and hooks as a Claude Code plugin, enabling automatic installation via the plugin system
+- [#103](https://github.com/pacaplan/agent-gauntlet/pull/103) Deliver validator skills and hooks as a Claude Code plugin, enabling automatic installation via the plugin system
 
 - [#104](https://github.com/pacaplan/agent-gauntlet/pull/104) Add Cursor as a first-class coding agent with dedicated plugin support and configuration scaffolding
 
-- [#105](https://github.com/pacaplan/agent-gauntlet/pull/105) Add `--report` flag for machine-readable gauntlet output and `update-review` command for baton-based review integration
+- [#105](https://github.com/pacaplan/agent-gauntlet/pull/105) Add `--report` flag for machine-readable validator output and `update-review` command for baton-based review integration
 
 ## 1.2.2
 
 ### Patch Changes
 
-- [#100](https://github.com/pacaplan/agent-gauntlet/pull/100) Use exit codes for the `detect` command and update `gauntlet-commit` skill to handle unexpected detect exit codes
+- [#100](https://github.com/pacaplan/agent-gauntlet/pull/100) Use exit codes for the `detect` command and update `validator-commit` skill to handle unexpected detect exit codes
 
 ## 1.2.1
 
@@ -78,7 +78,7 @@
 
 - [#92](https://github.com/pacaplan/agent-gauntlet/pull/92) Add `skill-quality` reviewer that evaluates skill prompt adherence, and fix stale base branch detection to prevent false diff scope misses
 
-- [#93](https://github.com/pacaplan/agent-gauntlet/pull/93) Add `gauntlet-commit`, `gauntlet-merge`, and `gauntlet-issue` skills for streamlined commit, merge, and issue management workflows
+- [#93](https://github.com/pacaplan/agent-gauntlet/pull/93) Add `validator-commit`, `validator-merge`, and `validator-issue` skills for streamlined commit, merge, and issue management workflows
 
 ### Patch Changes
 
@@ -90,11 +90,11 @@
 
 ### Major Changes
 
-- [#86](https://github.com/pacaplan/agent-gauntlet/pull/86) Remove the `gauntlet-fix-pr`, `gauntlet-push-pr`, and `wait-ci` commands, streamlining the CLI to focus on core verification functionality
+- [#86](https://github.com/pacaplan/agent-gauntlet/pull/86) Remove the `validator-fix-pr`, `validator-push-pr`, and `wait-ci` commands, streamlining the CLI to focus on core verification functionality
 
 ### Minor Changes
 
-- [#83](https://github.com/pacaplan/agent-gauntlet/pull/83) Add `agent-gauntlet skip` command for bypassing specific gates, and upgrade bundled openspec skills to the latest versions
+- [#83](https://github.com/pacaplan/agent-gauntlet/pull/83) Add `agent-validate skip` command for bypassing specific gates, and upgrade bundled openspec skills to the latest versions
 
 ### Patch Changes
 
@@ -106,7 +106,7 @@
 
 ### Patch Changes
 
-- [#81](https://github.com/pacaplan/agent-gauntlet/pull/81) Move all ConsoleReporter output from stderr to stdout so agents can see gate results when running `agent-gauntlet` via Bash tool
+- [#81](https://github.com/pacaplan/agent-gauntlet/pull/81) Move all ConsoleReporter output from stderr to stdout so agents can see gate results when running `agent-validate` via Bash tool
 
 ## 0.15.4
 
@@ -128,7 +128,7 @@
 
 ### Patch Changes
 
-- [#73](https://github.com/pacaplan/agent-gauntlet/pull/73) Add E2E integration tests for the `gauntlet-setup` skill and refactor the stop-hook E2E test to use `bun:test` format for consistency
+- [#73](https://github.com/pacaplan/agent-gauntlet/pull/73) Add E2E integration tests for the `validator-setup` skill and refactor the stop-hook E2E test to use `bun:test` format for consistency
 
 ## 0.15.1
 
@@ -142,9 +142,9 @@
 
 ### Minor Changes
 
-- [#64](https://github.com/pacaplan/agent-gauntlet/pull/64) Refactor `gauntlet-run` to delegate log and JSON file processing to disposable haiku subagents, keeping the main agent's context window free of ephemeral detail
+- [#64](https://github.com/pacaplan/agent-gauntlet/pull/64) Refactor `validator-run` to delegate log and JSON file processing to disposable haiku subagents, keeping the main agent's context window free of ephemeral detail
 
-- [#65](https://github.com/pacaplan/agent-gauntlet/pull/65) Add `agent-gauntlet status` CLI command, 3-tier subagent fallback strategy with Cursor `--trust` flag support, and prescriptive skill prompt improvements
+- [#65](https://github.com/pacaplan/agent-gauntlet/pull/65) Add `agent-validate status` CLI command, 3-tier subagent fallback strategy with Cursor `--trust` flag support, and prescriptive skill prompt improvements
 
 - [#66](https://github.com/pacaplan/agent-gauntlet/pull/66) Add `capture-eval-issues` skill that uses a sonnet subagent to judge review violations and capture noteworthy ones into `evals/inventory.yml` for the eval framework
 
@@ -156,7 +156,7 @@
 
 ### Minor Changes
 
-- [#60](https://github.com/pacaplan/agent-gauntlet/pull/60) Add gauntlet auto-invocation via skill frontmatter and start hooks, enabling automatic quality verification when coding tasks are detected
+- [#60](https://github.com/pacaplan/agent-gauntlet/pull/60) Add validator auto-invocation via skill frontmatter and start hooks, enabling automatic quality verification when coding tasks are detected
 
 - [#62](https://github.com/pacaplan/agent-gauntlet/pull/62) Redesign `init` command with interactive CLI selection, reviewer setup, and checksum-based change detection for idempotent re-runs
 
@@ -174,7 +174,7 @@
 
 ### Minor Changes
 
-- [#55](https://github.com/pacaplan/agent-gauntlet/pull/55) Improve `gauntlet init` command UX with better defaults, streamlined prompts, and a more intuitive setup flow
+- [#55](https://github.com/pacaplan/agent-gauntlet/pull/55) Improve `agent-validate init` command UX with better defaults, streamlined prompts, and a more intuitive setup flow
 
 ### Patch Changes
 
@@ -184,7 +184,7 @@
 
 ### Minor Changes
 
-- [#52](https://github.com/pacaplan/agent-gauntlet/pull/52) Simplify `gauntlet init` to a lightweight scaffolding step and introduce a `/gauntlet-setup` skill that guides users through full project configuration interactively
+- [#52](https://github.com/pacaplan/agent-gauntlet/pull/52) Simplify `agent-validate init` to a lightweight scaffolding step and introduce a `/validator-setup` skill that guides users through full project configuration interactively
 
 ### Patch Changes
 
@@ -194,13 +194,13 @@
 
 ### Minor Changes
 
-- [#50](https://github.com/pacaplan/agent-gauntlet/pull/50) Remove Bun runtime requirement for end users — ship compiled JS to npm so `npm install -g agent-gauntlet` works with just Node.js (>=18), replacing Bun's Glob with picomatch and adding a Bun.build()-based build pipeline
+- [#50](https://github.com/pacaplan/agent-gauntlet/pull/50) Remove Bun runtime requirement for end users — ship compiled JS to npm so `npm install -g agent-validator` works with just Node.js (>=18), replacing Bun's Glob with picomatch and adding a Bun.build()-based build pipeline
 
 ## 0.10.1
 
 ### Patch Changes
 
-- [#47](https://github.com/pacaplan/agent-gauntlet/pull/47) Add stop-hook E2E integration test exercising the full lifecycle, generate adapter config during `gauntlet init` based on eval results, and update README documentation
+- [#47](https://github.com/pacaplan/agent-gauntlet/pull/47) Add stop-hook E2E integration test exercising the full lifecycle, generate adapter config during `agent-validate init` based on eval results, and update README documentation
 
 ## 0.10.0
 
@@ -216,17 +216,17 @@
 
 - [#37](https://github.com/pacaplan/agent-gauntlet/pull/37) Add per-adapter configuration for tool use permissions and thinking budget allocation
 
-- [#38](https://github.com/pacaplan/agent-gauntlet/pull/38) Add `gauntlet-check` and `gauntlet-status` skills for querying gauntlet run state from within adapters
+- [#38](https://github.com/pacaplan/agent-gauntlet/pull/38) Add `validator-check` and `validator-status` skills for querying validator run state from within adapters
 
 - [#40](https://github.com/pacaplan/agent-gauntlet/pull/40) Add eval framework for measuring adapter performance across structured test scenarios
 
-- [#41](https://github.com/pacaplan/agent-gauntlet/pull/41) Add help skill providing contextual usage guidance for gauntlet commands and configuration
+- [#41](https://github.com/pacaplan/agent-gauntlet/pull/41) Add help skill providing contextual usage guidance for validator commands and configuration
 
 - [#43](https://github.com/pacaplan/agent-gauntlet/pull/43) Add configurable N-deep log rotation with automatic cleanup when the retry limit is reached
 
 ### Patch Changes
 
-- [#31](https://github.com/pacaplan/agent-gauntlet/pull/31) Fix auto-clean triggering on stale state and resolve post-gauntlet PR creation and CI workflow bugs
+- [#31](https://github.com/pacaplan/agent-gauntlet/pull/31) Fix auto-clean triggering on stale state and resolve post-validator PR creation and CI workflow bugs
 
 - [#34](https://github.com/pacaplan/agent-gauntlet/pull/34) Add per-reviewer GATE_RESULT logging and track execution state changes for debugging review pipelines
 
@@ -248,7 +248,7 @@
 
 - Add cursor stop hook for detecting and handling cursor adapter stops
 
-- [#30](https://github.com/pacaplan/agent-gauntlet/pull/30) Prevent clean command from running during active gauntlet run, properly skip unhealthy adapters, and include GitHub Actions failure logs in CI fix instructions
+- [#30](https://github.com/pacaplan/agent-gauntlet/pull/30) Prevent clean command from running during active validator run, properly skip unhealthy adapters, and include GitHub Actions failure logs in CI fix instructions
 
 ### Patch Changes
 

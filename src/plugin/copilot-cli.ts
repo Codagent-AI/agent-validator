@@ -11,8 +11,8 @@ export interface CopilotCliResult {
 export async function installPlugin(): Promise<CopilotCliResult> {
   try {
     execFileSync(
-      'gh',
-      ['copilot', '--', 'plugin', 'install', 'Codagent-AI/agent-validator'],
+      'copilot',
+      ['plugin', 'install', 'Codagent-AI/agent-validator'],
       {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],

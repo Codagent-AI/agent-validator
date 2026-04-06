@@ -93,12 +93,12 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 	});
 
 	describe("getManualInstallInstructions", () => {
-		it("returns instructions including gh copilot plugin install command", () => {
+		it("returns instructions including copilot plugin install command", () => {
 			const instructions = adapter.getManualInstallInstructions("user");
 			expect(instructions.length).toBeGreaterThan(0);
 			expect(
 				instructions.some((i: string) =>
-					i.includes("gh copilot -- plugin install Codagent-AI/agent-validator"),
+					i.includes("copilot plugin install Codagent-AI/agent-validator"),
 				),
 			).toBe(true);
 		});
@@ -142,13 +142,13 @@ describe("GitHubCopilotAdapter execution", () => {
 	});
 
 	describe("isAvailable", () => {
-		it("runs gh copilot -- --help to check availability", async () => {
+		it("runs copilot --help to check availability", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
 					const callback = args[args.length - 1];
 					if (typeof callback === "function") {
-						callback(null, "usage: gh copilot", "");
+						callback(null, "usage: copilot", "");
 					}
 					// biome-ignore lint/suspicious/noExplicitAny: mock typing
 					return {} as any;
@@ -157,12 +157,12 @@ describe("GitHubCopilotAdapter execution", () => {
 			);
 			const result = await adapter.isAvailable();
 			expect(result).toBe(true);
-			// Verify it called gh copilot -- --help, not just 'which copilot'
+			// Verify it called copilot --help
 			const callArgs = execSpy.mock.calls[0];
-			expect(callArgs[0]).toBe("gh copilot -- --help");
+			expect(callArgs[0]).toBe("copilot --help");
 		});
 
-		it("returns false when gh copilot is not available", async () => {
+		it("returns false when copilot is not available", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
@@ -181,7 +181,7 @@ describe("GitHubCopilotAdapter execution", () => {
 	});
 
 	describe("checkHealth", () => {
-		it("returns missing when gh copilot is not available", async () => {
+		it("returns missing when copilot is not available", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
@@ -204,47 +204,7 @@ describe("GitHubCopilotAdapter execution", () => {
 	});
 
 	describe("execute", () => {
-		it("resolves model via --list-models before passing to command", async () => {
-			let callIndex = 0;
-			execSpy = spyOn(childProcess, "exec").mockImplementation(
-				// biome-ignore lint/suspicious/noExplicitAny: mock typing
-				((...args: any[]) => {
-					const callback = args[args.length - 1];
-					if (typeof callback === "function") {
-						if (callIndex === 0) {
-							// First call: --list-models for model resolution
-							callback(
-								null,
-								"gpt-5.3-codex - GPT 5.3 Codex\ngpt-5.2-codex - GPT 5.2 Codex\n",
-								"",
-							);
-						} else {
-							// Second call: actual review command
-							callback(null, "review output", "");
-						}
-						callIndex++;
-					}
-					// biome-ignore lint/suspicious/noExplicitAny: mock typing
-					return {} as any;
-					// biome-ignore lint/suspicious/noExplicitAny: mock typing
-				}) as any,
-			);
-
-			await adapter.execute({
-				prompt: "Review this",
-				diff: "some diff",
-				model: "codex",
-			});
-
-			// First call should be --list-models
-			const listCmd = execSpy.mock.calls[0][0] as string;
-			expect(listCmd).toContain("--list-models");
-			// Second call should use the resolved model
-			const reviewCmd = execSpy.mock.calls[1][0] as string;
-			expect(reviewCmd).toContain("--model gpt-5.3-codex");
-		});
-
-		it("uses gh copilot command with -s flag", async () => {
+		it("uses copilot command (not gh copilot)", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
@@ -264,8 +224,8 @@ describe("GitHubCopilotAdapter execution", () => {
 			});
 
 			const cmd = execSpy.mock.calls[0][0] as string;
-			expect(cmd).toContain("gh copilot --");
-			expect(cmd).toContain("-s");
+			expect(cmd).toContain("copilot");
+			expect(cmd).not.toContain("gh copilot");
 		});
 
 		it("includes --allow-tool flags when allowToolUse is not false", async () => {
@@ -385,8 +345,8 @@ describe("GitHubCopilotAdapter execution", () => {
 			});
 
 			const cmd = execSpy.mock.calls[0][0] as string;
-			// Verify the command uses cat to pipe temp file content to gh copilot via stdin
-			expect(cmd).toMatch(/^cat ".*validator-copilot-.*\.txt" \| gh copilot -- /);
+			// Verify the command uses cat to pipe temp file content to copilot via stdin
+			expect(cmd).toMatch(/^cat ".*validator-copilot-.*\.txt" \| copilot /);
 		});
 
 		it("maps all thinkingBudget levels correctly", async () => {
