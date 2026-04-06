@@ -413,17 +413,11 @@ async function writeConfigYml(
   const cliList = reviewCLINames.map((name) => `    - ${name}`).join('\n');
   const adapterSettings = buildAdapterSettingsBlock(reviewCLINames);
 
-  const reviewEntries = selectedBuiltIns
-    .map(
-      (name) =>
-        `  ${name}:\n    builtin: ${name}\n    num_reviews: ${numReviews}`,
-    )
-    .join('\n');
-
-  const reviewsBlock =
+  // Build inline review entries for the entry_points comment hint
+  const reviewHint =
     selectedBuiltIns.length > 0
-      ? `# Built-in reviews\nreviews:\n${reviewEntries}`
-      : `# No built-in reviews selected\nreviews: {}`;
+      ? `# Selected built-in reviews: ${selectedBuiltIns.join(', ')} (num_reviews: ${numReviews})\n# These will be added inline to entry_points by /validator-setup`
+      : `# No built-in reviews selected`;
 
   const content = `# Ordered list of CLI agents to try for reviews
 cli:
@@ -433,7 +427,7 @@ ${adapterSettings}
 # entry_points configured by /validator-setup
 entry_points: []
 
-${reviewsBlock}
+${reviewHint}
 
 # -------------------------------------------------------------------
 # All settings below are optional. Uncomment and change as needed.

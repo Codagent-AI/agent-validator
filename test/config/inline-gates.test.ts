@@ -46,21 +46,19 @@ describe("Inline Gate Configs", () => {
 		}
 	});
 
-	// 6.1: Inline check is loaded and available for entry point reference
-	it("should load inline check and make it available for entry point reference", async () => {
+	// Inline check defined inside entry_point is loaded
+	it("should load inline check from entry_point", async () => {
 		await setupTestEnv({
 			configYml: `
 cli:
   default_preference:
     - claude
-checks:
-  build:
-    command: npm run build
-    parallel: true
 entry_points:
   - path: "."
     checks:
-      - build
+      - build:
+          command: npm run build
+          parallel: true
 `,
 		});
 		const config = await loadConfig(tmpDir);
@@ -71,20 +69,18 @@ entry_points:
 		expect(config.checks.build!.parallel).toBe(true);
 	});
 
-	// 6.2: Inline check with only command applies correct defaults
+	// Inline check with only command applies correct defaults
 	it("should apply correct defaults for inline check with only command", async () => {
 		await setupTestEnv({
 			configYml: `
 cli:
   default_preference:
     - claude
-checks:
-  minimal:
-    command: echo hello
 entry_points:
   - path: "."
     checks:
-      - minimal
+      - minimal:
+          command: echo hello
 `,
 		});
 		const config = await loadConfig(tmpDir);
@@ -96,20 +92,18 @@ entry_points:
 		expect(check.run_locally).toBe(true);
 	});
 
-	// 6.3: Name collision between inline and file-based check produces validation error
+	// Name collision between inline and file-based check produces validation error
 	it("should reject name collision between inline and file-based check", async () => {
 		await setupTestEnv({
 			configYml: `
 cli:
   default_preference:
     - claude
-checks:
-  lint:
-    command: npx eslint .
 entry_points:
   - path: "."
     checks:
-      - lint
+      - lint:
+          command: npx eslint .
 `,
 			checkFiles: {
 				"lint.yml": "command: npm run lint\n",
@@ -120,21 +114,19 @@ entry_points:
 		);
 	});
 
-	// 6.4: File-based checks coexist with inline checks
+	// File-based checks coexist with inline checks
 	it("should allow file-based checks to coexist with inline checks", async () => {
 		await setupTestEnv({
 			configYml: `
 cli:
   default_preference:
     - claude
-checks:
-  build:
-    command: npm run build
-    parallel: true
 entry_points:
   - path: "."
     checks:
-      - build
+      - build:
+          command: npm run build
+          parallel: true
       - lint
 `,
 			checkFiles: {
@@ -149,21 +141,19 @@ entry_points:
 		expect(config.checks.lint!.command).toBe("npx eslint .");
 	});
 
-	// 6.5: Inline review is loaded and available for entry point reference
-	it("should load inline review and make it available for entry point reference", async () => {
+	// Inline review defined inside entry_point is loaded
+	it("should load inline review from entry_point", async () => {
 		await setupTestEnv({
 			configYml: `
 cli:
   default_preference:
     - claude
-reviews:
-  code-quality:
-    builtin: code-quality
-    num_reviews: 1
 entry_points:
   - path: "."
     reviews:
-      - code-quality
+      - code-quality:
+          builtin: code-quality
+          num_reviews: 1
 `,
 		});
 		const config = await loadConfig(tmpDir);
@@ -173,20 +163,18 @@ entry_points:
 		expect(config.reviews["code-quality"]!.promptContent).toContain("Code Quality Review");
 	});
 
-	// 6.6: Inline review with only builtin applies correct defaults
+	// Inline review with only builtin applies correct defaults
 	it("should apply correct defaults for inline review with only builtin", async () => {
 		await setupTestEnv({
 			configYml: `
 cli:
   default_preference:
     - claude
-reviews:
-  minimal:
-    builtin: code-quality
 entry_points:
   - path: "."
     reviews:
-      - minimal
+      - minimal:
+          builtin: code-quality
 `,
 		});
 		const config = await loadConfig(tmpDir);
@@ -199,8 +187,130 @@ entry_points:
 		expect(review.enabled).toBe(true);
 	});
 
-	// 6.7: Name collision between inline and file-based review produces validation error
+	// Name collision between inline and file-based review produces validation error
 	it("should reject name collision between inline and file-based review", async () => {
+		await setupTestEnv({
+			configYml: `
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - code-quality:
+          builtin: code-quality
+`,
+			reviewFiles: {
+				"code-quality.yml": "builtin: code-quality\n",
+			},
+		});
+		await expect(loadConfig(tmpDir)).rejects.toThrow(
+			/Review "code-quality" is defined both inline.*and as a file/,
+		);
+	});
+
+	// Invalid inline check (missing command) produces validation error at config load
+	it("should reject invalid inline check missing command", async () => {
+		await setupTestEnv({
+			configYml: `
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    checks:
+      - bad-check:
+          parallel: true
+`,
+		});
+		await expect(loadConfig(tmpDir)).rejects.toThrow();
+	});
+
+	// Invalid inline review (no prompt source) produces validation error at config load
+	it("should reject invalid inline review with no prompt source", async () => {
+		await setupTestEnv({
+			configYml: `
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - bad-review:
+          num_reviews: 1
+`,
+		});
+		await expect(loadConfig(tmpDir)).rejects.toThrow();
+	});
+
+	// Duplicate inline check across entry_points is rejected
+	it("should reject same inline check defined in multiple entry_points", async () => {
+		await setupTestEnv({
+			configYml: `
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    checks:
+      - build:
+          command: npm run build
+  - path: "apps/api"
+    checks:
+      - build:
+          command: npm run build
+`,
+		});
+		await expect(loadConfig(tmpDir)).rejects.toThrow(
+			/Check "build" is defined inline in more than one entry point/,
+		);
+	});
+
+	// Entry point can reference an inline check defined in another entry_point by name
+	it("should allow referencing an inline check by name from another entry_point", async () => {
+		await setupTestEnv({
+			configYml: `
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    checks:
+      - build:
+          command: npm run build
+  - path: "apps/api"
+    checks:
+      - build
+`,
+		});
+		const config = await loadConfig(tmpDir);
+
+		expect(config.checks.build).toBeDefined();
+		// Both entry points reference the same check name
+		expect(config.project.entry_points[0]!.checks).toEqual(["build"]);
+		expect(config.project.entry_points[1]!.checks).toEqual(["build"]);
+	});
+
+	// Top-level checks/reviews are NOT allowed
+	it("should reject top-level checks map", async () => {
+		await setupTestEnv({
+			configYml: `
+cli:
+  default_preference:
+    - claude
+checks:
+  build:
+    command: npm run build
+entry_points:
+  - path: "."
+    checks:
+      - build
+`,
+		});
+		await expect(loadConfig(tmpDir)).rejects.toThrow();
+	});
+
+	it("should reject top-level reviews map", async () => {
 		await setupTestEnv({
 			configYml: `
 cli:
@@ -213,49 +323,6 @@ entry_points:
   - path: "."
     reviews:
       - code-quality
-`,
-			reviewFiles: {
-				"code-quality.yml": "builtin: code-quality\n",
-			},
-		});
-		await expect(loadConfig(tmpDir)).rejects.toThrow(
-			/Review "code-quality" is defined both inline.*and as a file/,
-		);
-	});
-
-	// 6.8: Invalid inline check (missing command) produces validation error at config load
-	it("should reject invalid inline check missing command", async () => {
-		await setupTestEnv({
-			configYml: `
-cli:
-  default_preference:
-    - claude
-checks:
-  bad-check:
-    parallel: true
-entry_points:
-  - path: "."
-    checks:
-      - bad-check
-`,
-		});
-		await expect(loadConfig(tmpDir)).rejects.toThrow();
-	});
-
-	// 6.9: Invalid inline review (no prompt source) produces validation error at config load
-	it("should reject invalid inline review with no prompt source", async () => {
-		await setupTestEnv({
-			configYml: `
-cli:
-  default_preference:
-    - claude
-reviews:
-  bad-review:
-    num_reviews: 1
-entry_points:
-  - path: "."
-    reviews:
-      - bad-review
 `,
 		});
 		await expect(loadConfig(tmpDir)).rejects.toThrow();

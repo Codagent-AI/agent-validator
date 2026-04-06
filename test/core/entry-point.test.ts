@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import type { EntryPointConfig } from "../../src/config/types.js";
+import type { NormalizedEntryPoint } from "../../src/config/types.js";
 import { EntryPointExpander } from "../../src/core/entry-point.js";
 
 describe("EntryPointExpander", () => {
 	const expander = new EntryPointExpander();
 
 	it("should include root entry point if there are any changes", async () => {
-		const entryPoints: EntryPointConfig[] = [{ path: "." }];
+		const entryPoints: NormalizedEntryPoint[] = [{ path: "." }];
 		const changes = ["some/file.ts"];
 
 		const result = await expander.expand(entryPoints, changes);
@@ -16,7 +16,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should match fixed directory entry points", async () => {
-		const entryPoints: EntryPointConfig[] = [
+		const entryPoints: NormalizedEntryPoint[] = [
 			{ path: "apps/api" },
 			{ path: "apps/web" },
 		];
@@ -29,7 +29,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should match wildcard entry points", async () => {
-		const entryPoints: EntryPointConfig[] = [{ path: "packages/*" }];
+		const entryPoints: NormalizedEntryPoint[] = [{ path: "packages/*" }];
 		const changes = [
 			"packages/ui/button.ts",
 			"packages/utils/helper.ts",
@@ -45,7 +45,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should handle no changes", async () => {
-		const entryPoints: EntryPointConfig[] = [{ path: "." }];
+		const entryPoints: NormalizedEntryPoint[] = [{ path: "." }];
 		const changes: string[] = [];
 
 		const result = await expander.expand(entryPoints, changes);
@@ -54,7 +54,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should exclude files based on exact pattern", async () => {
-		const entryPoints: EntryPointConfig[] = [
+		const entryPoints: NormalizedEntryPoint[] = [
 			{
 				path: "src",
 				exclude: ["src/ignore.ts"],
@@ -68,7 +68,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should not match entry point if all changes are excluded", async () => {
-		const entryPoints: EntryPointConfig[] = [
+		const entryPoints: NormalizedEntryPoint[] = [
 			{
 				path: "src",
 				exclude: ["src/ignore.ts"],
@@ -84,7 +84,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should exclude directory prefix", async () => {
-		const entryPoints: EntryPointConfig[] = [
+		const entryPoints: NormalizedEntryPoint[] = [
 			{
 				path: "src",
 				exclude: ["src/ignored_dir"],
@@ -97,7 +97,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should exclude glob patterns", async () => {
-		const entryPoints: EntryPointConfig[] = [
+		const entryPoints: NormalizedEntryPoint[] = [
 			{
 				path: "src",
 				exclude: ["**/*.md"],
@@ -110,7 +110,7 @@ describe("EntryPointExpander", () => {
 	});
 
 	it("should handle root exclusions", async () => {
-		const entryPoints: EntryPointConfig[] = [
+		const entryPoints: NormalizedEntryPoint[] = [
 			{
 				path: ".",
 				exclude: ["**/*.lock"],

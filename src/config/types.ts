@@ -58,9 +58,25 @@ export interface LoadedReviewGateConfig {
   enabled: boolean;
 }
 
+/** Entry point after inline gates have been extracted (string-only arrays). */
+export interface NormalizedEntryPoint {
+  path: string;
+  exclude?: string[];
+  checks?: string[];
+  reviews?: string[];
+}
+
+/** ValidatorConfig with entry_points normalised to string-only gate references. */
+export type NormalizedValidatorConfig = Omit<
+  ValidatorConfig,
+  'entry_points'
+> & {
+  entry_points: NormalizedEntryPoint[];
+};
+
 // Combined type for the fully loaded configuration
 export interface LoadedConfig {
-  project: ValidatorConfig;
+  project: NormalizedValidatorConfig;
   checks: Record<string, LoadedCheckGateConfig>;
   reviews: Record<string, LoadedReviewGateConfig>;
 }
