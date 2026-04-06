@@ -51,6 +51,16 @@ export async function loadConfig(
   const projectConfigRaw = YAML.parse(configContent);
   const projectConfig = validatorConfigSchema.parse(projectConfigRaw);
 
+  // Infer default_preference from adapter keys when not explicitly set
+  if (!projectConfig.cli.default_preference) {
+    const adapterKeys = projectConfig.cli.adapters
+      ? Object.keys(projectConfig.cli.adapters)
+      : [];
+    if (adapterKeys.length > 0) {
+      projectConfig.cli.default_preference = adapterKeys;
+    }
+  }
+
   // 2. Load checks (file-based + inline)
   const checks = await loadCheckGates(configDir, projectConfig.checks);
 

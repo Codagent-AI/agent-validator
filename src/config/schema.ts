@@ -7,7 +7,7 @@ export const adapterConfigSchema = z.object({
 });
 
 export const cliConfigSchema = z.object({
-  default_preference: z.array(z.string().min(1)).min(1),
+  default_preference: z.array(z.string().min(1)).min(1).optional(),
   adapters: z.record(z.string(), adapterConfigSchema).optional(),
 });
 

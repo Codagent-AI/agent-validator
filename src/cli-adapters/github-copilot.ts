@@ -87,6 +87,29 @@ function assertModelUsed(requested: string | undefined, actual: string): void {
   }
 }
 
+/**
+ * Verify the model from a parsed copilot session summary.
+ * Throws if a model was requested but cannot be verified.
+ * Logs debug when model is unknown and no specific model was requested.
+ */
+function verifySessionModel(
+  summary: { telemetryLine: string; model: string },
+  requestedModel: string | undefined,
+): void {
+  if (summary.model === 'unknown') {
+    if (requestedModel) {
+      throw new Error(
+        'Unable to verify Copilot model from session summary — cannot confirm the requested model was used',
+      );
+    }
+    log.debug(
+      'copilot session summary found but no model lines parsed — skipping model assertion',
+    );
+  } else {
+    assertModelUsed(requestedModel, summary.model);
+  }
+}
+
 export class GitHubCopilotAdapter implements CLIAdapter {
   name = 'github-copilot';
 
@@ -265,13 +288,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
       if (summary) {
         opts.onOutput(summary.telemetryLine);
         log.debug(`copilot session: ${summary.telemetryLine}`);
-        if (summary.model !== 'unknown') {
-          assertModelUsed(opts.model, summary.model);
-        } else {
-          log.debug(
-            'copilot session summary found but no model lines parsed — skipping model assertion',
-          );
-        }
+        verifySessionModel(summary, opts.model);
       }
       return raw;
     }
@@ -299,13 +316,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
       const summary = parseCopilotSessionSummary(stderr);
       if (summary) {
         log.debug(`copilot session: ${summary.telemetryLine}`);
-        if (summary.model !== 'unknown') {
-          assertModelUsed(opts.model, summary.model);
-        } else {
-          log.debug(
-            'copilot session summary found but no model lines parsed — skipping model assertion',
-          );
-        }
+        verifySessionModel(summary, opts.model);
       }
       return stdout;
     } finally {

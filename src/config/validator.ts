@@ -403,12 +403,18 @@ function validateCliConfig(
     return;
   }
 
-  const defaults = projectConfig.cli.default_preference;
+  // Infer default_preference from adapter keys when not explicitly set
+  const defaults =
+    projectConfig.cli.default_preference ??
+    (projectConfig.cli.adapters
+      ? Object.keys(projectConfig.cli.adapters)
+      : undefined);
   if (!(defaults && Array.isArray(defaults)) || defaults.length === 0) {
     ctx.issues.push({
       file: ctx.configPath,
       severity: 'error',
-      message: 'cli.default_preference is required and cannot be empty',
+      message:
+        'cli.default_preference is required when multiple adapters are configured (or set cli.adapters with at least one entry)',
       field: 'cli.default_preference',
     });
     return;
