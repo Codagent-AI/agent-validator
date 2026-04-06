@@ -265,7 +265,11 @@ export class GitHubCopilotAdapter implements CLIAdapter {
       if (summary) {
         opts.onOutput(summary.telemetryLine);
         log.debug(`copilot session: ${summary.telemetryLine}`);
-        assertModelUsed(opts.model, summary.model);
+        if (summary.model !== 'unknown') {
+          assertModelUsed(opts.model, summary.model);
+        } else {
+          log.debug('copilot session summary found but no model lines parsed — skipping model assertion');
+        }
       }
       return raw;
     }
@@ -293,7 +297,11 @@ export class GitHubCopilotAdapter implements CLIAdapter {
       const summary = parseCopilotSessionSummary(stderr);
       if (summary) {
         log.debug(`copilot session: ${summary.telemetryLine}`);
-        assertModelUsed(opts.model, summary.model);
+        if (summary.model !== 'unknown') {
+          assertModelUsed(opts.model, summary.model);
+        } else {
+          log.debug('copilot session summary found but no model lines parsed — skipping model assertion');
+        }
       }
       return stdout;
     } finally {

@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import YAML from "yaml";
 import { getAdapter } from "../src/cli-adapters/index.js";
@@ -142,6 +142,12 @@ export async function runEval(
 		evalsDir,
 		`../src/built-in-reviews/${promptFile}`,
 	);
+	if (!existsSync(promptPath)) {
+		throw new Error(
+			`Review prompt not found: ${promptPath}\n` +
+			`Set "reviewer" in eval-config.yml to an existing built-in review name.`,
+		);
+	}
 	const promptContent = readFileSync(promptPath, "utf-8");
 	const fullPrompt = `${promptContent}\n${JSON_SYSTEM_INSTRUCTION}`;
 
