@@ -8,7 +8,7 @@
 <!-- [![npm downloads](https://img.shields.io/npm/dm/agent-validator)](https://www.npmjs.com/package/agent-validator) -->
 <!-- [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/Codagent-AI/agent-validator)](https://coderabbit.ai) -->
 
-> Don't just review the agent's code — put it through the validator.
+> Don't just review the agent's code — put it through the gauntlet.
 
 Agent Validator (formerly Agent Gauntlet) is a configurable “feedback loop” runner for AI-assisted development workflows.
 
@@ -36,223 +36,95 @@ For AI reviews, it uses the CLI tool of your choice: Gemini, Codex, Claude Code,
 
 ![Agent Validator Demo](docs/images/agent-validator-demo.gif)
 
-## Common Workflows
-
-Agent Validator supports three workflows, ranging from simple CLI execution to fully autonomous agentic integration:
-
-- **CLI Mode** — Run checks via command line; ideal for CI pipelines and scripts.
-- **Assistant Mode** — AI assistant runs validation loop, fixing issues iteratively.
-- **Agentic Mode** — Autonomous agent validates and fixes in real-time, delivered as a Claude Code or Cursor plugin. *(Coming soon with [Agent Runner](https://www.codagent.dev/).)*
-
-![Agent Validator Workflows](docs/images/workflows2.png)
-
 ### Comparison vs Other Tools
 
-### AI Code Review Tools
-
-Agent Validator is not a replacement for tools that provide AI pull request code reviews. It provides real-time feedback loops for autonomous coding agents, combining deterministic static checks (build, lint, test) with multi-agent AI reviews in a single pipeline. This enables agents to iterate and self-correct until all checks and reviews pass, without human intervention.
+Agent Validator is not a replacement for AI pull request review tools. It provides real-time feedback loops for autonomous coding agents, combining deterministic static checks (build, lint, test) with multi-agent AI reviews in a single pipeline. This enables agents to iterate and self-correct until all checks and reviews pass, without human intervention.
 
 [Full comparison →](docs/feature_comparison.md)
 
-### Spec-Driven Workflow Tools
-
-It is recommended to use Agent Validator in conjunction with other spec-driven development tools. We believe is the ideal implementation of the validation step in any Spec → Implement → Validate workflow.
+It is recommended to use Agent Validator in conjunction with spec-driven development tools. We believe it is the ideal implementation of the validation step in any Spec → Implement → Validate workflow.
 
 ## Quick Start
 
 ### Requirements
 
-- **Node.js** (v18.0.0+)
-- **git** (change detection and diffs)
-- For reviews: one or more supported AI CLIs installed (`gemini`, `codex`, `claude`, `github-copilot`, `cursor`). For the full list of tools and how they are used, see [CLI Invocation Details](docs/cli-invocation-details.md)
+- **Node.js** (v18.0.0+), **git**
+- For reviews: one or more supported AI CLIs (`gemini`, `codex`, `claude`, `github-copilot`, `cursor`). See [CLI Invocation Details](docs/cli-invocation-details.md).
 
-### Installation
+### Installation & Setup
 
 ```bash
 npm install -g agent-validator
-```
-
-### Initialization
-
-Initialize configuration in your project root:
-
-```bash
 agent-validator init
 ```
 
-This walks you through an interactive setup:
+`init` detects your installed AI CLIs, creates `.validator/config.yml` with an empty config skeleton, and installs skills/hooks for your AI agent (Claude Code plugin, Copilot plugin, Cursor plugin, or Codex skills). Use `--yes` to skip prompts.
 
-1. **Detects available CLIs** on your system
-2. **Prompts for development CLIs** — the tools you work in
-3. **Prompts for install scope** — local (project) or global (user) installation
-4. **Prompts for review CLIs** — the tools used for AI code reviews (sets `cli.default_preference`)
-5. **Creates `.validator/`** with a config skeleton and the built-in code-quality review (see [Configuration Layout](#configuration-layout))
-6. **Installs skills and hooks** — for Claude Code, installs as a Claude Code plugin (skills and hooks delivered via plugin). For GitHub Copilot, installs via `gh copilot -- plugin install` (discovers the same `.claude-plugin/` manifest). For Cursor, installs by copying plugin files (`.cursor-plugin/`, skills, hooks) to `.cursor/plugins/agent-validator/` or `~/.cursor/plugins/agent-validator/`. For Codex, copies skill files to `.agents/skills/`.
-7. **Prints next steps** with context-aware instructions for your selected CLIs (Claude Code, Cursor, and GitHub Copilot users get `/validator-setup` instructions)
-
-Use `--yes` to skip all prompts (selects all detected CLIs, overwrites changed files).
-
-After init, configure your checks and reviews by running the setup skill in your AI agent session:
-
-```
-/validator-setup
-```
-
-The setup skill scans your project, discovers available tooling (linters, test runners, type checkers, etc.), and configures checks and entry points in `.validator/config.yml`. See the [Skills Guide](docs/skills-guide.md) for details.
+After init, run `/validator-setup` in your AI agent session to auto-discover your project's tooling and populate the config. See the [Skills Guide](docs/skills-guide.md) for details.
 
 ### Configuration Concepts
 
 Agent Validator uses three core concepts:
 
-- **Entry points**: Paths in your repository (e.g., `src/`, `docs/plans/`) that Agent Validator monitors for changes.
+- **Entry points**: Paths in your repository (e.g., `src/`) that Agent Validator monitors for changes.
 - **Checks**: Shell commands that run when an entry point changes — things like tests, linters, and type-checkers.
-- **Reviews**: AI-powered code reviews requested via CLI tools like Codex, Claude, or Gemini. Each review uses a custom prompt you define.
+- **Reviews**: AI-powered code reviews requested via CLI tools like Codex, Claude, or Gemini.
 
-When you run `agent-validator`, it detects which entry points have changed files and runs the associated checks and reviews.
-
-### Basic Usage
-
-- **Run gates for detected changes**
-
-```bash
-agent-validator run
-```
-
-- **Run gates from your agent and auto-fix detected issues**
-
-```
-/validator-run
-```
-
-### Agent Skills
-
-Agent Validator installs as a plugin for Claude Code, GitHub Copilot, and Cursor (and copies skill files for Codex), giving you slash-command workflows directly in your AI agent session. For example, `/validator-help` provides guidance and troubleshooting on how to use the tool. See the [Skills Guide](docs/skills-guide.md) for the full list of skills and configuration options.
-
-### Configuration Layout
-
-Agent Validator loads configuration from your repository:
-
-```text
-.validator/
-  config.yml          # entry_points starts as [] after init
-  checks/             # populated by /validator-setup or manually
-  reviews/
-    code-quality      # created by init
-```
-
-- **Project config**: `.validator/config.yml`
-- **Check definitions**: `.validator/checks/`
-- **Review definitions**: `.validator/reviews/`
+When you run Agent Validator, it detects which entry points have changed files and runs the associated checks and reviews.
 
 ### Example Configuration
 
-After running `agent-validator init`, your `config.yml` starts with empty entry points:
+Checks and reviews are defined inline in `config.yml`. Here's a simplified real-world example:
 
 ```yaml
-base_branch: origin/main
-log_dir: validator_logs
-cli:
-  default_preference:
-    - claude
-    - gemini
-# entry_points configured by /validator-setup
-entry_points: []
-```
-
-After running `/validator-setup`, a real-world configuration might look like this:
-
-#### config.yml
-
-```yaml
-base_branch: origin/main
+base_branch: main
 log_dir: validator_logs
 allow_parallel: true
+
 cli:
-  default_preference:
-    - codex
-    - claude
-    - gemini
+  adapters:
+    github-copilot:
+      allow_tool_use: false
+      thinking_budget: low
+
 entry_points:
-  - path: "src"
+  - path: "."
+    exclude:
+      - .validator
+      - openspec
     checks:
-      - test
-      - lint
-      - security-code
+      - build:
+          command: bun run build
+      - lint:
+          command: bunx biome check src
+      - typecheck:
+          command: bun run typecheck
+      - test:
+          command: bun test
+      - security-code:
+          command: semgrep scan --config auto --error src
     reviews:
-      - code-quality
-  - path: "package.json"
-    checks:
-      - security-deps
-  - path: "internal-docs/plans"
-    reviews:
-      - plan-review
+      - code-quality:
+          builtin: code-quality
+          cli_preference:
+            - github-copilot
+          model: claude-sonnet-4.6
+      - security-and-errors:
+          builtin: security-and-errors
+          cli_preference:
+            - github-copilot
+          model: gpt-5.3-codex
 ```
 
-**What each section does:**
+- **Checks** are inline shell commands — pass/fail based on exit code
+- **Reviews** reference a `builtin` prompt or a custom `.validator/reviews/*.md` file
+- Entry points can share gate names — define a gate inline once, reference it by name elsewhere
 
-| Section | Purpose |
-|---------|---------|
-| `base_branch` | The branch to compare against when detecting changes (usually `origin/main`) |
-| `log_dir` | Where Agent Validator writes log files for each run |
-| `allow_parallel` | Run checks and reviews concurrently for faster feedback |
-| `cli.default_preference` | Ordered list of AI CLIs to try for reviews — uses the first available one |
-| `entry_points` | Maps paths to the checks and reviews that run when those paths change |
+For check/review file definitions, per-review settings, and the full configuration schema, see the [Configuration Reference](docs/config-reference.md) and [User Guide](docs/user-guide.md).
 
-In this example:
-- Changes to `src/` trigger tests, linting, security checks, **and** an AI code review
-- Changes to `package.json` trigger a dependency security audit
-- Changes to `internal-docs/plans/` trigger an AI plan review (no code checks needed)
+### Agent Skills
 
-#### Check definition example
-
-Checks are shell commands defined in `.validator/checks/`:
-
-```yaml
-# .validator/checks/lint.yml
-name: lint
-command: bunx biome check src
-working_directory: .
-run_in_ci: true
-run_locally: true
-```
-
-The check name (`lint`) is referenced in `config.yml`. When Agent Validator runs this check, it executes the `command` and reports pass/fail based on exit code.
-
-#### Review definition example
-
-Reviews are defined in `.validator/reviews/`:
-
-```yaml
-# .validator/reviews/code-quality.yml
-builtin: code-quality
-num_reviews: 1
-```
-
-Review definitions can be **YAML** (`.yml`) or **Markdown** (`.md`). The filename (minus extension) becomes the review name referenced in `config.yml`.
-
-**Built-in reviews** use YAML with a `builtin` key that references a review prompt shipped with Agent Validator. The built-in `code-quality` review is a general-purpose code review that checks for bugs, style issues, and best practices. `num_reviews` controls how many review passes to run.
-
-**Custom reviews** are Markdown files containing your own review prompt. Agent Validator passes the prompt — along with the diff of changed files — to the AI CLI:
-
-```markdown
-<!-- .validator/reviews/plan-review.md -->
-
-# Plan Review
-Review this plan for completeness and potential issues.
-```
-
-**Per-review settings:** Both YAML and Markdown reviews support optional frontmatter to override defaults like `cli_preference`. This is useful when you want a specific LLM for certain types of reviews — for example, using Gemini for plan reviews but Codex for code reviews:
-
-```markdown
----
-cli_preference:
-  - gemini
-  - codex
----
-
-# Plan Review
-Review this plan for completeness and potential issues.
-```
+Agent Validator installs as a plugin for Claude Code, GitHub Copilot, and Cursor (and copies skill files for Codex), giving you slash-command workflows directly in your AI agent session. See the [Skills Guide](docs/skills-guide.md) for the full list.
 
 ### Recommended Reviewer Configuration
 
