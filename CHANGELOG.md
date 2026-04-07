@@ -1,5 +1,21 @@
 # agent-validator
 
+## 1.8.0
+
+### Minor Changes
+
+- [#122](https://github.com/Codagent-AI/agent-validator/pull/122) Add OpenCode CLI adapter, extending validator support to the OpenCode coding agent
+
+### Patch Changes
+
+- [#119](https://github.com/Codagent-AI/agent-validator/pull/119) Enable debug logging by default so validation output is visible without requiring manual configuration
+
+- [#123](https://github.com/Codagent-AI/agent-validator/pull/123) Rewrite built-in review prompts and add dedicated security and error-handling review categories
+
+- [#124](https://github.com/Codagent-AI/agent-validator/pull/124) Rebrand gauntlet to validator throughout the codebase, add combined reviews, and expand the eval framework with new test coverage
+
+- [#125](https://github.com/Codagent-AI/agent-validator/pull/125) Fix config syntax errors and auto-select the review config during `init` to reduce manual setup steps
+
 ## 1.7.0
 
 ### Minor Changes
