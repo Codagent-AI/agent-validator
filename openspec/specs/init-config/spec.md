@@ -4,38 +4,29 @@
 Configuration generation during `agent-validate init`. Covers config file creation, review config setup, and post-init guidance.
 ## Requirements
 ### Requirement: Init generates YAML review config with built-in reference
-The `init` command SHALL write review entries inline in `config.yml` under the top-level `reviews` map for each built-in review the user selects. Each entry SHALL reference the built-in by name with `builtin: <name>` and `num_reviews: 1`. The `init` command SHALL NOT create `.validator/reviews/` directory files, SHALL NOT create the `.validator/reviews/` directory, and SHALL NOT create the `.validator/checks/` directory.
+The `init` command SHALL write review entries in `config.yml` based on the reviewer recommendation logic rather than user selection. Each review entry SHALL include `builtin`, and when applicable, `cli_preference` and `model` fields matching the recommended configurations. The `init` command SHALL NOT create `.validator/reviews/` directory files, SHALL NOT create the `.validator/reviews/` directory, and SHALL NOT create the `.validator/checks/` directory.
 
-#### Scenario: Default init writes all selected built-in reviews inline
-- **WHEN** a user runs `agent-validate init`
-- **AND** the user accepts the default selection of all three built-in reviews
-- **THEN** `config.yml` SHALL contain a `reviews` map with entries for `code-quality`, `security`, and `error-handling`
-- **AND** each entry SHALL have `builtin: <name>` and `num_reviews: 1`
+#### Scenario: Primary config writes two-pass hybrid review entries
+- **WHEN** the primary review config is selected (GitHub Copilot available)
+- **THEN** `config.yml` SHALL contain a `code-quality` entry with `builtin: code-quality`, `cli_preference: [github-copilot]`, and `model: claude-sonnet-4.6`
+- **AND** `config.yml` SHALL contain a `security-and-errors` entry with `builtin: security-and-errors`, `cli_preference: [github-copilot]`, and `model: gpt-5.3-codex`
 - **AND** `.validator/reviews/` SHALL NOT be created
 - **AND** `.validator/checks/` SHALL NOT be created
 
-#### Scenario: Init with subset of built-in reviews selected
-- **WHEN** a user runs `agent-validate init`
-- **AND** the user deselects `error-handling` from the built-in review prompt
-- **THEN** `config.yml` SHALL contain a `reviews` map with entries for `code-quality` and `security` only
-- **AND** no `error-handling` entry SHALL be present
+#### Scenario: Secondary config writes single combined review entry
+- **WHEN** the secondary review config is selected (Codex only)
+- **THEN** `config.yml` SHALL contain an `all-reviewers` entry with `builtin: all-reviewers` and `model: gpt-5.3-codex`
+- **AND** no other review entries SHALL be present
 
-#### Scenario: Init with --yes flag writes all built-in reviews inline
+#### Scenario: Fallback config writes combined review entry without overrides
+- **WHEN** the fallback review config is selected (neither Copilot nor Codex)
+- **THEN** `config.yml` SHALL contain an `all-reviewers` entry with `builtin: all-reviewers`
+- **AND** no `model` or `cli_preference` SHALL be set on the review entry
+
+#### Scenario: Init with --yes and Copilot detected writes primary config
 - **WHEN** a user runs `agent-validate init --yes`
-- **THEN** `config.yml` SHALL contain a `reviews` map with entries for `code-quality`, `security`, and `error-handling`
-- **AND** no separate review file SHALL be created
-
-#### Scenario: Init re-run preserves existing inline reviews
-- **WHEN** `config.yml` already contains a `reviews` map
-- **AND** the user runs `agent-validate init`
-- **THEN** the existing `reviews` map SHALL be preserved (not overwritten)
-
-#### Scenario: Init re-run does not add new built-in reviews
-- **GIVEN** `config.yml` contains only a `code-quality` review entry
-- **AND** a newer version of agent-validator ships `security` and `error-handling` built-ins
-- **WHEN** the user runs `agent-validate init`
-- **THEN** the existing `reviews` map SHALL be preserved as-is
-- **AND** `security` and `error-handling` SHALL NOT be added automatically
+- **AND** `github-copilot` is detected as available
+- **THEN** `config.yml` SHALL contain the primary config review entries (code-quality + security-and-errors with per-review overrides)
 
 ### Requirement: Init outputs next-step message
 
@@ -157,20 +148,14 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **AND** the valid range SHALL be 1 to 3
 - **AND** the selected value SHALL be written as `num_reviews` in each review config entry
 
-#### Scenario: Built-in review selection prompt
+#### Scenario: Automatic review configuration selection
 - **GIVEN** the user runs `agent-validate init`
 - **WHEN** Phase 3 completes (after review CLI and num_reviews selection)
-- **THEN** the user SHALL be presented with a multi-select prompt listing all available built-in reviews: `code-quality`, `security`, `error-handling`
-- **AND** all built-in reviews SHALL be pre-selected by default
-- **AND** the user MAY deselect any reviews they do not want
-
-#### Scenario: Zero built-in reviews selected requires confirmation
-- **GIVEN** the user runs `agent-validate init`
-- **AND** the user deselects all built-in reviews
-- **WHEN** the selection is submitted
-- **THEN** the user SHALL be prompted with a confirmation: "No reviews selected. Are you sure you want to continue without any built-in reviews?"
-- **AND** if the user confirms, `config.yml` SHALL contain an empty `reviews` map
-- **AND** if the user cancels, the built-in review selection prompt SHALL be shown again
+- **THEN** review configuration SHALL be selected automatically by `selectReviewConfig()` based on detected reviewer CLIs
+- **AND** if `github-copilot` is among the selected review CLIs, the primary config SHALL be used: two-pass hybrid with `code-quality` (Sonnet) and `security-and-errors` (GPT)
+- **AND** if `codex` is among the selected review CLIs (without `github-copilot`), the secondary config SHALL be used: single `all-reviewers` pass (GPT)
+- **AND** otherwise, the fallback config SHALL be used: `all-reviewers` with no model override
+- **AND** the selected reviews SHALL be written as inline review definitions under the root entry point in `config.yml`
 
 #### Scenario: No base branch prompt
 - **GIVEN** the user runs `agent-validate init`
@@ -206,10 +191,11 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **THEN** all detected CLIs SHALL be added to `cli.default_preference`
 - **AND** `num_reviews` SHALL be set to the number of detected CLIs
 
-#### Scenario: --yes selects all built-in reviews
+#### Scenario: --yes applies auto-selected review configuration
 - **GIVEN** the user runs `agent-validate init --yes`
 - **WHEN** Phase 3 runs
-- **THEN** all built-in reviews (code-quality, security, error-handling) SHALL be selected without prompting
+- **THEN** the auto-selected review configuration SHALL be applied without prompting
+- **AND** the review config SHALL be determined by `selectReviewConfig()` based on detected CLIs
 
 #### Scenario: --yes overwrites changed files without asking
 - **GIVEN** the user runs `agent-validate init --yes`

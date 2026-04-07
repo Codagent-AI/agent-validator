@@ -117,11 +117,31 @@ export const reviewYamlSchema = z
     }
   });
 
+/** A single item in an entry point's checks array: either a name string or an inline definition. */
+export const entryPointCheckItemSchema = z.union([
+  z.string().min(1),
+  z
+    .record(z.string(), checkGateSchema)
+    .refine((obj) => Object.keys(obj).length === 1, {
+      message: 'Inline check item must have exactly one key (the gate name)',
+    }),
+]);
+
+/** A single item in an entry point's reviews array: either a name string or an inline definition. */
+export const entryPointReviewItemSchema = z.union([
+  z.string().min(1),
+  z
+    .record(z.string(), reviewYamlSchema)
+    .refine((obj) => Object.keys(obj).length === 1, {
+      message: 'Inline review item must have exactly one key (the gate name)',
+    }),
+]);
+
 export const entryPointSchema = z.object({
   path: z.string().min(1),
   exclude: z.array(z.string().min(1)).optional(),
-  checks: z.array(z.string().min(1)).optional(),
-  reviews: z.array(z.string().min(1)).optional(),
+  checks: z.array(entryPointCheckItemSchema).optional(),
+  reviews: z.array(entryPointReviewItemSchema).optional(),
 });
 
 export const debugLogConfigSchema = z.object({
@@ -156,8 +176,6 @@ export const validatorConfigSchema = z.object({
     .default('medium'),
   cli: cliConfigSchema,
   entry_points: z.array(entryPointSchema).min(1),
-  checks: z.record(z.string(), checkGateSchema).optional(),
-  reviews: z.record(z.string(), reviewYamlSchema).optional(),
   debug_log: debugLogConfigSchema.optional(),
   logging: loggingConfigSchema.optional(),
 });

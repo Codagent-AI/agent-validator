@@ -7,13 +7,11 @@ This document lists the configuration files Agent Validator loads and all suppor
 ```text
 .validator/
   config.yml              # project config (required)
-                          #   checks:   inline check gate definitions (preferred)
-                          #   reviews:  inline review gate definitions (preferred)
   checks/
-    *.yml                 # check gate definitions (also supported; file-per-gate)
+    *.yml                 # check gate definitions (file-per-gate; also supported)
   reviews/
-    *.md                  # review gate prompts as markdown (also supported; filename is gate name)
-    *.yml                 # review gate configs as YAML (also supported; filename is gate name)
+    *.md                  # review gate prompts as markdown (filename is gate name)
+    *.yml                 # review gate configs as YAML (filename is gate name)
 ```
 
 ## Project config: `.validator/config.yml`
@@ -65,14 +63,10 @@ This document lists the configuration files Agent Validator loads and all suppor
   Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-validator init`, this starts as `[]` (empty) and is populated by the `/validator-setup` skill.
   - **path**: string (required)  
     The scope path for the entry point. Supports fixed paths like `apps/api` and a trailing wildcard form like `packages/*` which expands to one job per changed subdirectory.
-  - **checks**: string[] (optional; names of check gates)  
-    Which check gate names to run when this entry point is active. Names reference gates defined inline under the `checks` map or as files in `.validator/checks/`.
-  - **reviews**: string[] (optional; names of review gates)  
-    Which review gate names to run when this entry point is active. Names reference gates defined inline under the `reviews` map or as files in `.validator/reviews/`.
-- **checks**: record (optional)
-  Inline check gate definitions. Each key is a check name and each value is a check configuration object using the same schema as `.validator/checks/*.yml` files (see [Check gates](#check-gates) below). Inline checks and file-based checks are merged at load time; if the same name appears in both sources, the system rejects with a validation error. This is the preferred way to define checks.
-- **reviews**: record (optional)
-  Inline review gate definitions. Each key is a review name and each value is a review configuration object using the same schema as `.validator/reviews/*.yml` files (see [Review gates](#review-gates) below). Inline reviews and file-based reviews are merged at load time; if the same name appears in both sources, the system rejects with a validation error. This is the preferred way to define simple reviews (e.g. built-in references). Reviews with long custom prompts are better as separate `.md` files.
+  - **checks**: array (optional)  
+    Which check gates to run when this entry point is active. Each item is either a **string** (name referencing a file-based gate in `.validator/checks/`) or an **inline definition** (a single-key object where the key is the gate name and the value is a check config object — same schema as `.validator/checks/*.yml` files, see [Check gates](#check-gates)). Inline checks and file-based checks are merged at load time; if the same name appears in both sources, the system rejects with a validation error. A check name may only be defined inline in one entry point; other entry points reference it by name.
+  - **reviews**: array (optional)  
+    Which review gates to run when this entry point is active. Each item is either a **string** (name referencing a file-based gate in `.validator/reviews/`) or an **inline definition** (a single-key object where the key is the gate name and the value is a review config object — same schema as `.validator/reviews/*.yml` files, see [Review gates](#review-gates)). Inline reviews and file-based reviews are merged at load time; if the same name appears in both sources, the system rejects with a validation error. A review name may only be defined inline in one entry point; other entry points reference it by name.
 
 ### Example
 
@@ -98,29 +92,21 @@ debug_log:
   enabled: true
   max_size_mb: 10
 
-# Inline check definitions (preferred)
-checks:
-  test:
-    command: npm run test
-  lint:
-    command: npx eslint .
-
-# Inline review definitions (preferred for simple configs)
-reviews:
-  code-quality:
-    builtin: code-quality
-    num_reviews: 1
-
 entry_points:
   - path: "."
     reviews:
-      - code-quality
+      - code-quality:
+          builtin: code-quality
+          num_reviews: 1
 
   - path: apps/api
     checks:
-      - test
-      - lint
+      - test:
+          command: npm run test
+      - lint:
+          command: npx eslint .
     reviews:
+      - code-quality
       - architecture
 
   - path: packages/*
@@ -130,7 +116,7 @@ entry_points:
 
 ## Check gates
 
-Check gates can be defined inline in `config.yml` under the `checks` map (preferred) or as separate files in `.validator/checks/*.yml` (also supported). Both styles use the same schema. For file-based checks, the gate name is derived from the filename (e.g. `lint.yml` → `lint`). For inline checks, the gate name is the map key.
+Check gates can be defined **inline** within an entry point's `checks` array (preferred) or as separate files in `.validator/checks/*.yml` (also supported). Both styles use the same schema. For file-based checks, the gate name is derived from the filename (e.g. `lint.yml` → `lint`). For inline checks, the gate name is the object key.
 
 ### Schema
 
@@ -169,9 +155,9 @@ fix_instructions_file: fix-guides/test-failures.md
 
 ## Review gates
 
-Review gates can be defined inline in `config.yml` under the `reviews` map (preferred for simple configs like built-in references), or as separate files in `.validator/reviews/`:
+Review gates can be defined **inline** within an entry point's `reviews` array (preferred for simple configs like built-in references), or as separate files in `.validator/reviews/`:
 
-- **Inline** (in `config.yml`): Same schema as `.validator/reviews/*.yml` files. Gate name is the map key.
+- **Inline** (in entry point): Same schema as `.validator/reviews/*.yml` files. Gate name is the object key.
 - **Markdown files** (`.md`): Gate name is the filename without extension. Best for reviews with custom prompts.
 - **YAML files** (`.yml`/`.yaml`): Gate name is the filename without extension.
 

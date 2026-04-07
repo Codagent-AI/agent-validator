@@ -12,6 +12,7 @@ import {
 } from './schema.js';
 import type {
   CheckGateConfig,
+  EntryPointConfig,
   ReviewPromptFrontmatter,
   ValidatorConfig,
 } from './types.js';
@@ -69,6 +70,12 @@ export async function validateConfig(
     await validateReviewGatesWrapper(ctx);
 
   if (projectConfig?.entry_points) {
+    // Collect inline gate names from entry_points so reference validation passes
+    collectInlineGateNames(
+      projectConfig,
+      existingCheckNames,
+      existingReviewNames,
+    );
     validateEntryPointReferences(
       projectConfig,
       existingCheckNames,
@@ -227,6 +234,29 @@ async function validateReviewGatesWrapper(ctx: ValidatorContext): Promise<{
   return validateReviewGates(reviewsPath, ctx.issues, ctx.filesChecked);
 }
 
+function addInlineNames(
+  items: EntryPointConfig['checks'] | EntryPointConfig['reviews'],
+  target: Set<string>,
+): void {
+  if (!items) return;
+  for (const item of items) {
+    if (typeof item !== 'string') {
+      for (const name of Object.keys(item)) target.add(name);
+    }
+  }
+}
+
+function collectInlineGateNames(
+  projectConfig: ValidatorConfig,
+  existingCheckNames: Set<string>,
+  existingReviewNames: Set<string>,
+): void {
+  for (const ep of projectConfig.entry_points) {
+    addInlineNames(ep.checks, existingCheckNames);
+    addInlineNames(ep.reviews, existingReviewNames);
+  }
+}
+
 function validateEntryPointReferences(
   projectConfig: ValidatorConfig,
   existingCheckNames: Set<string>,
@@ -256,8 +286,25 @@ function validateEntryPointReferences(
   }
 }
 
+/**
+ * Extract gate name from a union item (string or single-key object).
+ * The single-key invariant is enforced by entryPointCheckItemSchema /
+ * entryPointReviewItemSchema via `.refine()`, so the throw here is
+ * a defensive guard that should never be reached after schema validation.
+ */
+function gateItemName(item: string | Record<string, unknown>): string {
+  if (typeof item === 'string') return item;
+  const keys = Object.keys(item);
+  if (keys.length !== 1) {
+    throw new Error(
+      `Inline gate item must have exactly one key, got ${keys.length}`,
+    );
+  }
+  return keys[0] as string;
+}
+
 function validateEntryPointSchema(
-  entryPoint: { path: string; checks?: string[]; reviews?: string[] },
+  entryPoint: EntryPointConfig,
   entryPointPath: string,
   ctx: ValidatorContext,
 ): void {
@@ -278,7 +325,7 @@ function validateEntryPointSchema(
 }
 
 function validateReferencedChecks(
-  entryPoint: { checks?: string[] },
+  entryPoint: EntryPointConfig,
   entryPointPath: string,
   existingCheckNames: Set<string>,
   ctx: ValidatorContext,
@@ -286,7 +333,8 @@ function validateReferencedChecks(
   if (!entryPoint.checks) {
     return;
   }
-  for (const checkName of entryPoint.checks) {
+  for (const item of entryPoint.checks) {
+    const checkName = gateItemName(item);
     if (!existingCheckNames.has(checkName)) {
       ctx.issues.push({
         file: ctx.configPath,
@@ -299,7 +347,7 @@ function validateReferencedChecks(
 }
 
 function validateReferencedReviews(
-  entryPoint: { reviews?: string[] },
+  entryPoint: EntryPointConfig,
   entryPointPath: string,
   existingReviewNames: Set<string>,
   ctx: ValidatorContext,
@@ -307,7 +355,8 @@ function validateReferencedReviews(
   if (!entryPoint.reviews) {
     return;
   }
-  for (const reviewName of entryPoint.reviews) {
+  for (const item of entryPoint.reviews) {
+    const reviewName = gateItemName(item);
     if (!existingReviewNames.has(reviewName)) {
       ctx.issues.push({
         file: ctx.configPath,
@@ -320,7 +369,7 @@ function validateReferencedReviews(
 }
 
 function validateEntryPointHasGates(
-  entryPoint: { path: string; checks?: string[]; reviews?: string[] },
+  entryPoint: EntryPointConfig,
   entryPointPath: string,
   ctx: ValidatorContext,
 ): void {

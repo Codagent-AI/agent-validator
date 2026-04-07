@@ -1,16 +1,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import picomatch from 'picomatch';
-import type { EntryPointConfig } from '../config/types.js';
+import type { NormalizedEntryPoint } from '../config/types.js';
 
 export interface ExpandedEntryPoint {
   path: string; // The specific directory (e.g., "engines/billing")
-  config: EntryPointConfig; // The config that generated this (e.g., "engines/*")
+  config: NormalizedEntryPoint; // The config that generated this (e.g., "engines/*")
 }
 
 export class EntryPointExpander {
   async expand(
-    entryPoints: EntryPointConfig[],
+    entryPoints: NormalizedEntryPoint[],
     changedFiles: string[],
   ): Promise<ExpandedEntryPoint[]> {
     const results: ExpandedEntryPoint[] = [];
@@ -26,15 +26,15 @@ export class EntryPointExpander {
   }
 
   private expandRootEntryPoint(
-    entryPoints: EntryPointConfig[],
+    entryPoints: NormalizedEntryPoint[],
     changedFiles: string[],
     results: ExpandedEntryPoint[],
   ): void {
     if (changedFiles.length === 0) return;
 
-    const rootConfig = entryPoints.find((ep) => ep.path === '.') ?? {
-      path: '.',
-    };
+    const rootConfig: NormalizedEntryPoint = entryPoints.find(
+      (ep) => ep.path === '.',
+    ) ?? { path: '.' };
     const filteredRootChanges = this.filterExcludedFiles(
       changedFiles,
       rootConfig.exclude,
@@ -46,7 +46,7 @@ export class EntryPointExpander {
   }
 
   private async expandNonRootEntry(
-    ep: EntryPointConfig,
+    ep: NormalizedEntryPoint,
     changedFiles: string[],
     results: ExpandedEntryPoint[],
   ): Promise<void> {
@@ -72,7 +72,7 @@ export class EntryPointExpander {
   }
 
   async expandAll(
-    entryPoints: EntryPointConfig[],
+    entryPoints: NormalizedEntryPoint[],
   ): Promise<ExpandedEntryPoint[]> {
     const results: ExpandedEntryPoint[] = [];
 

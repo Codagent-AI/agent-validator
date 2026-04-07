@@ -27,7 +27,6 @@ Read the `entry_points` field from `.validator/config.yml`.
   1. **Add checks** — Scan for tools not already configured. Proceed to Step 3, but filter out any checks that already appear in `entry_points`.
   2. **Add custom** — User describes what they want to add. Skip to Step 7.
   3. **Reconfigure** — Start fresh. Back up existing config first:
-     - If a `checks` map exists in `config.yml`, rename it to `checks_bak` (commented out or preserved as a YAML comment)
      - Rename each `.validator/checks/*.yml` file to `.yml.bak` (overwrite any previous `.bak` files) — these are legacy file-based checks
      - Rename each custom `.validator/reviews/*.md` file to `.md.bak` (overwrite any previous `.bak` files)
      - Do NOT rename `.validator/reviews/*.yml` files (these are built-in review configs)
@@ -117,21 +116,11 @@ Ask the user: **check** (shell command) or **review** (AI code review)?
 
 ## Step 8: Create files and update config
 
-**Checks** — Add checks inline in `config.yml` under the top-level `checks` map. Each check is a key (check name) with its config object. Include `command`. Add optional fields (`run_in_ci`, `run_locally`) only when they differ from defaults. See `references/check-catalog.md` for schema.
-
-Example inline checks in `config.yml`:
-
-```yaml
-checks:
-  build:
-    command: npm run build
-  lint:
-    command: npx eslint .
-```
+**Checks** — Add checks inline in the entry point's `checks` array. Each inline check is a single-key object (check name → config object). Include `command`. Add optional fields (`run_in_ci`, `run_locally`) only when they differ from defaults. See `references/check-catalog.md` for schema. Do NOT add a top-level `checks` map — inline checks belong under entry_points.
 
 **Custom reviews** — Create `.validator/reviews/<name>.md` with YAML frontmatter (`num_reviews: 1`) and review prompt.
 
-**Built-in reviews** — The `code-quality` review is already defined inline in `config.yml` by `init`. Do not create a separate file for it.
+**Built-in reviews** — Add built-in reviews inline in the entry point's `reviews` array (e.g. `- code-quality: { builtin: code-quality }`). Do not create a separate file for built-in reviews.
 
 **Update entry_points** in `.validator/config.yml`:
 
@@ -139,13 +128,16 @@ checks:
 entry_points:
   - path: "<source_dir>"
     checks:
-      - <check-name-1>
-      - <check-name-2>
+      - build:
+          command: npm run build
+      - lint:
+          command: npx eslint .
     reviews:
-      - code-quality
+      - code-quality:
+          builtin: code-quality
 ```
 
-Always include `code-quality` in `reviews` for fresh setups. For "add checks" / "add custom": append to the appropriate entry point's lists, or add a new entry point if needed.
+Always include `code-quality` in `reviews` for fresh setups. For "add checks" / "add custom": append to the appropriate entry point's lists, or add a new entry point if needed. A check or review defined inline in one entry point can be referenced by name (as a string) in other entry points.
 
 ## Step 9: "Add something else?"
 
