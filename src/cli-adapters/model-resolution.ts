@@ -1,8 +1,8 @@
 // Tier suffixes to exclude from model resolution
 const TIER_SUFFIXES = ['-low', '-high', '-xhigh', '-fast'];
 
-/** Only allow model IDs with alphanumeric chars, hyphens, and dots. */
-export const SAFE_MODEL_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
+/** Only allow model IDs starting with an alphanumeric char, followed by alphanumeric, hyphens, or dots. */
+export const SAFE_MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 /**
  * Apply thinking preference filter to candidate models.

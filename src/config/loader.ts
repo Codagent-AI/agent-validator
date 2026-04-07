@@ -1,45 +1,39 @@
 import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
 import YAML from 'yaml';
-import {
-  isBuiltInReview,
-  loadBuiltInReview,
-} from '../built-in-reviews/index.js';
-import {
-  checkGateSchema,
-  reviewPromptFrontmatterSchema,
-  reviewYamlSchema,
-  validatorConfigSchema,
-} from './schema.js';
+import { loadCheckGates } from './load-checks.js';
+import { loadReviewGates } from './load-reviews.js';
+import { fileExists } from './loader-utils.js';
+import { validatorConfigSchema } from './schema.js';
 import type {
   CheckGateConfig,
   LoadedCheckGateConfig,
   LoadedConfig,
   LoadedReviewGateConfig,
+  NormalizedEntryPoint,
+  NormalizedValidatorConfig,
+  ReviewYamlConfig,
   ValidatorConfig,
 } from './types.js';
 
 const VALIDATOR_DIR = '.validator';
 const LEGACY_GAUNTLET_DIR = '.gauntlet';
 const CONFIG_FILE = 'config.yml';
-const CHECKS_DIR = 'checks';
-const REVIEWS_DIR = 'reviews';
 
 function resolveConfigDir(rootDir: string): string {
   const validatorPath = path.join(rootDir, VALIDATOR_DIR);
-  const gauntletPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
+  const legacyPath = path.join(rootDir, LEGACY_GAUNTLET_DIR);
   if (existsSync(validatorPath)) return validatorPath;
-  if (existsSync(gauntletPath)) return gauntletPath;
+  if (existsSync(legacyPath)) return legacyPath;
   return validatorPath; // default for new projects
 }
 
 export async function loadConfig(
   rootDir: string = process.cwd(),
 ): Promise<LoadedConfig> {
-  const gauntletPath = resolveConfigDir(rootDir);
-  const configPath = path.join(gauntletPath, CONFIG_FILE);
+  const configDir = resolveConfigDir(rootDir);
+  const configPath = path.join(configDir, CONFIG_FILE);
 
   // 1. Load project config
   if (!(await fileExists(configPath))) {
@@ -50,229 +44,104 @@ export async function loadConfig(
   const projectConfigRaw = YAML.parse(configContent);
   const projectConfig = validatorConfigSchema.parse(projectConfigRaw);
 
-  // 2. Load checks
-  const checks = await loadCheckGates(gauntletPath);
+  // Infer default_preference from adapter keys when not explicitly set
+  if (!projectConfig.cli.default_preference) {
+    const adapterKeys = projectConfig.cli.adapters
+      ? Object.keys(projectConfig.cli.adapters)
+      : [];
+    if (adapterKeys.length > 0) {
+      projectConfig.cli.default_preference = adapterKeys;
+    }
+  }
 
-  // 3. Load reviews
-  const reviews = await loadReviewGates(gauntletPath);
+  // 2. Extract inline gates from entry_points and normalize arrays to strings.
+  const { inlineChecks, inlineReviews, normalizedEntryPoints } =
+    extractInlineGates(projectConfig);
+  const normalizedConfig: NormalizedValidatorConfig = {
+    ...projectConfig,
+    entry_points: normalizedEntryPoints,
+  };
 
-  // 3b. Merge default CLI preference if not specified
-  mergeCliPreferences(reviews, projectConfig);
+  // 3. Load checks (file-based + entry-point inline)
+  const checks = await loadCheckGates(configDir, inlineChecks);
 
-  // 4. Validate entry point references
-  validateLoadedEntryPoints(projectConfig, checks, reviews);
+  // 4. Load reviews (file-based + entry-point inline)
+  const reviews = await loadReviewGates(configDir, inlineReviews);
+
+  // 5. Merge default CLI preference if not specified
+  mergeCliPreferences(reviews, normalizedConfig);
+
+  // 6. Validate entry point references
+  validateLoadedEntryPoints(normalizedConfig, checks, reviews);
 
   return {
-    project: projectConfig,
+    project: normalizedConfig,
     checks,
     reviews,
   };
 }
 
-async function loadCheckGates(
-  gauntletPath: string,
-): Promise<Record<string, LoadedCheckGateConfig>> {
-  const checksPath = path.join(gauntletPath, CHECKS_DIR);
-  const checks: Record<string, LoadedCheckGateConfig> = {};
-
-  if (!(await dirExists(checksPath))) {
-    return checks;
-  }
-
-  const checkFiles = await fs.readdir(checksPath);
-  for (const file of checkFiles) {
-    if (!(file.endsWith('.yml') || file.endsWith('.yaml'))) {
+/**
+ * Normalise a mixed array of strings and inline-definition objects into
+ * a plain string[] of gate names, collecting inline definitions into `out`.
+ */
+function extractInlineItems<T>(
+  items: (string | Record<string, T>)[],
+  gateKind: string,
+  out: Record<string, T>,
+): string[] {
+  const names: string[] = [];
+  for (const item of items) {
+    if (typeof item === 'string') {
+      names.push(item);
       continue;
     }
-
-    const filePath = path.join(checksPath, file);
-    const content = await fs.readFile(filePath, 'utf-8');
-    const raw = YAML.parse(content);
-    const name = path.basename(file, path.extname(file));
-    const parsed: CheckGateConfig = checkGateSchema.parse(raw);
-
-    // Normalize deprecated alias in loader (not schema) for reliability
-    const fixFile = parsed.fix_instructions_file || parsed.fix_instructions;
-
-    const loadedCheck: LoadedCheckGateConfig = {
-      ...parsed,
-      name,
-    };
-
-    // Load fix instructions file if specified
-    if (fixFile) {
-      loadedCheck.fixInstructionsContent = await loadPromptFile(
-        fixFile,
-        gauntletPath,
-        `check "${name}"`,
-      );
-    }
-
-    // Store fix_with_skill if specified
-    if (parsed.fix_with_skill) {
-      loadedCheck.fixWithSkill = parsed.fix_with_skill;
-    }
-
-    checks[name] = loadedCheck;
-  }
-
-  return checks;
-}
-
-async function loadReviewGates(
-  gauntletPath: string,
-): Promise<Record<string, LoadedReviewGateConfig>> {
-  const reviewsPath = path.join(gauntletPath, REVIEWS_DIR);
-  const reviews: Record<string, LoadedReviewGateConfig> = {};
-
-  if (!(await dirExists(reviewsPath))) {
-    return reviews;
-  }
-
-  const reviewFiles = await fs.readdir(reviewsPath);
-  detectDuplicateReviewNames(reviewFiles);
-
-  for (const file of reviewFiles) {
-    if (file.endsWith('.md')) {
-      reviews[path.basename(file, '.md')] = await loadMarkdownReview(
-        file,
-        reviewsPath,
-        gauntletPath,
-      );
-    } else if (file.endsWith('.yml') || file.endsWith('.yaml')) {
-      reviews[path.basename(file, path.extname(file))] = await loadYamlReview(
-        file,
-        reviewsPath,
-        gauntletPath,
-      );
-    }
-  }
-
-  return reviews;
-}
-
-function detectDuplicateReviewNames(reviewFiles: string[]): void {
-  const reviewNameSources = new Map<string, string[]>();
-  for (const file of reviewFiles) {
-    if (
-      !(file.endsWith('.md') || file.endsWith('.yml') || file.endsWith('.yaml'))
-    ) {
-      continue;
-    }
-
-    const name = path.basename(file, path.extname(file));
-
-    // Reject user-defined review files with the reserved built-in: prefix
-    if (isBuiltInReview(name)) {
+    const entry = Object.entries(item as Record<string, T>)[0];
+    if (!entry) {
       throw new Error(
-        `Review file "${file}" uses the reserved "built-in:" prefix. Rename the file to avoid conflicts with built-in reviews.`,
+        `${gateKind} inline item must have exactly one key (the gate name)`,
       );
     }
-
-    const sources = reviewNameSources.get(name) || [];
-    sources.push(file);
-    reviewNameSources.set(name, sources);
-  }
-
-  for (const [name, sources] of reviewNameSources) {
-    if (sources.length > 1) {
+    const [name, config] = entry;
+    if (out[name]) {
       throw new Error(
-        `Duplicate review name "${name}" found across files: ${sources.join(', ')}. Each review name must be unique.`,
+        `${gateKind} "${name}" is defined inline in more than one entry point. Define it once and reference by name in other entry points.`,
       );
     }
+    out[name] = config;
+    names.push(name);
   }
+  return names;
 }
 
-async function loadMarkdownReview(
-  file: string,
-  reviewsPath: string,
-  gauntletPath: string,
-): Promise<LoadedReviewGateConfig> {
-  const filePath = path.join(reviewsPath, file);
-  const content = await fs.readFile(filePath, 'utf-8');
-  const { data: frontmatter, content: promptBody } = matter(content);
+/**
+ * Walk entry_points, pull out inline check/review objects, and return
+ * normalised entry points where each array contains only gate-name strings.
+ */
+function extractInlineGates(projectConfig: ValidatorConfig): {
+  inlineChecks: Record<string, CheckGateConfig>;
+  inlineReviews: Record<string, ReviewYamlConfig>;
+  normalizedEntryPoints: NormalizedEntryPoint[];
+} {
+  const inlineChecks: Record<string, CheckGateConfig> = {};
+  const inlineReviews: Record<string, ReviewYamlConfig> = {};
 
-  const parsedFrontmatter = reviewPromptFrontmatterSchema.parse(frontmatter);
-  const name = path.basename(file, '.md');
+  const normalizedEntryPoints = projectConfig.entry_points.map((ep) => ({
+    ...ep,
+    checks: ep.checks
+      ? extractInlineItems(ep.checks, 'Check', inlineChecks)
+      : undefined,
+    reviews: ep.reviews
+      ? extractInlineItems(ep.reviews, 'Review', inlineReviews)
+      : undefined,
+  }));
 
-  const review: LoadedReviewGateConfig = {
-    name,
-    prompt: file,
-    promptContent: promptBody,
-    model: parsedFrontmatter.model,
-    cli_preference: parsedFrontmatter.cli_preference,
-    num_reviews: parsedFrontmatter.num_reviews,
-    parallel: parsedFrontmatter.parallel,
-    run_in_ci: parsedFrontmatter.run_in_ci,
-    run_locally: parsedFrontmatter.run_locally,
-    timeout: parsedFrontmatter.timeout,
-    enabled: parsedFrontmatter.enabled,
-  };
-
-  // If prompt_file is specified, override the markdown body
-  if (parsedFrontmatter.prompt_file) {
-    review.promptContent = await loadPromptFile(
-      parsedFrontmatter.prompt_file,
-      gauntletPath,
-      `review "${name}"`,
-    );
-  }
-
-  // If skill_name is specified, ignore body and set skillName
-  if (parsedFrontmatter.skill_name) {
-    review.promptContent = undefined;
-    review.skillName = parsedFrontmatter.skill_name;
-  }
-
-  return review;
-}
-
-async function loadYamlReview(
-  file: string,
-  reviewsPath: string,
-  gauntletPath: string,
-): Promise<LoadedReviewGateConfig> {
-  const filePath = path.join(reviewsPath, file);
-  const content = await fs.readFile(filePath, 'utf-8');
-  const raw = YAML.parse(content);
-  const parsed = reviewYamlSchema.parse(raw);
-  const name = path.basename(file, path.extname(file));
-
-  const review: LoadedReviewGateConfig = {
-    name,
-    prompt: file,
-    model: parsed.model,
-    cli_preference: parsed.cli_preference,
-    num_reviews: parsed.num_reviews,
-    parallel: parsed.parallel,
-    run_in_ci: parsed.run_in_ci,
-    run_locally: parsed.run_locally,
-    timeout: parsed.timeout,
-    enabled: parsed.enabled,
-  };
-
-  if (parsed.prompt_file) {
-    review.promptContent = await loadPromptFile(
-      parsed.prompt_file,
-      gauntletPath,
-      `review "${name}"`,
-    );
-  }
-
-  if (parsed.skill_name) {
-    review.skillName = parsed.skill_name;
-  }
-
-  if (parsed.builtin) {
-    review.promptContent = loadBuiltInReview(parsed.builtin);
-  }
-
-  return review;
+  return { inlineChecks, inlineReviews, normalizedEntryPoints };
 }
 
 function mergeCliPreferences(
   reviews: Record<string, LoadedReviewGateConfig>,
-  projectConfig: ValidatorConfig,
+  projectConfig: NormalizedValidatorConfig,
 ): void {
   for (const [name, review] of Object.entries(reviews)) {
     if (review.cli_preference) {
@@ -291,7 +160,7 @@ function mergeCliPreferences(
 }
 
 function validateLoadedEntryPoints(
-  projectConfig: ValidatorConfig,
+  projectConfig: NormalizedValidatorConfig,
   checks: Record<string, LoadedCheckGateConfig>,
   reviews: Record<string, LoadedReviewGateConfig>,
 ): void {
@@ -329,59 +198,5 @@ function validateGateReferences(
         `Entry point "${entryPointPath}" references non-existent ${gateKind} gate: "${name}"`,
       );
     }
-  }
-}
-
-async function loadPromptFile(
-  filePath: string,
-  gauntletPath: string,
-  source: string,
-): Promise<string> {
-  let resolvedPath: string;
-  if (path.isAbsolute(filePath)) {
-    console.warn(
-      `Warning: ${source} uses absolute path "${filePath}". Prefer relative paths for portability.`,
-    );
-    resolvedPath = filePath;
-  } else {
-    resolvedPath = path.resolve(gauntletPath, filePath);
-  }
-  // Warn if resolved path escapes the .gauntlet/ directory (including via relative traversal)
-  const normalizedGauntletPath = path.resolve(gauntletPath);
-  const relativeToConfigDir = path.relative(
-    normalizedGauntletPath,
-    resolvedPath,
-  );
-  if (
-    relativeToConfigDir.startsWith('..') ||
-    path.isAbsolute(relativeToConfigDir)
-  ) {
-    console.warn(
-      `Warning: ${source} references file outside config directory: "${filePath}" (resolves to ${resolvedPath}). Review config changes carefully in PRs.`,
-    );
-  }
-  if (!(await fileExists(resolvedPath))) {
-    throw new Error(
-      `File not found: ${resolvedPath} (referenced by ${source})`,
-    );
-  }
-  return fs.readFile(resolvedPath, 'utf-8');
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(path);
-    return stat.isFile();
-  } catch {
-    return false;
-  }
-}
-
-async function dirExists(path: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(path);
-    return stat.isDirectory();
-  } catch {
-    return false;
   }
 }

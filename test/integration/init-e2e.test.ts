@@ -6,7 +6,7 @@ import {
 	createClaudeStub,
 	initGitRepo,
 	isDistBuilt,
-	spawnGauntlet,
+	spawnValidator,
 } from "./helpers.js";
 
 let tempDir: string;
@@ -21,12 +21,12 @@ beforeAll(async () => {
 	const stub = await createClaudeStub();
 	stubBinDir = stub.binDir;
 
-	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "gauntlet-init-e2e-"));
+	tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-init-e2e-"));
 	await fs.mkdir(path.join(tempDir, "src"), { recursive: true });
 	await fs.writeFile(path.join(tempDir, "src", "index.ts"), "export {};\n");
 	await initGitRepo(tempDir);
 
-	initResult = await spawnGauntlet(["init", "--yes"], {
+	initResult = await spawnValidator(["init", "--yes"], {
 		cwd: tempDir,
 		env: { ...process.env, PATH: `${stubBinDir}:${process.env.PATH}` },
 	});
@@ -54,17 +54,15 @@ describe("agent-validator init (E2E)", () => {
 		expect(stat).toBeNull();
 	});
 
-	it("should scaffold .validator/ with config and review", async () => {
+	it("should scaffold .validator/ with config using recommended review config", async () => {
 		if (!canRun) return;
 		const configPath = path.join(tempDir, ".validator", "config.yml");
-		const reviewPath = path.join(
-			tempDir,
-			".validator",
-			"reviews",
-			"code-quality.yml",
-		);
 		expect((await fs.stat(configPath).catch(() => null))?.isFile()).toBe(true);
-		expect((await fs.stat(reviewPath).catch(() => null))?.isFile()).toBe(true);
+		const configContent = await fs.readFile(configPath, "utf-8");
+		// Reviews should be inline under entry_points, not top-level
+		expect(configContent).toContain("- path: .");
+		expect(configContent).toContain("builtin: all-reviewers");
+		expect(configContent).not.toMatch(/^reviews:/m);
 	});
 
 	it("should add validator_logs to .gitignore", async () => {

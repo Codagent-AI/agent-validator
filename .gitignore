@@ -14,7 +14,7 @@ coverage
 logs
 *.log
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-gauntlet_logs
+validator_logs
 
 # dotenv environment variable files
 .env
@@ -40,8 +40,5 @@ bin/
 # worktrees
 .worktrees/
 
-# scratch docs (plans, design docs)
-docs/plans/
-docs/design/
-.gauntlet/current-task-context.md
-validator_logs
+# eval results
+evals/results/

@@ -36,7 +36,7 @@ const mockAdapters = [
 		installPlugin: async (_scope: "user" | "project") =>
 			mockCopilotInstallPlugin(),
 		getManualInstallInstructions: (_scope: "user" | "project") => [
-			"gh copilot -- plugin install Codagent-AI/agent-validator",
+			"copilot plugin install Codagent-AI/agent-validator",
 		],
 	},
 ];
@@ -85,7 +85,7 @@ describe("init command with github-copilot", () => {
 
 	beforeEach(async () => {
 		testDir = await fs.mkdtemp(
-			path.join(os.tmpdir(), "gauntlet-init-copilot-test-"),
+			path.join(os.tmpdir(), "validator-init-copilot-test-"),
 		);
 		program = new Command();
 		registerInitCommand(program);

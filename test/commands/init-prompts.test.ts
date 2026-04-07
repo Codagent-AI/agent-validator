@@ -19,6 +19,8 @@ const {
 	promptHookOverwrite,
 } = await import("../../src/commands/init-prompts.js");
 
+const { selectReviewConfig } = await import("../../src/commands/init-reviews.js");
+
 describe("promptDevCLIs", () => {
 	it("should return all CLI names when skipPrompts is true", async () => {
 		const result = await promptDevCLIs(["claude", "codex", "gemini"], true);
@@ -90,6 +92,48 @@ describe("promptFileOverwrite", () => {
 	it("should call select when skipPrompts is false", async () => {
 		const result = await promptFileOverwrite("validator-run", false);
 		expect(result).toBe("yes"); // mocked select returns "yes"
+	});
+});
+
+describe("selectReviewConfig", () => {
+	it("returns primary config when github-copilot is selected", () => {
+		const config = selectReviewConfig(["github-copilot", "gemini"]);
+		expect(config.type).toBe("primary");
+		expect(config.reviews).toHaveLength(2);
+		expect(config.reviews[0].name).toBe("code-quality");
+		expect(config.reviews[0].builtin).toBe("code-quality");
+		expect(config.reviews[0].cli_preference).toEqual(["github-copilot"]);
+		expect(config.reviews[0].model).toBe("claude-sonnet-4.6");
+		expect(config.reviews[1].name).toBe("security-and-errors");
+		expect(config.reviews[1].builtin).toBe("security-and-errors");
+		expect(config.reviews[1].cli_preference).toEqual(["github-copilot"]);
+		expect(config.reviews[1].model).toBe("gpt-5.3-codex");
+	});
+
+	it("returns primary config when both copilot and codex are selected", () => {
+		const config = selectReviewConfig(["github-copilot", "codex"]);
+		expect(config.type).toBe("primary");
+		expect(config.reviews).toHaveLength(2);
+	});
+
+	it("returns secondary config when codex is selected without copilot", () => {
+		const config = selectReviewConfig(["codex", "gemini"]);
+		expect(config.type).toBe("secondary");
+		expect(config.reviews).toHaveLength(1);
+		expect(config.reviews[0].name).toBe("all-reviewers");
+		expect(config.reviews[0].builtin).toBe("all-reviewers");
+		expect(config.reviews[0].model).toBe("gpt-5.3-codex");
+		expect(config.reviews[0].cli_preference).toBeUndefined();
+	});
+
+	it("returns fallback config when neither copilot nor codex is selected", () => {
+		const config = selectReviewConfig(["gemini"]);
+		expect(config.type).toBe("fallback");
+		expect(config.reviews).toHaveLength(1);
+		expect(config.reviews[0].name).toBe("all-reviewers");
+		expect(config.reviews[0].builtin).toBe("all-reviewers");
+		expect(config.reviews[0].model).toBeUndefined();
+		expect(config.reviews[0].cli_preference).toBeUndefined();
 	});
 });
 

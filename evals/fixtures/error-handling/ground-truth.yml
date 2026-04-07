@@ -1,0 +1,233 @@
+issues:
+  - id: error-swallow
+    file: src/api/handler.ts
+    line_range: [81, 82]
+    description: >
+      The catch block in handleDeleteUser returns HTTP 200 success even when the
+      delete operation throws an error. The caller believes the deletion succeeded
+      when it may have failed.
+    category: bug
+    difficulty: medium
+    priority: medium
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: ts-notification-dispatch-crash
+    file: src/api/batch.ts
+    line_range: [129, 133]
+    description: >
+      The notification dispatch handler iterates over notificationListeners
+      and calls each listener without a try/catch. If any listener throws an
+      exception, the remaining listeners in the array are never called, silently
+      dropping notifications for all subsequent subscribers. Each listener
+      invocation should be wrapped in a try/catch to isolate failures.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: ts-batch-update-error-masked
+    file: src/api/batch.ts
+    line_range: [183, 184]
+    description: >
+      In handleBatchUpdate, the catch block pushes { success: true } for
+      updates that actually failed. The caller receives an all-success
+      response even when some or all updates threw errors, making it
+      impossible to detect or retry failed updates. The catch should push
+      { success: false } and include the error reason.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: ts-deactivate-silent-drop
+    file: src/api/batch.ts
+    line_range: [205, 206]
+    description: >
+      handleDeactivateUsers catches all exceptions during deactivation and
+      silently continues. The response reports the count of deactivated users
+      but gives no indication of how many failed or why. If the database is
+      down, every deactivation fails silently and the caller receives
+      { deactivated: 0, total: N } with no error status or detail.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: ts-migration-error-swallow
+    file: src/api/batch.ts
+    line_range: [231, 233]
+    description: >
+      handleDataMigration wraps the entire migration loop in a single
+      try/catch that silently swallows any error and returns HTTP 200 with
+      a partial count. If the migration fails mid-batch (e.g. on user 3
+      of 100), the caller receives { migrated: 3, total: 100 } with a 200
+      status, with no indication that an error occurred. A data migration
+      endpoint that silently returns success on failure risks data loss
+      and inconsistent state.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-bulk-update-error-swallow
+    file: src/batch_processor.py
+    line_range: [280, 281]
+    description: >
+      bulk_update_users catches all exceptions during individual updates
+      with a bare except/pass. Failed updates are silently skipped with no
+      logging or error details. The caller receives a succeeded count but
+      has no way to know which records failed or why, making it impossible
+      to retry or investigate failures.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-fetch-external-empty-on-error
+    file: src/batch_processor.py
+    line_range: [297, 298]
+    description: >
+      fetch_external_users catches all exceptions (network errors, JSON
+      decode errors, HTTP errors) and returns an empty list. The caller
+      cannot distinguish between "the API returned zero users" and "the
+      API is unreachable." This hides outages and data sync failures,
+      which can cause downstream logic to incorrectly delete or deactivate
+      users that appear to no longer exist upstream.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-sync-silent-continue
+    file: src/batch_processor.py
+    line_range: [317, 318]
+    description: >
+      sync_users_to_remote catches all exceptions per user and continues
+      to the next without logging or collecting error details. The return
+      value is only a count of synced users — the caller has no way to
+      know which users failed, making selective retry impossible. If the
+      remote service is down, every push fails silently and the function
+      returns 0 with no error.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-validate-import-error-miscount
+    file: src/batch_processor.py
+    line_range: [341, 342]
+    description: >
+      validate_and_import_users counts database insertion errors as "skipped"
+      records rather than "errors". A constraint violation (duplicate email)
+      and a missing required field are reported identically. The caller
+      cannot distinguish between records that were intentionally skipped due
+      to validation and records that failed due to database errors, hiding
+      real failures in the skip count.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: py-archive-error-returns-zero
+    file: src/batch_processor.py
+    line_range: [366, 367]
+    description: >
+      archive_old_notifications catches all database errors during the
+      archive-and-delete operation and returns 0. If the INSERT into the
+      archive table succeeds but the DELETE fails, the exception is caught
+      without a rollback, leaving duplicate records in both tables. Even
+      if both fail, the caller receives 0 with no error, indistinguishable
+      from "there were no old notifications to archive."
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-webhook-error-swallowed
+    file: src/batch_handler.go
+    line_range: [161, 169]
+    description: >
+      notifyWebhook silently discards errors at two levels: json.Marshal
+      errors are assigned to _ on line 162, and HTTP POST errors cause an
+      immediate return with no logging or error propagation on line 165.
+      Jobs are marked as completed in executeJob before notifyWebhook is
+      called, so if the webhook is unreachable the job appears successful
+      but no notification is ever delivered, with no record of the failure.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-encode-write-ignored
+    file: src/batch_handler.go
+    line_range: [115, 115]
+    description: >
+      json.NewEncoder(w).Encode() can fail (e.g. broken client connection),
+      but its error return is ignored in HandleSubmitJobs (line 115),
+      HandleGetJob (line 126), and HandleBatchDelete (line 306). If encoding
+      fails, the client receives a partial or empty response body with a 200
+      status code. At minimum the error should be logged so broken responses
+      can be diagnosed.
+    category: bug
+    difficulty: easy
+    priority: medium
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-health-check-false-positive
+    file: src/batch_handler.go
+    line_range: [407, 421]
+    description: >
+      HandleHealthCheck pings the webhook endpoint and stores the result
+      in dbHealthy, but then discards it with _ = dbHealthy and
+      unconditionally returns {"status": "healthy"}. The health check
+      always reports healthy regardless of whether the dependency is
+      reachable, defeating the purpose of the check and hiding outages
+      from load balancers and monitoring systems.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-cleanup-notification-error-ignored
+    file: src/batch_handler.go
+    line_range: [437, 444]
+    description: >
+      CleanupExpiredJobs sends a webhook notification about the cleanup
+      but ignores the HTTP response — json.Marshal error is discarded
+      with _, the POST error causes an early return (losing the notification
+      silently), and on success the response body is assigned to _ and
+      never closed, leaking the underlying TCP connection.
+    category: bug
+    difficulty: medium
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling
+
+  - id: go-process-all-report-ignored
+    file: src/batch_handler.go
+    line_range: [465, 467]
+    description: >
+      ProcessAllUsers sends a summary report to the webhook but discards
+      both the json.Marshal error and the entire HTTP response. The POST
+      error is completely ignored (not even an early return), and the
+      response body is never closed, leaking the connection. If the
+      reporting endpoint is critical for audit or billing, failures will
+      go unnoticed.
+    category: bug
+    difficulty: easy
+    priority: high
+    requires_tool_use: false
+    reviewer: error-handling

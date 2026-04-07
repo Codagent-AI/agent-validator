@@ -29,16 +29,16 @@ export function printReport(
 }
 
 function printConfigTable(results: EvalResults): void {
-	const sorted = [...results.configs].sort((a, b) => b.meanF1 - a.meanF1);
+	const sorted = [...results.configs].sort(
+		(a, b) => b.meanRecall - a.meanRecall,
+	);
 
-	console.log(chalk.bold("Configuration Comparison (sorted by F1):"));
+	console.log(chalk.bold("Configuration Comparison (sorted by Recall):"));
 	console.log(
 		chalk.dim(
 			"Config".padEnd(35) +
 				"Prec".padStart(7) +
 				"Rec".padStart(7) +
-				"F1".padStart(7) +
-				"Cons".padStart(7) +
 				"Time".padStart(8) +
 				"In".padStart(9) +
 				"Out".padStart(9) +
@@ -47,7 +47,7 @@ function printConfigTable(results: EvalResults): void {
 				"Tools".padStart(7),
 		),
 	);
-	console.log(chalk.dim("-".repeat(107)));
+	console.log(chalk.dim("-".repeat(100)));
 
 	for (const config of sorted) {
 		console.log(formatConfigRow(config));
@@ -57,14 +57,11 @@ function printConfigTable(results: EvalResults): void {
 }
 
 function formatConfigRow(config: ConfigAggregate): string {
-	const vals = Object.values(config.consistency);
-	const consistency =
-		vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
 	const timeStr = `${(config.meanDurationMs / 1000).toFixed(1)}s`;
-	const f1Color =
-		config.meanF1 >= 0.7
+	const recallColor =
+		config.meanRecall >= 0.7
 			? chalk.green
-			: config.meanF1 >= 0.4
+			: config.meanRecall >= 0.4
 				? chalk.yellow
 				: chalk.red;
 
@@ -74,10 +71,7 @@ function formatConfigRow(config: ConfigAggregate): string {
 	return (
 		config.configLabel.padEnd(35) +
 		config.meanPrecision.toFixed(2).padStart(7) +
-		config.meanRecall.toFixed(2).padStart(7) +
-		f1Color(config.meanF1.toFixed(2).padStart(7)) +
-		(consistency * 100).toFixed(0).padStart(6) +
-		"%" +
+		recallColor(config.meanRecall.toFixed(2).padStart(7)) +
 		timeStr.padStart(7) +
 		formatTokenCount(t.inputTokens).padStart(9) +
 		formatTokenCount(t.outputTokens).padStart(9) +

@@ -1,6 +1,0 @@
-command: bun run typecheck
-working_directory: .
-parallel: true
-run_in_ci: true
-run_locally: true
-timeout: 60

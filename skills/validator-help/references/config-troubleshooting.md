@@ -12,7 +12,7 @@
 
 ## `no_config` — Missing Configuration
 
-The `no_config` status is returned when `.validator/config.yml` doesn't exist. This is normal for non-gauntlet projects.
+The `no_config` status is returned when `.validator/config.yml` doesn't exist. This is normal for projects that don't use Agent Validator.
 
 **If it should exist:**
 1. Run `agent-validate init` to create the configuration
@@ -80,7 +80,7 @@ Check gates support only one fix method. These are mutually exclusive:
 - `fix_with_skill` (skill name)
 
 ### Entry Point References Non-Existent Gate
-If an entry point lists a check or review name that doesn't exist in `.validator/checks/` or `.validator/reviews/`, validation fails.
+If an entry point lists a check or review name that doesn't exist (inline in `config.yml` or in `.validator/checks/`/`.validator/reviews/`), validation fails.
 
 ### Review Gate Uses Tool Not in `default_preference`
 Review gates can specify `cli_preference` but the tools must also appear in `default_preference`.
@@ -95,7 +95,7 @@ The `log_dir` field (default: `validator_logs`) determines where all logs are wr
 3. Check if a previous `agent-validate clean` archived everything to `previous/`
 
 **Permissions:**
-- The gauntlet needs write access to `log_dir`
+- Agent Validator needs write access to `log_dir`
 - On some setups, the directory may not be writable
 
 ## `base_branch` Misconfiguration
@@ -124,7 +124,7 @@ Most settings come from the project config (`.validator/config.yml`) with built-
 
 ## Init Setup Problems
 
-### "`.gauntlet` directory already exists"
+### "`.validator` directory already exists"
 `agent-validate init` won't overwrite an existing `.validator/` directory. Delete it first or manually edit.
 
 ### Git Not Initialized

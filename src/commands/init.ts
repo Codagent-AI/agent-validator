@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -7,6 +6,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
 import { computeSkillChecksum } from './init-checksums.js';
+import { writeConfigYml } from './init-config-helpers.js';
 import { getCodexSkillsBaseDir, installAdapterPlugin } from './init-plugin.js';
 import {
   type OverwriteChoice,
@@ -16,6 +16,11 @@ import {
   promptNumReviews,
   promptReviewCLIs,
 } from './init-prompts.js';
+import {
+  printReviewConfigExplanation,
+  type ReviewConfig,
+  selectReviewConfig,
+} from './init-reviews.js';
 import { runPluginUpdate } from './plugin-update.js';
 import { addToGitignore, exists } from './shared.js';
 
@@ -46,29 +51,12 @@ async function getSkillDirNames(): Promise<string[]> {
 }
 
 const CLI_PREFERENCE_ORDER = [
+  'github-copilot',
   'codex',
   'claude',
   'cursor',
-  'github-copilot',
   'gemini',
 ];
-
-type AdapterCfg = {
-  allow_tool_use: boolean;
-  thinking_budget: string;
-  model?: string;
-};
-const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
-  claude: { allow_tool_use: false, thinking_budget: 'high' },
-  codex: { allow_tool_use: false, thinking_budget: 'low' },
-  gemini: { allow_tool_use: false, thinking_budget: 'low' },
-  cursor: { allow_tool_use: false, thinking_budget: 'low', model: 'codex' },
-  'github-copilot': {
-    allow_tool_use: false,
-    thinking_budget: 'low',
-    model: 'codex',
-  },
-};
 
 interface InitOptions {
   yes?: boolean;
@@ -159,17 +147,15 @@ async function runInit(options: InitOptions): Promise<void> {
       reviewCLINames.length,
       skipPrompts,
     );
-    console.log(
-      chalk.cyan(
-        "Agent Validator's built-in code quality reviewer will be installed.",
-      ),
-    );
+    const reviewConfig = selectReviewConfig(reviewCLINames);
+    printReviewConfigExplanation(reviewConfig);
 
-    await scaffoldGauntletDir(
+    await scaffoldValidatorDir(
       projectRoot,
       targetDir,
       reviewCLINames,
       numReviews,
+      reviewConfig,
     );
     instructionCLINames = devCLINames;
     await installExternalFiles(projectRoot, devAdapters, skipPrompts);
@@ -187,11 +173,12 @@ function printNoCLIsMessage(): void {
   console.log();
 }
 
-async function scaffoldGauntletDir(
+async function scaffoldValidatorDir(
   _projectRoot: string,
   targetDir: string,
   reviewCLINames: string[],
   numReviews: number,
+  reviewConfig: ReviewConfig,
 ): Promise<void> {
   if (await exists(targetDir)) {
     console.log(chalk.dim('.validator/ already exists, skipping scaffolding'));
@@ -199,16 +186,8 @@ async function scaffoldGauntletDir(
   }
 
   await fs.mkdir(targetDir);
-  await fs.mkdir(path.join(targetDir, 'checks'));
-  await fs.mkdir(path.join(targetDir, 'reviews'));
 
-  await writeConfigYml(targetDir, reviewCLINames);
-
-  await fs.writeFile(
-    path.join(targetDir, 'reviews', 'code-quality.yml'),
-    `builtin: code-quality\nnum_reviews: ${numReviews}\n`,
-  );
-  console.log(chalk.green('Created .validator/reviews/code-quality.yml'));
+  await writeConfigYml(targetDir, reviewCLINames, numReviews, reviewConfig);
 }
 
 async function copyDirRecursive(opts: {
@@ -409,105 +388,6 @@ async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
       console.log(`  @.claude/skills/${dirName}/SKILL.md`);
     }
   }
-}
-
-async function writeConfigYml(
-  targetDir: string,
-  reviewCLINames: string[],
-): Promise<void> {
-  const baseBranch = await detectBaseBranch();
-  const cliList = reviewCLINames.map((name) => `    - ${name}`).join('\n');
-  const adapterSettings = buildAdapterSettingsBlock(reviewCLINames);
-
-  const content = `# Ordered list of CLI agents to try for reviews
-cli:
-  default_preference:
-${cliList}
-${adapterSettings}
-# entry_points configured by /validator-setup
-entry_points: []
-
-# -------------------------------------------------------------------
-# All settings below are optional. Uncomment and change as needed.
-# -------------------------------------------------------------------
-
-# Git ref for detecting local changes via git diff (default: origin/main)
-# base_branch: ${baseBranch}
-
-# Directory for per-job logs (default: validator_logs)
-# log_dir: validator_logs
-
-# Run gates in parallel when possible (default: true)
-# allow_parallel: true
-
-# Maximum retry attempts before declaring "Retry limit exceeded" (default: 3)
-# max_retries: 3
-
-# Archived session directories to keep during log rotation (default: 3, 0 = disable)
-# max_previous_logs: 3
-
-# Priority threshold for filtering new violations during reruns (default: medium)
-# Options: critical, high, medium, low
-# rerun_new_issue_threshold: medium
-
-# Debug log — persistent debug logging to .debug.log (default: enabled)
-# debug_log:
-#   enabled: true
-#   max_size_mb: 10               # Max size before rotation to .debug.log.1
-
-# Structured logging via LogTape
-# logging:
-#   level: debug                  # Options: debug, info, warning, error
-#   console:
-#     enabled: true
-#     format: pretty              # Options: pretty, json
-#   file:
-#     enabled: true
-#     format: text                # Options: text, json
-`;
-  await fs.writeFile(path.join(targetDir, 'config.yml'), content);
-  console.log(chalk.green('Created .validator/config.yml'));
-}
-
-function gitSilent(args: string[], opts?: { timeout?: number }): string | null {
-  try {
-    return (
-      execFileSync('git', args, {
-        encoding: 'utf-8',
-        timeout: opts?.timeout,
-        stdio: ['pipe', 'pipe', 'ignore'],
-      }) as string
-    ).trim();
-  } catch {
-    return null;
-  }
-}
-
-async function detectBaseBranch(): Promise<string> {
-  gitSilent(['remote', 'set-head', 'origin', '--auto'], { timeout: 5000 });
-  const ref = gitSilent(['symbolic-ref', 'refs/remotes/origin/HEAD']);
-  if (ref) return ref.replace('refs/remotes/', '');
-
-  for (const candidate of ['origin/main', 'origin/master']) {
-    if (gitSilent(['rev-parse', '--verify', candidate]) !== null) {
-      return candidate;
-    }
-  }
-  return 'origin/main';
-}
-
-function buildAdapterSettingsBlock(adapterNames: string[]): string {
-  const items = adapterNames.filter((name) => ADAPTER_CONFIG[name]);
-  if (items.length === 0) return '';
-  const lines = items.map((name) => {
-    const c = ADAPTER_CONFIG[name];
-    let block = `    ${name}:\n      allow_tool_use: ${c?.allow_tool_use}\n      thinking_budget: ${c?.thinking_budget}`;
-    if (c?.model) {
-      block += `\n      model: ${c.model}`;
-    }
-    return block;
-  });
-  return `  # Recommended settings (see docs/eval-results.md)\n  adapters:\n${lines.join('\n')}\n`;
 }
 
 async function detectAvailableCLIs(): Promise<CLIAdapter[]> {

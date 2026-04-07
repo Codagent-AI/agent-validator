@@ -2,7 +2,7 @@
 name: capture-eval-issues
 description: >-
   Capture noteworthy review violations for the eval framework. Use when
-  gauntlet-run finds review failures — judges violations and saves notable
+  validator-run finds review failures — judges violations and saves notable
   ones to evals/inventory.yml.
 disable-model-invocation: false
 allowed-tools: Bash, Task, Read
@@ -15,7 +15,7 @@ Capture noteworthy review violations into the eval inventory.
 ## Input
 
 This skill receives one or more review JSON file paths as arguments (space-separated).
-Example: `/capture-eval-issues gauntlet_logs/review_src_claude@1.0.json gauntlet_logs/review_src_gemini@2.0.json`
+Example: `/capture-eval-issues validator_logs/review_src_claude@1.0.json validator_logs/review_src_gemini@2.0.json`
 
 ## Procedure
 

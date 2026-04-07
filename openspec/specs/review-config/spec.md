@@ -4,7 +4,7 @@
 TBD - created by archiving change add-prompt-configurability. Update Purpose after archive.
 ## Requirements
 ### Requirement: Reviews support YAML configuration files
-The system MUST load review configurations from both `.md` and `.yml`/`.yaml` files in the `.validator/reviews/` directory. The review name MUST be derived from the filename (without extension). If both a `.md` and `.yml`/`.yaml` file exist with the same base name, the system MUST reject the configuration with an error.
+The system MUST load review configurations from both `.md` and `.yml`/`.yaml` files in the `.validator/reviews/` directory. The review name MUST be derived from the filename (without extension). If both a `.md` and `.yml`/`.yaml` file exist with the same base name, the system MUST reject the configuration with an error. Reviews MAY also be defined inline in `config.yml` under the top-level `reviews` map (see inline-review-config capability). File-based reviews and inline reviews are merged; a name present in both sources MUST cause a validation error.
 
 YAML review files MUST specify exactly one of `prompt_file`, `skill_name`, or `builtin`. These three attributes are mutually exclusive. When `builtin` is specified, the prompt content MUST be loaded from the package's built-in review registry.
 
@@ -100,6 +100,12 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **WHEN** the configuration is loaded
 - **THEN** the review "task-compliance" is available with `enabled` set to `false`
 
+#### Scenario: Name collision between inline and file-based review
+- **WHEN** `config.yml` defines an inline review named `code-quality`
+- **AND** `.validator/reviews/code-quality.yml` also exists
+- **WHEN** the configuration is loaded
+- **THEN** the system MUST reject with a validation error naming the conflicting review
+
 ### Requirement: Markdown reviews support prompt_file and skill_name in frontmatter
 Existing `.md` review files MUST support optional `prompt_file` or `skill_name` fields in their YAML frontmatter. These fields are mutually exclusive. When `prompt_file` is specified, the file content MUST override the markdown body. When `skill_name` is specified, the markdown body MUST be ignored and the skill MUST be used instead.
 
@@ -122,7 +128,7 @@ Existing `.md` review files MUST support optional `prompt_file` or `skill_name` 
 ### Requirement: Prompt file paths support absolute and relative resolution
 The `prompt_file` field MUST accept both absolute and relative file paths. Relative paths MUST resolve from the `.validator/` directory. When an absolute path is used, the system MUST log a warning. The system MUST reject the configuration if the referenced file does not exist.
 
-#### Scenario: Relative path resolves from .gauntlet directory
+#### Scenario: Relative path resolves from .validator directory
 - **GIVEN** a review config with `prompt_file: prompts/review.md`
 - **AND** the file `.validator/prompts/review.md` exists
 - **WHEN** the configuration is loaded
@@ -141,7 +147,7 @@ The `prompt_file` field MUST accept both absolute and relative file paths. Relat
 - **THEN** the system MUST reject with a file-not-found error
 
 ### Requirement: Per-Adapter Configuration
-The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.validator/config.yml`. Each adapter entry is keyed by adapter name and the system MUST accept optional `allow_tool_use` (boolean, defaults to `true`) and `thinking_budget` (one of `off`, `low`, `medium`, `high`) when provided. When `thinking_budget` is not specified, the adapter MUST use its built-in default behavior (no thinking budget override is applied). Unknown adapter names in the config are silently ignored at the schema level. When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
+The system MUST support optional per-adapter configuration under the `cli.adapters` section of `.validator/config.yml`. Each adapter entry is keyed by adapter name and the system MUST accept optional `allow_tool_use` (boolean, defaults to `true`), `thinking_budget` (one of `off`, `low`, `medium`, `high`), and `model` (string) when provided. When `thinking_budget` is not specified, the adapter MUST use its built-in default behavior (no thinking budget override is applied). When `model` is not specified, the adapter MUST NOT pass a `--model` flag to the CLI (preserving current default behavior). Unknown adapter names in the config are silently ignored at the schema level. When specified, these settings MUST be passed to the adapter's `execute()` method and applied to the CLI invocation.
 
 #### Scenario: Adapter with tool use disabled
 - **GIVEN** a `.validator/config.yml` with `cli.adapters.gemini.allow_tool_use: false`
@@ -171,7 +177,86 @@ The system MUST support optional per-adapter configuration under the `cli.adapte
 #### Scenario: No adapter config section
 - **GIVEN** a `.validator/config.yml` with no `cli.adapters` section
 - **WHEN** reviews are executed
-- **THEN** all adapters MUST use their default hardcoded settings (tool use enabled, no thinking budget override)
+- **THEN** all adapters MUST use their default hardcoded settings (tool use enabled, no thinking budget override, no model override)
+
+#### Scenario: Adapter with model configured
+- **GIVEN** a `.validator/config.yml` with `cli.adapters.cursor.model: codex`
+- **WHEN** a review is executed using the Cursor adapter
+- **THEN** the Cursor adapter MUST resolve the model name and pass `--model <resolved-id>` to the CLI
+
+#### Scenario: Adapter with model absent
+- **GIVEN** a `.validator/config.yml` with no `model` setting for the Cursor adapter
+- **WHEN** a review is executed using the Cursor adapter
+- **THEN** the Cursor CLI MUST be invoked without a `--model` flag
+
+### Requirement: Adapter Model Resolution
+When an adapter has a `model` configured, the adapter MUST resolve the base model name to a specific model ID at runtime by querying the CLI for available models, filtering to matches, and selecting the highest-versioned result. The resolution logic MUST:
+
+1. Query the CLI for available models (Cursor: `agent --list-models`; GitHub Copilot: parse `copilot --help` output for `--model` choices).
+2. Filter to models whose ID contains the configured base name as a complete hyphen-delimited segment (e.g. `codex` matches `gpt-5.3-codex` and `gpt-5.3-codex-low` because `codex` is a complete segment, but does NOT match `gpt-5.3-codecx` because `codecx` is a different segment). The base name MUST appear as a whole token between hyphens (or at the start/end of the ID), not as an arbitrary substring.
+3. Exclude quality-tier variants (model IDs ending in `-low`, `-high`, `-xhigh`, or `-fast`).
+4. If `thinking_budget` is set and not `off`, prefer models with a `-thinking` suffix when available (Cursor only; GitHub Copilot has no thinking variants). When thinking is preferred but no `-thinking` variant exists for the matched models, the adapter MUST fall back to the non-thinking variant.
+5. Sort remaining candidates by version descending and select the highest. The version SHALL be extracted as the first occurrence of a `MAJOR.MINOR` pattern (regex `(\d+)\.(\d+)`) in the model ID. If no `MAJOR.MINOR` pattern is found, the model is sorted after all versioned models. Versions SHALL be compared numerically (major first, then minor). When two candidates have the same version, the first one encountered in the input list is selected.
+6. On failure (CLI query fails, no matches found), log a warning and proceed without a `--model` flag.
+
+#### Scenario: Cursor resolves highest-versioned codex model
+- **GIVEN** `cli.adapters.cursor.model: codex` and `cli.adapters.cursor.thinking_budget: low`
+- **AND** `agent --list-models` returns models including `gpt-5.3-codex`, `gpt-5.3-codex-low`, `gpt-5.3-codex-high`, `gpt-5.2-codex`
+- **WHEN** the Cursor adapter resolves the model
+- **THEN** tier variants (`gpt-5.3-codex-low`, `gpt-5.3-codex-high`) MUST be excluded
+- **AND** `gpt-5.3-codex` MUST be selected as the highest version
+- **AND** the CLI MUST be invoked with `--model gpt-5.3-codex`
+
+#### Scenario: Cursor resolves thinking variant when thinking_budget is active
+- **GIVEN** `cli.adapters.cursor.model: opus` and `cli.adapters.cursor.thinking_budget: high`
+- **AND** `agent --list-models` returns `opus-4.6`, `opus-4.6-thinking`, `opus-4.5`, `opus-4.5-thinking`
+- **WHEN** the Cursor adapter resolves the model
+- **THEN** thinking variants MUST be preferred because `thinking_budget` is not `off`
+- **AND** `opus-4.6-thinking` MUST be selected as the highest-versioned thinking variant
+- **AND** the CLI MUST be invoked with `--model opus-4.6-thinking`
+
+#### Scenario: Cursor falls back to non-thinking when thinking variant unavailable
+- **GIVEN** `cli.adapters.cursor.model: codex` and `cli.adapters.cursor.thinking_budget: high`
+- **AND** `agent --list-models` returns `gpt-5.3-codex` (no `-thinking` variant available)
+- **WHEN** the Cursor adapter resolves the model
+- **THEN** `gpt-5.3-codex` MUST be selected as the best available match
+- **AND** the CLI MUST be invoked with `--model gpt-5.3-codex`
+
+#### Scenario: Thinking variants excluded when thinking_budget is off
+- **GIVEN** `cli.adapters.cursor.model: opus` and `cli.adapters.cursor.thinking_budget: off`
+- **AND** `agent --list-models` returns `opus-4.6`, `opus-4.6-thinking`
+- **WHEN** the Cursor adapter resolves the model
+- **THEN** `opus-4.6` MUST be selected (non-thinking variant)
+- **AND** `opus-4.6-thinking` MUST NOT be selected
+
+#### Scenario: GitHub Copilot resolves model without thinking variants
+- **GIVEN** `cli.adapters.github-copilot.model: codex`
+- **AND** `copilot --help` lists `--model` choices including `gpt-5.3-codex` and `gpt-5.2-codex`
+- **WHEN** the GitHub Copilot adapter resolves the model
+- **THEN** `gpt-5.3-codex` MUST be selected as the highest version
+- **AND** the CLI MUST be invoked with `--model gpt-5.3-codex`
+
+#### Scenario: Base name matching uses segment boundaries
+- **GIVEN** `cli.adapters.cursor.model: codex`
+- **AND** `agent --list-models` returns `gpt-5.3-codex`, `gpt-5.3-codex-low`, `gpt-5.3-codecx`
+- **WHEN** the Cursor adapter filters by base name
+- **THEN** `gpt-5.3-codex` MUST match (`codex` is a complete hyphen-delimited segment)
+- **AND** `gpt-5.3-codex-low` MUST match (`codex` is a complete segment; tier exclusion handles it separately in step 3)
+- **AND** `gpt-5.3-codecx` MUST NOT match (`codecx` is not the same segment as `codex`)
+
+#### Scenario: Model resolution failure falls back gracefully
+- **GIVEN** `cli.adapters.cursor.model: nonexistent`
+- **AND** `agent --list-models` returns no models matching `nonexistent`
+- **WHEN** the Cursor adapter resolves the model
+- **THEN** a warning MUST be logged indicating no matching model was found
+- **AND** the CLI MUST be invoked without a `--model` flag
+
+#### Scenario: CLI query failure falls back gracefully
+- **GIVEN** `cli.adapters.cursor.model: codex`
+- **AND** `agent --list-models` fails (non-zero exit code or timeout)
+- **WHEN** the Cursor adapter attempts to resolve the model
+- **THEN** a warning MUST be logged indicating the model query failed
+- **AND** the CLI MUST be invoked without a `--model` flag
 
 ### Requirement: Adapter Thinking Budget Level Mapping
 The system MUST map the unified `thinking_budget` level string to adapter-specific values. The mapping MUST be:
@@ -204,17 +289,28 @@ The system MUST map the unified `thinking_budget` level string to adapter-specif
 - **THEN** the original `.gemini/settings.json` MUST still be restored
 
 ### Requirement: Built-in review prompts are pure markdown
-Built-in review prompts bundled with the package MUST be pure markdown files with no YAML frontmatter. They contain only the prompt text. All configuration settings (num_reviews, cli_preference, etc.) MUST be specified in the YAML review config file that references the built-in.
+Built-in review prompts bundled with the package MUST be pure markdown files with no YAML frontmatter. They contain only the prompt text. All configuration settings (num_reviews, cli_preference, etc.) MUST be specified in the YAML review config file that references the built-in. The package SHALL ship three built-in reviews: `code-quality`, `security`, and `error-handling`. All built-in reviewers SHALL prioritize recall over precision — when uncertain, the reviewer reports the issue rather than suppressing it.
 
-#### Scenario: Built-in code-quality prompt content
+#### Scenario: Built-in code-quality prompt is self-contained
 - **GIVEN** a YAML review config with `builtin: code-quality`
 - **WHEN** the configuration is loaded
-- **THEN** the `promptContent` SHALL contain instructions to use pr-review-toolkit agents (code-reviewer, silent-failure-hunter, type-design-analyzer) when the reviewing CLI has access to them
-- **AND** the `promptContent` SHALL contain a fallback inline review framework covering three lenses (code quality/bugs/security, silent failures/error handling, type design) for use when those agents are unavailable
+- **THEN** the `promptContent` SHALL contain a self-contained code review prompt with no references to external agents or toolkits
 - **AND** the `promptContent` SHALL NOT contain project-specific documentation references
 
-#### Scenario: Built-in code-quality prompt with partial pr-review-toolkit availability
-- **GIVEN** a YAML review config with `builtin: code-quality`
+#### Scenario: Built-in security prompt loaded by name
+- **GIVEN** a YAML review config with `builtin: security`
 - **WHEN** the configuration is loaded
-- **THEN** the `promptContent` SHALL instruct the reviewer to use whichever pr-review-toolkit agents are available and fall back to inline analysis for lenses whose agents are missing
+- **THEN** the `promptContent` SHALL be loaded from the built-in security review prompt
+- **AND** the prompt SHALL focus on security-specific concerns (injection, auth/authz, secrets exposure, input validation)
+
+#### Scenario: Built-in error-handling prompt loaded by name
+- **GIVEN** a YAML review config with `builtin: error-handling`
+- **WHEN** the configuration is loaded
+- **THEN** the `promptContent` SHALL be loaded from the built-in error-handling review prompt
+- **AND** the prompt SHALL focus on error-handling concerns (swallowed errors, missing observability, silent failures)
+
+#### Scenario: Unknown built-in name rejected
+- **GIVEN** a YAML review config with `builtin: nonexistent`
+- **WHEN** the configuration is loaded
+- **THEN** the system MUST reject with an error indicating the built-in review "nonexistent" is unknown
 

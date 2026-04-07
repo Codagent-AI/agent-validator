@@ -4,24 +4,29 @@
 Configuration generation during `agent-validate init`. Covers config file creation, review config setup, and post-init guidance.
 ## Requirements
 ### Requirement: Init generates YAML review config with built-in reference
-The `init` command SHALL generate a `.validator/reviews/code-quality.yml` file that references the built-in code-quality review prompt.
+The `init` command SHALL write review entries in `config.yml` based on the reviewer recommendation logic rather than user selection. Each review entry SHALL include `builtin`, and when applicable, `cli_preference` and `model` fields matching the recommended configurations. The `init` command SHALL NOT create `.validator/reviews/` directory files, SHALL NOT create the `.validator/reviews/` directory, and SHALL NOT create the `.validator/checks/` directory.
 
-#### Scenario: Default init creates YAML review config
-- **GIVEN** a user runs `agent-validate init`
-- **WHEN** the `.validator/` directory is scaffolded
-- **THEN** `.validator/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
-- **AND** the YAML file SHALL include default settings (`num_reviews: 1`)
+#### Scenario: Primary config writes two-pass hybrid review entries
+- **WHEN** the primary review config is selected (GitHub Copilot available)
+- **THEN** `config.yml` SHALL contain a `code-quality` entry with `builtin: code-quality`, `cli_preference: [github-copilot]`, and `model: claude-sonnet-4.6`
+- **AND** `config.yml` SHALL contain a `security-and-errors` entry with `builtin: security-and-errors`, `cli_preference: [github-copilot]`, and `model: gpt-5.3-codex`
+- **AND** `.validator/reviews/` SHALL NOT be created
+- **AND** `.validator/checks/` SHALL NOT be created
 
-#### Scenario: Init with --yes flag creates YAML review config
-- **GIVEN** a user runs `agent-validate init --yes`
-- **WHEN** the `.validator/` directory is scaffolded
-- **THEN** `.validator/reviews/code-quality.yml` SHALL be created with content referencing `builtin: code-quality`
-- **AND** the YAML file SHALL include default settings (`num_reviews: 1`)
+#### Scenario: Secondary config writes single combined review entry
+- **WHEN** the secondary review config is selected (Codex only)
+- **THEN** `config.yml` SHALL contain an `all-reviewers` entry with `builtin: all-reviewers` and `model: gpt-5.3-codex`
+- **AND** no other review entries SHALL be present
 
-#### Scenario: Init re-run preserves existing review config
-- **GIVEN** `.validator/reviews/code-quality.yml` already exists
-- **WHEN** the user runs `agent-validate init`
-- **THEN** the existing review config SHALL be preserved (not overwritten)
+#### Scenario: Fallback config writes combined review entry without overrides
+- **WHEN** the fallback review config is selected (neither Copilot nor Codex)
+- **THEN** `config.yml` SHALL contain an `all-reviewers` entry with `builtin: all-reviewers`
+- **AND** no `model` or `cli_preference` SHALL be set on the review entry
+
+#### Scenario: Init with --yes and Copilot detected writes primary config
+- **WHEN** a user runs `agent-validate init --yes`
+- **AND** `github-copilot` is detected as available
+- **THEN** `config.yml` SHALL contain the primary config review entries (code-quality + security-and-errors with per-review overrides)
 
 ### Requirement: Init outputs next-step message
 
@@ -133,7 +138,7 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 #### Scenario: Single review CLI sets num_reviews automatically
 - **GIVEN** the user selects exactly 1 review CLI
 - **WHEN** Phase 3 completes
-- **THEN** `num_reviews` SHALL be set to `1` in the default review config
+- **THEN** `num_reviews` SHALL be set to `1` in each review config entry
 - **AND** no prompt for `num_reviews` SHALL be shown
 
 #### Scenario: Multiple review CLIs prompt for num_reviews
@@ -141,12 +146,16 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **WHEN** Phase 3 completes
 - **THEN** the user SHALL be prompted: "How many of these CLIs would you like to run on every review?"
 - **AND** the valid range SHALL be 1 to 3
-- **AND** the selected value SHALL be written as `num_reviews` in the default review config
+- **AND** the selected value SHALL be written as `num_reviews` in each review config entry
 
-#### Scenario: Built-in reviewer announcement
+#### Scenario: Automatic review configuration selection
 - **GIVEN** the user runs `agent-validate init`
-- **WHEN** Phase 3 completes
-- **THEN** the output SHALL display: "Agent Validator's built-in code quality reviewer will be installed."
+- **WHEN** Phase 3 completes (after review CLI and num_reviews selection)
+- **THEN** review configuration SHALL be selected automatically by `selectReviewConfig()` based on detected reviewer CLIs
+- **AND** if `github-copilot` is among the selected review CLIs, the primary config SHALL be used: two-pass hybrid with `code-quality` (Sonnet) and `security-and-errors` (GPT)
+- **AND** if `codex` is among the selected review CLIs (without `github-copilot`), the secondary config SHALL be used: single `all-reviewers` pass (GPT)
+- **AND** otherwise, the fallback config SHALL be used: `all-reviewers` with no model override
+- **AND** the selected reviews SHALL be written as inline review definitions under the root entry point in `config.yml`
 
 #### Scenario: No base branch prompt
 - **GIVEN** the user runs `agent-validate init`
@@ -182,6 +191,12 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **THEN** all detected CLIs SHALL be added to `cli.default_preference`
 - **AND** `num_reviews` SHALL be set to the number of detected CLIs
 
+#### Scenario: --yes applies auto-selected review configuration
+- **GIVEN** the user runs `agent-validate init --yes`
+- **WHEN** Phase 3 runs
+- **THEN** the auto-selected review configuration SHALL be applied without prompting
+- **AND** the review config SHALL be determined by `selectReviewConfig()` based on detected CLIs
+
 #### Scenario: --yes overwrites changed files without asking
 - **GIVEN** the user runs `agent-validate init --yes`
 - **AND** a Codex skill file exists with a different checksum
@@ -192,11 +207,14 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 
 When `.validator/` already exists, Phase 4 SHALL skip entirely without modifying any files inside the directory.
 
-#### Scenario: Fresh init creates .validator/ directory
+#### Scenario: Fresh init creates .validator/ directory with selected reviews
 - **GIVEN** the user runs `agent-validate init`
 - **AND** no `.validator/` directory exists
+- **AND** the user selects code-quality and security built-in reviews
 - **WHEN** Phase 4 runs
-- **THEN** `.validator/` SHALL be created with full scaffolding (directory structure, config.yml, default review, .gitignore entry)
+- **THEN** `.validator/` SHALL be created with `config.yml` containing inline review entries for `code-quality` and `security`, and empty `entry_points`
+- **AND** the project-root `.gitignore` SHALL be updated to include `validator_logs`
+- **AND** `.validator/reviews/` and `.validator/checks/` SHALL NOT be created
 
 #### Scenario: Re-run skips .validator/ scaffolding
 - **GIVEN** the user runs `agent-validate init`
@@ -232,13 +250,13 @@ When Codex is a selected development CLI, init SHALL install skills to the appro
 - **GIVEN** the user selects `codex` as a development CLI
 - **AND** the user selects local scope
 - **WHEN** Phase 5 runs
-- **THEN** gauntlet skills SHALL be copied to `.agents/skills/<skill-name>/`
+- **THEN** validator skills SHALL be copied to `.agents/skills/<skill-name>/`
 
 #### Scenario: Codex selected with global scope
 - **GIVEN** the user selects `codex` as a development CLI
 - **AND** the user selects global scope
 - **WHEN** Phase 5 runs
-- **THEN** gauntlet skills SHALL be copied to `$HOME/.agents/skills/<skill-name>/`
+- **THEN** validator skills SHALL be copied to `$HOME/.agents/skills/<skill-name>/`
 
 #### Scenario: Codex skill checksum matches skips update
 - **GIVEN** a skill already exists at the target Codex skill location
@@ -275,6 +293,39 @@ When `.validator/` already exists, the init command SHALL skip interactive phase
 - **WHEN** `agent-validate init --yes` runs
 - **THEN** Phases 2-4 SHALL be skipped
 - **AND** update logic SHALL run with changed files overwritten without prompting
+
+### Requirement: Init scaffolds model defaults for proxy adapters
+The `init` command SHALL include a `model` field in the adapter configuration defaults for Cursor and GitHub Copilot adapters. These adapters proxy requests to upstream LLMs and benefit from an explicit model default. Adapters that are themselves LLM providers (Claude, Codex, Gemini) SHALL NOT have a `model` default.
+
+#### Scenario: Cursor adapter default includes model
+- **GIVEN** a user runs `agent-validate init`
+- **AND** `cursor` is selected as a review CLI
+- **WHEN** `.validator/config.yml` is generated
+- **THEN** the `cli.adapters.cursor` section SHALL include `model: codex`
+
+#### Scenario: GitHub Copilot adapter default includes model
+- **GIVEN** a user runs `agent-validate init`
+- **AND** `github-copilot` is selected as a review CLI
+- **WHEN** `.validator/config.yml` is generated
+- **THEN** the `cli.adapters.github-copilot` section SHALL include `model: codex`
+
+#### Scenario: Claude adapter does not include model default
+- **GIVEN** a user runs `agent-validate init`
+- **AND** `claude` is selected as a review CLI
+- **WHEN** `.validator/config.yml` is generated
+- **THEN** the `cli.adapters.claude` section SHALL NOT include a `model` field
+
+#### Scenario: Codex adapter does not include model default
+- **GIVEN** a user runs `agent-validate init`
+- **AND** `codex` is selected as a review CLI
+- **WHEN** `.validator/config.yml` is generated
+- **THEN** the `cli.adapters.codex` section SHALL NOT include a `model` field
+
+#### Scenario: Gemini adapter does not include model default
+- **GIVEN** a user runs `agent-validate init`
+- **AND** `gemini` is selected as a review CLI
+- **WHEN** `.validator/config.yml` is generated
+- **THEN** the `cli.adapters.gemini` section SHALL NOT include a `model` field
 
 ### Requirement: Non-Claude non-Codex CLIs keep current behavior
 

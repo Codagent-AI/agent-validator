@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const GAUNTLET_ROOT = path.resolve(import.meta.dir, "../..");
-export const DIST_BIN = path.join(GAUNTLET_ROOT, "dist", "index.js");
+export const VALIDATOR_ROOT = path.resolve(import.meta.dir, "../..");
+export const DIST_BIN = path.join(VALIDATOR_ROOT, "dist", "index.js");
 
 export function isDistBuilt(): boolean {
 	return fs.existsSync(DIST_BIN);
@@ -20,11 +20,11 @@ export async function createClaudeStub(): Promise<{
 	await fs.promises.writeFile(claudePath, "#!/bin/sh\necho '[]'\nexit 0\n");
 	await fs.promises.chmod(claudePath, 0o755);
 
-	// Stub `gh` so that `gh copilot -- --help` (used by the github-copilot
+	// Stub `copilot` so that `copilot --help` (used by the github-copilot
 	// adapter's isAvailable check) exits immediately instead of hanging in CI.
-	const ghPath = path.join(binDir, "gh");
-	await fs.promises.writeFile(ghPath, "#!/bin/sh\nexit 1\n");
-	await fs.promises.chmod(ghPath, 0o755);
+	const copilotPath = path.join(binDir, "copilot");
+	await fs.promises.writeFile(copilotPath, "#!/bin/sh\nexit 1\n");
+	await fs.promises.chmod(copilotPath, 0o755);
 
 	return {
 		binDir,
@@ -56,7 +56,7 @@ export async function initGitRepo(dir: string): Promise<void> {
 	}
 }
 
-export async function spawnGauntlet(
+export async function spawnValidator(
 	args: string[],
 	opts: {
 		cwd: string;

@@ -26,7 +26,7 @@ Claude Code then discovers and loads the plugin's skills and hooks automatically
 
 When you run `agent-validator init` with GitHub Copilot selected, it:
 
-1. Installs the plugin: `gh copilot -- plugin install Codagent-AI/agent-validator`
+1. Installs the plugin: `copilot plugin install Codagent-AI/agent-validator`
 
 Copilot discovers the plugin via the existing `.claude-plugin/plugin.json` manifest — no separate manifest is needed. Plugins always install to user scope (`~/.copilot/installed-plugins/`).
 
@@ -71,7 +71,7 @@ This command:
 1. Detects where the Claude plugin is installed (`claude plugin list --json`)
 2. If Claude plugin found → updates the marketplace registry and plugin
 3. Detects where the GitHub Copilot plugin is installed (reads `~/.copilot/config.json`)
-4. If Copilot plugin found → re-runs `gh copilot -- plugin install` to update
+4. If Copilot plugin found → re-runs `copilot plugin install` to update
 5. Detects where the Cursor plugin is installed (file-system check)
 6. If Cursor plugin found → re-copies plugin assets from the npm package
 7. Refreshes Codex skills if installed (checksum-based)

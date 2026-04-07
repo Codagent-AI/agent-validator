@@ -1,14 +1,14 @@
 ---
 name: validator-commit
 description: >-
-  Handles commit flows by detecting changes, optionally running gauntlet validation, and completing commits for requests such as "commit with gauntlet", "run checks before commit", "run gauntlet then commit", or "skip gauntlet and commit".
+  Handles commit flows by detecting changes, optionally running validator validation, and completing commits for requests such as "commit with validator", "run checks before commit", "run validator then commit", or "skip validator and commit".
 disable-model-invocation: false
 allowed-tools: Bash, Task
 ---
 
 # /validator-commit $ARGUMENTS
 
-Commit with optional gauntlet validation. Runs `agent-validate detect` first, validates based on intent (full run, checks only, or skip), handles failures, then commits.
+Commit with optional validator validation. Runs `agent-validate detect` first, validates based on intent (full run, checks only, or skip), handles failures, then commits.
 
 ## Step 1 - Detect Changes
 
@@ -40,7 +40,7 @@ Parse `$ARGUMENTS` for a validation intent. Do not prompt the user if a clear in
 
 1. **Run all gates** — full validation (checks + reviews)
 2. **Run checks only** — checks without AI reviews
-3. **Skip gauntlet** — advance baseline without running any gates
+3. **Skip validator** — advance baseline without running any gates
 
 Then proceed to the step matching the user's selection.
 

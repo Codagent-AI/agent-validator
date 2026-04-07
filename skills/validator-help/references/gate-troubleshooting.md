@@ -80,7 +80,7 @@ No files changed relative to `base_branch`.
 ## Parallel vs Sequential Execution
 
 ### Check Gates
-- Each check gate has a `parallel` setting (default: `false`)
+- Each check gate has a `parallel` setting (default: `true`)
 - Parallel checks run concurrently; sequential checks run one at a time
 - `allow_parallel` in `config.yml` (default: `true`) is the global switch
 
@@ -96,7 +96,7 @@ No files changed relative to `base_branch`.
 
 ## Rerun / Verification Mode
 
-When the gauntlet detects existing logs in `<log_dir>/`, it enters **rerun mode** instead of a fresh run.
+When Agent Validator detects existing logs in `<log_dir>/`, it enters **rerun mode** instead of a fresh run.
 
 ### How It Works
 1. Previous violations are loaded from existing `review_*.json` files

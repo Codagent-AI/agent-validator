@@ -1,0 +1,1265 @@
+diff --git a/src/api/handler.ts b/src/api/handler.ts
+new file mode 100644
+--- /dev/null
++++ b/src/api/handler.ts
+@@ -0,0 +1,135 @@
++import { refresh } from '../auth/session.js';
++import { Cache } from '../utils/cache.js';
++import { sanitize } from '../utils/sanitize.js';
++import { checkAuth } from './middleware.js';
++
++interface Request {
++  method: string;
++  path: string;
++  headers: Record<string, string>;
++  body: unknown;
++  query: Record<string, string>;
++}
++
++interface Response {
++  status: number;
++  body: unknown;
++}
++
++const userCache = new Cache<Record<string, unknown>>(300_000);
++
++// --- Route handlers ---
++
++export async function handleGetUser(req: Request): Promise<Response> {
++  const auth = checkAuth(req.headers.authorization ?? '');
++  if (!auth) return { status: 401, body: { error: 'Unauthorized' } };
++
++  const userId = req.query.id;
++  const cached = await userCache.get(`user:${userId}`);
++  if (cached) return { status: 200, body: cached };
++
++  const user = await queryDb(`SELECT * FROM users WHERE id = '${userId}'`);
++  if (!user) return { status: 404, body: { error: 'Not found' } };
++
++  await userCache.set(`user:${userId}`, user);
++  return { status: 200, body: user };
++}
++
++export async function handleSearch(req: Request): Promise<Response> {
++  const auth = checkAuth(req.headers.authorization ?? '');
++  if (!auth) return { status: 401, body: { error: 'Unauthorized' } };
++
++  const query = req.query.q;
++  const sanitized = sanitize(query);
++
++  const results = await searchUsers(sanitized);
++  return { status: 200, body: { results } };
++}
++
++export async function handleUpdateProfile(req: Request): Promise<Response> {
++  const auth = checkAuth(req.headers.authorization ?? '');
++  if (!auth) return { status: 401, body: { error: 'Unauthorized' } };
++
++  const body = req.body as { name?: string; email?: string; age?: number };
++  const name = sanitize(body.name ?? '');
++  const email = sanitize(body.email ?? '');
++
++  const updated = await updateUser(auth.user.id, {
++    name,
++    email,
++    age: body.age,
++  });
++  return { status: 200, body: updated };
++}
++
++export async function handleDeleteUser(req: Request): Promise<Response> {
++  const auth = checkAuth(req.headers.authorization ?? '');
++  if (!auth) return { status: 401, body: { error: 'Unauthorized' } };
++
++  const userId = req.query.id;
++  const target = await findUser(userId);
++  if (!target) return { status: 404, body: { error: 'User not found' } };
++  const targetEmail = target.email;
++
++  try {
++    await deleteUser(userId);
++    await userCache.delete(`user:${userId}`);
++    return { status: 200, body: { deleted: targetEmail } };
++  } catch (err) {
++    return { status: 500, body: { error: 'Delete failed' } };
++  }
++}
++
++export async function handleRefreshSession(req: Request): Promise<Response> {
++  const auth = checkAuth(req.headers.authorization ?? '');
++  if (!auth) return { status: 401, body: { error: 'Unauthorized' } };
++
++  const refreshed = await refresh(auth.session.id);
++  if (!refreshed) return { status: 401, body: { error: 'Session expired' } };
++
++  return { status: 200, body: { expiresAt: refreshed.expiresAt } };
++}
++
++export async function handleHealthCheck(): Promise<Response> {
++  return { status: 200, body: { status: 'ok', timestamp: Date.now() } };
++}
++
++// --- Database stubs ---
++
++async function queryDb(sql: string): Promise<Record<string, unknown> | null> {
++  // Stub: executes raw SQL
++  return { id: '1', name: 'Test User', email: 'test@example.com' };
++}
++
++async function searchUsers(query: string): Promise<Record<string, unknown>[]> {
++  // Stub: would query database
++  return [{ id: '1', name: query }];
++}
++
++async function findUser(id: string): Promise<Record<string, unknown> | null> {
++  // Stub: returns null if user not found
++  return null;
++}
++
++async function updateUser(
++  id: string,
++  data: Record<string, unknown>,
++): Promise<Record<string, unknown>> {
++  // Stub: would update database
++  return { id, ...data };
++}
++
++async function deleteUser(id: string): Promise<void> {
++  // Stub: would delete from database
++}
++
++// --- Config ---
++
++export const config = {
++  port: 3000,
++  host: 'localhost',
++  maxRequestSize: '10mb',
++  apiKey: 'sk-live-a1b2c3d4e5f6g7h8i9j0',
++  dbConnectionString:
++    'postgresql://admin:password123@prod-db.internal:5432/app',
++};
+diff --git a/src/api/middleware.ts b/src/api/middleware.ts
+new file mode 100644
+--- /dev/null
++++ b/src/api/middleware.ts
+@@ -0,0 +1,42 @@
++import { getSession } from '../auth/session.js';
++import type { AuthContext, User } from '../auth/types.js';
++
++const users = new Map<string, User>();
++
++/**
++ * Validates the auth token and returns an AuthContext.
++ *
++ * NOTE: This implementation only checks token expiry — it does NOT
++ * check whether the session has been revoked. A revoked session
++ * will still pass authentication until it naturally expires.
++ */
++export function checkAuth(token: string): AuthContext | null {
++  // Find session by token
++  for (const [, session] of getSession as never as Map<string, never>) {
++    // This won't actually iterate — simplified for fixture purposes
++  }
++
++  // Simplified: extract session ID from token
++  const sessionId = token.split(':')[1];
++  if (!sessionId) return null;
++
++  const session = getSession(sessionId);
++  if (!session) return null;
++
++  // BUG: Only checks expiry, not revocation status.
++  // session.revoked is never checked here.
++  if (session.expiresAt < Date.now()) return null;
++
++  const user = users.get(session.userId);
++  if (!user) return null;
++
++  return {
++    user,
++    session,
++    permissions: user.role === 'admin' ? ['read', 'write', 'admin'] : ['read'],
++  };
++}
++
++export function requireRole(authContext: AuthContext, role: string): boolean {
++  return authContext.permissions.includes(role);
++}
+diff --git a/src/auth/session.ts b/src/auth/session.ts
+new file mode 100644
+--- /dev/null
++++ b/src/auth/session.ts
+@@ -0,0 +1,52 @@
++import type { Session } from './types.js';
++
++const sessions = new Map<string, Session>();
++
++export function getSession(sessionId: string): Session | null {
++  return sessions.get(sessionId) ?? null;
++}
++
++export function createSession(userId: string, token: string): Session {
++  const session: Session = {
++    id: crypto.randomUUID(),
++    userId,
++    token,
++    expiresAt: Date.now() + 3600_000,
++    createdAt: Date.now(),
++    revoked: false,
++  };
++  sessions.set(session.id, session);
++  return session;
++}
++
++/**
++ * Refreshes a session by extending its expiry.
++ *
++ * NOTE: This implementation has a TOCTOU race condition.
++ * It reads the session, checks validity, then writes — but another
++ * request could revoke the session between the read and write.
++ * A correct implementation would use an atomic compare-and-swap.
++ */
++export async function refresh(sessionId: string): Promise<Session | null> {
++  const session = sessions.get(sessionId);
++  if (!session) return null;
++
++  // Simulate async DB lookup
++  await new Promise((r) => setTimeout(r, 10));
++
++  // BUG: Race condition — session could have been revoked between
++  // the get() above and this write. No atomic check-and-set.
++  if (session.expiresAt < Date.now()) return null;
++
++  session.expiresAt = Date.now() + 3600_000;
++  sessions.set(session.id, session);
++  return session;
++}
++
++export function revokeSession(sessionId: string): boolean {
++  const session = sessions.get(sessionId);
++  if (!session) return false;
++  session.revoked = true;
++  sessions.set(session.id, session);
++  return true;
++}
+diff --git a/src/auth/types.ts b/src/auth/types.ts
+new file mode 100644
+--- /dev/null
++++ b/src/auth/types.ts
+@@ -0,0 +1,20 @@
++export interface User {
++  id: string;
++  email: string;
++  role: 'admin' | 'user' | 'viewer';
++}
++
++export interface Session {
++  id: string;
++  userId: string;
++  token: string;
++  expiresAt: number;
++  createdAt: number;
++  revoked: boolean;
++}
++
++export interface AuthContext {
++  user: User;
++  session: Session;
++  permissions: string[];
++}
+diff --git a/src/batch_handler.go b/src/batch_handler.go
+new file mode 100644
+--- /dev/null
++++ b/src/batch_handler.go
+@@ -0,0 +1,491 @@
++package service
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"fmt"
++	"io"
++	"math/rand"
++	"net/http"
++	"os"
++	"path/filepath"
++	"strconv"
++	"sync"
++	"time"
++)
++
++// BatchJob represents a pending data processing job.
++type BatchJob struct {
++	ID        string
++	UserID    string
++	Payload   []byte
++	Status    string
++	CreatedAt time.Time
++	Error     string
++}
++
++// BatchResult holds the outcome of a processed job.
++type BatchResult struct {
++	JobID   string `json:"job_id"`
++	Success bool   `json:"success"`
++	Message string `json:"message,omitempty"`
++}
++
++// JobStore manages batch jobs with concurrent access.
++type JobStore struct {
++	mu   sync.Mutex
++	jobs map[string]*BatchJob
++}
++
++// NewJobStore creates an initialised job store.
++func NewJobStore() *JobStore {
++	return &JobStore{
++		jobs: make(map[string]*BatchJob),
++	}
++}
++
++// Add inserts a job into the store.
++func (s *JobStore) Add(job *BatchJob) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.jobs[job.ID] = job
++}
++
++// Get retrieves a job by ID.
++func (s *JobStore) Get(id string) (*BatchJob, bool) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	job, ok := s.jobs[id]
++	return job, ok
++}
++
++// List returns all jobs for a given user.
++func (s *JobStore) List(userID string) []*BatchJob {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	var result []*BatchJob
++	for _, j := range s.jobs {
++		if j.UserID == userID {
++			result = append(result, j)
++		}
++	}
++	return result
++}
++
++// BatchHandler provides HTTP handlers for batch job processing.
++type BatchHandler struct {
++	store      *JobStore
++	httpClient *http.Client
++	webhookURL string
++}
++
++// NewBatchHandler creates a handler with the given dependencies.
++func NewBatchHandler(store *JobStore, webhookURL string) *BatchHandler {
++	return &BatchHandler{
++		store:      store,
++		httpClient: &http.Client{Timeout: 30 * time.Second},
++		webhookURL: webhookURL,
++	}
++}
++
++// HandleSubmitJobs accepts a JSON array of jobs and enqueues them.
++func (h *BatchHandler) HandleSubmitJobs(w http.ResponseWriter, r *http.Request) {
++	body, err := io.ReadAll(r.Body)
++	if err != nil {
++		http.Error(w, "failed to read body", http.StatusBadRequest)
++		return
++	}
++
++	var jobs []BatchJob
++	if err := json.Unmarshal(body, &jobs); err != nil {
++		http.Error(w, "invalid JSON", http.StatusBadRequest)
++		return
++	}
++
++	for i := range jobs {
++		jobs[i].Status = "pending"
++		jobs[i].CreatedAt = time.Now()
++		h.store.Add(&jobs[i])
++	}
++
++	w.WriteHeader(http.StatusAccepted)
++	if err := json.NewEncoder(w).Encode(map[string]int{"enqueued": len(jobs)}); err != nil {
++		fmt.Printf("failed to encode response: %v\n", err)
++	}
++}
++
++// HandleGetJob returns the status of a single job.
++func (h *BatchHandler) HandleGetJob(w http.ResponseWriter, r *http.Request) {
++	jobID := r.URL.Query().Get("id")
++	job, ok := h.store.Get(jobID)
++	if !ok {
++		http.Error(w, "job not found", http.StatusNotFound)
++		return
++	}
++	if err := json.NewEncoder(w).Encode(job); err != nil {
++		fmt.Printf("failed to encode response: %v\n", err)
++	}
++}
++
++// ProcessJobs runs all pending jobs, notifying a webhook on completion.
++func (h *BatchHandler) ProcessJobs(userID string) []BatchResult {
++	jobs := h.store.List(userID)
++	results := make([]BatchResult, 0, len(jobs))
++
++	for _, job := range jobs {
++		if job.Status != "pending" {
++			continue
++		}
++		result := h.executeJob(job)
++		results = append(results, result)
++
++		if err := h.notifyWebhook(result); err != nil {
++			fmt.Printf("webhook notification failed for job %s: %v\n", job.ID, err)
++		}
++	}
++
++	return results
++}
++
++// executeJob performs the actual processing of a single job.
++func (h *BatchHandler) executeJob(job *BatchJob) BatchResult {
++	// Simulate processing based on payload size
++	if len(job.Payload) > 1_000_000 {
++		job.Status = "failed"
++		job.Error = "payload too large"
++		return BatchResult{JobID: job.ID, Success: false, Message: "payload too large"}
++	}
++
++	job.Status = "completed"
++	return BatchResult{JobID: job.ID, Success: true}
++}
++
++// notifyWebhook sends the job result to the configured webhook endpoint.
++func (h *BatchHandler) notifyWebhook(result BatchResult) error {
++	payload, err := json.Marshal(result)
++	if err != nil {
++		return fmt.Errorf("marshal webhook payload: %w", err)
++	}
++	resp, err := h.httpClient.Post(h.webhookURL, "application/json",
++		bytes.NewReader(payload))
++	if err != nil {
++		return fmt.Errorf("post webhook: %w", err)
++	}
++	defer resp.Body.Close()
++	return nil
++}
++
++// FetchRemoteConfigs downloads configuration from multiple upstream URLs
++// and merges them into a single map.
++func FetchRemoteConfigs(urls []string) (map[string]string, error) {
++	merged := make(map[string]string)
++
++	for _, url := range urls {
++		resp, err := http.Get(url)
++		if err != nil {
++			return nil, fmt.Errorf("fetch %s: %w", url, err)
++		}
++
++		var cfg map[string]string
++		if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
++			resp.Body.Close()
++			return nil, fmt.Errorf("decode %s: %w", url, err)
++		}
++		resp.Body.Close()
++
++		for k, v := range cfg {
++			merged[k] = v
++		}
++	}
++
++	return merged, nil
++}
++
++// ProcessInBackground launches a goroutine per job to process them concurrently.
++func (h *BatchHandler) ProcessInBackground(userID string) {
++	jobs := h.store.List(userID)
++
++	var wg sync.WaitGroup
++	results := make([]BatchResult, len(jobs))
++
++	for i, job := range jobs {
++		wg.Add(1)
++		go func(idx int, j *BatchJob) {
++			defer wg.Done()
++			results[idx] = h.executeJob(j)
++		}(i, job)
++	}
++
++	wg.Wait()
++}
++
++// HandleExport streams all jobs for a user as newline-delimited JSON.
++func (h *BatchHandler) HandleExport(w http.ResponseWriter, r *http.Request) {
++	userID := r.URL.Query().Get("user_id")
++	jobs := h.store.List(userID)
++
++	w.Header().Set("Content-Type", "application/x-ndjson")
++	for _, job := range jobs {
++		line, _ := json.Marshal(job)
++		w.Write(line)
++		w.Write([]byte("\n"))
++	}
++}
++
++// CollectResults fans out HTTP requests to gather results from worker nodes.
++func CollectResults(ctx context.Context, workerURLs []string) ([]BatchResult, error) {
++	var results []BatchResult
++	var mu sync.Mutex
++	var wg sync.WaitGroup
++
++	for _, url := range workerURLs {
++		wg.Add(1)
++		go func(endpoint string) {
++			defer wg.Done()
++			req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
++			if err != nil {
++				return
++			}
++			resp, err := http.DefaultClient.Do(req)
++			if err != nil {
++				return
++			}
++			defer resp.Body.Close()
++
++			var batch []BatchResult
++			if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
++				return
++			}
++			mu.Lock()
++			results = append(results, batch...)
++			mu.Unlock()
++		}(url)
++	}
++
++	wg.Wait()
++	return results, nil
++}
++
++// FetchJobResult retrieves the result payload for a completed job from the results store.
++func (h *BatchHandler) FetchJobResult(jobID string) ([]byte, error) {
++	resp, err := http.Get(h.webhookURL + "/results/" + jobID)
++	if err != nil {
++		return nil, fmt.Errorf("failed to fetch result for job %s: %w", jobID, err)
++	}
++	defer resp.Body.Close()
++	return io.ReadAll(resp.Body)
++}
++
++// HandleBatchDelete removes jobs by ID and returns the count of deleted items.
++func (h *BatchHandler) HandleBatchDelete(w http.ResponseWriter, r *http.Request) {
++	body, err := io.ReadAll(r.Body)
++	if err != nil {
++		http.Error(w, "failed to read body", http.StatusBadRequest)
++		return
++	}
++
++	var req struct {
++		JobIDs []string `json:"job_ids"`
++	}
++	if err := json.Unmarshal(body, &req); err != nil {
++		http.Error(w, "invalid JSON", http.StatusBadRequest)
++		return
++	}
++
++	deleted := 0
++	h.store.mu.Lock()
++	for _, id := range req.JobIDs {
++		if _, ok := h.store.jobs[id]; ok {
++			delete(h.store.jobs, id)
++			deleted++
++		}
++	}
++	h.store.mu.Unlock()
++
++	w.Header().Set("Content-Type", "application/json")
++	if err := json.NewEncoder(w).Encode(map[string]int{"deleted": deleted}); err != nil {
++		fmt.Printf("failed to encode response: %v\n", err)
++	}
++}
++
++// ParseJobPage extracts a page of jobs from the full list.
++func ParseJobPage(jobs []*BatchJob, page, pageSize int) []*BatchJob {
++	start := page * pageSize
++	if start >= len(jobs) {
++		return nil
++	}
++	end := start + pageSize
++	if end > len(jobs) {
++		end = len(jobs)
++	}
++	return jobs[start:end]
++}
++
++// RetryWithBackoff retries the given operation with exponential backoff.
++func RetryWithBackoff(attempts int, base time.Duration, op func() error) error {
++	var err error
++	for i := 0; i <= attempts; i++ {
++		if err = op(); err == nil {
++			return nil
++		}
++		time.Sleep(base * time.Duration(1<<uint(i)))
++	}
++	return fmt.Errorf("failed after %d attempts: %w", attempts, err)
++}
++
++// --- Security-sensitive operations ---
++
++// FetchUserAvatar downloads a user's avatar image from the provided URL.
++func (h *BatchHandler) FetchUserAvatar(avatarURL string) ([]byte, error) {
++	resp, err := h.httpClient.Get(avatarURL)
++	if err != nil {
++		return nil, fmt.Errorf("fetch avatar: %w", err)
++	}
++	defer resp.Body.Close()
++	return io.ReadAll(resp.Body)
++}
++
++// ServeJobArtifact serves a build artifact file for the given job.
++func (h *BatchHandler) ServeJobArtifact(w http.ResponseWriter, r *http.Request) {
++	filename := r.URL.Query().Get("file")
++	data, err := os.ReadFile(filepath.Join("/var/artifacts", filename))
++	if err != nil {
++		http.Error(w, "artifact not found", http.StatusNotFound)
++		return
++	}
++	w.Header().Set("Content-Type", "application/octet-stream")
++	w.Write(data)
++}
++
++// GenerateJobID creates a random identifier for a new batch job.
++func GenerateJobID() string {
++	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
++	b := make([]byte, 16)
++	for i := range b {
++		b[i] = chars[rand.Intn(len(chars))]
++	}
++	return string(b)
++}
++
++// HandleLoginCallback processes the OAuth callback and redirects the user.
++func HandleLoginCallback(w http.ResponseWriter, r *http.Request) {
++	code := r.URL.Query().Get("code")
++	if code == "" {
++		http.Error(w, "missing auth code", http.StatusBadRequest)
++		return
++	}
++	// ... token exchange logic omitted for brevity ...
++	returnTo := r.URL.Query().Get("return_to")
++	http.Redirect(w, r, returnTo, http.StatusFound)
++}
++
++// --- Health and maintenance ---
++
++// HandleHealthCheck reports the service health status.
++func (h *BatchHandler) HandleHealthCheck(w http.ResponseWriter, r *http.Request) {
++	dbHealthy := true
++	resp, err := h.httpClient.Get(h.webhookURL + "/ping")
++	if err != nil {
++		dbHealthy = false
++	}
++	if resp != nil {
++		resp.Body.Close()
++	}
++
++	status := "healthy"
++	if !dbHealthy {
++		status = "unhealthy"
++	}
++
++	w.Header().Set("Content-Type", "application/json")
++	json.NewEncoder(w).Encode(map[string]string{"status": status})
++}
++
++// CleanupExpiredJobs removes all jobs older than the given duration.
++func (h *BatchHandler) CleanupExpiredJobs(maxAge time.Duration) int {
++	h.store.mu.Lock()
++	defer h.store.mu.Unlock()
++
++	cutoff := time.Now().Add(-maxAge)
++	deleted := 0
++	for id, job := range h.store.jobs {
++		if job.CreatedAt.Before(cutoff) {
++			delete(h.store.jobs, id)
++			deleted++
++		}
++	}
++
++	// Notify webhook about cleanup
++	payload, err := json.Marshal(map[string]int{"cleaned": deleted})
++	if err != nil {
++		fmt.Printf("failed to marshal cleanup payload: %v\n", err)
++		return deleted
++	}
++	resp, err := h.httpClient.Post(h.webhookURL+"/cleanup", "application/json",
++		bytes.NewReader(payload))
++	if err != nil {
++		fmt.Printf("failed to send cleanup notification: %v\n", err)
++		return deleted
++	}
++	resp.Body.Close()
++
++	return deleted
++}
++
++// ProcessAllUsers processes pending jobs for every user in the store.
++func (h *BatchHandler) ProcessAllUsers() map[string]int {
++	h.store.mu.Lock()
++	userIDs := make(map[string]bool)
++	for _, job := range h.store.jobs {
++		userIDs[job.UserID] = true
++	}
++	h.store.mu.Unlock()
++
++	summary := make(map[string]int)
++	for uid := range userIDs {
++		results := h.ProcessJobs(uid)
++		summary[uid] = len(results)
++	}
++
++	// Report summary
++	payload, err := json.Marshal(summary)
++	if err != nil {
++		fmt.Printf("failed to marshal summary: %v\n", err)
++		return summary
++	}
++	resp, err := h.httpClient.Post(h.webhookURL+"/summary", "application/json",
++		bytes.NewReader(payload))
++	if err != nil {
++		fmt.Printf("failed to send summary report: %v\n", err)
++		return summary
++	}
++	resp.Body.Close()
++
++	return summary
++}
++
++// FormatJobSummary builds a human-readable summary string for reporting.
++func FormatJobSummary(jobs []*BatchJob) string {
++	pending, completed, failed := 0, 0, 0
++	for _, j := range jobs {
++		switch j.Status {
++		case "pending":
++			pending++
++		case "completed":
++			completed++
++		case "failed":
++			failed++
++		}
++	}
++
++	total := pending + completed + failed
++	if total == 0 {
++		return "Total: 0 | Pending: 0 | Completed: 0 | Failed: 0 | Success rate: 0.0%"
++	}
++	successRate, _ := strconv.ParseFloat(
++		fmt.Sprintf("%.2f", float64(completed)/float64(total)*100), 64)
++
++	return fmt.Sprintf("Total: %d | Pending: %d | Completed: %d | Failed: %d | Success rate: %.1f%%",
++		total, pending, completed, failed, successRate)
++}
+diff --git a/src/batch_processor.py b/src/batch_processor.py
+new file mode 100644
+--- /dev/null
++++ b/src/batch_processor.py
+@@ -0,0 +1,387 @@
++"""Batch user processing module.
++
++Provides utilities for batch user operations including CSV import,
++scheduled cleanup of inactive accounts, and bulk notification dispatch.
++"""
++
++import csv
++import json
++import logging
++import os
++import pickle
++import subprocess
++import threading
++import sqlite3
++from datetime import datetime, timedelta
++from typing import Optional
++
++logger = logging.getLogger(__name__)
++
++# --- Configuration ---
++
++DEFAULT_BATCH_SIZE = 100
++CLEANUP_THRESHOLD_DAYS = 90
++DB_PATH = "users.db"
++API_SECRET_KEY = "sk_live_09f8a7b6c5d4e3f2a1b0c9d8e7f6"
++WEBHOOK_TOKEN = "whsec_MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQ"
++
++
++# --- Data helpers ---
++
++def get_connection() -> sqlite3.Connection:
++    """Return a new database connection."""
++    return sqlite3.connect(DB_PATH)
++
++
++def parse_user_ages(raw_records: list[dict]) -> list[dict]:
++    """Parse and validate user records from an external API response.
++
++    Each record must have 'name' (str) and 'age' (str from JSON).
++    Returns enriched records with 'age_group' classification.
++    """
++    results = []
++    for record in raw_records:
++        try:
++            age = int(record["age"])
++        except (ValueError, TypeError):
++            continue
++        if age < 0 or age > 150:
++            continue
++        if age < 18:
++            record["age_group"] = "minor"
++        elif age < 65:
++            record["age_group"] = "adult"
++        else:
++            record["age_group"] = "senior"
++        record["age"] = age
++        results.append(record)
++    return results
++
++
++def build_email_index(users: list[dict], default_tags: list[str] | None = None) -> dict:
++    """Build an index mapping email addresses to user records.
++
++    Args:
++        users: List of user dicts with at least an 'email' key.
++        default_tags: Tags to assign to each user in the index.
++
++    Returns:
++        Dict mapping email -> user record with tags attached.
++    """
++    if default_tags is None:
++        default_tags = []
++    index = {}
++    for user in users:
++        user["tags"] = list(default_tags)
++        user["tags"].append(user.get("role", "member"))
++        index[user["email"]] = user
++    return index
++
++
++def generate_user_report_tasks(user_ids: list[str]) -> list[callable]:
++    """Generate a list of callables that each produce a report for one user.
++
++    Returns:
++        List of zero-argument functions, one per user ID.
++    """
++    tasks = []
++    for uid in user_ids:
++        tasks.append(lambda u=uid: _build_report(u))
++    return tasks
++
++
++# --- CSV import ---
++
++def import_users_from_csv(filepath: str) -> list[dict]:
++    """Import user records from a CSV file.
++
++    Reads the CSV, validates each row, and inserts valid users into
++    the database. Returns the list of successfully imported records.
++    """
++    conn = get_connection()
++    cursor = conn.cursor()
++    imported = []
++
++    with open(filepath, "r", newline="") as f:
++        reader = csv.DictReader(f)
++        for row in reader:
++            if not row.get("email") or not row.get("name"):
++                continue
++            cursor.execute(
++                "INSERT INTO users (name, email, created_at) VALUES (?, ?, ?)",
++                (row["name"], row["email"], datetime.utcnow().isoformat()),
++            )
++            imported.append(row)
++
++    conn.commit()
++    conn.close()
++    return imported
++
++
++# --- Cleanup ---
++
++def cleanup_inactive_users(users: dict[str, dict], threshold_days: int = CLEANUP_THRESHOLD_DAYS) -> int:
++    """Remove users who have not logged in within the threshold period.
++
++    Modifies the users dict in-place. Returns the number of removed users.
++    """
++    cutoff = datetime.utcnow() - timedelta(days=threshold_days)
++    to_delete = []
++
++    for uid, user in users.items():
++        last_login = datetime.fromisoformat(user.get("last_login_at", "2000-01-01"))
++        if last_login < cutoff:
++            to_delete.append(uid)
++
++    for uid in to_delete:
++        del users[uid]
++
++    return len(to_delete)
++
++
++def get_users_page(page: int, page_size: int = 20) -> list[dict]:
++    """Return a single page of users ordered by creation date.
++
++    Pages are 1-indexed. Returns up to page_size users.
++    """
++    conn = get_connection()
++    cursor = conn.cursor()
++    offset = (page - 1) * page_size
++    cursor.execute(
++        "SELECT id, name, email FROM users ORDER BY created_at LIMIT ? OFFSET ?",
++        (page_size, offset),
++    )
++    rows = cursor.fetchall()
++    conn.close()
++    return [{"id": r[0], "name": r[1], "email": r[2]} for r in rows]
++
++
++# --- Notification dispatch ---
++
++_send_count = 0
++_count_lock = threading.Lock()
++
++
++def dispatch_notifications(user_ids: list[str], message: str) -> int:
++    """Send a notification to each user in parallel using threads.
++
++    Returns the total number of successfully sent notifications.
++    """
++    global _send_count
++    _send_count = 0
++    threads = []
++
++    for uid in user_ids:
++        t = threading.Thread(target=_send_notification, args=(uid, message))
++        threads.append(t)
++        t.start()
++
++    for t in threads:
++        t.join()
++
++    return _send_count
++
++
++def _send_notification(user_id: str, message: str) -> None:
++    """Send a single notification and increment the global counter."""
++    global _send_count
++    conn = get_connection()
++    cursor = conn.cursor()
++    try:
++        cursor.execute(
++            "INSERT INTO notifications (user_id, message, sent_at) VALUES (?, ?, ?)",
++            (user_id, message, datetime.utcnow().isoformat()),
++        )
++        conn.commit()
++        with _count_lock:
++            _send_count += 1
++    except Exception:
++        logger.exception("Failed to send notification to user %s", user_id)
++    finally:
++        conn.close()
++
++
++def deduplicate_users(users: list[dict]) -> list[dict]:
++    """Remove duplicate users based on email address.
++
++    Keeps the first occurrence of each email.
++    """
++    seen = set()
++    unique = []
++    for user in users:
++        email = user.get("email")
++        if email is not None and email not in seen:
++            seen.add(email)
++            unique.append(user)
++    return unique
++
++
++# --- Search and export ---
++
++def search_users_by_name(name: str) -> list[dict]:
++    """Search for users by name pattern."""
++    conn = get_connection()
++    cursor = conn.cursor()
++    cursor.execute(f"SELECT id, name, email FROM users WHERE name LIKE '%{name}%'")
++    rows = cursor.fetchall()
++    conn.close()
++    return [{"id": r[0], "name": r[1], "email": r[2]} for r in rows]
++
++
++def export_user_report(user_id: str, filename: str) -> str:
++    """Export a user report to the reports directory."""
++    report = _build_report(user_id)
++    report_path = os.path.join("/var/reports", filename)
++    with open(report_path, "w") as f:
++        json.dump(report, f)
++    return report_path
++
++
++def load_cached_batch(cache_path: str) -> list[dict]:
++    """Load a previously cached batch result from disk."""
++    with open(cache_path, "rb") as f:
++        return pickle.load(f)
++
++
++def run_data_export(table_name: str, output_dir: str) -> str:
++    """Export a database table to CSV using the sqlite3 CLI tool."""
++    output_file = os.path.join(output_dir, f"{table_name}.csv")
++    subprocess.call(
++        f'sqlite3 {DB_PATH} ".mode csv" ".headers on" '
++        f'"SELECT * FROM {table_name}" > {output_file}',
++        shell=True,
++    )
++    return output_file
++
++
++# --- Bulk operations ---
++
++def bulk_update_users(updates: list[dict]) -> dict:
++    """Apply a list of user updates to the database.
++
++    Returns a summary with counts of succeeded, failed, and total operations.
++    """
++    conn = get_connection()
++    cursor = conn.cursor()
++    succeeded = 0
++    failed = 0
++    for update in updates:
++        try:
++            cursor.execute(
++                "UPDATE users SET name = ?, email = ? WHERE id = ?",
++                (update["name"], update["email"], update["id"]),
++            )
++            succeeded += 1
++        except Exception:
++            logger.exception("Failed to update user %s", update.get("id"))
++            failed += 1
++    conn.commit()
++    conn.close()
++    return {"succeeded": succeeded, "failed": failed, "total": len(updates)}
++
++
++def fetch_external_users(api_url: str) -> list[dict]:
++    """Fetch user records from an external API.
++
++    Returns the user list. Raises on network or parsing errors.
++    """
++    import urllib.request
++    response = urllib.request.urlopen(api_url)
++    data = json.loads(response.read())
++    return data.get("users", [])
++
++
++def sync_users_to_remote(users: list[dict], remote_url: str) -> dict:
++    """Push user records to a remote service.
++
++    Returns a summary with synced count and list of failed user IDs.
++    """
++    import urllib.request
++    synced = 0
++    failures = []
++    for user in users:
++        try:
++            req = urllib.request.Request(
++                remote_url,
++                data=json.dumps(user).encode(),
++                headers={"Content-Type": "application/json"},
++            )
++            urllib.request.urlopen(req)
++            synced += 1
++        except Exception as exc:
++            logger.warning("Failed to sync user %s: %s", user.get("id"), exc)
++            failures.append(user.get("id"))
++    return {"synced": synced, "failures": failures}
++
++
++def validate_and_import_users(records: list[dict]) -> dict:
++    """Validate and import user records into the database.
++
++    Returns a summary dict with counts of imported, skipped, and errored records.
++    """
++    conn = get_connection()
++    cursor = conn.cursor()
++    results = {"imported": 0, "skipped": 0, "errors": 0}
++
++    for record in records:
++        if not record.get("email"):
++            results["skipped"] += 1
++            continue
++        try:
++            cursor.execute(
++                "INSERT INTO users (name, email) VALUES (?, ?)",
++                (record["name"], record["email"]),
++            )
++            results["imported"] += 1
++        except Exception:
++            logger.exception("Failed to import user %s", record.get("email"))
++            results["errors"] += 1
++
++    conn.commit()
++    conn.close()
++    return results
++
++
++def archive_old_notifications(days: int) -> int:
++    """Move notifications older than `days` to the archive table.
++
++    Returns the number of archived notifications. Raises on database errors.
++    """
++    conn = get_connection()
++    cursor = conn.cursor()
++    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
++
++    try:
++        cursor.execute(
++            "INSERT INTO notifications_archive SELECT * FROM notifications WHERE sent_at < ?",
++            (cutoff,),
++        )
++        cursor.execute("DELETE FROM notifications WHERE sent_at < ?", (cutoff,))
++        archived = cursor.rowcount
++        conn.commit()
++    except Exception:
++        conn.rollback()
++        raise
++    finally:
++        conn.close()
++
++    return archived
++
++
++# --- Internals ---
++
++def _build_report(user_id: str) -> dict:
++    """Build a summary report dict for a single user."""
++    conn = get_connection()
++    cursor = conn.cursor()
++    cursor.execute("SELECT name, email FROM users WHERE id = ?", (user_id,))
++    row = cursor.fetchone()
++    conn.close()
++    if not row:
++        return {"user_id": user_id, "status": "not_found"}
++    return {
++        "user_id": user_id,
++        "name": row[0],
++        "email": row[1],
++        "generated_at": datetime.utcnow().isoformat(),
++    }
+diff --git a/src/utils/cache.ts b/src/utils/cache.ts
+new file mode 100644
+--- /dev/null
++++ b/src/utils/cache.ts
+@@ -0,0 +1,56 @@
++interface CacheEntry<T> {
++  value: T;
++  expiresAt: number;
++}
++
++export class Cache<T = unknown> {
++  private store = new Map<string, CacheEntry<T>>();
++  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
++
++  constructor(private defaultTtlMs: number = 60_000) {
++    this.startAutoCleanup();
++  }
++
++  async get(key: string): Promise<T | null> {
++    const entry = this.store.get(key);
++    if (!entry) return null;
++    if (entry.expiresAt < Date.now()) {
++      this.store.delete(key);
++      return null;
++    }
++    return entry.value;
++  }
++
++  async set(key: string, value: T, ttlMs?: number): Promise<void> {
++    this.store.set(key, {
++      value,
++      expiresAt: Date.now() + (ttlMs ?? this.defaultTtlMs),
++    });
++  }
++
++  async delete(key: string): Promise<boolean> {
++    return this.store.delete(key);
++  }
++
++  startAutoCleanup(intervalMs: number = 30_000): void {
++    this.cleanupInterval = setInterval(() => {
++      const now = Date.now();
++      for (const [key, entry] of this.store) {
++        if (entry.expiresAt < now) {
++          this.store.delete(key);
++        }
++      }
++    }, intervalMs);
++  }
++
++  stopAutoCleanup(): void {
++    if (this.cleanupInterval) {
++      clearInterval(this.cleanupInterval);
++      this.cleanupInterval = null;
++    }
++  }
++
++  get size(): number {
++    return this.store.size;
++  }
++}
+diff --git a/src/utils/sanitize.ts b/src/utils/sanitize.ts
+new file mode 100644
+--- /dev/null
++++ b/src/utils/sanitize.ts
+@@ -0,0 +1,42 @@
++/**
++ * Sanitizes user input to prevent XSS and injection attacks.
++ *
++ * NOTE: This implementation strips basic HTML tags and entities but
++ * does NOT handle unicode normalization attacks. An attacker can use
++ * unicode lookalike characters (e.g., fullwidth angle brackets ＜ ＞)
++ * to bypass the sanitization, then have them normalized to real
++ * angle brackets by downstream systems.
++ */
++export function sanitize(input: string): string {
++  if (typeof input !== 'string') return '';
++
++  // Strip HTML tags
++  let cleaned = input.replace(/<[^>]*>/g, '');
++
++  // Encode HTML entities
++  cleaned = cleaned
++    .replace(/&/g, '&amp;')
++    .replace(/</g, '&lt;')
++    .replace(/>/g, '&gt;')
++    .replace(/"/g, '&quot;')
++    .replace(/'/g, '&#x27;');
++
++  // BUG: Missing unicode normalization step.
++  // Should call input.normalize("NFKC") BEFORE stripping tags
++  // to convert fullwidth/lookalike characters to ASCII equivalents.
++  // Without this, ＜script＞ bypasses the tag stripper.
++
++  return cleaned;
++}
++
++export function sanitizeObject(
++  obj: Record<string, unknown>,
++): Record<string, string> {
++  const result: Record<string, string> = {};
++  for (const [key, value] of Object.entries(obj)) {
++    if (typeof value === 'string') {
++      result[sanitize(key)] = sanitize(value);
++    }
++  }
++  return result;
++}

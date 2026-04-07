@@ -1,11 +1,42 @@
 // @ts-expect-error Bun text import
+import allReviewersContent from './all-reviewers.md' with { type: 'text' };
+// @ts-expect-error Bun text import
 import codeQualityContent from './code-quality.md' with { type: 'text' };
+// @ts-expect-error Bun text import
+import errorHandlingContent from './error-handling.md' with { type: 'text' };
+// @ts-expect-error Bun text import
+import securityContent from './security.md' with { type: 'text' };
+// @ts-expect-error Bun text import
+import securityAndErrorsContent from './security-and-errors.md' with {
+  type: 'text',
+};
 
 const BUILT_IN_PREFIX = 'built-in:';
 
-const builtInSources: Record<string, string> = {
+/** Primary built-in reviews offered during `init`. */
+const primaryBuiltIns: Record<string, string> = {
   'code-quality': codeQualityContent,
+  security: securityContent,
+  'error-handling': errorHandlingContent,
 };
+
+/** Combined built-in reviews (aggregates of primary reviews). */
+const combinedBuiltIns: Record<string, string> = {
+  'all-reviewers': allReviewersContent,
+  'security-and-errors': securityAndErrorsContent,
+};
+
+const builtInSources: Record<string, string> = {
+  ...primaryBuiltIns,
+  ...combinedBuiltIns,
+};
+
+/**
+ * Return the names of primary built-in reviews (for init prompts).
+ */
+export function getBuiltInReviewNames(): string[] {
+  return Object.keys(primaryBuiltIns);
+}
 
 /**
  * Check if a review name uses the built-in prefix.

@@ -4,10 +4,10 @@ import path from "node:path";
 import { loadConfig } from "../../src/config/loader.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-prompt-config-${Date.now()}`);
-const GAUNTLET_DIR = path.join(TEST_DIR, ".validator");
-const CHECKS_DIR = path.join(GAUNTLET_DIR, "checks");
-const REVIEWS_DIR = path.join(GAUNTLET_DIR, "reviews");
-const PROMPTS_DIR = path.join(GAUNTLET_DIR, "prompts");
+const VALIDATOR_DIR = path.join(TEST_DIR, ".validator");
+const CHECKS_DIR = path.join(VALIDATOR_DIR, "checks");
+const REVIEWS_DIR = path.join(VALIDATOR_DIR, "reviews");
+const PROMPTS_DIR = path.join(VALIDATOR_DIR, "prompts");
 
 async function writeConfig(entryChecks: string[], entryReviews: string[]) {
 	const checksSection =
@@ -19,7 +19,7 @@ async function writeConfig(entryChecks: string[], entryReviews: string[]) {
 			? `    reviews:\n${entryReviews.map((r) => `      - ${r}`).join("\n")}\n`
 			: "";
 	await fs.writeFile(
-		path.join(GAUNTLET_DIR, "config.yml"),
+		path.join(VALIDATOR_DIR, "config.yml"),
 		`base_branch: origin/main
 log_dir: test_logs
 cli:
@@ -35,7 +35,7 @@ ${checksSection}${reviewsSection}`,
 async function setupBase(checks: string[] = [], reviews: string[] = []) {
 	await fs.rm(TEST_DIR, { recursive: true, force: true });
 	await fs.mkdir(TEST_DIR, { recursive: true });
-	await fs.mkdir(GAUNTLET_DIR);
+	await fs.mkdir(VALIDATOR_DIR);
 	await fs.mkdir(CHECKS_DIR);
 	await fs.mkdir(REVIEWS_DIR);
 	await fs.mkdir(PROMPTS_DIR, { recursive: true });
@@ -242,7 +242,7 @@ command: "true"
 	describe("Check with fix_instructions_file", () => {
 		beforeAll(async () => {
 			await setupBase(["lint"], []);
-			const fixDir = path.join(GAUNTLET_DIR, "fix-guides");
+			const fixDir = path.join(VALIDATOR_DIR, "fix-guides");
 			await fs.mkdir(fixDir, { recursive: true });
 			await fs.writeFile(
 				path.join(fixDir, "lint.md"),
@@ -268,7 +268,7 @@ fix_instructions_file: fix-guides/lint.md
 	describe("Check with deprecated fix_instructions alias", () => {
 		beforeAll(async () => {
 			await setupBase(["lint"], []);
-			const fixDir = path.join(GAUNTLET_DIR, "fix-guides");
+			const fixDir = path.join(VALIDATOR_DIR, "fix-guides");
 			await fs.mkdir(fixDir, { recursive: true });
 			await fs.writeFile(
 				path.join(fixDir, "lint.md"),
