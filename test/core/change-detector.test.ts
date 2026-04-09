@@ -60,6 +60,16 @@ describe("ChangeDetector fixBase support", () => {
 		uncommittedSpy.mockRestore();
 	});
 
+	it("rejects refs starting with a hyphen", async () => {
+		const detector = new ChangeDetector("origin/main", { fixBase: "--help" });
+		await expect(detector.getChangedFiles()).rejects.toThrow("Invalid fixBase ref");
+	});
+
+	it("rejects commit refs starting with a hyphen", async () => {
+		const detector = new ChangeDetector("origin/main", { commit: "-x" });
+		await expect(detector.getChangedFiles()).rejects.toThrow("Invalid commit ref");
+	});
+
 	it("priority order: commit > fixBase > uncommitted > default", () => {
 		const { readFileSync } = require("node:fs");
 		const { join } = require("node:path");

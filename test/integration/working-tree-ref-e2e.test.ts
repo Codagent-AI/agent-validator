@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -89,10 +89,11 @@ beforeAll(async () => {
 	canRun = isDistBuilt();
 });
 
-afterAll(async () => {
+afterEach(async () => {
 	for (const dir of tempDirs) {
 		await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
 	}
+	tempDirs.length = 0;
 });
 
 describe("working-tree-ref E2E", () => {

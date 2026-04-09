@@ -6,7 +6,7 @@ const execFileAsync = promisify(execFile);
 
 /** Validate that a string is a safe git ref (hex SHA or branch-like name). */
 function isValidGitRef(ref: string): boolean {
-  return /^[a-zA-Z0-9._\-/]+$/.test(ref);
+  return /^[a-zA-Z0-9][a-zA-Z0-9._\-/]*$/.test(ref);
 }
 
 export interface ChangeDetectorOptions {
