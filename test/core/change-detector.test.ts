@@ -7,7 +7,7 @@ describe("ChangeDetector fixBase support", () => {
 		const detector = new ChangeDetector("origin/main", { fixBase });
 		const spy = spyOn(
 			detector as any,
-			"getDiffWithWorkingTree",
+			"getFixBaseChangedFiles",
 		).mockResolvedValue(["src/foo.ts"]);
 
 		const files = await detector.getChangedFiles();
@@ -26,7 +26,7 @@ describe("ChangeDetector fixBase support", () => {
 		).mockResolvedValue(["src/bar.ts"]);
 		const fixBaseSpy = spyOn(
 			detector as any,
-			"getDiffWithWorkingTree",
+			"getFixBaseChangedFiles",
 		).mockResolvedValue(["src/foo.ts"]);
 
 		const files = await detector.getChangedFiles();
@@ -45,7 +45,7 @@ describe("ChangeDetector fixBase support", () => {
 		});
 		const fixBaseSpy = spyOn(
 			detector as any,
-			"getDiffWithWorkingTree",
+			"getFixBaseChangedFiles",
 		).mockResolvedValue(["src/foo.ts"]);
 		const uncommittedSpy = spyOn(
 			detector as any,
@@ -58,6 +58,16 @@ describe("ChangeDetector fixBase support", () => {
 		expect(files).toEqual(["src/foo.ts"]);
 		fixBaseSpy.mockRestore();
 		uncommittedSpy.mockRestore();
+	});
+
+	it("rejects refs starting with a hyphen", async () => {
+		const detector = new ChangeDetector("origin/main", { fixBase: "--help" });
+		await expect(detector.getChangedFiles()).rejects.toThrow("Invalid fixBase ref");
+	});
+
+	it("rejects commit refs starting with a hyphen", async () => {
+		const detector = new ChangeDetector("origin/main", { commit: "-x" });
+		await expect(detector.getChangedFiles()).rejects.toThrow("Invalid commit ref");
 	});
 
 	it("priority order: commit > fixBase > uncommitted > default", () => {

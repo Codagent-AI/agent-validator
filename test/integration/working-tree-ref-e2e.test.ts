@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -89,10 +89,11 @@ beforeAll(async () => {
 	canRun = isDistBuilt();
 });
 
-afterAll(async () => {
+afterEach(async () => {
 	for (const dir of tempDirs) {
 		await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
 	}
+	tempDirs.length = 0;
 });
 
 describe("working-tree-ref E2E", () => {
@@ -266,6 +267,62 @@ describe("working-tree-ref E2E", () => {
 
 				// Verify working_tree_ref was updated after the second run
 				expect(secondState?.working_tree_ref).not.toBeUndefined();
+			},
+			{ timeout: TIMEOUT_MS * 2 },
+		);
+
+		it(
+			"Scenario: detect reports no changes after committing validated unstaged fix",
+			async () => {
+				if (!canRun) return;
+
+				const tempDir = await createTestRepo();
+				tempDirs.push(tempDir);
+
+				// Strip CI env vars so detect uses config's base_branch ("base")
+				// instead of GITHUB_BASE_REF, which would trigger auto-clean
+				const cleanEnv = { ...process.env };
+				delete cleanEnv.CI;
+				delete cleanEnv.GITHUB_ACTIONS;
+				delete cleanEnv.GITHUB_BASE_REF;
+				delete cleanEnv.GITHUB_SHA;
+
+				// Step 1: Make an uncommitted change (simulates a review fix)
+				await fs.writeFile(
+					path.join(tempDir, "hello.ts"),
+					"export const x = 0; // review fix\n",
+				);
+
+				// Step 2: Run validator — saves working_tree_ref as stash snapshot
+				await spawnValidator(["run"], {
+					cwd: tempDir,
+					env: cleanEnv,
+					timeoutMs: TIMEOUT_MS,
+				});
+
+				const state = await readExecutionState(tempDir);
+				expect(state).not.toBeNull();
+				const wtr = state?.working_tree_ref as string;
+				const commitRef = state?.commit as string;
+
+				// working_tree_ref should be a stash (differs from commit/HEAD)
+				expect(wtr).not.toBe(commitRef);
+
+				// Step 3: Commit the fix (same content as the stash snapshot)
+				await git(["add", "hello.ts"], tempDir);
+				await git(["commit", "-m", "apply review fix"], tempDir);
+
+				// Step 4: Run detect — should show NO changes since committed
+				// content matches the validated working_tree_ref
+				const detectResult = await spawnValidator(["detect"], {
+					cwd: tempDir,
+					env: cleanEnv,
+					timeoutMs: TIMEOUT_MS,
+				});
+
+				// detect exits 2 when no changes found, 0 when changes found
+				expect(detectResult.exitCode).toBe(2);
+				expect(detectResult.stdout).toContain("No changes detected");
 			},
 			{ timeout: TIMEOUT_MS * 2 },
 		);

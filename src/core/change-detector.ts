@@ -6,7 +6,7 @@ const execFileAsync = promisify(execFile);
 
 /** Validate that a string is a safe git ref (hex SHA or branch-like name). */
 function isValidGitRef(ref: string): boolean {
-  return /^[a-zA-Z0-9._\-/]+$/.test(ref);
+  return /^[a-zA-Z0-9][a-zA-Z0-9._\-/]*$/.test(ref);
 }
 
 export interface ChangeDetectorOptions {
@@ -186,7 +186,21 @@ export class ChangeDetector {
   }
 
   private async getFixBaseChangedFiles(fixBase: string): Promise<string[]> {
-    return this.getDiffWithWorkingTree(fixBase);
+    // Use two-dot diff (direct content comparison) instead of three-dot diff.
+    // Three-dot diff resolves the merge-base first, which for stash refs
+    // (working_tree_ref) points to the pre-fix commit — producing false positives
+    // when the fix has been committed and the content matches the stash.
+    const { stdout: committed } = await execFileAsync('git', [
+      'diff',
+      '--name-only',
+      fixBase,
+      'HEAD',
+    ]);
+    const files = new Set([
+      ...this.parseOutput(committed),
+      ...(await this.getWorkingTreeFiles()),
+    ]);
+    return Array.from(files);
   }
 
   private async getUncommittedChangedFiles(): Promise<string[]> {
