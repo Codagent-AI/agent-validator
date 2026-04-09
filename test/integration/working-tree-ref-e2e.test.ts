@@ -278,6 +278,14 @@ describe("working-tree-ref E2E", () => {
 				const tempDir = await createTestRepo();
 				tempDirs.push(tempDir);
 
+				// Strip CI env vars so detect uses config's base_branch ("base")
+				// instead of GITHUB_BASE_REF, which would trigger auto-clean
+				const cleanEnv = { ...process.env };
+				delete cleanEnv.CI;
+				delete cleanEnv.GITHUB_ACTIONS;
+				delete cleanEnv.GITHUB_BASE_REF;
+				delete cleanEnv.GITHUB_SHA;
+
 				// Step 1: Make an uncommitted change (simulates a review fix)
 				await fs.writeFile(
 					path.join(tempDir, "hello.ts"),
@@ -287,6 +295,7 @@ describe("working-tree-ref E2E", () => {
 				// Step 2: Run validator — saves working_tree_ref as stash snapshot
 				await spawnValidator(["run"], {
 					cwd: tempDir,
+					env: cleanEnv,
 					timeoutMs: TIMEOUT_MS,
 				});
 
@@ -306,6 +315,7 @@ describe("working-tree-ref E2E", () => {
 				// content matches the validated working_tree_ref
 				const detectResult = await spawnValidator(["detect"], {
 					cwd: tempDir,
+					env: cleanEnv,
 					timeoutMs: TIMEOUT_MS,
 				});
 
