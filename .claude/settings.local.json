@@ -1,8 +1,0 @@
-{
-  "hooks": {},
-  "permissions": {
-    "allow": [
-      "Bash(bun src/index.ts:*)"
-    ]
-  }
-}
