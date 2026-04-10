@@ -8,9 +8,6 @@ allowed-tools: Bash, Task
 # /validator-run
 Execute the autonomous verification suite.
 
-Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. When you skip an issue, briefly state what was skipped and why.
-
-
 ## Procedure
 
 ### Step 1 - Run Agent Validator
@@ -43,10 +40,12 @@ Print the compact failure summary returned from Step 3.
 
 ### Step 5 - Fix
 
-Apply the review guidance above to each failure and fix accordingly:
+Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. "Issue is pre-existing" is not a valid reason to skip unless you have another good reason to skip it. When you skip an issue, briefly state what was skipped and why.
+
+Apply this guidance to each failure and fix accordingly:
 - CHECK failures with Fix Skill: invoke the named skill
 - CHECK failures with Fix Instructions: follow the instructions
-- REVIEW violations: fix or skip per the review guidance above
+- REVIEW violations: fix or skip per the guidance above
 
 ### Step 6 - Update Review Decisions
 
