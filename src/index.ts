@@ -23,10 +23,15 @@ import {
 
 const program = new Command();
 
+// BUILD_GIT_SHA is injected at compile time; falls back to semver for npm installs
+declare const BUILD_GIT_SHA: string | undefined;
+const versionString =
+  typeof BUILD_GIT_SHA !== 'undefined' ? BUILD_GIT_SHA : packageJson.version;
+
 program
   .name('agent-validate')
   .description('AI-assisted quality gates')
-  .version(packageJson.version);
+  .version(versionString);
 
 // Register all commands
 registerRunCommand(program);

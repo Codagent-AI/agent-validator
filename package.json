@@ -37,7 +37,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:bin": "bun build --compile --minify --sourcemap ./src/index.ts --outfile bin/agent-validate",
+    "build:local": "INJECT_GIT_VERSION=1 bun build.ts",
     "build:npm": "bun build.ts",
     "prepublishOnly": "bun run build:npm",
     "test": "bun test",

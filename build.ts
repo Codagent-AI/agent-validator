@@ -1,7 +1,15 @@
 import { chmod, readFile, writeFile } from "node:fs/promises";
+import { execSync } from "node:child_process";
 import path from "node:path";
 
 const entrypoints = ["./src/index.ts", "./src/scripts/status.ts"];
+
+const define: Record<string, string> = {};
+if (process.env.INJECT_GIT_VERSION) {
+	const sha = execSync("git rev-parse --short HEAD").toString().trim();
+	const subject = execSync("git log -1 --format=%s").toString().trim();
+	define.BUILD_GIT_SHA = JSON.stringify(`${sha} ${subject}`);
+}
 
 const result = await Bun.build({
 	entrypoints,
@@ -10,6 +18,7 @@ const result = await Bun.build({
 	format: "esm",
 	packages: "external",
 	sourcemap: "external",
+	define,
 });
 
 if (!result.success) {
