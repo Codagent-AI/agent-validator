@@ -202,6 +202,16 @@ agent-validator run --enable-review task-compliance --enable-review security
 
 Reviews with `enabled: true` (the default) are unaffected by this flag. If the name doesn't match any configured review, the flag is silently ignored.
 
+#### `--context-file <path>`
+
+Reads the file at `<path>` and injects its contents into review prompts that contain the `{{CONTEXT}}` placeholder. The path is resolved relative to the current working directory. If the file does not exist, the command exits with an error.
+
+This is used with reviews like the built-in `task-compliance` review that need external context (e.g. a task specification) to perform their review:
+
+```bash
+agent-validator run --enable-review task-compliance --context-file tasks/implement-feature.md
+```
+
 #### `--commit <sha>`
 
 Uses diff for a specific commit instead of the default change detection logic. The diff is computed as `commit^..commit`.
@@ -245,7 +255,7 @@ Runs only applicable reviews for detected changes. Checks are skipped.
 - Expands entry points that match those changes
 - Runs only review gates for those active entry points
 
-Uses the same options as `run` (see above), including `--enable-review`. When using `--gate <name>`, filters to a single review gate name.
+Uses the same options as `run` (see above), including `--enable-review` and `--context-file`. When using `--gate <name>`, filters to a single review gate name.
 
 ### `agent-validator review-audit`
 

@@ -4,6 +4,8 @@ import codeQualityContent from './code-quality.md' with { type: 'text' };
 import errorHandlingContent from './error-handling.md' with { type: 'text' };
 // @ts-expect-error Bun text import
 import securityContent from './security.md' with { type: 'text' };
+// @ts-expect-error Bun text import
+import taskComplianceContent from './task-compliance.md' with { type: 'text' };
 
 const BUILT_IN_PREFIX = 'built-in:';
 
@@ -12,6 +14,11 @@ const primaryBuiltIns: Record<string, string> = {
   'code-quality': codeQualityContent,
   security: securityContent,
   'error-handling': errorHandlingContent,
+};
+
+/** Opt-in built-in reviews (not offered during init, activated via --enable-review). */
+const optInBuiltIns: Record<string, string> = {
+  'task-compliance': taskComplianceContent,
 };
 
 /** Definitions for combined reviews: which primaries to concatenate. */
@@ -30,6 +37,7 @@ const combinedBuiltIns: Record<string, string> = Object.fromEntries(
 
 const builtInSources: Record<string, string> = {
   ...primaryBuiltIns,
+  ...optInBuiltIns,
   ...combinedBuiltIns,
 };
 

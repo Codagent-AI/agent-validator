@@ -289,7 +289,7 @@ The system MUST map the unified `thinking_budget` level string to adapter-specif
 - **THEN** the original `.gemini/settings.json` MUST still be restored
 
 ### Requirement: Built-in review prompts are pure markdown
-Built-in review prompts bundled with the package MUST be pure markdown files with no YAML frontmatter. They contain only the prompt text. All configuration settings (num_reviews, cli_preference, etc.) MUST be specified in the YAML review config file that references the built-in. The package SHALL ship three built-in reviews: `code-quality`, `security`, and `error-handling`. All built-in reviewers SHALL prioritize recall over precision — when uncertain, the reviewer reports the issue rather than suppressing it.
+Built-in review prompts bundled with the package MUST be pure markdown files with no YAML frontmatter. They contain only the prompt text. All configuration settings (num_reviews, cli_preference, etc.) MUST be specified in the YAML review config file that references the built-in. The package SHALL ship four built-in reviews: `code-quality`, `security`, `error-handling`, and `task-compliance`. All built-in reviewers SHALL prioritize recall over precision — when uncertain, the reviewer reports the issue rather than suppressing it.
 
 #### Scenario: Built-in code-quality prompt is self-contained
 - **GIVEN** a YAML review config with `builtin: code-quality`
@@ -309,8 +309,53 @@ Built-in review prompts bundled with the package MUST be pure markdown files wit
 - **THEN** the `promptContent` SHALL be loaded from the built-in error-handling review prompt
 - **AND** the prompt SHALL focus on error-handling concerns (swallowed errors, missing observability, silent failures)
 
+#### Scenario: Built-in task-compliance prompt loaded by name
+- **GIVEN** a YAML review config with `builtin: task-compliance`
+- **WHEN** the configuration is loaded
+- **THEN** the `promptContent` SHALL be loaded from the built-in task-compliance review prompt
+- **AND** the prompt SHALL contain the `{{CONTEXT}}` placeholder for runtime context injection
+- **AND** the prompt SHALL focus on verifying that every requirement, acceptance criterion, and done-when item from the injected task specification is fully implemented in the diff
+
 #### Scenario: Unknown built-in name rejected
 - **GIVEN** a YAML review config with `builtin: nonexistent`
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with an error indicating the built-in review "nonexistent" is unknown
+
+### Requirement: Runtime context injection via --context-file
+The `run` and `review` commands MUST accept a `--context-file <path>` CLI option that reads a file and injects its contents into review prompts at execution time. The file contents replace the `{{CONTEXT}}` placeholder in `promptContent` during prompt building. This mechanism is general-purpose — any review (built-in or user-authored) MAY use the `{{CONTEXT}}` placeholder.
+
+When `--context-file` is provided, the file MUST be read before review execution begins. When `--context-file` is not provided, any `{{CONTEXT}}` placeholder in the prompt MUST be replaced with an empty string. The `--context-file` path MUST be resolved relative to the current working directory. If the file does not exist, the system MUST exit with an error.
+
+#### Scenario: Context file contents injected into prompt
+- **GIVEN** a review prompt containing `{{CONTEXT}}`
+- **AND** `--context-file path/to/task.md` is passed on the CLI
+- **AND** `path/to/task.md` contains task specification text
+- **WHEN** the review prompt is built
+- **THEN** `{{CONTEXT}}` in the prompt SHALL be replaced with the full contents of `path/to/task.md`
+
+#### Scenario: Context file used with task-compliance built-in
+- **GIVEN** a review configured with `builtin: task-compliance`
+- **AND** `--enable-review task-compliance` is passed
+- **AND** `--context-file tasks/implement-feature.md` is passed
+- **WHEN** the review executes
+- **THEN** the task-compliance prompt SHALL contain the full contents of `tasks/implement-feature.md` in place of `{{CONTEXT}}`
+- **AND** the reviewer SHALL evaluate the diff against the task specification
+
+#### Scenario: No context file provided with CONTEXT placeholder
+- **GIVEN** a review prompt containing `{{CONTEXT}}`
+- **AND** no `--context-file` option is passed
+- **WHEN** the review prompt is built
+- **THEN** `{{CONTEXT}}` SHALL be replaced with an empty string
+
+#### Scenario: Context file does not exist
+- **GIVEN** `--context-file nonexistent.md` is passed on the CLI
+- **WHEN** the system attempts to read the file
+- **THEN** the system MUST exit with an error indicating the file was not found
+
+#### Scenario: Context file with review that has no placeholder
+- **GIVEN** a review prompt that does NOT contain `{{CONTEXT}}`
+- **AND** `--context-file path/to/task.md` is passed on the CLI
+- **WHEN** the review prompt is built
+- **THEN** the prompt SHALL remain unchanged (the context is unused)
+- **AND** no error or warning SHALL be emitted
 

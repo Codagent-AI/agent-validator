@@ -45,6 +45,8 @@ export interface ExecuteRunOptions {
   enableReviews?: Set<string>;
   /** When true, generate a plain-text report in RunResult.reportText */
   report?: boolean;
+  /** Content to inject into review prompts via {{CONTEXT}} placeholder */
+  contextContent?: string;
 }
 
 /** Initialize app logger and debug logger, returning a RunContext. */

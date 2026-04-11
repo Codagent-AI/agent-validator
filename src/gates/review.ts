@@ -63,6 +63,7 @@ export class ReviewGateExecutor {
     passedSlots?: Map<number, { adapter: string; passIteration: number }>,
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
+    contextContent?: string,
   ): Promise<GateResult> {
     const startTime = Date.now();
     const { mainLogger, getAdapterLogger, logPaths, logPathsSet } =
@@ -85,6 +86,7 @@ export class ReviewGateExecutor {
         passedSlots,
         logDir,
         adapterConfigs,
+        contextContent,
       );
     } catch (error: unknown) {
       return handleCriticalError(error, jobId, startTime, logPaths, mainLogger);
@@ -112,6 +114,7 @@ export class ReviewGateExecutor {
     passedSlots?: Map<number, { adapter: string; passIteration: number }>,
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
+    contextContent?: string,
   ): Promise<GateResult> {
     log.debug(`Starting review: ${config.name} | entry=${entryPointPath}`);
     await mainLogger(`Starting review: ${config.name}\n`);
@@ -158,6 +161,7 @@ export class ReviewGateExecutor {
       rerunThreshold,
       logDir,
       adapterConfigs,
+      contextContent,
     );
   }
 
@@ -183,6 +187,7 @@ export class ReviewGateExecutor {
     rerunThreshold: 'critical' | 'high' | 'medium' | 'low' = 'high',
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
+    contextContent?: string,
   ): Promise<GateResult> {
     const dispatchMsg = `Dispatching ${required} review(s) via round-robin: ${assignments.map((a) => `${a.adapter}@${a.reviewIndex}`).join(', ')}`;
     log.debug(dispatchMsg);
@@ -214,6 +219,7 @@ export class ReviewGateExecutor {
         rerunThreshold,
         logDir,
         adapterConfigs,
+        contextContent,
       );
 
     const outputs = await dispatchReviews(
@@ -253,6 +259,7 @@ export class ReviewGateExecutor {
     rerunThreshold: 'critical' | 'high' | 'medium' | 'low' = 'high',
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
+    contextContent?: string,
   ): Promise<SingleReviewResult | null> {
     const reviewStartTime = Date.now();
     const adapter = getAdapter(toolName);
@@ -280,6 +287,7 @@ export class ReviewGateExecutor {
         adapterConfigs,
         toolName,
         reviewStartTime,
+        contextContent,
       );
     } catch (error: unknown) {
       return handleReviewError(
@@ -308,6 +316,7 @@ export class ReviewGateExecutor {
     adapterConfigs: Record<string, AdapterConfig> | undefined,
     toolName: string,
     reviewStartTime: number,
+    contextContent?: string,
   ): Promise<SingleReviewResult | null> {
     await adapterLogger(
       `[START] review:.:${config.name} (${adapter.name}@${reviewIndex})\n`,
@@ -318,7 +327,11 @@ export class ReviewGateExecutor {
       previousFailures?.get(indexKey) ??
       previousFailures?.get(adapter.name) ??
       [];
-    const finalPrompt = buildReviewPrompt(config, adapterPreviousViolations);
+    const finalPrompt = buildReviewPrompt(
+      config,
+      adapterPreviousViolations,
+      contextContent,
+    );
     logInputStats(finalPrompt, diff, adapterLogger);
     await adapterLogger(`[diff]\n${diff}\n`);
 

@@ -118,6 +118,27 @@ export async function addToGitignore(
   console.log(chalk.green(`Added ${entry} to .gitignore`));
 }
 
+/**
+ * Read a context file from a CLI --context-file path.
+ * Exits the process with an error if the file cannot be read.
+ */
+export async function readContextFile(filePath: string): Promise<string> {
+  const resolved = path.resolve(filePath);
+  try {
+    return await fs.readFile(resolved, 'utf-8');
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      console.error(`Error: context file not found: ${resolved}`);
+    } else {
+      console.error(
+        `Error: failed to read context file: ${resolved} (${code ?? (err as Error).message})`,
+      );
+    }
+    process.exit(1);
+  }
+}
+
 export async function exists(filePath: string): Promise<boolean> {
   try {
     await fs.stat(filePath);

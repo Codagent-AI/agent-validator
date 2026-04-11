@@ -44,9 +44,14 @@ Both copies of the validator-run skill SHALL accept `--enable-review <name>` fla
 - **THEN** the run command SHALL NOT include any `--enable-review` flags
 
 ### Requirement: Task-compliance review defaults to disabled
-The `task-compliance` review SHALL be configured as opt-in in this project, so it does not execute unless explicitly activated.
+The `task-compliance` review SHALL be configured as opt-in in this project, so it does not execute unless explicitly activated. When activated, callers SHOULD provide `--context-file` pointing to the task specification so the reviewer has the requirements to verify against.
 
 #### Scenario: Task-compliance does not run without explicit activation
 - **GIVEN** the `task-compliance` review is configured with `enabled: false` in this project
 - **WHEN** the validator is run in this project without `--enable-review task-compliance`
 - **THEN** the task-compliance review SHALL NOT execute
+
+#### Scenario: Task-compliance activated with context file
+- **GIVEN** the `task-compliance` review is configured with `enabled: false` in this project
+- **WHEN** the validator is run with `--enable-review task-compliance --context-file path/to/task.md`
+- **THEN** the task-compliance review SHALL execute with the task specification injected into the prompt

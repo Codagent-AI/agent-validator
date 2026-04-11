@@ -7,8 +7,12 @@ import { JSON_SYSTEM_INSTRUCTION } from './review-types.js';
 export function buildReviewPrompt(
   config: ReviewConfig,
   previousViolations: PreviousViolation[] = [],
+  context?: string,
 ): string {
-  const baseContent = config.promptContent || '';
+  let baseContent = config.promptContent || '';
+
+  // Replace {{CONTEXT}} placeholder with injected context (or empty string)
+  baseContent = baseContent.replace('{{CONTEXT}}', context ?? '');
 
   if (previousViolations.length > 0) {
     return (
