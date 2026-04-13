@@ -40,7 +40,15 @@ Print the compact failure summary returned from Step 3.
 
 ### Step 5 - Fix
 
-Fix issues you reasonably agree with or believe the human wants to be fixed. Skip issues that are purely stylistic, subjective, or that you believe the human would not want changed. "Issue is pre-existing" is not a valid reason to skip unless you have another good reason to skip it. When you skip an issue, briefly state what was skipped and why.
+Fix issues reasonably supported by the feedback or likely intended by the human. When skipping an issue, briefly state what was skipped and why.
+
+**Valid reasons to skip:**
+- Purely stylistic or subjective preference
+- The human would not want it changed
+
+**You MUST NOT skip for these reasons:**
+- "Issue is pre-existing" — you MUST fix it unless you have another valid reason
+- "Issue is out of scope" — you MUST address valid feedback even if it requires refactoring or non-trivial changes
 
 Apply this guidance to each failure and fix accordingly:
 - CHECK failures with Fix Skill: invoke the named skill
