@@ -1,7 +1,20 @@
 import { chmod, readFile, writeFile } from "node:fs/promises";
+import { execSync } from "node:child_process";
 import path from "node:path";
 
 const entrypoints = ["./src/index.ts", "./src/scripts/status.ts"];
+
+const define: Record<string, string> = {};
+if (process.env.INJECT_GIT_VERSION) {
+	try {
+		const sha = execSync("git rev-parse --short HEAD").toString().trim();
+		const subject = execSync("git log -1 --format=%s").toString().trim();
+		define.BUILD_GIT_SHA = JSON.stringify(`${sha} ${subject}`);
+	} catch {
+		console.warn("Warning: failed to read git version info; BUILD_GIT_SHA will be 'unknown'");
+		define.BUILD_GIT_SHA = JSON.stringify("unknown");
+	}
+}
 
 const result = await Bun.build({
 	entrypoints,
@@ -10,6 +23,7 @@ const result = await Bun.build({
 	format: "esm",
 	packages: "external",
 	sourcemap: "external",
+	define,
 });
 
 if (!result.success) {

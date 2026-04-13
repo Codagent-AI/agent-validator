@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { executeGateCommand } from './gate-command.js';
+import { readContextFile } from './shared.js';
 
 export function registerReviewCommand(program: Command): void {
   program
@@ -21,10 +22,19 @@ export function registerReviewCommand(program: Command): void {
       (value: string, prev: string[] = []) => [...prev, value],
       [] as string[],
     )
-    .action((options) =>
-      executeGateCommand('review', {
+    .option(
+      '--context-file <path>',
+      'Inject file contents into review prompts via {{CONTEXT}} placeholder',
+    )
+    .action(async (options) => {
+      const contextContent = options.contextFile
+        ? await readContextFile(options.contextFile)
+        : undefined;
+
+      await executeGateCommand('review', {
         ...options,
         enableReviews: new Set<string>(options.enableReview ?? []),
-      }),
-    );
+        contextContent,
+      });
+    });
 }

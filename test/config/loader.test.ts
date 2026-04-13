@@ -384,7 +384,7 @@ entry_points:
 		expect(content).toMatch(/injection/i);
 		expect(content).toMatch(/auth/i);
 		expect(content).toMatch(/secrets/i);
-		expect(content).toMatch(/when uncertain, report/i);
+		expect(content).toMatch(/concrete exploit scenario/i);
 	});
 
 	it("should load error-handling prompt with counterfactual reasoning", async () => {
@@ -415,7 +415,7 @@ entry_points:
 		// Error-handling categories
 		expect(content).toMatch(/swallowed error/i);
 		expect(content).toMatch(/observability/i);
-		expect(content).toMatch(/when uncertain, report/i);
+		expect(content).toMatch(/could this cause data loss/i);
 	});
 
 	it("should reject user-defined review file with built-in: prefix in filename", async () => {

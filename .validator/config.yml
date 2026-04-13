@@ -22,7 +22,7 @@ entry_points:
       - .claude/skills
     checks:
       - build:
-          command: bun run build
+          command: bun run build:local
       - lint:
           command: bunx biome check src
       - typecheck:

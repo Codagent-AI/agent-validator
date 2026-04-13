@@ -194,7 +194,17 @@ YAML review files must specify exactly one of `prompt_file`, `skill_name`, or `b
 - **skill_name**: string (optional)
   Name of a CLI skill to delegate the review to. When set, no prompt content is loaded. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `prompt_file` and `builtin`.
 - **builtin**: string (optional, `.yml` only)
-  Name of a built-in review prompt bundled with the package (e.g. `code-quality`). Loads the prompt from the built-in review library. Mutually exclusive with `prompt_file` and `skill_name`.
+  Name of a built-in review prompt bundled with the package. Available built-ins: `code-quality`, `security`, `error-handling`, `task-compliance`. Combined reviews `security-and-errors` and `all-reviewers` are also available. Mutually exclusive with `prompt_file` and `skill_name`.
+
+### Context injection
+
+Review prompts (built-in or user-authored) can include a `{{CONTEXT}}` placeholder. At runtime, the `--context-file <path>` CLI option reads a file and replaces `{{CONTEXT}}` with its contents. If no `--context-file` is provided, the placeholder is replaced with an empty string.
+
+The built-in `task-compliance` review uses this mechanism to receive a task specification:
+
+```bash
+agent-validator run --enable-review task-compliance --context-file tasks/implement-feature.md
+```
 
 **JSON Output format**
 

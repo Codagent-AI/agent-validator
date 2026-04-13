@@ -1,15 +1,11 @@
 // @ts-expect-error Bun text import
-import allReviewersContent from './all-reviewers.md' with { type: 'text' };
-// @ts-expect-error Bun text import
 import codeQualityContent from './code-quality.md' with { type: 'text' };
 // @ts-expect-error Bun text import
 import errorHandlingContent from './error-handling.md' with { type: 'text' };
 // @ts-expect-error Bun text import
 import securityContent from './security.md' with { type: 'text' };
 // @ts-expect-error Bun text import
-import securityAndErrorsContent from './security-and-errors.md' with {
-  type: 'text',
-};
+import taskComplianceContent from './task-compliance.md' with { type: 'text' };
 
 const BUILT_IN_PREFIX = 'built-in:';
 
@@ -20,14 +16,28 @@ const primaryBuiltIns: Record<string, string> = {
   'error-handling': errorHandlingContent,
 };
 
-/** Combined built-in reviews (aggregates of primary reviews). */
-const combinedBuiltIns: Record<string, string> = {
-  'all-reviewers': allReviewersContent,
-  'security-and-errors': securityAndErrorsContent,
+/** Opt-in built-in reviews (not offered during init, activated via --enable-review). */
+const optInBuiltIns: Record<string, string> = {
+  'task-compliance': taskComplianceContent,
 };
+
+/** Definitions for combined reviews: which primaries to concatenate. */
+const combinedDefinitions: Record<string, string[]> = {
+  'security-and-errors': ['security', 'error-handling'],
+  'all-reviewers': ['code-quality', 'security', 'error-handling'],
+};
+
+/** Combined built-in reviews built at runtime from primaries. */
+const combinedBuiltIns: Record<string, string> = Object.fromEntries(
+  Object.entries(combinedDefinitions).map(([name, primaries]) => [
+    name,
+    primaries.map((key) => primaryBuiltIns[key]).join('\n\n---\n\n'),
+  ]),
+);
 
 const builtInSources: Record<string, string> = {
   ...primaryBuiltIns,
+  ...optInBuiltIns,
   ...combinedBuiltIns,
 };
 

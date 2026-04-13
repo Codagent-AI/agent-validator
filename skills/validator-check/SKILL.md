@@ -40,7 +40,7 @@ Required when status is Failed:
 
 ### Step 5 - Fix
 
-Execute the fixes for all failed checks:
+Fix all failed checks:
 - CHECK failures with Fix Skill: invoke the named skill
 - CHECK failures with Fix Instructions: follow the instructions
 

@@ -99,6 +99,7 @@ export class Runner {
     private isRerun?: boolean,
     checkExecutor?: CheckGateExecutor,
     reviewExecutor?: ReviewGateExecutor,
+    private contextContent?: string,
   ) {
     this.checkExecutor = checkExecutor ?? new CheckGateExecutor();
     this.reviewExecutor = reviewExecutor ?? new ReviewGateExecutor();
@@ -226,6 +227,7 @@ export class Runner {
           this.passedSlotsMap?.get(safeJobId),
           this.config.project.log_dir,
           this.config.project.cli?.adapters,
+          this.contextContent,
         );
       }
     } catch (err) {

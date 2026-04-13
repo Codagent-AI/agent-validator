@@ -45,6 +45,7 @@ interface GateCommandOptions {
   commit?: string;
   uncommitted?: boolean;
   enableReviews?: Set<string>;
+  contextContent?: string;
 }
 
 interface ChangeOptions {
@@ -74,16 +75,16 @@ async function initializeDebugLogger(
   initDebugLogger(config.project.log_dir, debugLogConfig);
 
   const debugLogger = getDebugLogger() ?? undefined;
-  const args = [
-    options.baseBranch ? `-b ${options.baseBranch}` : '',
-    options.gate ? `-g ${options.gate}` : '',
-    options.commit ? `-c ${options.commit}` : '',
-    options.uncommitted ? '-u' : '',
-  ].filter(Boolean);
-  await debugLogger?.logCommand(commandName, args);
-
+  await debugLogger?.logCommand(
+    commandName,
+    [
+      options.baseBranch && `-b ${options.baseBranch}`,
+      options.gate && `-g ${options.gate}`,
+      options.commit && `-c ${options.commit}`,
+      options.uncommitted && '-u',
+    ].filter((v): v is string => !!v),
+  );
   const effectiveBaseBranch = resolveBaseBranch(options, config);
-
   return { config, debugLogger, effectiveBaseBranch };
 }
 
@@ -159,7 +160,6 @@ function buildFailuresMap(
   }
   return failuresMap;
 }
-
 /** Log a summary of previous violations if any exist. */
 function logPreviousViolations(
   previousFailures: Awaited<
@@ -180,7 +180,6 @@ function logPreviousViolations(
     ),
   );
 }
-
 /** Resolve fixBase for post-clean runs from execution state. */
 async function resolveChangeOptions(
   logDir: string,
@@ -241,14 +240,11 @@ async function detectChangesAndGenerateJobs(
   );
   const expander = new EntryPointExpander();
   const jobGen = new JobGenerator(config, options.enableReviews);
-
   console.log(chalk.dim('Detecting changes...'));
   const changes = await changeDetector.getChangedFiles();
-
   if (changes.length === 0) {
     return { changes, jobs: [] };
   }
-
   console.log(chalk.dim(`Found ${changes.length} changed files.`));
 
   const entryPoints = await expander.expand(
@@ -256,10 +252,7 @@ async function detectChangesAndGenerateJobs(
     changes,
   );
   let jobs = jobGen.generateJobs(entryPoints);
-
-  // Filter to only the requested type
   jobs = jobs.filter((j) => j.type === commandName);
-
   if (options.gate) {
     jobs = jobs.filter((j) => j.name === options.gate);
   }
@@ -279,6 +272,7 @@ async function executeAndFinalize(
   passedSlotsMap: Map<string, Map<number, PassedSlot>> | undefined,
   changes: string[],
   jobs: Awaited<ReturnType<JobGenerator['generateJobs']>>,
+  contextContent?: string,
 ): Promise<boolean> {
   const runMode = isRerun ? 'verification' : 'full';
   await debugLogger?.logRunStart(runMode, changes.length, jobs.length);
@@ -294,6 +288,9 @@ async function executeAndFinalize(
     passedSlotsMap,
     debugLogger,
     isRerun,
+    undefined,
+    undefined,
+    contextContent,
   );
 
   const outcome = await runner.run(jobs);
@@ -489,6 +486,7 @@ export async function executeGateCommand(
       rerunResult.passedSlotsMap,
       changes,
       jobs,
+      options.contextContent,
     );
 
     await releaseLock(logDir);

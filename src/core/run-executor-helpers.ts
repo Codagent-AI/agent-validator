@@ -47,6 +47,7 @@ export interface RunContext {
     cwd?: string;
     enableReviews?: Set<string>;
     report?: boolean;
+    contextContent?: string;
   };
   config: LoadedConfig;
   loggerInitializedHere: boolean;
@@ -404,6 +405,9 @@ export async function executeAndReport(
     passedSlotsMap,
     debugLogger ?? undefined,
     isRerun,
+    undefined,
+    undefined,
+    ctx.options.contextContent,
   );
 
   const outcome = await runner.run(jobs);

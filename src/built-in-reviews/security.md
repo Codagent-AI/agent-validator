@@ -28,6 +28,6 @@ This format structures your thinking — it is not a gate. If you cannot complet
 
 ## Guidelines
 
-- **Threshold**: could this be exploited or expose sensitive data? When uncertain, report it.
+- **Threshold**: could an attacker exploit this with a realistic attack vector? Only report issues where you can describe a concrete exploit scenario using inputs the attacker actually controls. Do not report theoretical vulnerabilities that require multiple simultaneous faults or access the attacker would not plausibly have.
 - Explain **why** each issue matters with a concrete exploit scenario
 - Provide a **concrete fix** with corrected code
