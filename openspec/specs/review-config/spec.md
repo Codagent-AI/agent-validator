@@ -289,7 +289,7 @@ The system MUST map the unified `thinking_budget` level string to adapter-specif
 - **THEN** the original `.gemini/settings.json` MUST still be restored
 
 ### Requirement: Built-in review prompts are pure markdown
-Built-in review prompts bundled with the package MUST be pure markdown files with no YAML frontmatter. They contain only the prompt text. All configuration settings (num_reviews, cli_preference, etc.) MUST be specified in the YAML review config file that references the built-in. The package SHALL ship four built-in reviews: `code-quality`, `security`, `error-handling`, and `task-compliance`. All built-in reviewers SHALL prioritize recall over precision — when uncertain, the reviewer reports the issue rather than suppressing it.
+Built-in review prompts bundled with the package MUST be pure markdown files with no YAML frontmatter. They contain only the prompt text. All configuration settings (num_reviews, cli_preference, etc.) MUST be specified in the YAML review config file that references the built-in. The package SHALL ship four built-in reviews: `code-quality`, `security`, `error-handling`, and `task-compliance`. Built-in reviewers SHALL use configurable precision/recall tradeoffs appropriate to their domain: `security` and `error-handling` reviewers MUST prioritize precision (minimizing false positives) over recall, while `code-quality` and `task-compliance` reviewers MAY favor recall or a balanced approach.
 
 #### Scenario: Built-in code-quality prompt is self-contained
 - **GIVEN** a YAML review config with `builtin: code-quality`

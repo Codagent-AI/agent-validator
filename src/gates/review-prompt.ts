@@ -12,7 +12,7 @@ export function buildReviewPrompt(
   let baseContent = config.promptContent || '';
 
   // Replace {{CONTEXT}} placeholder with injected context (or empty string)
-  baseContent = baseContent.replace('{{CONTEXT}}', context ?? '');
+  baseContent = baseContent.split('{{CONTEXT}}').join(context ?? '');
 
   if (previousViolations.length > 0) {
     return (
