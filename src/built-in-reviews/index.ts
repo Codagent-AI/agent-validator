@@ -6,6 +6,8 @@ import errorHandlingContent from './error-handling.md' with { type: 'text' };
 import securityContent from './security.md' with { type: 'text' };
 // @ts-expect-error Bun text import
 import taskComplianceContent from './task-compliance.md' with { type: 'text' };
+// @ts-expect-error Bun text import
+import testIntegrityContent from './test-integrity.md' with { type: 'text' };
 
 const BUILT_IN_PREFIX = 'built-in:';
 
@@ -19,6 +21,7 @@ const primaryBuiltIns: Record<string, string> = {
 /** Opt-in built-in reviews (not offered during init, activated via --enable-review). */
 const optInBuiltIns: Record<string, string> = {
   'task-compliance': taskComplianceContent,
+  'test-integrity': testIntegrityContent,
 };
 
 /** Definitions for combined reviews: which primaries to concatenate. */
