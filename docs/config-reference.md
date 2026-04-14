@@ -242,7 +242,7 @@ enabled: false
 Review the diff against the task requirements in the provided context.
 ```
 
-To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-validator-run)).
+To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-validator-run)). The flag only unlocks reviews that are already configured and referenced by an entry point — it does not inject new reviews. A built-in like `task-compliance` still needs a config entry (inline or in `.validator/reviews/`) before `--enable-review` has any effect.
 
 **Markdown review with external prompt file:**
 
