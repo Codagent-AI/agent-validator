@@ -7,7 +7,13 @@ debug_log:
 allow_parallel: true
 
 cli:
+  default_preference:
+    - codex
+    - github-copilot
   adapters:
+    codex:
+      allow_tool_use: false
+      thinking_budget: low
     github-copilot:
       allow_tool_use: false
       thinking_budget: low
@@ -36,16 +42,8 @@ entry_points:
       - schema-validate:
           command: bun run src/index.ts validate
     reviews:
-      - code-quality:
-          builtin: code-quality
-          cli_preference:
-            - github-copilot
-          model: claude-sonnet-4.6
-      - security-and-errors:
-          builtin: security-and-errors
-          cli_preference:
-            - github-copilot
-          model: gpt-5.3-codex
+      - all-reviewers:
+          builtin: all-reviewers
   - path: "skills"
     reviews:
       - skill-quality
