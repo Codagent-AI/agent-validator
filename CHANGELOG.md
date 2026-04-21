@@ -1,5 +1,15 @@
 # agent-validator
 
+## 1.9.0
+
+### Minor Changes
+
+- [#129](https://github.com/Codagent-AI/agent-validator/pull/129) Add `--context-file` flag to pass structured context into validation runs, introduce a built-in `task-compliance` review that checks implementation against task requirements, and improve validator skill guidance
+
+### Patch Changes
+
+- [#128](https://github.com/Codagent-AI/agent-validator/pull/128) Fix change detector incorrectly reporting the validated file as changed after committing an unstaged fix
+
 ## 1.8.0
 
 ### Minor Changes

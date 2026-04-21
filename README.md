@@ -22,8 +22,6 @@ For AI reviews, it uses the CLI tool of your choice: Gemini, Codex, Claude Code,
 - **Local cross-agent code reviews**: Enable one AI agent to automatically request code reviews from another. For example, if Claude made changes, Agent Validator can request a review from Codex — spreading token usage across your subscriptions instead of burning through one.
   - Multiple AI review adapters have been evaluated for quality and efficiency. Claude and Codex deliver optimal review quality with superior token efficiency. For detailed metrics, see [Eval Results](docs/eval-results.md).
 - **Leverage existing subscriptions**: Agent Validator is *free* and tool-agnostic, leveraging the AI CLI tools you already have installed.
-- **Easy CI setup**: Define your CI gates once, run them locally and in GitHub.
-
 
 ### Example Workflow
 
