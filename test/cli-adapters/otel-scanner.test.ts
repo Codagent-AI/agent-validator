@@ -463,25 +463,38 @@ function buildAdversarialInput(lineCount: number): string {
 }
 
 describe('performance', () => {
-  it('scales near-linearly: 4x input completes in <= 6x time (no backtracking)', () => {
-    // Use relative scaling to avoid flaky wall-clock assertions on slow CI runners.
-    // A backtracking regex would show O(n^2+) growth; linear scanner should be ~O(n).
+  it('scales near-linearly: 4x input completes in well under backtracking time', () => {
+    // Discriminates O(n) from catastrophic backtracking (which would scale ~16x+).
+    // Uses min-of-N across warmed runs to reduce GC/scheduler contamination —
+    // a single timed run of short operations is too noisy for a ratio assertion.
     const smallInput = buildAdversarialInput(1000);
     const largeInput = buildAdversarialInput(4000);
     expect(largeInput.length).toBeGreaterThan(200_000);
 
-    const smallStart = performance.now();
+    const bestElapsed = (input: string, runs: number): number => {
+      let best = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < runs; i++) {
+        const start = performance.now();
+        scanOtelBlocks(input);
+        const elapsed = performance.now() - start;
+        if (elapsed < best) best = elapsed;
+      }
+      return best;
+    };
+
+    // Warm up both sizes so JIT and allocator state are comparable.
     scanOtelBlocks(smallInput);
-    const smallElapsed = performance.now() - smallStart;
+    scanOtelBlocks(largeInput);
 
-    const largeStart = performance.now();
-    const result = scanOtelBlocks(largeInput);
-    const largeElapsed = performance.now() - largeStart;
+    const smallElapsed = bestElapsed(smallInput, 5);
+    const largeElapsed = bestElapsed(largeInput, 5);
 
-    // 4x input should complete in at most 6x time (generous margin for GC jitter)
+    // Threshold of 10 still fails a backtracking regression (expected ~16x+)
+    // but tolerates single-digit-ms timing noise inherent to short runs.
     const scalingFactor = smallElapsed > 0 ? largeElapsed / smallElapsed : 1;
-    expect(scalingFactor).toBeLessThan(6);
+    expect(scalingFactor).toBeLessThan(10);
     // None of these partial patterns should be classified as OTel blocks
+    const result = scanOtelBlocks(largeInput);
     expect(result.metricBlocks).toHaveLength(0);
     expect(result.logBlocks).toHaveLength(0);
   });

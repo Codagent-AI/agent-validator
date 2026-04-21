@@ -202,6 +202,19 @@ agent-validator run --enable-review task-compliance --enable-review security
 
 Reviews with `enabled: true` (the default) are unaffected by this flag. If the name doesn't match any configured review, the flag is silently ignored.
 
+**The review must be pre-configured.** `--enable-review` does not inject a review — it only flips `enabled: false` → active for a review that is already defined (inline, `.md`, or `.yml` in `.validator/reviews/`) *and* referenced in an entry point's `reviews:` list. Opt-in built-ins like `task-compliance` and `test-integrity` therefore need a config entry before the flag does anything. Example inline entry:
+
+```yaml
+entry_points:
+  - path: "."
+    reviews:
+      - task-compliance:
+          builtin: task-compliance
+          enabled: false
+```
+
+If `--enable-review task-compliance` appears to do nothing, the most common cause is a missing config entry like the one above.
+
 #### `--context-file <path>`
 
 Reads the file at `<path>` and injects its contents into review prompts that contain the `{{CONTEXT}}` placeholder. The path is resolved relative to the current working directory. If the file does not exist, the command exits with an error.

@@ -194,7 +194,7 @@ YAML review files must specify exactly one of `prompt_file`, `skill_name`, or `b
 - **skill_name**: string (optional)
   Name of a CLI skill to delegate the review to. When set, no prompt content is loaded. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `prompt_file` and `builtin`.
 - **builtin**: string (optional, `.yml` only)
-  Name of a built-in review prompt bundled with the package. Available built-ins: `code-quality`, `security`, `error-handling`, `task-compliance`. Combined reviews `security-and-errors` and `all-reviewers` are also available. Mutually exclusive with `prompt_file` and `skill_name`.
+  Name of a built-in review prompt bundled with the package. Available built-ins: `code-quality`, `security`, `error-handling`, `task-compliance`, `test-integrity`. Combined reviews `security-and-errors` and `all-reviewers` are also available. Mutually exclusive with `prompt_file` and `skill_name`.
 
 ### Context injection
 
@@ -242,7 +242,7 @@ enabled: false
 Review the diff against the task requirements in the provided context.
 ```
 
-To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-validator-run)).
+To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-validator-run)). The flag only unlocks reviews that are already configured and referenced by an entry point — it does not inject new reviews. A built-in like `task-compliance` still needs a config entry (inline or in `.validator/reviews/`) before `--enable-review` has any effect.
 
 **Markdown review with external prompt file:**
 
