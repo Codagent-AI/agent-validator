@@ -1,6 +1,6 @@
 # /release — Create a release PR from merged PRs
 
-Generate changesets from merged PRs since the last release, version the package, and create a release PR.
+Generate changesets from merged PRs since the last release (plus any unmerged current-branch PR), version the package, and create a release PR.
 
 ## Steps
 
@@ -13,19 +13,44 @@ bun run test
 bun run test:e2e
 ```
 
-### 2. Ensure clean main branch
+### 2. Prepare the working branch
 
 ```bash
-git checkout main
-git pull origin main
-git fetch --tags
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git fetch origin main --tags
 LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -1)
 TAG_DATE=$(git log -1 --format=%cI "$LAST_TAG" 2>/dev/null || echo "1970-01-01T00:00:00Z")
 ```
 
 If no tags exist, the fallback date ensures all PRs are included.
 
-### 3. Find merged PRs since that tag
+**If `CURRENT_BRANCH` is not `main`:**
+
+1. Check whether the branch has commits ahead of `origin/main`:
+   ```bash
+   git log --oneline origin/main..HEAD
+   ```
+2. If there are commits ahead, verify a PR exists for this branch:
+   ```bash
+   gh pr view --json number,title,labels
+   ```
+   If no PR exists, **stop with an error**: "Current branch has changes not on main but no PR exists. Create a PR first."
+3. Merge `origin/main` into the current branch to ensure it includes all of main's changes:
+   ```bash
+   git merge origin/main --no-edit
+   ```
+   If the merge has conflicts, stop and tell the user to resolve them first.
+
+**If `CURRENT_BRANCH` is `main`:**
+
+Pull latest:
+```bash
+git pull origin main
+```
+
+### 3. Find PRs to include
+
+#### 3a. Merged PRs on main since last tag
 
 ```bash
 gh pr list --state merged --base main --search "merged:>$TAG_DATE" --json number,title,mergedAt,labels --limit 100
@@ -40,7 +65,13 @@ Use the full ISO 8601 `TAG_DATE` timestamp as the cutoff (not truncated to date)
 
 These are changesets/release PRs, not feature PRs.
 
-If no qualifying PRs are found, stop and tell the user there's nothing to release.
+#### 3b. Current branch PR (if not on main)
+
+If `CURRENT_BRANCH` is not `main`, add the PR retrieved in step 2 to the list (it won't appear in the merged-PR query since it hasn't been merged yet). Skip it if its title matches the exclusion patterns above.
+
+#### Result
+
+Combine the PRs from 3a and 3b into a single deduplicated list. If no qualifying PRs are found, stop and tell the user there's nothing to release.
 
 ### 4. Create changeset files
 
@@ -110,7 +141,7 @@ After (reformatted):
 # Read new version from package.json
 NEW_VERSION=$(node -p "require('./package.json').version")
 
-# Create branch (use -B to reset if it already exists from a failed attempt)
+# Create release branch from the current working branch (not necessarily main)
 git checkout -B "release/v${NEW_VERSION}"
 
 # Update lockfile after version bump

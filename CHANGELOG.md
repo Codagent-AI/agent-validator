@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.10.0
+
+### Minor Changes
+
+- [#131](https://github.com/Codagent-AI/agent-validator/pull/131) Add `test-integrity` built-in review for detecting test quality issues, and switch validator reviews to the `all-reviewers` strategy with Codex and Copilot adapter support
+
 ## 1.9.0
 
 ### Minor Changes
