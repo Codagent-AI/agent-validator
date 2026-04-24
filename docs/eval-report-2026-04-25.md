@@ -32,20 +32,22 @@ Ground truth sizes: code-quality **24** issues, all-reviewers **56**, security-e
 | All-reviewers (combined prompt) | 56 | 3 | 0.56 | 0.31 | 0.40 | ~131.8s |
 | Security + EH combined | 32 | 3 | 0.70 | 0.65 | 0.67 | ~107.8s |
 
-**Artifacts (machine-readable):**
+**Result JSON (local, not in git):** each run writes under `evals/results/` (gitignored). This session’s timestamped files were:
 
-- [evals/results/eval-2026-04-24T15-19-09.json](../evals/results/eval-2026-04-24T15-19-09.json) — code-quality  
-- [evals/results/eval-2026-04-24T15-32-21.json](../evals/results/eval-2026-04-24T15-32-21.json) — all-reviewers  
-- [evals/results/eval-2026-04-24T15-43-52.json](../evals/results/eval-2026-04-24T15-43-52.json) — security-errors  
+- `eval-2026-04-24T15-19-09.json` — code-quality  
+- `eval-2026-04-24T15-32-21.json` — all-reviewers  
+- `eval-2026-04-24T15-43-52.json` — security-errors  
 
-Cursor CLI version recorded in each file: `2026.04.17-787b533`.
+Regenerate: from the repo root, run `bun evals/run-eval.ts` with each of the three `--eval-config=evals/eval-config.cursor-composer2-*.yml` files (no `--skip-judge` for full scoring). New files appear in `evals/results/`.
+
+Cursor CLI version recorded in each run: `2026.04.17-787b533`.
 
 ## Comparison to [eval-report-2026-04-05.md](eval-report-2026-04-05.md) (Copilot + Codex baselines)
 
-The April 2026-04-05 report benchmarked **copilot-sonnet**, **copilot-gpt5.3**, and **codex-gpt5.3**—not Cursor. Indicative **relative** placement for **cursor-composer-2** (this session):
+The April 2026-04-05 report benchmarked **copilot-sonnet**, **copilot-gpt5.3**, and **codex-gpt5.3**—not Cursor. Indicative **relative** placement for **cursor-composer2** (this session; alias in eval YAML):
 
-| Slice | April leaders (indicative) | cursor-composer-2 (this report) |
-|--------|----------------------------|---------------------------------|
+| Slice | April leaders (indicative) | cursor-composer2 (this report) |
+|--------|----------------------------|--------------------------------|
 | Code quality (24 issues) | copilot-sonnet **0.71 R / 0.87 P**; GPT configs **0.43–0.47 R** | **0.55 / 0.55** — below Sonnet; recall near GPT, precision lower than all three April rows |
 | All-reviewers (56) | **0.59–0.71 R**; **0.94–0.96 P** for top configs | **0.31 R / 0.56 P** — well below; one failed run in three |
 | Sec+EH only (32) | copilot-gpt5.3 combined **0.79 R / 0.77 P** (only config in that subsection) | **0.65 R / 0.70 P** — below that published row |

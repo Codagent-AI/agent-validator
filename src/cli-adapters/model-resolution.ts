@@ -41,7 +41,8 @@ export function resolveModelFromList(
   allModels: string[],
   opts: { baseName: string; preferThinking: boolean },
 ): string | undefined {
-  // Prefer an exact ID when the config matches a listed model (e.g. `composer-2`).
+  // Exact model IDs (e.g. `composer-2`) return as-is; preferThinking only applies
+  // when resolving a base segment like `opus` to `-thinking` variants, not for full IDs.
   if (allModels.includes(opts.baseName)) {
     return opts.baseName;
   }

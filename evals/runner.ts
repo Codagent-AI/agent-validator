@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import YAML from "yaml";
 import { getAdapter } from "../src/cli-adapters/index.js";
 import { loadBuiltInReview } from "../src/built-in-reviews/index.js";
@@ -106,7 +106,7 @@ function resolveEvalConfigPath(
 ): string {
 	const defaultPath = resolve(evalsDir, "eval-config.yml");
 	if (!explicit) return defaultPath;
-	if (explicit.startsWith("/")) return explicit;
+	if (isAbsolute(explicit)) return explicit;
 	const fromCwd = resolve(process.cwd(), explicit);
 	if (existsSync(fromCwd)) return fromCwd;
 	const fromEvals = resolve(evalsDir, explicit);
@@ -159,26 +159,42 @@ export async function runEval(
 		);
 	}
 
-	// Build review prompt — optional builtin_prompt for combined reviews; else .md by fixture/reviewer name
+	// Build review prompt — optional builtin_prompt loads combined built-ins only; else .md then fallback
 	const fixtureBasename = evalConfig.fixture.split("/").pop() ?? "code-quality";
 	const reviewKey =
 		evalConfig.builtin_prompt ?? evalConfig.reviewer ?? fixtureBasename;
-	const promptPath = resolve(
-		evalsDir,
-		`../src/built-in-reviews/${reviewKey}.md`,
-	);
 	let promptContent: string;
-	if (existsSync(promptPath)) {
-		promptContent = readFileSync(promptPath, "utf-8");
-	} else {
+	if (evalConfig.builtin_prompt) {
 		try {
 			promptContent = loadBuiltInReview(reviewKey);
-		} catch {
+		} catch (error) {
+			const underlying =
+				error instanceof Error ? error.message : String(error);
 			throw new Error(
-				`Review prompt not found: ${promptPath}\n` +
-					`Set "builtin_prompt" to a combined built-in (e.g. all-reviewers, security-and-errors), ` +
-					`or "reviewer" to an existing built-in name.`,
+				`Failed to load built-in review "${reviewKey}": ${underlying}\n` +
+					`Set "builtin_prompt" to a valid name (e.g. all-reviewers, security-and-errors).`,
 			);
+		}
+	} else {
+		const promptPath = resolve(
+			evalsDir,
+			`../src/built-in-reviews/${reviewKey}.md`,
+		);
+		if (existsSync(promptPath)) {
+			promptContent = readFileSync(promptPath, "utf-8");
+		} else {
+			try {
+				promptContent = loadBuiltInReview(reviewKey);
+			} catch (error) {
+				const underlying =
+					error instanceof Error ? error.message : String(error);
+				throw new Error(
+					`Review prompt not found: ${promptPath}\n` +
+						`Set "builtin_prompt" to a combined built-in (e.g. all-reviewers, security-and-errors), ` +
+						`or "reviewer" to an existing built-in name.\n` +
+						`Underlying error: ${underlying}`,
+				);
+			}
 		}
 	}
 	const fullPrompt = `${promptContent}\n${JSON_SYSTEM_INSTRUCTION}`;
