@@ -41,6 +41,11 @@ export function resolveModelFromList(
   allModels: string[],
   opts: { baseName: string; preferThinking: boolean },
 ): string | undefined {
+  // Prefer an exact ID when the config matches a listed model (e.g. `composer-2`).
+  if (allModels.includes(opts.baseName)) {
+    return opts.baseName;
+  }
+
   const candidates = allModels
     .filter((id) => id.split('-').includes(opts.baseName))
     .filter((id) => !TIER_SUFFIXES.some((s) => id.endsWith(s)));

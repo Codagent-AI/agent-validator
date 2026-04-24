@@ -13,6 +13,7 @@ export async function judgeRun(
 	groundTruth: GroundTruthIssue[],
 	judgeAdapterName: EvalAdapterName,
 	thinkingBudget: string,
+	options?: { model?: string },
 ): Promise<JudgeResult> {
 	const adapter = getAdapter(judgeAdapterName);
 	if (!adapter) {
@@ -25,6 +26,7 @@ export async function judgeRun(
 	const rawOutput = await adapter.execute({
 		prompt,
 		diff: "",
+		model: options?.model,
 		allowToolUse: false,
 		thinkingBudget,
 		timeoutMs: 300_000,

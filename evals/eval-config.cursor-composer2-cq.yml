@@ -1,0 +1,15 @@
+# Cursor CLI (agent) + Composer — code-quality fixture, 5 runs (April-style).
+fixture: fixtures/code-quality
+
+adapters:
+  - name: cursor
+    model: composer-2
+    alias: cursor-composer2
+    allow_tool_use: false
+    thinking_budget: low
+
+runs_per_config: 5
+timeout_ms: 300000
+judge:
+  adapter: claude
+  thinking_budget: high

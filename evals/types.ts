@@ -1,4 +1,9 @@
-export type EvalAdapterName = "claude" | "codex" | "gemini" | "github-copilot";
+export type EvalAdapterName =
+	| "claude"
+	| "codex"
+	| "cursor"
+	| "gemini"
+	| "github-copilot";
 
 export interface EvalConfiguration {
 	adapter: EvalAdapterName;

@@ -16,12 +16,13 @@ The framework benchmarks adapters across configurations to find optimal settings
 
 ## Adapters
 
-The eval supports three adapters, plus alias support for running the same adapter with different models:
+The eval supports these adapters, plus alias support for running the same adapter with different models:
 
 | Adapter | CLI | Notes |
 |---------|-----|-------|
 | `claude` | `claude` | Claude Code CLI. Currently too slow for the 300s timeout in most configurations. |
 | `codex` | `codex` | Codex CLI (OpenAI). |
+| `cursor` | `agent` | Cursor CLI (`agent`). Model override uses `agent --list-models`. |
 | `github-copilot` | `copilot` | GitHub Copilot CLI. |
 
 Each adapter entry in the config can specify a `model` override and an `alias` that becomes its label in results:
@@ -63,7 +64,7 @@ evals/fixtures/
 
 Each fixture's codebase contains bugs specific to that reviewer only -- bugs belonging to other reviewers are fixed in that fixture's source files. This isolation ensures that each eval run measures detection of the exact issue class the reviewer is responsible for.
 
-The config specifies the fixture path (e.g., `fixture: fixtures/code-quality`), and the reviewer prompt file is auto-inferred from the directory name, mapping to the corresponding prompt at `src/built-in-reviews/<reviewer>.md`.
+The config specifies the fixture path (e.g., `fixture: fixtures/code-quality`), and the reviewer prompt file is auto-inferred from the directory name, mapping to the corresponding prompt at `src/built-in-reviews/<reviewer>.md`. For **combined** built-ins (`all-reviewers`, `security-and-errors`) there is no single `.md` file; set **`builtin_prompt`** in the eval YAML to that name so the harness loads the combined prompt via `loadBuiltInReview`.
 
 ### Issue counts
 
@@ -115,7 +116,8 @@ timeout_ms: 300000    # per-adapter timeout in milliseconds
 
 judge:
   adapter: claude         # which adapter scores the results
-  thinking_budget: "high" # thinking budget for the judge
+  thinking_budget: "high" # thinking budget for the judge (Claude Code CLI)
+  # model: optional; passed to the judge adapter when set
 ```
 
 ## Scoring Approach
@@ -139,7 +141,7 @@ After each adapter run, a judge LLM receives the adapter's violations alongside 
 
 From these, standard metrics are computed: precision (True Positives / reported) and recall (True Positives / expected).
 
-The judge uses a single consistent model across all runs (Claude with high thinking) to avoid introducing scoring variance.
+The judge uses a single consistent model across all runs (Claude Code with high thinking in the default eval config) to avoid introducing scoring variance.
 
 ## Token Caching Concern
 
@@ -150,20 +152,23 @@ Runs execute sequentially. Both Claude and OpenAI implement prompt caching with 
 ### Quick start
 
 ```bash
-# Full eval (all adapters, all configs)
-bun run evals/runner.ts
+# Full eval (all adapters in eval-config.yml)
+bun evals/run-eval.ts
+
+# Use an alternate matrix file (path relative to cwd or evals/)
+bun evals/run-eval.ts --eval-config=evals/eval-config.cursor-composer2-cq.yml
 
 # Dry run -- validate config and check adapter availability without making API calls
-bun run evals/runner.ts --dry-run
+bun evals/run-eval.ts --dry-run
 
 # Skip judge scoring -- run adapters only, no LLM judge pass
-bun run evals/runner.ts --skip-judge
+bun evals/run-eval.ts --skip-judge
 
 # Filter to a single adapter
-bun run evals/runner.ts --adapter=codex
+bun evals/run-eval.ts --adapter=codex
 
 # Filter to a specific configuration
-bun run evals/runner.ts --config=tools-off-low
+bun evals/run-eval.ts --config=tools-off-low
 ```
 
 ### Output
@@ -244,7 +249,7 @@ The tradeoff is no pre-built comparison UI -- but for the current configuration 
 | **False Positive (FP)** | -- | A violation reported by the adapter that does not match any ground truth issue. |
 | **False Negative (FN)** | -- | A ground truth issue that the adapter failed to detect (shown as "missed issues"). |
 | **Ground Truth** | -- | The set of known, seeded issues in the test fixture, each with an ID, file, line range, difficulty, and category. |
-| **Judge** | -- | An LLM (default: Claude with high thinking) that evaluates whether adapter violations match ground truth issues. Provides semantic matching rather than brittle keyword matching. |
+| **Judge** | -- | An LLM (default: Claude Code with high thinking) that evaluates whether adapter violations match ground truth issues. Provides semantic matching rather than brittle keyword matching. |
 | **Fixture** | -- | A per-reviewer test directory containing a codebase, diff.patch, and ground-truth.yml. Each fixture isolates bugs for a single reviewer type. |
 | **Telemetry** | -- | Token usage and cost data emitted by adapter CLIs during execution. Parsed from `[otel]`, `[codex-telemetry]`, or `[telemetry]` output lines. |
 | **Candidates Comparison** | -- | A JSON file (`evals/results/candidates-comparison.json`) that accumulates results across eval sessions for cross-run comparison. |
