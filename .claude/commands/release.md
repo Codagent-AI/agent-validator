@@ -135,24 +135,36 @@ After (reformatted):
 - [#32](https://github.com/Codagent-AI/agent-validator/pull/32) Add `rerun_command` field to check gates, allowing reviewers to specify a command for re-running failed checks
 ```
 
-### 8. Create the release PR
+### 8. Commit and push the release
 
 ```bash
-# Read new version from package.json
 NEW_VERSION=$(node -p "require('./package.json').version")
+```
 
-# Create release branch from the current working branch (not necessarily main)
-git checkout -B "release/v${NEW_VERSION}"
+**If `CURRENT_BRANCH` is not `main` (existing PR):**
 
-# Update lockfile after version bump
+Stay on the current branch. The PR from step 2 already targets main — commit the release changes directly to it:
+
+```bash
 bun install
-
-# Stage all changes including deleted changeset files and updated lockfile
 git add CHANGELOG.md package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json .cursor-plugin/plugin.json bun.lock
 git add -A .changeset/
 git commit -m "chore: release v${NEW_VERSION}"
+git push
+```
 
-# Push and create PR
+Print the existing PR URL (from `gh pr view --json url --jq .url`). Do **not** create a new PR or branch.
+
+**If `CURRENT_BRANCH` is `main`:**
+
+Create a release branch and PR:
+
+```bash
+git checkout -B "release/v${NEW_VERSION}"
+bun install
+git add CHANGELOG.md package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json .cursor-plugin/plugin.json bun.lock
+git add -A .changeset/
+git commit -m "chore: release v${NEW_VERSION}"
 git push -u origin "release/v${NEW_VERSION}"
 gh pr create --base main --title "chore: release v${NEW_VERSION}" --body "$(cat <<EOF
 ## Release v${NEW_VERSION}
