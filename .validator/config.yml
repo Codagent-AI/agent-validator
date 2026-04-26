@@ -12,7 +12,7 @@ cli:
     - github-copilot
   adapters:
     codex:
-      model: gpt-5.5-codex
+      model: gpt-5.3-codex
       allow_tool_use: false
       thinking_budget: low
     github-copilot:
