@@ -80,6 +80,23 @@ Status: PASS
 		const result = await parseLogFile(logPath);
 		expect(result).toBeNull();
 	});
+
+	it("does not turn review adapter execution errors into check failures", async () => {
+		const logPath = path.join(
+			TEST_DIR,
+			"review_._all-reviewers_codex@1.4.log",
+		);
+		await fs.writeFile(
+			logPath,
+			`[START] review:.:all-reviewers (codex@1)
+Error running codex@1: Process exited with code 1
+Result: error - Failed to complete reviews. Expected: 1, Completed: 0.
+`,
+		);
+
+		const result = await parseLogFile(logPath);
+		expect(result).toBeNull();
+	});
 });
 
 describe("findPreviousFailures", () => {
