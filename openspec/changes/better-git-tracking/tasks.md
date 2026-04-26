@@ -1,0 +1,2 @@
+- [ ] Trust ledger core module + write integration (`tasks/trust-ledger-core.md`)
+- [ ] Startup reconciliation, trusted status, and validator-merge removal (`tasks/reconciliation-and-cleanup.md`)
