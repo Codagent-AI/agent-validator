@@ -347,31 +347,35 @@ async function gitObjectExists(ref: string | undefined): Promise<boolean> {
 }
 
 export async function pruneIfNeeded(threshold: number): Promise<void> {
-  const ledgerPath = await getLedgerPath();
-  if ((await lineCount(ledgerPath)) <= threshold) return;
+  try {
+    const ledgerPath = await getLedgerPath();
+    if ((await lineCount(ledgerPath)) <= threshold) return;
 
-  const [records, reachable] = await Promise.all([
-    readRecords(),
-    reachableCommits(),
-  ]);
-  const survivors: TrustRecord[] = [];
-  for (const record of records) {
-    if (record.commit) {
-      if (reachable.has(record.commit)) survivors.push(record);
-      continue;
+    const [records, reachable] = await Promise.all([
+      readRecords(),
+      reachableCommits(),
+    ]);
+    const survivors: TrustRecord[] = [];
+    for (const record of records) {
+      if (record.commit) {
+        if (reachable.has(record.commit)) survivors.push(record);
+        continue;
+      }
+      if (await gitObjectExists(record.working_tree_ref)) {
+        survivors.push(record);
+      }
     }
-    if (await gitObjectExists(record.working_tree_ref)) {
-      survivors.push(record);
-    }
+
+    await fs.mkdir(path.dirname(ledgerPath), { recursive: true });
+    const tempPath = `${ledgerPath}.${process.pid}.tmp`;
+    await fs.writeFile(
+      tempPath,
+      survivors.map((record) => JSON.stringify(record)).join('\n') +
+        (survivors.length > 0 ? '\n' : ''),
+      'utf-8',
+    );
+    await fs.rename(tempPath, ledgerPath);
+  } catch (err) {
+    console.error('[trust-ledger] prune failed:', err);
   }
-
-  await fs.mkdir(path.dirname(ledgerPath), { recursive: true });
-  const tempPath = `${ledgerPath}.${process.pid}.tmp`;
-  await fs.writeFile(
-    tempPath,
-    survivors.map((record) => JSON.stringify(record)).join('\n') +
-      (survivors.length > 0 ? '\n' : ''),
-    'utf-8',
-  );
-  await fs.rename(tempPath, ledgerPath);
 }
