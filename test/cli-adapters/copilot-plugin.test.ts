@@ -201,6 +201,36 @@ describe("GitHubCopilotAdapter execution", () => {
 				message: "Command not found",
 			});
 		});
+
+		it("returns unhealthy with the CLI error when copilot exists but cannot start", async () => {
+			execSpy = spyOn(childProcess, "exec").mockImplementation(
+				// biome-ignore lint/suspicious/noExplicitAny: mock typing
+				((...args: any[]) => {
+					const callback = args[args.length - 1];
+					const command = args[0];
+					if (typeof callback === "function") {
+						if (command === "which copilot") {
+							callback(null, "/opt/homebrew/bin/copilot\n", "");
+						} else {
+							callback(
+								new Error("Command failed"),
+								"",
+								"ERROR: SecItemCopyMatching failed -50\n",
+							);
+						}
+					}
+					// biome-ignore lint/suspicious/noExplicitAny: mock typing
+					return {} as any;
+					// biome-ignore lint/suspicious/noExplicitAny: mock typing
+				}) as any,
+			);
+			const result = await adapter.checkHealth();
+			expect(result).toEqual({
+				available: true,
+				status: "unhealthy",
+				message: "ERROR: SecItemCopyMatching failed -50",
+			});
+		});
 	});
 
 	describe("execute", () => {
