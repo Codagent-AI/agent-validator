@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import packageJson from '../../package.json' with { type: 'json' };
 import type { LoadedConfig } from '../config/types.js';
@@ -10,7 +11,7 @@ import {
   hasWorkingTreeChanges,
   readExecutionState,
 } from './execution-state.js';
-import { gitStdout } from './git.js';
+import { gitStdout, gitStdoutWithInput } from './git.js';
 
 export type TrustRecordSource =
   | 'validated'
@@ -135,6 +136,85 @@ export async function isTrusted(
 
 export async function computeTreeSha(ref: string): Promise<string> {
   return gitStdout(['rev-parse', `${ref}^{tree}`]);
+}
+
+interface TreeEntry {
+  mode: string;
+  object: string;
+  path: string;
+}
+
+async function maybeTree(ref: string): Promise<string | null> {
+  try {
+    return await gitStdout(['rev-parse', '--verify', `${ref}^{tree}`]);
+  } catch (error) {
+    if ((error as Error).message.includes('Needed a single revision')) {
+      return null;
+    }
+    if ((error as Error).message.includes('unknown revision')) {
+      return null;
+    }
+    if ((error as Error).message.includes('ambiguous argument')) {
+      return null;
+    }
+    if ((error as Error).message.includes('Not a valid object name')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function indexInfoFor(entries: TreeEntry[]): string {
+  return entries
+    .map((entry) => `${entry.mode} ${entry.object}\t${entry.path}\0`)
+    .join('');
+}
+
+async function writeCombinedTree(entries: TreeEntry[]): Promise<string> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'validator-index-'));
+  const env = { GIT_INDEX_FILE: path.join(tempDir, 'index') };
+  try {
+    if (entries.length > 0) {
+      await gitStdoutWithInput(
+        ['update-index', '-z', '--index-info'],
+        indexInfoFor(entries),
+        { env },
+      );
+    }
+    return await gitStdout(['write-tree'], { env });
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function listTreeEntries(tree: string): Promise<TreeEntry[]> {
+  const output = await gitStdout(['ls-tree', '-r', tree]);
+  if (!output) return [];
+  return output
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line): TreeEntry[] => {
+      const [meta, filePath] = line.split('\t');
+      if (!(meta && filePath)) return [];
+      const [mode, , object] = meta.split(' ');
+      if (!(mode && object)) return [];
+      return [{ mode, object, path: filePath }];
+    });
+}
+
+export async function computeSnapshotTreeSha(ref: string): Promise<string> {
+  const mainTree = await computeTreeSha(ref);
+  const untrackedTree = await maybeTree(`${ref}^3`);
+  if (!untrackedTree) return mainTree;
+
+  const entries = new Map<string, TreeEntry>();
+  for (const entry of await listTreeEntries(mainTree)) {
+    entries.set(entry.path, entry);
+  }
+  for (const entry of await listTreeEntries(untrackedTree)) {
+    entries.set(entry.path, entry);
+  }
+  return writeCombinedTree(Array.from(entries.values()));
 }
 
 function stable(value: unknown): unknown {
@@ -270,7 +350,7 @@ export async function appendCurrentTrustRecord(args: {
       if (!state?.working_tree_ref) return;
       commit = null;
       workingTreeRef = state.working_tree_ref;
-      tree = await computeTreeSha(workingTreeRef);
+      tree = await computeSnapshotTreeSha(workingTreeRef);
     } else {
       commit = await getCurrentCommit();
       tree = await computeTreeSha('HEAD');

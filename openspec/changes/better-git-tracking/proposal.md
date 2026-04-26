@@ -7,7 +7,7 @@ Agent-validator has no concept of "validation evidence." `.execution_state` reco
 - **New trust ledger**, separate from `.execution_state`: an append-only JSONL file at `$(git rev-parse --git-common-dir)/agent-validator/trusted-snapshots.jsonl`. Worktrees naturally share `.git/`, so trust propagates across worktrees without copying state files.
 - **Trust semantics on writes.** A ledger record is written on any trust-eligible outcome (clean or dirty tree). Specifically:
   - Clean-tree full pass → trusted record with `commit: HEAD`, `tree: HEAD^{tree}`.
-  - Dirty-tree full pass → trusted record with `commit: null`, `tree: working_tree_ref^{tree}` (recognized by tree match after commit).
+  - Dirty-tree full pass → trusted record with `commit: null`, `tree` equal to the full validated snapshot tree, including stash `^3` untracked files when present (recognized by tree match after commit).
   - Clean-tree partial pass (e.g. `--gate lint`) → record with `trusted: false` (narrowed scope, audit only).
   - Skip command → trusted record with `source: "manual-skip"` (human override, propagates through merges).
   - Failure, retry-limit-exceeded → no ledger write (`.execution_state` updates unchanged).

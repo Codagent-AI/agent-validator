@@ -8,9 +8,15 @@ export interface GitResult {
   code: number | null;
 }
 
-export function runGit(args: string[]): Promise<GitResult> {
+export function runGit(
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv } = {},
+): Promise<GitResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('git', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: options.env ? { ...process.env, ...options.env } : undefined,
+    });
     const stdoutDecoder = new StringDecoder('utf8');
     const stderrDecoder = new StringDecoder('utf8');
     let stdout = '';
@@ -30,8 +36,55 @@ export function runGit(args: string[]): Promise<GitResult> {
   });
 }
 
-export async function gitStdout(args: string[]): Promise<string> {
-  const result = await runGit(args);
+export async function gitStdout(
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv } = {},
+): Promise<string> {
+  const result = await runGit(args, options);
+  if (result.code === 0) return result.stdout;
+  const detail = result.stderr ? `: ${result.stderr}` : '';
+  throw new Error(
+    `git ${args.join(' ')} failed with code ${result.code}${detail}`,
+  );
+}
+
+export function runGitWithInput(
+  args: string[],
+  input: string,
+  options: { env?: NodeJS.ProcessEnv } = {},
+): Promise<GitResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: options.env ? { ...process.env, ...options.env } : undefined,
+    });
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += typeof chunk === 'string' ? chunk : stdoutDecoder.write(chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : stderrDecoder.write(chunk);
+    });
+    child.on('close', (code) => {
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
+      resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code });
+    });
+    child.on('error', reject);
+    child.stdin.write(input);
+    child.stdin.end();
+  });
+}
+
+export async function gitStdoutWithInput(
+  args: string[],
+  input: string,
+  options: { env?: NodeJS.ProcessEnv } = {},
+): Promise<string> {
+  const result = await runGitWithInput(args, input, options);
   if (result.code === 0) return result.stdout;
   const detail = result.stderr ? `: ${result.stderr}` : '';
   throw new Error(

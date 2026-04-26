@@ -16,7 +16,7 @@ Agent-validator's `.execution_state` answers "where do I diff from?" but has no 
 - **Modify** `src/core/run-executor-helpers.ts` — in the function that calls `writeExecutionState` (near the end of the run-completion path, after `buildRunResult`), add conditional ledger write after the `writeExecutionState` call.
 - **Modify** `src/commands/gate-command.ts` — in `executeGateCommand()`, after the `writeExecutionState` call that follows the `runner.run(jobs)` outcome, add conditional ledger write.
 - **Modify** `src/commands/skip.ts` — in the skip command handler, after the `writeExecutionState` call, add ledger write with `source: "manual-skip"`.
-- **Reference** `src/utils/execution-state.ts` — `createWorkingTreeRef()` shows how stash SHAs work. Use `git rev-parse <ref>^{tree}` to extract tree SHA from stash or commit.
+- **Reference** `src/utils/execution-state.ts` — `createWorkingTreeRef()` shows how stash SHAs work. Use a full snapshot tree for stash refs: combine `<ref>^{tree}` with `<ref>^3^{tree}` when the untracked-files parent exists.
 - **Reference** `src/config/types.ts` — `LoadedConfig` interface for computing `config_hash`.
 - **Reference** `src/utils/git.ts` — existing git helper functions (spawn, safe ref validation).
 
@@ -58,7 +58,7 @@ interface TrustRecord {
 **Trust-eligible scope**: default invocations of `run`, `check`, or `skip` (no `--gate`/`--review` CLI narrowing). These write `trusted: true`. Partial runs (`--gate`, `--review` overrides) and review-only runs write records with `trusted: false`.
 
 **Clean tree** (`git status --porcelain` empty): `commit = HEAD SHA`, `tree = HEAD^{tree}`.
-**Dirty tree** (`git status --porcelain` non-empty): `commit = null`, `tree = working_tree_ref^{tree}`, `working_tree_ref = <stash SHA>`. The `working_tree_ref` is already computed by `createWorkingTreeRef()` and stored in `.execution_state`.
+**Dirty tree** (`git status --porcelain` non-empty): `commit = null`, `tree = <full snapshot tree>`, `working_tree_ref = <stash SHA>`. The `working_tree_ref` is already computed by `createWorkingTreeRef()` and stored in `.execution_state`; if it is a stash, include untracked files from the `^3` parent in the snapshot tree.
 
 **Skip command**: writes its own ledger record with `source: "manual-skip"`. This is NOT part of the run-completion flow — skip owns its ledger write independently. Same clean/dirty logic applies.
 
@@ -102,7 +102,7 @@ On run completion, the system SHALL evaluate whether to write a trust record. Th
 
 **Clean vs dirty tree behavior:**
 - **Clean tree**: record SHALL have `commit` = HEAD SHA and `tree` = `HEAD^{tree}`.
-- **Dirty tree**: record SHALL have `commit` = null, `tree` = tree of `working_tree_ref`, and `working_tree_ref` = stash SHA.
+- **Dirty tree**: record SHALL have `commit` = null, `tree` = the full validated snapshot tree, and `working_tree_ref` = stash SHA. For stash refs, include untracked files from the `^3` parent when present.
 
 #### Scenario: Full run pass on clean tree
 - **WHEN** `agent-validator run` completes with status `passed` on a clean tree
@@ -114,11 +114,11 @@ On run completion, the system SHALL evaluate whether to write a trust record. Th
 
 #### Scenario: Full run pass on dirty tree
 - **WHEN** `agent-validator run` completes with status `passed` on a dirty tree
-- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
 
 #### Scenario: Check pass on dirty tree
 - **WHEN** `agent-validator check` completes with status `passed` on a dirty tree
-- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
 
 #### Scenario: Skip command on clean tree
 - **WHEN** `agent-validator skip` is executed on a clean tree
@@ -126,7 +126,7 @@ On run completion, the system SHALL evaluate whether to write a trust record. Th
 
 #### Scenario: Skip command on dirty tree
 - **WHEN** `agent-validator skip` is executed on a dirty tree
-- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "manual-skip"`, `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "manual-skip"`, `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
 
 #### Scenario: Full run with warnings
 - **WHEN** `agent-validator run` completes with status `passed_with_warnings` on a clean tree
@@ -224,7 +224,7 @@ The system SHALL periodically prune ledger records whose content is no longer re
 - **THEN** the file SHALL be empty (not deleted)
 
 ### Requirement: Ledger Write on Run Completion
-After `writeExecutionState`, the system SHALL evaluate whether to write a ledger trust record. Ledger records SHALL only be written for trust-eligible terminal outcomes: `passed`, `passed_with_warnings`, and `no_applicable_gates`. The outcomes `failed`, `error`, `lock_conflict`, and `retry_limit_exceeded` SHALL NOT produce ledger records. For clean trees, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. For dirty trees, the record SHALL use `commit: null`, `tree: working_tree_ref^{tree}`, with `working_tree_ref` set to the stash SHA. The ledger write SHALL NOT block or fail the run — errors are logged and swallowed.
+After `writeExecutionState`, the system SHALL evaluate whether to write a ledger trust record. Ledger records SHALL only be written for trust-eligible terminal outcomes: `passed`, `passed_with_warnings`, and `no_applicable_gates`. The outcomes `failed`, `error`, `lock_conflict`, and `retry_limit_exceeded` SHALL NOT produce ledger records. For clean trees, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. For dirty trees, the record SHALL use `commit: null`, `tree: <full snapshot tree>`, with `working_tree_ref` set to the stash SHA. The ledger write SHALL NOT block or fail the run — errors are logged and swallowed.
 
 #### Scenario: Clean tree pass writes commit-keyed record
 - **WHEN** a trust-eligible run completes on a clean tree
@@ -232,7 +232,7 @@ After `writeExecutionState`, the system SHALL evaluate whether to write a ledger
 
 #### Scenario: Dirty tree pass writes tree-keyed record
 - **WHEN** a trust-eligible run completes on a dirty tree
-- **THEN** a ledger record SHALL be written with `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
 
 #### Scenario: Partial pass writes record with trusted false
 - **WHEN** a run with `--gate` or `--review` CLI narrowing completes with `passed`
@@ -249,7 +249,7 @@ After `writeExecutionState`, the system SHALL evaluate whether to write a ledger
 
 ### Requirement: Skip CLI Command (modified — ledger write addition)
 
-The skip command SHALL write a trusted ledger record with `source: "manual-skip"` in addition to updating `.execution_state`. The ledger write is the skip command's own responsibility (not part of the run-completion flow). On a clean tree, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. On a dirty tree, the record SHALL use `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`.
+The skip command SHALL write a trusted ledger record with `source: "manual-skip"` in addition to updating `.execution_state`. The ledger write is the skip command's own responsibility (not part of the run-completion flow). On a clean tree, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. On a dirty tree, the record SHALL use `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`.
 
 #### Scenario: Skip on clean tree writes commit-keyed record
 - **WHEN** the user executes `agent-validate skip`
@@ -259,7 +259,7 @@ The skip command SHALL write a trusted ledger record with `source: "manual-skip"
 #### Scenario: Skip on dirty tree writes tree-keyed record
 - **WHEN** the user executes `agent-validate skip`
 - **AND** `git status --porcelain` returns non-empty
-- **THEN** the ledger record SHALL have `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`, `trusted: true`, `source: "manual-skip"`
+- **THEN** the ledger record SHALL have `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`, `trusted: true`, `source: "manual-skip"`
 
 #### Scenario: Skip ledger write failure does not fail the command
 - **WHEN** the user executes `agent-validate skip`
@@ -272,7 +272,7 @@ The skip command SHALL write a trusted ledger record with `source: "manual-skip"
 
 - The trust-ledger module exists with all functions (appendRecord, readRecords, isTrusted, pruneIfNeeded, getLedgerPath, computeTreeSha).
 - Running `agent-validator run` or `agent-validator check` on a clean tree writes a ledger record with `trusted: true`, `commit: HEAD`, and `tree: HEAD^{tree}`.
-- Running on a dirty tree writes a record with `commit: null` and `tree: working_tree_ref^{tree}`.
+- Running on a dirty tree writes a record with `commit: null` and `tree: <full snapshot tree>` including tracked and untracked validated content.
 - Running `agent-validator skip` writes a `source: "manual-skip"` record (clean or dirty).
 - Partial runs (`--gate`, `--review`) write records with `trusted: false`.
 - Failures produce no records.

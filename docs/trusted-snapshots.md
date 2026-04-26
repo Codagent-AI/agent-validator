@@ -33,8 +33,10 @@ records, but those records are not trusted for propagation. Failures and retry
 limit exits do not write trusted records.
 
 Clean worktrees write records keyed by the current commit and tree. Dirty
-worktrees write records keyed by the captured `working_tree_ref` tree with
-`commit: null`. This supports the common flow:
+worktrees write records keyed by a full snapshot tree derived from
+`working_tree_ref` with `commit: null`. For stash refs, that snapshot includes
+tracked changes from the stash main tree and untracked files from the stash
+`^3` parent. This supports the common flow:
 
 1. Make changes in a dirty worktree.
 2. Run `agent-validator run` and pass.

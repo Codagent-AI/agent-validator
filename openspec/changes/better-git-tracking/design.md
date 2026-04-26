@@ -135,9 +135,9 @@ After `writeExecutionState` in both `src/core/run-executor-helpers.ts:428` and `
 - Failures and `retry_limit_exceeded` do not write records at all
 
 For **clean trees**: `commit = HEAD`, `tree = HEAD^{tree}`
-For **dirty trees**: `commit = null`, `tree = working_tree_ref^{tree}`, `working_tree_ref = <stash SHA>`
+For **dirty trees**: `commit = null`, `tree = <full snapshot tree>`, `working_tree_ref = <stash SHA>`
 
-To extract the tree from a stash-based `working_tree_ref`: `git rev-parse <working_tree_ref>^{tree}`. The stash ref is a commit object; `^{tree}` dereferences to its tree.
+For stash-based `working_tree_ref` values, the full snapshot tree is composed from the stash main tree plus the stash `^3` untracked-files tree when present. This matters because `working_tree_ref^{tree}` alone omits files that were untracked during validation; after the user commits those files, `HEAD^{tree}` must still match the trusted ledger tree.
 
 Errors during ledger writes are caught and logged to stderr. They never propagate or fail the run.
 

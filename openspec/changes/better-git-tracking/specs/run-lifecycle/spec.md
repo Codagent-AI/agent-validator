@@ -31,7 +31,7 @@ The validator SHALL support a `trusted` status for `run`, `check`, and `review` 
 - **AND** it SHALL NOT write `.execution_state`, create gate logs, create console logs, or increment the run count
 
 ### Requirement: Ledger Write on Run Completion
-After `writeExecutionState`, the system SHALL evaluate whether to write a ledger trust record. Ledger records SHALL only be written for trust-eligible terminal outcomes: `passed`, `passed_with_warnings`, and `no_applicable_gates`. The outcomes `failed`, `error`, `lock_conflict`, and `retry_limit_exceeded` SHALL NOT produce ledger records. For clean trees, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. For dirty trees, the record SHALL use `commit: null`, `tree: working_tree_ref^{tree}`, with `working_tree_ref` set to the stash SHA. The ledger write SHALL NOT block or fail the run — errors are logged and swallowed.
+After `writeExecutionState`, the system SHALL evaluate whether to write a ledger trust record. Ledger records SHALL only be written for trust-eligible terminal outcomes: `passed`, `passed_with_warnings`, and `no_applicable_gates`. The outcomes `failed`, `error`, `lock_conflict`, and `retry_limit_exceeded` SHALL NOT produce ledger records. For clean trees, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. For dirty trees, the record SHALL use `commit: null`, `tree` equal to the full validated snapshot tree, with `working_tree_ref` set to the stash SHA. For stash refs, the full snapshot tree SHALL include untracked files from the stash `^3` parent when present. The ledger write SHALL NOT block or fail the run — errors are logged and swallowed.
 
 #### Scenario: Clean tree pass writes commit-keyed record
 - **WHEN** a trust-eligible run completes on a clean tree
@@ -39,7 +39,8 @@ After `writeExecutionState`, the system SHALL evaluate whether to write a ledger
 
 #### Scenario: Dirty tree pass writes tree-keyed record
 - **WHEN** a trust-eligible run completes on a dirty tree
-- **THEN** a ledger record SHALL be written with `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
+- **AND** the full snapshot tree SHALL include both tracked changes and untracked files captured by the stash
 
 #### Scenario: Partial pass writes record with trusted false
 - **WHEN** a run with `--gate` or `--review` CLI narrowing completes with `passed`

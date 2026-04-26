@@ -36,7 +36,7 @@ On run completion, the system SHALL evaluate whether to write a trust record. Th
 
 **Clean vs dirty tree behavior:**
 - **Clean tree**: record SHALL have `commit` = HEAD SHA and `tree` = `HEAD^{tree}`.
-- **Dirty tree**: record SHALL have `commit` = null, `tree` = tree of `working_tree_ref`, and `working_tree_ref` = stash SHA. This captures the exact validated content so it can be recognized by tree match after the user commits.
+- **Dirty tree**: record SHALL have `commit` = null, `tree` = the full validated snapshot tree, and `working_tree_ref` = stash SHA. For stash refs, the full snapshot tree SHALL combine tracked changes from the stash main tree with untracked files from the stash `^3` parent when present. This captures the exact validated content so it can be recognized by tree match after the user commits.
 
 #### Scenario: Full run pass on clean tree
 - **WHEN** `agent-validator run` completes with status `passed` on a clean tree
@@ -48,11 +48,17 @@ On run completion, the system SHALL evaluate whether to write a trust record. Th
 
 #### Scenario: Full run pass on dirty tree
 - **WHEN** `agent-validator run` completes with status `passed` on a dirty tree
-- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
 
 #### Scenario: Check pass on dirty tree
 - **WHEN** `agent-validator check` completes with status `passed` on a dirty tree
-- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "validated"`, `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
+
+#### Scenario: Dirty tree with untracked files
+- **WHEN** validation or skip writes a dirty-tree ledger record
+- **AND** `working_tree_ref` is a stash with a `^3` untracked-files parent
+- **THEN** the recorded `tree` SHALL include the untracked files from `working_tree_ref^3`
+- **AND** committing the same content SHALL produce a `HEAD^{tree}` that matches the ledger record's `tree`
 
 #### Scenario: Skip command on clean tree
 - **WHEN** `agent-validator skip` is executed on a clean tree
@@ -60,7 +66,7 @@ On run completion, the system SHALL evaluate whether to write a trust record. Th
 
 #### Scenario: Skip command on dirty tree
 - **WHEN** `agent-validator skip` is executed on a dirty tree
-- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "manual-skip"`, `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`
+- **THEN** a ledger record SHALL be written with `trusted: true`, `source: "manual-skip"`, `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`
 
 #### Scenario: Full run with warnings
 - **WHEN** `agent-validator run` completes with status `passed_with_warnings` on a clean tree

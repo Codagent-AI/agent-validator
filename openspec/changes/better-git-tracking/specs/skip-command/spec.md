@@ -2,7 +2,7 @@
 
 ### Requirement: Skip CLI Command
 
-The system MUST provide an `agent-validate skip` CLI subcommand that advances the execution state baseline to the current working tree state without running any verification gates. The command SHALL archive existing logs and write a new `.execution_state` file, producing the same post-run state as a successful `agent-validate run`. Additionally, the command SHALL write a trusted ledger record with `source: "manual-skip"`. The ledger write is the skip command's own responsibility (not part of the run-completion flow). On a clean tree, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. On a dirty tree, the record SHALL use `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`.
+The system MUST provide an `agent-validate skip` CLI subcommand that advances the execution state baseline to the current working tree state without running any verification gates. The command SHALL archive existing logs and write a new `.execution_state` file, producing the same post-run state as a successful `agent-validate run`. Additionally, the command SHALL write a trusted ledger record with `source: "manual-skip"`. The ledger write is the skip command's own responsibility (not part of the run-completion flow). On a clean tree, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. On a dirty tree, the record SHALL use `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`.
 
 #### Scenario: Skip with no existing state
 - **WHEN** the user executes `agent-validate skip`
@@ -28,7 +28,8 @@ The system MUST provide an `agent-validate skip` CLI subcommand that advances th
 #### Scenario: Skip on dirty tree writes tree-keyed record
 - **WHEN** the user executes `agent-validate skip`
 - **AND** `git status --porcelain` returns non-empty
-- **THEN** the ledger record SHALL have `commit: null`, `tree: working_tree_ref^{tree}`, `working_tree_ref: <stash SHA>`, `trusted: true`, `source: "manual-skip"`
+- **THEN** the ledger record SHALL have `commit: null`, `tree: <full snapshot tree>`, `working_tree_ref: <stash SHA>`, `trusted: true`, `source: "manual-skip"`
+- **AND** the full snapshot tree SHALL include untracked files captured by the stash `^3` parent when present
 
 #### Scenario: Skip preserves unhealthy adapter state
 - **WHEN** the user executes `agent-validate skip`

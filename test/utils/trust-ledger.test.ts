@@ -15,6 +15,7 @@ import {
 	appendRecord,
 	appendCurrentTrustRecord,
 	buildTrustRecord,
+	computeSnapshotTreeSha,
 	getLedgerPath,
 	isTrusted,
 	pruneIfNeeded,
@@ -24,13 +25,22 @@ import {
 
 const TEST_DIR = path.join(import.meta.dir, "../../.test-trust-ledger");
 
-function createMockSpawn(stdout: string, exitCode = 0, stderr = "") {
+function createMockSpawn(
+	stdout: string,
+	exitCode = 0,
+	stderr = "",
+): ReturnType<typeof childProcess.spawn> {
 	const mockProcess = new EventEmitter() as EventEmitter & {
 		stdout: EventEmitter;
 		stderr: EventEmitter;
+		stdin: { write: (_chunk?: unknown) => boolean; end: () => void };
 	};
 	mockProcess.stdout = new EventEmitter();
 	mockProcess.stderr = new EventEmitter();
+	mockProcess.stdin = {
+		write: () => true,
+		end: () => {},
+	};
 
 	setImmediate(() => {
 		if (stdout) mockProcess.stdout.emit("data", Buffer.from(stdout));
@@ -38,7 +48,7 @@ function createMockSpawn(stdout: string, exitCode = 0, stderr = "") {
 		mockProcess.emit("close", exitCode);
 	});
 
-	return mockProcess;
+	return mockProcess as unknown as ReturnType<typeof childProcess.spawn>;
 }
 
 function record(overrides: Partial<TrustRecord> = {}): TrustRecord {
@@ -241,6 +251,76 @@ describe("trust ledger", () => {
 
 		expect(result.trusted).toBe(false);
 		expect(result.matchType).toBeNull();
+	});
+
+	it("propagates unexpected untracked-tree lookup failures", async () => {
+		mock.restore();
+		spyOn(childProcess, "spawn").mockImplementation(((cmd, args) => {
+			if (cmd === "git" && Array.isArray(args)) {
+				if (args.join(" ") === "rev-parse stash-ref^{tree}") {
+					return createMockSpawn("main-tree\n") as ReturnType<
+						typeof childProcess.spawn
+					>;
+				}
+				if (args.join(" ") === "rev-parse --verify stash-ref^3^{tree}") {
+					return createMockSpawn(
+						"",
+						128,
+						"fatal: bad object stash-ref^3^{tree}",
+					) as ReturnType<typeof childProcess.spawn>;
+				}
+			}
+			return createMockSpawn("") as ReturnType<typeof childProcess.spawn>;
+		}) as typeof childProcess.spawn);
+
+		await expect(computeSnapshotTreeSha("stash-ref")).rejects.toThrow(
+			"bad object",
+		);
+	});
+
+	it("batches snapshot index population into one update-index call", async () => {
+		mock.restore();
+		let updateIndexCalls = 0;
+		spyOn(childProcess, "spawn").mockImplementation(((cmd, args) => {
+			if (cmd === "git" && Array.isArray(args)) {
+				const command = args.join(" ");
+				if (command === "rev-parse stash-ref^{tree}") {
+					return createMockSpawn("main-tree\n") as ReturnType<
+						typeof childProcess.spawn
+					>;
+				}
+				if (command === "rev-parse --verify stash-ref^3^{tree}") {
+					return createMockSpawn("untracked-tree\n") as ReturnType<
+						typeof childProcess.spawn
+					>;
+				}
+				if (command === "ls-tree -r main-tree") {
+					return createMockSpawn(
+						"100644 blob tracked-1\ttracked.ts\n100644 blob tracked-2\tnested/file.ts\n",
+					) as ReturnType<typeof childProcess.spawn>;
+				}
+				if (command === "ls-tree -r untracked-tree") {
+					return createMockSpawn(
+						"100644 blob untracked-1\tuntracked.ts\n",
+					) as ReturnType<typeof childProcess.spawn>;
+				}
+				if (args.includes("update-index")) {
+					updateIndexCalls += 1;
+					return createMockSpawn("") as ReturnType<typeof childProcess.spawn>;
+				}
+				if (command === "write-tree") {
+					return createMockSpawn("combined-tree\n") as ReturnType<
+						typeof childProcess.spawn
+					>;
+				}
+			}
+			return createMockSpawn("") as ReturnType<typeof childProcess.spawn>;
+		}) as typeof childProcess.spawn);
+
+		await expect(computeSnapshotTreeSha("stash-ref")).resolves.toBe(
+			"combined-tree",
+		);
+		expect(updateIndexCalls).toBe(1);
 	});
 
 	it("writes a clean partial gate pass as an untrusted narrowed-scope record", async () => {
