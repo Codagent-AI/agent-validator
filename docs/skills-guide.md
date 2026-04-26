@@ -13,7 +13,6 @@ Agent Validator installs **skills** that let you invoke Agent Validator workflow
 | Status | `/validator-status` | Show a summary of the most recent Agent Validator session |
 | Help | `/validator-help` | Diagnose and explain Agent Validator behavior (diagnosis-only) |
 | Commit | `/validator-commit` | Gate a commit behind optional validation (detect → validate → commit) |
-| Merge | `/validator-merge <branch>` | Merge a branch and propagate its validated execution state |
 | Issue | `/validator-issue` | Collect diagnostic evidence and file a GitHub bug report |
 
 ## Installation
@@ -131,21 +130,6 @@ Gate a commit behind optional Agent Validator validation.
 4. Commits using an available commit skill if found, otherwise stages and commits directly
 
 **Usage:** `/validator-commit` or `/validator-commit run` / `/validator-commit checks` / `/validator-commit skip`
-
-### /validator-merge
-
-Merge a branch and propagate its validated execution state, eliminating redundant re-validation.
-
-**Workflow:**
-1. Locates the worktree (or main clone) where `<branch>` is checked out via `git worktree list`
-2. Reads `log_dir` from each worktree's `.validator/config.yml` (default: `validator_logs`)
-3. Verifies the source `.execution_state` exists before merging (fails fast if missing)
-4. Runs `git merge <branch>`
-5. Copies `.execution_state` from the source worktree to the current directory
-
-The branch must be checked out in some worktree — if it was deleted after merging, the execution state is gone and the skill reports an error.
-
-**Usage:** `/validator-merge <branch-name>`
 
 ### /validator-issue
 

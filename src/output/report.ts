@@ -139,6 +139,8 @@ export function statusLineText(status: ValidatorStatus): string {
       return 'Status: Failed';
     case 'retry_limit_exceeded':
       return 'Status: Retry limit exceeded';
+    case 'trusted':
+      return 'Status: Trusted';
     default:
       return `Status: ${status}`;
   }

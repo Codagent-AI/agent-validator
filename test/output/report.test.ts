@@ -201,6 +201,11 @@ describe('generateReport', () => {
     expect(report).toBe('Status: Passed with warnings');
   });
 
+  it('returns "Trusted" status for trusted reconciliation short-circuit', async () => {
+    const report = await generateReport('trusted', undefined, TEST_DIR);
+    expect(report).toBe('Status: Trusted');
+  });
+
   it('includes check failure metadata but not parsed error output', async () => {
     const gateResults: GateResult[] = [
       {
