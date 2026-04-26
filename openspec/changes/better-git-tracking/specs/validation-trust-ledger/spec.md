@@ -209,6 +209,51 @@ On every `run`, `check`, and `review` invocation, the system SHALL perform ledge
 - **THEN** reconciliation SHALL find no trusted records
 - **AND** the validator SHALL proceed with normal validation
 
+### Requirement: Detect Trust Reconciliation
+On every `detect` invocation without explicit `--commit` or `--uncommitted` diff source overrides, the system SHALL perform read-only trust reconciliation before normal change detection. Detect trust reconciliation SHALL use the same trust lookup and merge-parent analysis as startup reconciliation, but it SHALL NOT mutate `.execution_state`, append ledger records, acquire the run lock, prune the ledger, initialize loggers, or report the `trusted` validator status. If the working tree is dirty, detect trust reconciliation SHALL be skipped and `detect` SHALL use its existing change detection behavior.
+
+#### Scenario: Detect sees HEAD trusted by commit
+- **WHEN** `agent-validator detect` runs on a clean worktree
+- **AND** HEAD has a trusted ledger record matching by commit
+- **THEN** `detect` SHALL print "No changes detected."
+- **AND** exit with the existing no-changes exit code
+- **AND** `.execution_state` SHALL NOT be written or modified
+
+#### Scenario: Detect sees HEAD trusted by tree
+- **WHEN** `agent-validator detect` runs on a clean worktree
+- **AND** HEAD has no trusted commit record
+- **AND** a trusted ledger record exists with `tree` matching `HEAD^{tree}`
+- **THEN** `detect` SHALL print "No changes detected."
+- **AND** exit with the existing no-changes exit code
+- **AND** NO materialized `ledger-reconciled` record SHALL be appended
+
+#### Scenario: Detect scopes from one trusted merge parent
+- **WHEN** `agent-validator detect` runs on a clean two-parent merge commit
+- **AND** exactly one merge parent is trusted
+- **THEN** `detect` SHALL use the trusted parent's commit as `fixBase`
+- **AND** list only changes between that trusted parent and HEAD
+
+#### Scenario: Detect scopes from synthetic merge tree
+- **WHEN** `agent-validator detect` runs on a clean two-parent merge commit
+- **AND** both merge parents are trusted
+- **AND** the synthetic merge tree differs from `HEAD^{tree}`
+- **THEN** `detect` SHALL use the synthetic merge tree as `fixBase`
+- **AND** list only the merge-resolution delta files
+- **AND** NO ledger record SHALL be appended for HEAD
+
+#### Scenario: Detect auto-trusted merge has no changes
+- **WHEN** `agent-validator detect` runs on a clean two-parent merge commit
+- **AND** both merge parents are trusted
+- **AND** the synthetic merge tree equals `HEAD^{tree}`
+- **THEN** `detect` SHALL print "No changes detected."
+- **AND** exit with the existing no-changes exit code
+- **AND** NO ledger record SHALL be appended for HEAD
+
+#### Scenario: Detect explicit diff source bypasses trust reconciliation
+- **WHEN** `agent-validator detect --commit <sha>` or `agent-validator detect --uncommitted` runs
+- **THEN** trust reconciliation SHALL NOT short-circuit or alter the requested diff source
+- **AND** detect SHALL use the explicit diff source requested by the user
+
 ### Requirement: Ledger Pruning
 The system SHALL periodically prune ledger records whose content is no longer relevant. For records with a non-null `commit`, the commit MUST be reachable from a local ref. For records with `commit: null` (dirty-tree records), the `working_tree_ref` object MUST still exist in git (not garbage collected). Reachability SHALL be checked via `git rev-list --all`; object existence via `git cat-file -t`. Pruning SHALL rewrite the file atomically (write to temp file, rename). Pruning SHALL be triggered when the ledger exceeds 1000 lines, checked at startup before reconciliation.
 

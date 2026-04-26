@@ -68,6 +68,31 @@ The same pattern applies to `executeGateCommand()` in `src/commands/gate-command
 
 Reconciliation is skipped entirely if the working tree is dirty (`git status --porcelain` non-empty). In that case, existing auto-clean proceeds unchanged.
 
+### Detect read-only reconciliation
+
+`agent-validator detect` uses a read-only variant of reconciliation before its normal change detection. This variant shares the trust lookup and merge analysis logic with startup reconciliation, but it does not acquire the run lock, prune the ledger, initialize loggers, rewrite `.execution_state`, or append `ledger-reconciled` records.
+
+The read-only result is used only to choose detect's observable output:
+
+```
+1. If explicit --commit or --uncommitted was passed:
+   → bypass trust reconciliation and use the requested diff source
+2. If the working tree is dirty:
+   → bypass trust reconciliation and use existing detect behavior
+3. If HEAD is trusted by commit or tree:
+   → print "No changes detected." and exit with detect's no-changes code
+4. If HEAD is a 2-parent merge with exactly one trusted parent:
+   → set fixBase to the trusted parent's commit before running ChangeDetector
+5. If HEAD is a 2-parent merge with both parents trusted:
+   → compute the synthetic merge tree
+   → if the synthetic tree matches HEAD, print "No changes detected."
+   → if it differs, set fixBase to the synthetic tree before running ChangeDetector
+6. Otherwise:
+   → use existing detect behavior
+```
+
+This keeps `detect` observational while aligning its "what would run?" output with the trust behavior that `run`, `check`, and `review` would apply.
+
 ### Reconciliation logic (clean tree)
 
 ```

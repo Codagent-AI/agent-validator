@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Trusted Exit Status
-The validator SHALL support a `trusted` status for runs that short-circuit via ledger reconciliation. `trusted` SHALL be a success status (exit code 0). It SHALL NOT count as a gate run — no gates are executed, no gate logs are written, and no run count is incremented. Reconciliation SHALL run within the run lock (since it may mutate `.execution_state` and append ledger records) but BEFORE logger initialization and console log creation.
+The validator SHALL support a `trusted` status for `run`, `check`, and `review` invocations that short-circuit via mutating ledger reconciliation. `trusted` SHALL be a success status (exit code 0). It SHALL NOT count as a gate run — no gates are executed, no gate logs are written, and no run count is incremented. Mutating reconciliation SHALL run within the run lock (since it may mutate `.execution_state` and append ledger records) but BEFORE logger initialization and console log creation. The `detect` command SHALL use read-only trust reconciliation and SHALL NOT emit the `trusted` status.
 
 #### Scenario: Trusted status on reconciliation short-circuit
 - **WHEN** ledger reconciliation determines HEAD is trusted
@@ -23,6 +23,12 @@ The validator SHALL support a `trusted` status for runs that short-circuit via l
 - **WHEN** a validator command acquires the run lock
 - **THEN** reconciliation SHALL execute before logger initialization
 - **AND** if reconciliation short-circuits, logger SHALL NOT be initialized
+
+#### Scenario: Detect uses no-changes output for trusted snapshots
+- **WHEN** `agent-validator detect` finds clean HEAD is trusted via read-only reconciliation
+- **THEN** it SHALL report "No changes detected."
+- **AND** it SHALL NOT emit the `trusted` status
+- **AND** it SHALL NOT write `.execution_state`, create gate logs, create console logs, or increment the run count
 
 ### Requirement: Ledger Write on Run Completion
 After `writeExecutionState`, the system SHALL evaluate whether to write a ledger trust record. Ledger records SHALL only be written for trust-eligible terminal outcomes: `passed`, `passed_with_warnings`, and `no_applicable_gates`. The outcomes `failed`, `error`, `lock_conflict`, and `retry_limit_exceeded` SHALL NOT produce ledger records. For clean trees, the record SHALL use `commit: HEAD`, `tree: HEAD^{tree}`. For dirty trees, the record SHALL use `commit: null`, `tree: working_tree_ref^{tree}`, with `working_tree_ref` set to the stash SHA. The ledger write SHALL NOT block or fail the run — errors are logged and swallowed.

@@ -33,6 +33,20 @@ export type ReconciliationResult =
   | ReconciliationTrusted
   | ReconciliationContinue;
 
+export type DetectReconciliationResult =
+  | { kind: 'trusted' }
+  | ReconciliationContinue;
+
+type ReconciliationAnalysis =
+  | {
+      kind: 'trusted';
+      materialize?: {
+        commit: string;
+        tree: string;
+      };
+    }
+  | ReconciliationContinue;
+
 interface ReconcileArgs {
   command: ScopeDescriptor['command'];
   config: LoadedConfig;
@@ -100,9 +114,7 @@ async function diffNames(baseTree: string): Promise<string[]> {
   return stdout.split('\n').filter(Boolean);
 }
 
-export async function reconcileStartup(
-  args: ReconcileArgs,
-): Promise<ReconciliationResult> {
+async function analyzeReconciliation(): Promise<ReconciliationAnalysis> {
   if (await hasWorkingTreeChanges()) {
     return { kind: 'continue' };
   }
@@ -113,9 +125,12 @@ export async function reconcileStartup(
 
   if (trust.trusted) {
     if (trust.matchType === 'tree' && trust.record?.commit !== head) {
-      await appendReconciledRecord({ ...args, commit: head, tree: headTree });
+      return {
+        kind: 'trusted',
+        materialize: { commit: head, tree: headTree },
+      };
     }
-    return trustedResult(args);
+    return { kind: 'trusted' };
   }
 
   const parents = await getParents(head);
@@ -147,8 +162,10 @@ export async function reconcileStartup(
 
   const delta = await diffNames(syntheticTree);
   if (delta.length === 0) {
-    await appendReconciledRecord({ ...args, commit: head, tree: headTree });
-    return trustedResult(args);
+    return {
+      kind: 'trusted',
+      materialize: { commit: head, tree: headTree },
+    };
   }
 
   return {
@@ -156,4 +173,29 @@ export async function reconcileStartup(
     changeOptions: { fixBase: syntheticTree },
     trustSourceOnPass: 'ledger-reconciled',
   };
+}
+
+export async function reconcileDetect(): Promise<DetectReconciliationResult> {
+  const analysis = await analyzeReconciliation();
+  if (analysis.kind === 'trusted') {
+    return { kind: 'trusted' };
+  }
+  return analysis;
+}
+
+export async function reconcileStartup(
+  args: ReconcileArgs,
+): Promise<ReconciliationResult> {
+  const analysis = await analyzeReconciliation();
+  if (analysis.kind === 'trusted') {
+    if (analysis.materialize) {
+      await appendReconciledRecord({
+        ...args,
+        commit: analysis.materialize.commit,
+        tree: analysis.materialize.tree,
+      });
+    }
+    return trustedResult(args);
+  }
+  return analysis;
 }

@@ -314,6 +314,7 @@ This replaces the old `rerun` command — simply run `agent-validator run` again
 Shows what gates would run for detected changes without actually executing them.
 
 - Detects changed files using the same logic as `run`
+- Treats a clean trusted `HEAD` as no changes, without advancing `.execution_state`
 - Expands entry points that match those changes
 - Lists all gates that would run, grouped by entry point
 

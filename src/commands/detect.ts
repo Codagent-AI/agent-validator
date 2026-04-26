@@ -4,6 +4,7 @@ import { loadConfig } from '../config/loader.js';
 import { ChangeDetector } from '../core/change-detector.js';
 import { EntryPointExpander } from '../core/entry-point.js';
 import { type Job, JobGenerator } from '../core/job.js';
+import { reconcileDetect } from '../core/reconciliation.js';
 import {
   readExecutionState,
   resolveFixBase,
@@ -19,6 +20,14 @@ interface ChangeOptions {
   uncommitted?: boolean;
   fixBase?: string;
 }
+
+interface DetectCliOptions {
+  baseBranch?: string;
+  commit?: string;
+  uncommitted?: boolean;
+}
+
+type LoadedConfig = Awaited<ReturnType<typeof loadConfig>>;
 
 async function autoCleanIfNeeded(
   logDir: string,
@@ -47,6 +56,7 @@ async function resolveChangeOptions(
   logDir: string,
   baseBranch: string,
   cliOptions: { commit?: string; uncommitted?: boolean },
+  trustedChangeOptions: ChangeOptions = {},
 ): Promise<ChangeOptions> {
   await autoCleanIfNeeded(logDir, baseBranch);
 
@@ -70,7 +80,84 @@ async function resolveChangeOptions(
       fixBase: opts.fixBase,
     };
   }
-  return opts;
+  if (isRerun) return opts;
+  return { ...opts, ...trustedChangeOptions };
+}
+
+function resolveEffectiveBaseBranch(
+  options: DetectCliOptions,
+  config: LoadedConfig,
+): string {
+  return (
+    options.baseBranch ||
+    (process.env.GITHUB_BASE_REF &&
+    (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true')
+      ? process.env.GITHUB_BASE_REF
+      : null) ||
+    config.project.base_branch
+  );
+}
+
+function printNoChangesAndExit(): never {
+  console.log(chalk.dim('Detecting changes...'));
+  console.log(chalk.green('No changes detected.'));
+  process.exit(2);
+}
+
+async function resolveTrustedChangeOptions(
+  options: DetectCliOptions,
+): Promise<ChangeOptions> {
+  if (options.commit || options.uncommitted) return {};
+
+  const reconciliation = await reconcileDetect();
+  if (reconciliation.kind === 'trusted') {
+    printNoChangesAndExit();
+  }
+  return reconciliation.changeOptions ?? {};
+}
+
+async function executeDetect(options: DetectCliOptions): Promise<void> {
+  const config = await loadConfig();
+  const effectiveBaseBranch = resolveEffectiveBaseBranch(options, config);
+  const trustedChangeOptions = await resolveTrustedChangeOptions(options);
+  const changeOptions = await resolveChangeOptions(
+    config.project.log_dir,
+    effectiveBaseBranch,
+    { commit: options.commit, uncommitted: options.uncommitted },
+    trustedChangeOptions,
+  );
+
+  const changeDetector = new ChangeDetector(effectiveBaseBranch, changeOptions);
+  const expander = new EntryPointExpander();
+  const jobGen = new JobGenerator(config);
+
+  console.log(chalk.dim('Detecting changes...'));
+  const changes = await changeDetector.getChangedFiles();
+
+  if (changes.length === 0) {
+    console.log(chalk.green('No changes detected.'));
+    process.exit(2);
+  }
+
+  console.log(chalk.dim(`Found ${changes.length} changed files:`));
+  for (const file of changes) {
+    console.log(chalk.dim(`  - ${file}`));
+  }
+  console.log();
+
+  const entryPoints = await expander.expand(
+    config.project.entry_points,
+    changes,
+  );
+  const jobs = jobGen.generateJobs(entryPoints);
+
+  if (jobs.length === 0) {
+    console.log(chalk.yellow('No applicable gates for these changes.'));
+    process.exit(2);
+  }
+
+  console.log(chalk.bold(`Would run ${jobs.length} gate(s):\n`));
+  printJobsByWorkDir(jobs);
 }
 
 export function registerDetectCommand(program: Command): void {
@@ -90,57 +177,7 @@ export function registerDetectCommand(program: Command): void {
     )
     .action(async (options) => {
       try {
-        const config = await loadConfig();
-
-        // Priority: CLI override > CI env var > config
-        const effectiveBaseBranch =
-          options.baseBranch ||
-          (process.env.GITHUB_BASE_REF &&
-          (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true')
-            ? process.env.GITHUB_BASE_REF
-            : null) ||
-          config.project.base_branch;
-
-        const changeOptions = await resolveChangeOptions(
-          config.project.log_dir,
-          effectiveBaseBranch,
-          { commit: options.commit, uncommitted: options.uncommitted },
-        );
-
-        const changeDetector = new ChangeDetector(
-          effectiveBaseBranch,
-          changeOptions,
-        );
-        const expander = new EntryPointExpander();
-        const jobGen = new JobGenerator(config);
-
-        console.log(chalk.dim('Detecting changes...'));
-        const changes = await changeDetector.getChangedFiles();
-
-        if (changes.length === 0) {
-          console.log(chalk.green('No changes detected.'));
-          process.exit(2);
-        }
-
-        console.log(chalk.dim(`Found ${changes.length} changed files:`));
-        for (const file of changes) {
-          console.log(chalk.dim(`  - ${file}`));
-        }
-        console.log();
-
-        const entryPoints = await expander.expand(
-          config.project.entry_points,
-          changes,
-        );
-        const jobs = jobGen.generateJobs(entryPoints);
-
-        if (jobs.length === 0) {
-          console.log(chalk.yellow('No applicable gates for these changes.'));
-          process.exit(2);
-        }
-
-        console.log(chalk.bold(`Would run ${jobs.length} gate(s):\n`));
-        printJobsByWorkDir(jobs);
+        await executeDetect(options);
       } catch (error: unknown) {
         const err = error as { message?: string };
         console.error(chalk.red('Error:'), err.message);

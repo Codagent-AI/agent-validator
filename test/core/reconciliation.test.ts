@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { LoadedConfig } from "../../src/config/types.js";
 import {
+	reconcileDetect,
 	reconcileStartup,
 	type ReconciliationContinue,
 } from "../../src/core/reconciliation.js";
@@ -117,6 +118,19 @@ describe("startup reconciliation", () => {
 		const state = await readExecutionState(logDir);
 		expect(state?.commit).toBe(head);
 		expect(state?.working_tree_ref).toBe(head);
+	});
+
+	it("detect reconciliation reports trusted HEAD without mutating state", async () => {
+		const head = await git(["rev-parse", "HEAD"]);
+		const tree = await computeTreeSha("HEAD");
+		const logDir = path.join(repoDir, "validator_logs");
+		await appendRecord(trustedRecord(head, tree));
+
+		const result = await reconcileDetect();
+
+		expect(result).toEqual({ kind: "trusted" });
+		expect(await readExecutionState(logDir)).toBeNull();
+		expect(await readRecords()).toHaveLength(1);
 	});
 
 	it("materializes a commit record when HEAD is trusted by tree match", async () => {

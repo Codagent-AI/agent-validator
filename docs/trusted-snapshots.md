@@ -58,6 +58,10 @@ clean `HEAD` is trusted by commit or tree, Agent Validator:
 Dirty worktrees skip reconciliation and use the normal execution-state and
 auto-clean flow.
 
+`agent-validator detect` uses the same trust lookup in read-only mode. If the
+current clean `HEAD` is trusted, `detect` reports no changes without rewriting
+`.execution_state` or appending ledger records.
+
 ## Merge Behavior
 
 For a two-parent merge commit, reconciliation checks whether the parents are
