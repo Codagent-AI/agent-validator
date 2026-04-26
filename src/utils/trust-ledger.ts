@@ -1,16 +1,16 @@
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { StringDecoder } from 'node:string_decoder';
 import packageJson from '../../package.json' with { type: 'json' };
 import type { LoadedConfig } from '../config/types.js';
 import type { ValidatorStatus } from '../types/validator-status.js';
 import {
   getCurrentCommit,
+  gitObjectExists as gitObjectExistsBase,
   hasWorkingTreeChanges,
   readExecutionState,
 } from './execution-state.js';
+import { gitStdout } from './git.js';
 
 export type TrustRecordSource =
   | 'validated'
@@ -32,7 +32,7 @@ export interface TrustRecord {
   scope_hash: string;
   validator_version: string;
   source: TrustRecordSource;
-  status: string;
+  status: ValidatorStatus | 'skipped';
   trusted: boolean;
   created_at: string;
   working_tree_ref?: string;
@@ -42,44 +42,6 @@ export interface TrustLookupResult {
   trusted: boolean;
   matchType: 'commit' | 'tree' | null;
   record?: TrustRecord;
-}
-
-interface GitResult {
-  stdout: string;
-  stderr: string;
-  code: number | null;
-}
-
-function runGit(args: string[]): Promise<GitResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    const stdoutDecoder = new StringDecoder('utf8');
-    const stderrDecoder = new StringDecoder('utf8');
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (chunk: Buffer | string) => {
-      stdout += typeof chunk === 'string' ? chunk : stdoutDecoder.write(chunk);
-    });
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += typeof chunk === 'string' ? chunk : stderrDecoder.write(chunk);
-    });
-    child.on('close', (code) => {
-      stdout += stdoutDecoder.end();
-      stderr += stderrDecoder.end();
-      resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code });
-    });
-    child.on('error', reject);
-  });
-}
-
-async function gitStdout(args: string[]): Promise<string> {
-  const result = await runGit(args);
-  if (result.code === 0) return result.stdout;
-  const detail = result.stderr ? `: ${result.stderr}` : '';
-  throw new Error(
-    `git ${args.join(' ')} failed with code ${result.code}${detail}`,
-  );
 }
 
 export async function getLedgerPath(): Promise<string> {
@@ -230,7 +192,7 @@ export function buildTrustRecord(args: {
   config: LoadedConfig;
   command: ScopeDescriptor['command'];
   source: TrustRecordSource;
-  status: string;
+  status: ValidatorStatus | 'skipped';
   trusted: boolean;
   commit: string | null;
   tree: string;
@@ -342,8 +304,7 @@ async function reachableCommits(): Promise<Set<string>> {
 
 async function gitObjectExists(ref: string | undefined): Promise<boolean> {
   if (!ref) return false;
-  const result = await runGit(['cat-file', '-t', ref]);
-  return result.code === 0;
+  return gitObjectExistsBase(ref);
 }
 
 export async function pruneIfNeeded(threshold: number): Promise<void> {

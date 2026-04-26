@@ -1,4 +1,43 @@
+import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import type { loadConfig } from '../config/loader.js';
+
+export interface GitResult {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+}
+
+export function runGit(args: string[]): Promise<GitResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += typeof chunk === 'string' ? chunk : stdoutDecoder.write(chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : stderrDecoder.write(chunk);
+    });
+    child.on('close', (code) => {
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
+      resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code });
+    });
+    child.on('error', reject);
+  });
+}
+
+export async function gitStdout(args: string[]): Promise<string> {
+  const result = await runGit(args);
+  if (result.code === 0) return result.stdout;
+  const detail = result.stderr ? `: ${result.stderr}` : '';
+  throw new Error(
+    `git ${args.join(' ')} failed with code ${result.code}${detail}`,
+  );
+}
 
 /**
  * Compute effective base branch from options, env vars, and config.

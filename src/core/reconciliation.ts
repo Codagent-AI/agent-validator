@@ -1,5 +1,3 @@
-import { spawn } from 'node:child_process';
-import { StringDecoder } from 'node:string_decoder';
 import { generateReport } from '../output/report.js';
 import type { RunResult } from '../types/validator-status.js';
 import {
@@ -7,6 +5,7 @@ import {
   hasWorkingTreeChanges,
   writeExecutionState,
 } from '../utils/execution-state.js';
+import { gitStdout, runGit } from '../utils/git.js';
 import {
   appendRecord,
   buildTrustRecord,
@@ -40,40 +39,6 @@ interface ReconcileArgs {
   logDir: string;
   report?: boolean;
   options?: { gate?: string; enableReviews?: Set<string> };
-}
-
-interface GitResult {
-  stdout: string;
-  stderr: string;
-  code: number | null;
-}
-
-function runGit(args: string[]): Promise<GitResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    const stdoutDecoder = new StringDecoder('utf8');
-    const stderrDecoder = new StringDecoder('utf8');
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk: Buffer | string) => {
-      stdout += typeof chunk === 'string' ? chunk : stdoutDecoder.write(chunk);
-    });
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += typeof chunk === 'string' ? chunk : stderrDecoder.write(chunk);
-    });
-    child.on('close', (code) => {
-      stdout += stdoutDecoder.end();
-      stderr += stderrDecoder.end();
-      resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code });
-    });
-    child.on('error', reject);
-  });
-}
-
-async function gitStdout(args: string[]): Promise<string> {
-  const result = await runGit(args);
-  if (result.code === 0) return result.stdout;
-  throw new Error(result.stderr || `git ${args.join(' ')} failed`);
 }
 
 async function trustedResult(
