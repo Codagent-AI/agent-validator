@@ -282,39 +282,45 @@ export async function appendCurrentTrustRecord(args: {
   options?: { gate?: string; enableReviews?: Set<string> };
   trusted?: boolean;
 }): Promise<void> {
-  if (!isTrustEligibleStatus(args.status)) return;
+  try {
+    if (!isTrustEligibleStatus(args.status)) return;
 
-  const state = await readExecutionState(args.logDir);
-  const dirty = await hasWorkingTreeChanges();
-  const trusted =
-    args.trusted ?? shouldMarkTrusted(args.command, args.options ?? {});
+    const state = await readExecutionState(args.logDir);
+    const dirty = await hasWorkingTreeChanges();
+    const trusted =
+      args.trusted ?? shouldMarkTrusted(args.command, args.options ?? {});
 
-  let commit: string | null;
-  let tree: string;
-  let workingTreeRef: string | undefined;
-  if (dirty) {
-    if (!state?.working_tree_ref) return;
-    commit = null;
-    workingTreeRef = state.working_tree_ref;
-    tree = await computeTreeSha(workingTreeRef);
-  } else {
-    commit = await getCurrentCommit();
-    tree = await computeTreeSha('HEAD');
+    let commit: string | null;
+    let tree: string;
+    let workingTreeRef: string | undefined;
+    if (dirty) {
+      if (!state?.working_tree_ref) return;
+      commit = null;
+      workingTreeRef = state.working_tree_ref;
+      tree = await computeTreeSha(workingTreeRef);
+    } else {
+      commit = await getCurrentCommit();
+      tree = await computeTreeSha('HEAD');
+    }
+
+    await appendRecord(
+      buildTrustRecord({
+        config: args.config,
+        command: args.command,
+        source: args.source,
+        status: args.status,
+        trusted,
+        commit,
+        tree,
+        workingTreeRef,
+        options: args.options,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      `validator: failed to write trust ledger record: ${(error as Error).message}`,
+    );
   }
-
-  await appendRecord(
-    buildTrustRecord({
-      config: args.config,
-      command: args.command,
-      source: args.source,
-      status: args.status,
-      trusted,
-      commit,
-      tree,
-      workingTreeRef,
-      options: args.options,
-    }),
-  );
 }
 
 async function lineCount(file: string): Promise<number> {
