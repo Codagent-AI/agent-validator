@@ -91,7 +91,7 @@ async function mergeTree(
   parent2: string,
 ): Promise<string | null> {
   const result = await runGit(['merge-tree', '--write-tree', parent1, parent2]);
-  const match = result.stdout.match(/\b[0-9a-f]{40}\b/);
+  const match = result.stdout.match(/\b[0-9a-f]{40,64}\b/);
   return match?.[0] ?? null;
 }
 

@@ -99,6 +99,9 @@ export async function readRecords(): Promise<TrustRecord[]> {
     return records;
   } catch (error) {
     if ((error as { code?: string }).code === 'ENOENT') return [];
+    console.error(
+      `validator: failed to read trust ledger records: ${(error as Error).message}`,
+    );
     return [];
   }
 }
@@ -173,14 +176,22 @@ function scopeFor(
     cli_overrides.review = Array.from(enableReviews).sort();
   }
 
-  const gateNames = [
-    ...Object.keys(config.checks ?? {}).map((name) => `check:${name}`),
-    ...Object.keys(config.reviews ?? {}).map((name) => `review:${name}`),
-  ].sort();
+  const checkNames = Object.keys(config.checks ?? {});
+  const reviewNames = Object.keys(config.reviews ?? {});
+  let gateNames: string[];
+  if (command === 'check') {
+    gateNames = checkNames;
+  } else if (command === 'review') {
+    gateNames = reviewNames;
+  } else if (command === 'skip') {
+    gateNames = [];
+  } else {
+    gateNames = [...checkNames, ...reviewNames];
+  }
 
   return {
     command,
-    gates: options.gate ? [options.gate] : gateNames,
+    gates: options.gate ? [options.gate] : gateNames.sort(),
     entry_points: (config.project.entry_points ?? [])
       .map((entry) => entry.path)
       .sort(),
@@ -322,7 +333,10 @@ export async function pruneIfNeeded(threshold: number): Promise<void> {
         if (reachable.has(record.commit)) survivors.push(record);
         continue;
       }
-      if (await gitObjectExists(record.working_tree_ref)) {
+      if (
+        (await gitObjectExists(record.working_tree_ref)) ||
+        (await gitObjectExists(record.tree))
+      ) {
         survivors.push(record);
       }
     }

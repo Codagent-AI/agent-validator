@@ -447,13 +447,13 @@ Exits `0` if all config files are valid, `1` if validation fails (with the error
 
 ### `agent-validator skip`
 
-Advances the execution state baseline to the current commit without running any gates. The next `run` will diff from this new baseline.
+Advances the execution state baseline to the current snapshot without running any gates. The next `run` will diff from this new baseline.
 
 ```bash
 agent-validator skip
 ```
 
-This is useful when you want to skip validation for a known-good state (e.g., after a merge from main) and start fresh from the current commit.
+This is useful when you want to skip validation for a known-good state (e.g., after a merge from main) and start fresh from the current commit. It also writes a trusted snapshot record as a human override, so the skipped state can be recognized in other worktrees after commit or merge. See [Trusted Snapshots](trusted-snapshots.md).
 
 ### `agent-validator status`
 

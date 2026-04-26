@@ -167,21 +167,37 @@ export async function acquireAndReconcileGateStartup(args: {
   logDir: string;
   options: GateCommandOptions;
 }): Promise<ReconciliationContinue> {
-  await acquireLock(args.logDir);
-  await pruneIfNeeded(1000);
-  const reconciliation = await reconcileStartup({
-    command: args.commandName,
-    config: args.config,
-    logDir: args.logDir,
-    options: {
-      gate: args.options.gate,
-      enableReviews: args.options.enableReviews,
-    },
-  });
-  if (reconciliation.kind === 'trusted') {
-    console.log(chalk.green(reconciliation.result.message));
-    await releaseLock(args.logDir);
-    process.exit(0);
+  let lockAcquired = false;
+  try {
+    await acquireLock(args.logDir);
+    lockAcquired = true;
+    await pruneIfNeeded(1000);
+    const reconciliation = await reconcileStartup({
+      command: args.commandName,
+      config: args.config,
+      logDir: args.logDir,
+      options: {
+        gate: args.options.gate,
+        enableReviews: args.options.enableReviews,
+      },
+    });
+    if (reconciliation.kind === 'trusted') {
+      console.log(chalk.green(reconciliation.result.message));
+      await releaseLock(args.logDir);
+      process.exit(0);
+    }
+    return reconciliation;
+  } catch (error) {
+    if (lockAcquired) {
+      try {
+        await releaseLock(args.logDir);
+      } catch (releaseError) {
+        throw new AggregateError(
+          [error, releaseError],
+          'failed during startup and failed to release lock',
+        );
+      }
+    }
+    throw error;
   }
-  return reconciliation;
 }

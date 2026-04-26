@@ -391,13 +391,13 @@ export async function executeGateCommand(
     const { debugLogger, effectiveBaseBranch } = initResult;
     const logDir = config.project.log_dir;
 
-    lockAcquired = true;
     const reconciliation = await acquireAndReconcileGateStartup({
       commandName,
       config,
       logDir,
       options,
     });
+    lockAcquired = true;
 
     await handleAutoClean(
       logDir,

@@ -217,11 +217,14 @@ This updates the Claude Code plugin (via marketplace), the GitHub Copilot plugin
 
 Agent Validator tracks an **execution state baseline** — the branch, commit, and working tree snapshot at which the last run completed. On subsequent runs, only changes since that baseline are reviewed, avoiding redundant and expensive re-reviews of code that already passed. When a run fails, the baseline stays put so the next run can verify fixes in a narrowed scope. If you want to advance the baseline without running reviews — for example, after manually reviewing changes, accepting flagged issues, or integrating upstream code — run `agent-validator skip` to record the current state as the new starting point. See [Execution State Tracking](docs/execution-state.md) for full details on how state is managed, when it resets, and edge cases.
 
+For multi-worktree workflows, Agent Validator also records **trusted snapshots** in a shared git-common-dir ledger. A passing `run`, passing `check`, or explicit `skip` in one worktree can be recognized after committing or merging in another worktree. When reconciliation finds the current clean `HEAD` is already trusted, the validator exits with status `trusted` and advances the local baseline without rerunning gates. See [Trusted Snapshots](docs/trusted-snapshots.md) for the full workflow and merge behavior.
+
 ## Documentation
 
 - [User Guide](docs/user-guide.md) — full usage details
 - [Configuration Reference](docs/config-reference.md) — all configuration fields + defaults
 - [Execution State Tracking](docs/execution-state.md) — how the validator avoids redundant reviews
+- [Trusted Snapshots](docs/trusted-snapshots.md) — how validated/skipped work propagates across worktrees
 - [Plugin & Update Guide](docs/plugin-guide.md) — Claude Code and Cursor plugin delivery and updating
 - [CLI Invocation Details](docs/cli-invocation-details.md) — how we securely invoke AI CLIs
 - [Feature Comparison](docs/feature_comparison.md) — how Agent Validator compares to other tools

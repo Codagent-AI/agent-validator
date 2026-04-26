@@ -147,6 +147,11 @@ describe("trust ledger", () => {
 						typeof childProcess.spawn
 					>;
 				}
+				if (args.join(" ") === "cat-file -t removed-dirty") {
+					return createMockSpawn("", 1, "fatal: Not a valid object name") as ReturnType<
+						typeof childProcess.spawn
+					>;
+				}
 			}
 			return createMockSpawn("") as ReturnType<typeof childProcess.spawn>;
 		}) as typeof childProcess.spawn);
@@ -176,6 +181,21 @@ describe("trust ledger", () => {
 		const records = await readRecords();
 
 		expect(records.map((r) => r.commit)).toEqual(["abc123", "def456"]);
+	});
+
+	it("logs non-missing read errors before returning no records", async () => {
+		const ledgerPath = await getLedgerPath();
+		await fs.mkdir(path.dirname(ledgerPath), { recursive: true });
+		await fs.mkdir(ledgerPath);
+		const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+		const records = await readRecords();
+
+		expect(records).toEqual([]);
+		expect(errorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("failed to read trust ledger records"),
+		);
+		errorSpy.mockRestore();
 	});
 
 	it("trusts by commit before tree", async () => {
@@ -251,6 +271,40 @@ describe("trust ledger", () => {
 		expect(written.trusted).toBe(false);
 		expect(written.scope.cli_overrides).toEqual({ gate: "lint" });
 		expect(written.scope.gates).toEqual(["lint"]);
+	});
+
+	it("records command-specific gate scope metadata", () => {
+		const runRecord = buildTrustRecord({
+			config: config(),
+			command: "run",
+			source: "validated",
+			status: "passed",
+			trusted: true,
+			commit: "commit123",
+			tree: "tree123",
+		});
+		const checkRecord = buildTrustRecord({
+			config: config(),
+			command: "check",
+			source: "validated",
+			status: "passed",
+			trusted: true,
+			commit: "commit123",
+			tree: "tree123",
+		});
+		const reviewRecord = buildTrustRecord({
+			config: config(),
+			command: "review",
+			source: "validated",
+			status: "passed",
+			trusted: false,
+			commit: "commit123",
+			tree: "tree123",
+		});
+
+		expect(runRecord.scope.gates).toEqual(["code-quality", "lint"]);
+		expect(checkRecord.scope.gates).toEqual(["lint"]);
+		expect(reviewRecord.scope.gates).toEqual(["code-quality"]);
 	});
 
 	it("writes dirty manual-skip records using the stored working tree ref", async () => {
@@ -367,6 +421,13 @@ describe("trust ledger", () => {
 		await appendRecord(
 			record({
 				commit: null,
+				tree: "tree-still-exists",
+				working_tree_ref: "missing-ref",
+			}),
+		);
+		await appendRecord(
+			record({
+				commit: null,
 				tree: "removed-dirty",
 				working_tree_ref: "missing-ref",
 			}),
@@ -375,8 +436,12 @@ describe("trust ledger", () => {
 		await pruneIfNeeded(2);
 
 		const records = await readRecords();
-		expect(records.map((r) => r.tree)).toEqual(["kept-commit", "kept-dirty"]);
-		expect(await readLedgerLines()).toHaveLength(2);
+		expect(records.map((r) => r.tree)).toEqual([
+			"kept-commit",
+			"kept-dirty",
+			"tree-still-exists",
+		]);
+		expect(await readLedgerLines()).toHaveLength(3);
 	});
 
 	it("records config hash for gate-affecting fields but excludes operational fields", () => {
