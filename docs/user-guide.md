@@ -314,6 +314,7 @@ This replaces the old `rerun` command — simply run `agent-validator run` again
 Shows what gates would run for detected changes without actually executing them.
 
 - Detects changed files using the same logic as `run`
+- Treats a clean trusted `HEAD` as no changes, without advancing `.execution_state`
 - Expands entry points that match those changes
 - Lists all gates that would run, grouped by entry point
 
@@ -447,13 +448,13 @@ Exits `0` if all config files are valid, `1` if validation fails (with the error
 
 ### `agent-validator skip`
 
-Advances the execution state baseline to the current commit without running any gates. The next `run` will diff from this new baseline.
+Advances the execution state baseline to the current snapshot without running any gates. The next `run` will diff from this new baseline.
 
 ```bash
 agent-validator skip
 ```
 
-This is useful when you want to skip validation for a known-good state (e.g., after a merge from main) and start fresh from the current commit.
+This is useful when you want to skip validation for a known-good state (e.g., after a merge from main) and start fresh from the current commit. It also writes a trusted snapshot record as a human override, so the skipped state can be recognized in other worktrees after commit or merge. See [Trusted Snapshots](trusted-snapshots.md).
 
 ### `agent-validator status`
 

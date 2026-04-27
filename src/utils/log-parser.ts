@@ -107,7 +107,10 @@ export async function parseLogFile(
     const parsed = parseReviewFilename(filename);
     const jobId = parsed ? parsed.jobId : extractPrefix(filename);
 
-    if (content.includes('--- Review Output')) {
+    if (
+      content.includes('--- Review Output') ||
+      (parsed && jobId.startsWith('review_'))
+    ) {
       return parseReviewLog(content, jobId, logPath, parsed);
     }
     return parseCheckLog(content, jobId, logPath);

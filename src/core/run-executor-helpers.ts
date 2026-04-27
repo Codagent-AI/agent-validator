@@ -20,12 +20,17 @@ import {
   type PassedSlot,
   type PreviousViolation,
 } from '../utils/log-parser.js';
+import {
+  appendCurrentTrustRecord,
+  type TrustRecordSource,
+} from '../utils/trust-ledger.js';
 import { ChangeDetector } from './change-detector.js';
 import { computeDiffStats } from './diff-stats.js';
 import { EntryPointExpander } from './entry-point.js';
 import { JobGenerator } from './job.js';
 import { findLatestConsoleLog, tryAcquireLock } from './run-executor-lock.js';
 import { Runner } from './runner.js';
+import { TRUSTED_SNAPSHOT_MESSAGE } from './trusted-message.js';
 
 // Re-export lock helpers so existing imports from run-executor-helpers still work
 export { findLatestConsoleLog, tryAcquireLock };
@@ -52,6 +57,8 @@ export interface RunContext {
   config: LoadedConfig;
   loggerInitializedHere: boolean;
   effectiveBaseBranch: string;
+  startupChangeOptions?: ChangeOptions;
+  trustSourceOnPass?: TrustRecordSource;
 }
 
 const statusMessages: Record<ValidatorStatus, string> = {
@@ -59,6 +66,7 @@ const statusMessages: Record<ValidatorStatus, string> = {
   passed_with_warnings: 'Passed with warnings -- some issues were skipped.',
   no_applicable_gates: 'No applicable gates for these changes.',
   no_changes: 'No changes detected.',
+  trusted: TRUSTED_SNAPSHOT_MESSAGE,
   failed: 'Gates failed -- issues must be fixed.',
   retry_limit_exceeded:
     'Retry limit exceeded -- logs have been automatically archived.',
@@ -74,6 +82,23 @@ export function getStatusMessage(status: ValidatorStatus): string {
 
 function getRunLogger() {
   return getCategoryLogger('run');
+}
+
+export async function appendRunTrustRecord(
+  ctx: RunContext,
+  status: ValidatorStatus,
+): Promise<void> {
+  await appendCurrentTrustRecord({
+    config: ctx.config,
+    logDir: ctx.config.project.log_dir,
+    command: 'run',
+    status,
+    source: ctx.trustSourceOnPass ?? 'validated',
+    options: {
+      gate: ctx.options.gate,
+      enableReviews: ctx.options.enableReviews,
+    },
+  });
 }
 
 export async function finalizeAndReturn(
@@ -191,6 +216,13 @@ export async function processRerunMode(
     };
   }
 
+  if (ctx.startupChangeOptions?.fixBase && !ctx.options.commit) {
+    changeOptions = {
+      ...changeOptions,
+      fixBase: ctx.startupChangeOptions.fixBase,
+    };
+  }
+
   return { failuresMap, passedSlotsMap, changeOptions };
 }
 
@@ -219,6 +251,7 @@ export async function handleNoChanges(
 
     // Write execution state AFTER clean so the file always survives.
     await writeExecutionState(ctx.config.project.log_dir);
+    await appendRunTrustRecord(ctx, status);
 
     log.info(getStatusMessage(status));
     return { status, message: getStatusMessage(status), gatesRun: 0 };
@@ -426,6 +459,7 @@ export async function executeAndReport(
   // cleanLogs should preserve persistent files, but writing after clean
   // is the defensive ordering (matches the skip command's pattern).
   await writeExecutionState(ctx.config.project.log_dir);
+  await appendRunTrustRecord(ctx, result.status);
 
   return result;
 }

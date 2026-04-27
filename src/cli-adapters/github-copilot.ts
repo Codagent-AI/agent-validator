@@ -110,17 +110,45 @@ function verifySessionModel(
   }
 }
 
+function isMissingCommandError(error: unknown): boolean {
+  const err = error as {
+    code?: string;
+    stderr?: string;
+    stdout?: string;
+    message?: string;
+  };
+  const detail = `${err.stderr ?? ''}\n${err.stdout ?? ''}\n${err.message ?? ''}`;
+  return (
+    err.code === 'ENOENT' ||
+    /command not found|not recognized|no such file|not found/i.test(detail)
+  );
+}
+
 export class GitHubCopilotAdapter implements CLIAdapter {
   name = 'github-copilot';
 
+  private execCopilot(
+    command: string,
+  ): Promise<{ stdout: string; stderr: string }> {
+    return new Promise((resolve, reject) => {
+      exec(command, { timeout: 10_000 }, (error, stdout, stderr) => {
+        if (error) {
+          reject(
+            Object.assign(error, {
+              stdout,
+              stderr,
+            }),
+          );
+        } else {
+          resolve({ stdout, stderr });
+        }
+      });
+    });
+  }
+
   async isAvailable(): Promise<boolean> {
     try {
-      await new Promise<string>((resolve, reject) => {
-        exec('copilot --help', { timeout: 10_000 }, (error, stdout) => {
-          if (error) reject(error);
-          else resolve(stdout);
-        });
-      });
+      await this.execCopilot('copilot --help');
       return true;
     } catch {
       return false;
@@ -132,12 +160,21 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     status: 'healthy' | 'missing' | 'unhealthy';
     message?: string;
   }> {
-    const available = await this.isAvailable();
-    if (!available) {
+    try {
+      await this.execCopilot('copilot --help');
+    } catch (error) {
+      const err = error as { stderr?: string; message?: string };
+      if (isMissingCommandError(error)) {
+        return {
+          available: false,
+          status: 'missing',
+          message: 'Command not found',
+        };
+      }
       return {
-        available: false,
-        status: 'missing',
-        message: 'Command not found',
+        available: true,
+        status: 'unhealthy',
+        message: (err.stderr || err.message || 'Unhealthy').trim(),
       };
     }
 

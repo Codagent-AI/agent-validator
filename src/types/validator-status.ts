@@ -9,6 +9,7 @@ export type ValidatorStatus =
   | 'no_changes' // No changes detected
   | 'failed' // Gates failed, retries remaining
   | 'retry_limit_exceeded' // Max retries reached
+  | 'trusted' // Snapshot trusted by reconciliation; no gates ran
   | 'lock_conflict' // Another run in progress
   | 'error' // Unexpected error (includes config errors)
   | 'no_config'; // No config found
@@ -49,6 +50,7 @@ export function isSuccessStatus(status: ValidatorStatus): boolean {
     status === 'passed' ||
     status === 'passed_with_warnings' ||
     status === 'no_applicable_gates' ||
-    status === 'no_changes'
+    status === 'no_changes' ||
+    status === 'trusted'
   );
 }

@@ -121,5 +121,15 @@ describe("ConsoleReporter", () => {
 			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Failed");
 		});
+
+		it("should write Trusted summary to stderr when status is overridden", async () => {
+			const reporter = new ConsoleReporter();
+
+			await reporter.printSummary([], undefined, "Trusted");
+
+			const output = errorOutput.join("");
+			expect(output).toContain("RESULTS SUMMARY");
+			expect(output).toContain("Status: Trusted");
+		});
 	});
 });

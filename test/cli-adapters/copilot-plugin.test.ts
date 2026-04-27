@@ -168,7 +168,7 @@ describe("GitHubCopilotAdapter execution", () => {
 				((...args: any[]) => {
 					const callback = args[args.length - 1];
 					if (typeof callback === "function") {
-						callback(new Error("Command failed"), "", "");
+						callback(new Error("copilot: command not found"), "", "");
 					}
 					// biome-ignore lint/suspicious/noExplicitAny: mock typing
 					return {} as any;
@@ -187,7 +187,7 @@ describe("GitHubCopilotAdapter execution", () => {
 				((...args: any[]) => {
 					const callback = args[args.length - 1];
 					if (typeof callback === "function") {
-						callback(new Error("Command failed"), "", "");
+						callback(new Error("copilot: command not found"), "", "");
 					}
 					// biome-ignore lint/suspicious/noExplicitAny: mock typing
 					return {} as any;
@@ -199,6 +199,31 @@ describe("GitHubCopilotAdapter execution", () => {
 				available: false,
 				status: "missing",
 				message: "Command not found",
+			});
+		});
+
+		it("returns unhealthy with the CLI error when copilot exists but cannot start", async () => {
+			execSpy = spyOn(childProcess, "exec").mockImplementation(
+				// biome-ignore lint/suspicious/noExplicitAny: mock typing
+				((...args: any[]) => {
+					const callback = args[args.length - 1];
+					if (typeof callback === "function") {
+						callback(
+							new Error("Command failed"),
+							"",
+							"ERROR: SecItemCopyMatching failed -50\n",
+						);
+					}
+					// biome-ignore lint/suspicious/noExplicitAny: mock typing
+					return {} as any;
+					// biome-ignore lint/suspicious/noExplicitAny: mock typing
+				}) as any,
+			);
+			const result = await adapter.checkHealth();
+			expect(result).toEqual({
+				available: true,
+				status: "unhealthy",
+				message: "ERROR: SecItemCopyMatching failed -50",
 			});
 		});
 	});

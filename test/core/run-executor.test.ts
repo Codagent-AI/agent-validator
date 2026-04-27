@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { TRUSTED_SNAPSHOT_DOCS_URL } from "../../src/core/trusted-message.js";
+import { isSuccessStatus } from "../../src/types/validator-status.js";
+import { getStatusMessage } from "../../src/core/run-executor-helpers.js";
 
 describe("run-executor logging", () => {
 	describe("LogTape integration", () => {
@@ -116,5 +119,15 @@ describe("run-executor auto-clean on retry_limit_exceeded", () => {
 		expect(sourceFile).toMatch(
 			/status\s*===\s*'passed'[\s\S]*?cleanLogs\([\s\S]*?config\.project\.max_previous_logs/,
 		);
+	});
+});
+
+describe("trusted status", () => {
+	it("treats trusted as success-equivalent", () => {
+		expect(isSuccessStatus("trusted")).toBe(true);
+	});
+
+	it("includes the trusted snapshot explanation link in status messages", () => {
+		expect(getStatusMessage("trusted")).toContain(TRUSTED_SNAPSHOT_DOCS_URL);
 	});
 });

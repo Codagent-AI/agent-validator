@@ -1,5 +1,7 @@
 import { exec, execFile } from 'node:child_process';
+import fs from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { gitStdoutWithInput } from '../utils/git.js';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -186,21 +188,173 @@ export class ChangeDetector {
   }
 
   private async getFixBaseChangedFiles(fixBase: string): Promise<string[]> {
-    // Use two-dot diff (direct content comparison) instead of three-dot diff.
-    // Three-dot diff resolves the merge-base first, which for stash refs
-    // (working_tree_ref) points to the pre-fix commit — producing false positives
-    // when the fix has been committed and the content matches the stash.
-    const { stdout: committed } = await execFileAsync('git', [
+    // Compare the fixBase snapshot directly against the current working tree.
+    // For stash refs, untracked files live in the ^3 parent and are invisible to
+    // git diff, so handle that tree explicitly below.
+    const { stdout: tracked } = await execFileAsync('git', [
       'diff',
       '--name-only',
       fixBase,
-      'HEAD',
     ]);
-    const files = new Set([
-      ...this.parseOutput(committed),
-      ...(await this.getWorkingTreeFiles()),
+    const files = new Set(this.parseOutput(tracked));
+    const snapshotUntracked = await this.getStashUntrackedFileHashes(fixBase);
+    const currentUntracked = new Set(
+      await this.getCurrentUntrackedChangedFiles(),
+    );
+    const currentFilesToHash = new Set([
+      ...currentUntracked,
+      ...snapshotUntracked.keys(),
     ]);
+    const currentHashes = await this.getCurrentFileHashes(currentFilesToHash);
+
+    for (const file of currentUntracked) {
+      const snapshotHash = snapshotUntracked.get(file);
+      const currentHash = currentHashes.get(file);
+      if (!snapshotHash) {
+        files.add(file);
+        continue;
+      }
+
+      if (snapshotHash === currentHash) {
+        files.delete(file);
+      } else {
+        files.add(file);
+      }
+    }
+
+    for (const file of snapshotUntracked.keys()) {
+      if (currentUntracked.has(file)) continue;
+
+      const snapshotHash = snapshotUntracked.get(file);
+      const currentHash = currentHashes.get(file);
+      if (snapshotHash === currentHash) {
+        files.delete(file);
+      } else {
+        files.add(file);
+      }
+    }
+
     return Array.from(files);
+  }
+
+  private async getCurrentUntrackedChangedFiles(): Promise<string[]> {
+    const { stdout } = await execFileAsync('git', [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '-z',
+    ]);
+    return this.parseNullOutput(stdout);
+  }
+
+  private async getStashUntrackedFileHashes(
+    fixBase: string,
+  ): Promise<Map<string, string>> {
+    try {
+      const { stdout: hashesStdout } = await execFileAsync('git', [
+        'ls-tree',
+        '-r',
+        '-z',
+        `${fixBase}^3`,
+      ]);
+      const entries = this.parseNullOutput(hashesStdout);
+      const hashes = new Map<string, string>();
+      for (const entry of entries) {
+        const tabIndex = entry.indexOf('\t');
+        if (tabIndex === -1) continue;
+        const meta = entry.slice(0, tabIndex);
+        const file = entry.slice(tabIndex + 1);
+        const [, type, hash] = meta.split(/\s+/);
+        if (type !== 'blob') continue;
+        if (hash && file) hashes.set(file, hash);
+      }
+      return hashes;
+    } catch (error) {
+      const err = error as { stderr?: string; message?: string };
+      const detail = `${err.stderr ?? ''}\n${err.message ?? ''}`;
+      if (!this.isMissingSnapshotTreeError(detail)) {
+        console.warn(
+          `Failed to inspect untracked files in fixBase snapshot: ${detail.trim()}`,
+        );
+      }
+      return new Map();
+    }
+  }
+
+  private isMissingSnapshotTreeError(detail: string): boolean {
+    return (
+      detail.includes('Not a valid object name') ||
+      detail.includes('unknown revision') ||
+      detail.includes('ambiguous argument')
+    );
+  }
+
+  private async splitHashableFiles(files: Iterable<string>): Promise<{
+    batchFiles: string[];
+    specialFiles: string[];
+  }> {
+    const batchFiles: string[] = [];
+    const specialFiles: string[] = [];
+    for (const file of files) {
+      try {
+        const stat = await fs.stat(file);
+        if (!stat.isFile()) continue;
+        if (file.includes('\n')) {
+          specialFiles.push(file);
+        } else {
+          batchFiles.push(file);
+        }
+      } catch {
+        // Missing files stay absent from the map and compare as changed.
+      }
+    }
+    return { batchFiles, specialFiles };
+  }
+
+  private async addBatchFileHashes(
+    result: Map<string, string>,
+    files: string[],
+  ): Promise<void> {
+    if (files.length === 0) return;
+    const stdout = await gitStdoutWithInput(
+      ['hash-object', '--stdin-paths'],
+      `${files.join('\n')}\n`,
+    );
+    const hashes = this.parseOutput(stdout);
+    for (const [index, file] of files.entries()) {
+      const hash = hashes[index];
+      if (hash) result.set(file, hash);
+    }
+  }
+
+  private async addSpecialFileHashes(
+    result: Map<string, string>,
+    files: string[],
+  ): Promise<void> {
+    for (const file of files) {
+      const { stdout } = await execFileAsync('git', [
+        'hash-object',
+        '--',
+        file,
+      ]);
+      const hash = stdout.trim();
+      if (hash) result.set(file, hash);
+    }
+  }
+
+  private async getCurrentFileHashes(
+    files: Iterable<string>,
+  ): Promise<Map<string, string>> {
+    const { batchFiles, specialFiles } = await this.splitHashableFiles(files);
+
+    if (batchFiles.length === 0 && specialFiles.length === 0) {
+      return new Map();
+    }
+
+    const result = new Map<string, string>();
+    await this.addBatchFileHashes(result, batchFiles);
+    await this.addSpecialFileHashes(result, specialFiles);
+    return result;
   }
 
   private async getUncommittedChangedFiles(): Promise<string[]> {
@@ -213,5 +367,9 @@ export class ChangeDetector {
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
+  }
+
+  private parseNullOutput(stdout: string): string[] {
+    return stdout.split('\0').filter((entry) => entry.length > 0);
   }
 }

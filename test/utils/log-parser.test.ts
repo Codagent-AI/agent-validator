@@ -67,6 +67,20 @@ Status: FAIL
 		expect(result.adapterFailures[0]?.adapterName).toBe("check");
 	});
 
+	it("returns failures for non-review logs with at-sign filenames", async () => {
+		const logPath = path.join(TEST_DIR, "build_eslint@1.3.log");
+		await fs.writeFile(
+			logPath,
+			"Some check output\nResult: error - Command failed",
+		);
+
+		const result = await parseLogFile(logPath);
+		expect(result).not.toBeNull();
+		expect(result?.jobId).toBe("build");
+		if (!result) throw new Error("Expected result");
+		expect(result.adapterFailures[0]?.adapterName).toBe("check");
+	});
+
 	it("returns null for passing review", async () => {
 		const logPath = path.join(TEST_DIR, "review_src_claude.1.log");
 		await fs.writeFile(
@@ -74,6 +88,23 @@ Status: FAIL
 			`--- Review Output (claude) ---
 --- Parsed Result ---
 Status: PASS
+`,
+		);
+
+		const result = await parseLogFile(logPath);
+		expect(result).toBeNull();
+	});
+
+	it("does not turn review adapter execution errors into check failures", async () => {
+		const logPath = path.join(
+			TEST_DIR,
+			"review_._all-reviewers_codex@1.4.log",
+		);
+		await fs.writeFile(
+			logPath,
+			`[START] review:.:all-reviewers (codex@1)
+Error running codex@1: Process exited with code 1
+Result: error - Failed to complete reviews. Expected: 1, Completed: 0.
 `,
 		);
 

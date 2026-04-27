@@ -162,7 +162,8 @@ function computeOverallStatus(
   statusOverride?: string,
 ): { overallStatus: string; statusColor: typeof chalk.green } {
   if (statusOverride) {
-    return { overallStatus: statusOverride, statusColor: chalk.red };
+    const color = statusOverride === 'Trusted' ? chalk.green : chalk.red;
+    return { overallStatus: statusOverride, statusColor: color };
   }
 
   const hasError = results.some((r) => r.status === 'error');

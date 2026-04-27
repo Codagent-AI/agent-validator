@@ -23,8 +23,12 @@ import {
   initDebugLogger,
   mergeDebugLogConfig,
 } from '../utils/debug-log.js';
+import { writeExecutionState } from '../utils/execution-state.js';
 import { resolveBaseBranch } from '../utils/git.js';
+import { pruneIfNeeded } from '../utils/trust-ledger.js';
+import { reconcileStartup } from './reconciliation.js';
 import {
+  appendRunTrustRecord,
   detectAndPrepareChanges,
   executeAndReport,
   finalizeAndReturn,
@@ -146,6 +150,10 @@ async function runWithLock(
   );
 
   if ('earlyResult' in prepared) {
+    if (prepared.earlyResult.status === 'no_applicable_gates') {
+      await writeExecutionState(ctx.config.project.log_dir);
+      await appendRunTrustRecord(ctx, prepared.earlyResult.status);
+    }
     if (ctx.options.report) {
       const reportText = await generateReport(
         prepared.earlyResult.status,
@@ -197,17 +205,6 @@ export async function executeRun(
 
   try {
     const config = await loadConfig(options.cwd);
-    const { ctx, loggerInitializedHere: lih } = await initRunContext(
-      options,
-      config,
-    );
-    loggerInitializedHere = lih;
-
-    await handleAutoClean(ctx);
-
-    const logsExist = await hasExistingLogs(config.project.log_dir);
-    const isRerun = logsExist && !options.commit;
-
     const lockAcquired = await tryAcquireLock(config.project.log_dir);
     if (!lockAcquired) {
       return finalizeAndReturn(loggerInitializedHere, {
@@ -217,6 +214,34 @@ export async function executeRun(
     }
 
     try {
+      await pruneIfNeeded();
+      const reconciliation = await reconcileStartup({
+        command: 'run',
+        config,
+        logDir: config.project.log_dir,
+        report: options.report,
+        options: {
+          gate: options.gate,
+          enableReviews: options.enableReviews,
+        },
+      });
+      if (reconciliation.kind === 'trusted') {
+        return reconciliation.result;
+      }
+
+      const { ctx, loggerInitializedHere: lih } = await initRunContext(
+        options,
+        config,
+      );
+      loggerInitializedHere = lih;
+      ctx.startupChangeOptions = reconciliation.changeOptions;
+      ctx.trustSourceOnPass = reconciliation.trustSourceOnPass;
+
+      await handleAutoClean(ctx);
+
+      const logsExist = await hasExistingLogs(config.project.log_dir);
+      const isRerun = logsExist && !options.commit;
+
       return await runWithLock(ctx, isRerun, logsExist);
     } finally {
       await releaseLock(config.project.log_dir);

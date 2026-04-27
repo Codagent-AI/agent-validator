@@ -11,6 +11,11 @@ import {
   getCurrentCommit,
   writeExecutionState,
 } from '../utils/execution-state.js';
+import {
+  appendCurrentTrustRecord,
+  DEFAULT_PRUNE_THRESHOLD,
+  pruneIfNeeded,
+} from '../utils/trust-ledger.js';
 import { acquireLock, cleanLogs, releaseLock } from './shared.js';
 
 export function registerSkipCommand(program: Command): void {
@@ -34,6 +39,7 @@ export function registerSkipCommand(program: Command): void {
         // Acquire lock BEFORE any state changes
         await acquireLock(config.project.log_dir);
         lockAcquired = true;
+        await pruneIfNeeded(DEFAULT_PRUNE_THRESHOLD);
 
         // Log the command invocation
         const debugLogger = getDebugLogger();
@@ -47,6 +53,14 @@ export function registerSkipCommand(program: Command): void {
 
         // Write execution state with current branch/commit/working-tree-ref
         await writeExecutionState(config.project.log_dir);
+        await appendCurrentTrustRecord({
+          config,
+          logDir: config.project.log_dir,
+          command: 'skip',
+          status: 'skipped',
+          source: 'manual-skip',
+          trusted: true,
+        });
 
         // Get abbreviated commit SHA for confirmation message
         const commit = await getCurrentCommit();

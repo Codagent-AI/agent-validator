@@ -6,11 +6,8 @@ import { EntryPointExpander } from '../core/entry-point.js';
 import { JobGenerator } from '../core/job.js';
 import { Runner } from '../core/runner.js';
 import { ConsoleReporter } from '../output/console.js';
-import {
-  type ConsoleLogHandle,
-  startConsoleLog,
-} from '../output/console-log.js';
-import { Logger } from '../output/logger.js';
+import type { Logger } from '../output/logger.js';
+import type { ValidatorStatus } from '../types/validator-status.js';
 import {
   type DebugLogger,
   getDebugLogger,
@@ -29,30 +26,26 @@ import {
   type PreviousViolation,
 } from '../utils/log-parser.js';
 import {
-  acquireLock,
+  appendCurrentTrustRecord,
+  type TrustRecordSource,
+} from '../utils/trust-ledger.js';
+import {
+  acquireAndReconcileGateStartup,
+  type ChangeOptions,
+  checkEarlyExit,
+  type GateCommandName,
+  type GateCommandOptions,
+  handleGateError,
+  initLoggerAfterLock,
+  type LockContext,
+} from './gate-command-support.js';
+import {
   cleanLogs,
   hasExistingLogs,
   performAutoClean,
   releaseLock,
   shouldAutoClean,
 } from './shared.js';
-
-type GateCommandName = 'check' | 'review';
-
-interface GateCommandOptions {
-  baseBranch?: string;
-  gate?: string;
-  commit?: string;
-  uncommitted?: boolean;
-  enableReviews?: Set<string>;
-  contextContent?: string;
-}
-
-interface ChangeOptions {
-  commit?: string;
-  uncommitted?: boolean;
-  fixBase?: string;
-}
 
 interface InitResult {
   config: Awaited<ReturnType<typeof loadConfig>>;
@@ -187,6 +180,7 @@ async function resolveChangeOptions(
   options: GateCommandOptions,
   rerunChangeOptions: ChangeOptions | undefined,
   logsExist: boolean,
+  startupChangeOptions?: ChangeOptions,
 ): Promise<ChangeOptions | undefined> {
   let changeOptions = rerunChangeOptions;
 
@@ -212,6 +206,13 @@ async function resolveChangeOptions(
       commit: options.commit,
       uncommitted: options.uncommitted,
       fixBase: changeOptions?.fixBase,
+    };
+  }
+
+  if (startupChangeOptions?.fixBase && !options.commit) {
+    changeOptions = {
+      ...changeOptions,
+      fixBase: startupChangeOptions.fixBase,
     };
   }
 
@@ -261,6 +262,15 @@ async function detectChangesAndGenerateJobs(
 }
 
 /** Create runner, execute jobs, log results, and clean up. */
+function statusFromOutcome(outcome: {
+  allPassed: boolean;
+  anySkipped: boolean;
+}): ValidatorStatus {
+  if (!outcome.allPassed) return 'failed';
+  if (outcome.anySkipped) return 'passed_with_warnings';
+  return 'passed';
+}
+
 async function executeAndFinalize(
   config: Awaited<ReturnType<typeof loadConfig>>,
   logger: Logger,
@@ -273,6 +283,9 @@ async function executeAndFinalize(
   changes: string[],
   jobs: Awaited<ReturnType<JobGenerator['generateJobs']>>,
   contextContent?: string,
+  commandName?: GateCommandName,
+  options?: GateCommandOptions,
+  trustSourceOnPass?: TrustRecordSource,
 ): Promise<boolean> {
   const runMode = isRerun ? 'verification' : 'full';
   await debugLogger?.logRunStart(runMode, changes.length, jobs.length);
@@ -310,99 +323,22 @@ async function executeAndFinalize(
 
   // Write execution state AFTER clean so the file always survives.
   await writeExecutionState(config.project.log_dir);
+  if (commandName && options) {
+    const status = statusFromOutcome(outcome);
+    await appendCurrentTrustRecord({
+      config,
+      logDir: config.project.log_dir,
+      command: commandName,
+      status,
+      source: trustSourceOnPass ?? 'validated',
+      options: {
+        gate: options.gate,
+        enableReviews: options.enableReviews,
+      },
+    });
+  }
 
   return outcome.allPassed;
-}
-
-/** Handle early exit when no changes or no applicable jobs are found. */
-async function handleNoWork(
-  logDir: string,
-  restoreConsole: ConsoleLogHandle | undefined,
-  failuresMap?: Map<string, Map<string, PreviousViolation[]>>,
-): Promise<never> {
-  // Match run-executor's handleNoChanges: outstanding violations → fail, don't advance state.
-  if (failuresMap && failuresMap.size > 0) {
-    let total = 0;
-    for (const am of failuresMap.values())
-      for (const v of am.values()) total += v.length;
-    console.log(
-      chalk.yellow(
-        `No changes detected — ${total} violation(s) still outstanding.`,
-      ),
-    );
-    await releaseLock(logDir);
-    restoreConsole?.restore();
-    process.exit(1);
-  }
-  await writeExecutionState(logDir);
-  await releaseLock(logDir);
-  restoreConsole?.restore();
-  process.exit(0);
-}
-
-/** Check for early exit conditions (no changes or no jobs). */
-async function checkEarlyExit(
-  changes: string[],
-  jobs: unknown[],
-  commandName: GateCommandName,
-  logDir: string,
-  restoreConsole: ConsoleLogHandle | undefined,
-  failuresMap?: Map<string, Map<string, PreviousViolation[]>>,
-): Promise<void> {
-  if (changes.length === 0) {
-    await handleNoWork(logDir, restoreConsole, failuresMap);
-  }
-  if (jobs.length === 0) {
-    console.log(
-      chalk.yellow(`No applicable ${commandName}s for these changes.`),
-    );
-    await handleNoWork(logDir, restoreConsole);
-  }
-}
-
-interface LockContext {
-  logger: Logger;
-  restoreConsole: ConsoleLogHandle;
-}
-
-/** Acquire lock, initialize logger, and start console log capture. */
-async function acquireLockAndInitLogger(logDir: string): Promise<LockContext> {
-  await acquireLock(logDir);
-
-  const logger = new Logger(logDir);
-  await logger.init();
-  const runNumber = logger.getRunNumber();
-
-  const restoreConsole = await startConsoleLog(logDir, runNumber);
-  return { logger, restoreConsole };
-}
-
-/** Handle error during gate command execution. */
-async function handleGateError(
-  error: unknown,
-  config: Awaited<ReturnType<typeof loadConfig>> | undefined,
-  lockAcquired: boolean,
-  restoreConsole: ConsoleLogHandle | undefined,
-): Promise<never> {
-  if (config && lockAcquired) {
-    try {
-      await writeExecutionState(config.project.log_dir);
-    } catch {
-      // Ignore errors writing state during error handling
-    }
-    try {
-      await releaseLock(config.project.log_dir);
-    } catch (releaseErr) {
-      console.error(
-        chalk.yellow('Warning: failed to release lock:'),
-        (releaseErr as Error).message,
-      );
-    }
-  }
-  const err = error as { message?: string };
-  console.error(chalk.red('Error:'), err.message);
-  restoreConsole?.restore();
-  process.exit(1);
 }
 
 const NO_RERUN: RerunResult = {
@@ -411,6 +347,42 @@ const NO_RERUN: RerunResult = {
   passedSlotsMap: undefined,
   changeOptions: undefined,
 };
+
+async function prepareGateWork(args: {
+  config: Awaited<ReturnType<typeof loadConfig>>;
+  logDir: string;
+  effectiveBaseBranch: string;
+  options: GateCommandOptions;
+  commandName: GateCommandName;
+  startupChangeOptions?: ChangeOptions;
+}): Promise<{
+  rerunResult: RerunResult;
+  changeOptions: ChangeOptions | undefined;
+  changes: string[];
+  jobs: Awaited<ReturnType<JobGenerator['generateJobs']>>;
+}> {
+  const logsExist = await hasExistingLogs(args.logDir);
+  const isRerun = detectRerunMode(logsExist, args.options.commit);
+  const rerunResult = isRerun
+    ? await processRerunMode(args.logDir, args.options)
+    : NO_RERUN;
+  const changeOptions = await resolveChangeOptions(
+    args.logDir,
+    args.effectiveBaseBranch,
+    args.options,
+    rerunResult.changeOptions,
+    logsExist,
+    args.startupChangeOptions,
+  );
+  const { changes, jobs } = await detectChangesAndGenerateJobs(
+    args.config,
+    args.effectiveBaseBranch,
+    changeOptions,
+    args.options,
+    args.commandName,
+  );
+  return { rerunResult, changeOptions, changes, jobs };
+}
 
 /**
  * Shared gate command executor for both "check" and "review" commands.
@@ -422,12 +394,20 @@ export async function executeGateCommand(
 ): Promise<void> {
   let config: Awaited<ReturnType<typeof loadConfig>> | undefined;
   let lockAcquired = false;
-  let restoreConsole: ConsoleLogHandle | undefined;
+  let restoreConsole: LockContext['restoreConsole'] | undefined;
   try {
     const initResult = await initializeDebugLogger(commandName, options);
     config = initResult.config;
     const { debugLogger, effectiveBaseBranch } = initResult;
     const logDir = config.project.log_dir;
+
+    const reconciliation = await acquireAndReconcileGateStartup({
+      commandName,
+      config,
+      logDir,
+      options,
+    });
+    lockAcquired = true;
 
     await handleAutoClean(
       logDir,
@@ -436,32 +416,17 @@ export async function executeGateCommand(
       config.project.max_previous_logs,
     );
 
-    // Detect rerun mode after auto-clean (clean may have removed logs)
-    const logsExist = await hasExistingLogs(logDir);
-    const isRerun = detectRerunMode(logsExist, options.commit);
-
-    const lockCtx = await acquireLockAndInitLogger(logDir);
-    lockAcquired = true;
+    const lockCtx = await initLoggerAfterLock(logDir);
     restoreConsole = lockCtx.restoreConsole;
-
-    const rerunResult = isRerun
-      ? await processRerunMode(logDir, options)
-      : NO_RERUN;
-
-    const changeOptions = await resolveChangeOptions(
-      logDir,
-      effectiveBaseBranch,
-      options,
-      rerunResult.changeOptions,
-      logsExist,
-    );
-
-    const { changes, jobs } = await detectChangesAndGenerateJobs(
-      config,
-      effectiveBaseBranch,
-      changeOptions,
-      options,
-      commandName,
+    const { rerunResult, changeOptions, changes, jobs } = await prepareGateWork(
+      {
+        config,
+        logDir,
+        effectiveBaseBranch,
+        options,
+        commandName,
+        startupChangeOptions: reconciliation.changeOptions,
+      },
     );
 
     await checkEarlyExit(
@@ -471,6 +436,7 @@ export async function executeGateCommand(
       logDir,
       restoreConsole,
       rerunResult.failuresMap,
+      { config, options, source: reconciliation.trustSourceOnPass },
     );
 
     console.log(chalk.dim(`Running ${jobs.length} ${commandName}(s)...`));
@@ -487,6 +453,9 @@ export async function executeGateCommand(
       changes,
       jobs,
       options.contextContent,
+      commandName,
+      options,
+      reconciliation.trustSourceOnPass,
     );
 
     await releaseLock(logDir);
