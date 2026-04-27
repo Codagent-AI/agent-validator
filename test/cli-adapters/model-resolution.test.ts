@@ -27,6 +27,16 @@ describe("resolveModelFromList", () => {
 		).toBe("gpt-5.3-codex");
 	});
 
+	it("uses exact model id when listed", () => {
+		const models = ["composer-1.5", "composer-2", "composer-2-fast"];
+		expect(
+			resolveModelFromList(models, {
+				baseName: "composer-2",
+				preferThinking: false,
+			}),
+		).toBe("composer-2");
+	});
+
 	it("excludes tier variants", () => {
 		const models = ["gpt-5.3-codex", "gpt-5.3-codex-low", "gpt-5.3-codex-high"];
 		expect(

@@ -1,8 +1,9 @@
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import YAML from "yaml";
 import { getAdapter } from "../src/cli-adapters/index.js";
+import { loadBuiltInReview } from "../src/built-in-reviews/index.js";
 // Re-export JSON_SYSTEM_INSTRUCTION from review gate
 import { JSON_SYSTEM_INSTRUCTION } from "../src/gates/review.js";
 import { runAdapter } from "./adapter-runner.js";
@@ -31,6 +32,8 @@ interface AdapterConfig {
 
 interface EvalConfig {
 	fixture: string;
+	/** When set, load prompt via `loadBuiltInReview` (combined built-ins: `all-reviewers`, `security-and-errors`, …). */
+	builtin_prompt?: string;
 	reviewer?: string;
 	adapters: (EvalAdapterName | AdapterConfig)[];
 	runs_per_config: number;
@@ -38,10 +41,14 @@ interface EvalConfig {
 	judge: {
 		adapter: EvalAdapterName;
 		thinking_budget: string;
+		/** Passed to the judge adapter (e.g. Copilot `--model`). */
+		model?: string;
 	};
 }
 
 export interface RunEvalOptions {
+	/** Path to eval YAML (absolute, or relative to cwd or evals/). Default: evals/eval-config.yml */
+	evalConfigPath?: string;
 	adapterFilter?: string;
 	configFilter?: string;
 	dryRun?: boolean;
@@ -52,6 +59,7 @@ export interface RunEvalOptions {
 const VERSION_COMMANDS: Record<EvalAdapterName, string> = {
 	claude: "claude --version",
 	codex: "codex --version",
+	cursor: "agent --version",
 	gemini: "gemini --version",
 	"github-copilot": "copilot --version",
 };
@@ -88,7 +96,23 @@ const MODEL_DETECTORS: Record<EvalAdapterName, () => string | undefined> = {
 		} catch { return undefined; }
 	},
 	"github-copilot": () => undefined,
+	cursor: () => undefined,
 };
+
+/** Resolve eval YAML path: absolute paths as-is; otherwise prefer cwd, then evals/. */
+function resolveEvalConfigPath(
+	evalsDir: string,
+	explicit: string | undefined,
+): string {
+	const defaultPath = resolve(evalsDir, "eval-config.yml");
+	if (!explicit) return defaultPath;
+	if (isAbsolute(explicit)) return explicit;
+	const fromCwd = resolve(process.cwd(), explicit);
+	if (existsSync(fromCwd)) return fromCwd;
+	const fromEvals = resolve(evalsDir, explicit);
+	if (existsSync(fromEvals)) return fromEvals;
+	return fromCwd;
+}
 
 function getAdapterVersionInfo(
 	adapter: EvalAdapterName,
@@ -111,7 +135,7 @@ export async function runEval(
 	const evalsDir = dirname(new URL(import.meta.url).pathname);
 
 	// Load eval config
-	const configPath = resolve(evalsDir, "eval-config.yml");
+	const configPath = resolveEvalConfigPath(evalsDir, options.evalConfigPath);
 	const configRaw = readFileSync(configPath, "utf-8");
 	const evalConfig: EvalConfig = YAML.parse(configRaw);
 
@@ -135,20 +159,44 @@ export async function runEval(
 		);
 	}
 
-	// Build review prompt — use reviewer config, or infer from fixture directory name
+	// Build review prompt — optional builtin_prompt loads combined built-ins only; else .md then fallback
 	const fixtureBasename = evalConfig.fixture.split("/").pop() ?? "code-quality";
-	const promptFile = `${evalConfig.reviewer ?? fixtureBasename}.md`;
-	const promptPath = resolve(
-		evalsDir,
-		`../src/built-in-reviews/${promptFile}`,
-	);
-	if (!existsSync(promptPath)) {
-		throw new Error(
-			`Review prompt not found: ${promptPath}\n` +
-			`Set "reviewer" in eval-config.yml to an existing built-in review name.`,
+	const reviewKey =
+		evalConfig.builtin_prompt ?? evalConfig.reviewer ?? fixtureBasename;
+	let promptContent: string;
+	if (evalConfig.builtin_prompt) {
+		try {
+			promptContent = loadBuiltInReview(reviewKey);
+		} catch (error) {
+			const underlying =
+				error instanceof Error ? error.message : String(error);
+			throw new Error(
+				`Failed to load built-in review "${reviewKey}": ${underlying}\n` +
+					`Set "builtin_prompt" to a valid name (e.g. all-reviewers, security-and-errors).`,
+			);
+		}
+	} else {
+		const promptPath = resolve(
+			evalsDir,
+			`../src/built-in-reviews/${reviewKey}.md`,
 		);
+		if (existsSync(promptPath)) {
+			promptContent = readFileSync(promptPath, "utf-8");
+		} else {
+			try {
+				promptContent = loadBuiltInReview(reviewKey);
+			} catch (error) {
+				const underlying =
+					error instanceof Error ? error.message : String(error);
+				throw new Error(
+					`Review prompt not found: ${promptPath}\n` +
+						`Set "builtin_prompt" to a combined built-in (e.g. all-reviewers, security-and-errors), ` +
+						`or "reviewer" to an existing built-in name.\n` +
+						`Underlying error: ${underlying}`,
+				);
+			}
+		}
 	}
-	const promptContent = readFileSync(promptPath, "utf-8");
 	const fullPrompt = `${promptContent}\n${JSON_SYSTEM_INSTRUCTION}`;
 
 	// Generate eval matrix — one entry per adapter config (no cross-product)
@@ -295,6 +343,7 @@ export async function runEval(
 						groundTruth,
 						evalConfig.judge.adapter,
 						evalConfig.judge.thinking_budget,
+						{ model: evalConfig.judge.model },
 					);
 					judgeResultsByRun.set(result, judgeResult);
 					console.log(

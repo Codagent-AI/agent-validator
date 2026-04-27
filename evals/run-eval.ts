@@ -9,6 +9,7 @@ function getArg(name: string): string | undefined {
 }
 
 const options = {
+	evalConfigPath: getArg("eval-config"),
 	adapterFilter: getArg("adapter"),
 	configFilter: getArg("config"),
 	dryRun: args.includes("--dry-run"),
@@ -20,6 +21,8 @@ console.log("=====================");
 
 if (options.dryRun) console.log("Mode: dry run (no adapter calls)");
 if (options.skipJudge) console.log("Mode: skip judge scoring");
+if (options.evalConfigPath)
+	console.log(`Eval config: ${options.evalConfigPath}`);
 if (options.adapterFilter)
 	console.log(`Filter: adapter=${options.adapterFilter}`);
 if (options.configFilter) console.log(`Filter: config=${options.configFilter}`);
