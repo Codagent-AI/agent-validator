@@ -64,6 +64,12 @@ auto-clean flow.
 current clean `HEAD` is trusted, `detect` reports no changes without rewriting
 `.execution_state` or appending ledger records.
 
+If the worktree is still dirty after a successful run or skip, `detect` does
+not use the ledger. It uses `.execution_state.working_tree_ref` as the baseline
+and compares the current worktree to that full snapshot, including untracked
+files captured by the stash. If nothing changed since the validated dirty
+snapshot, `detect` reports no changes before you commit.
+
 ## Merge Behavior
 
 For a two-parent merge commit, reconciliation checks whether the parents are

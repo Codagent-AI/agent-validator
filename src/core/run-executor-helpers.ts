@@ -30,6 +30,7 @@ import { EntryPointExpander } from './entry-point.js';
 import { JobGenerator } from './job.js';
 import { findLatestConsoleLog, tryAcquireLock } from './run-executor-lock.js';
 import { Runner } from './runner.js';
+import { TRUSTED_SNAPSHOT_MESSAGE } from './trusted-message.js';
 
 // Re-export lock helpers so existing imports from run-executor-helpers still work
 export { findLatestConsoleLog, tryAcquireLock };
@@ -65,7 +66,7 @@ const statusMessages: Record<ValidatorStatus, string> = {
   passed_with_warnings: 'Passed with warnings -- some issues were skipped.',
   no_applicable_gates: 'No applicable gates for these changes.',
   no_changes: 'No changes detected.',
-  trusted: 'Trusted snapshot; baseline advanced.',
+  trusted: TRUSTED_SNAPSHOT_MESSAGE,
   failed: 'Gates failed -- issues must be fixed.',
   retry_limit_exceeded:
     'Retry limit exceeded -- logs have been automatically archived.',

@@ -60,7 +60,7 @@ v1 does NOT gate trust on `config_hash`. The field is recorded for audit and fut
 
 Reconciliation inserts into the run flow **after lock acquisition, before `runWithLock()` is called**. In `src/core/run-executor.ts`, this is between the `tryAcquireLock()` success and the `runWithLock()` call. If reconciliation short-circuits (HEAD is trusted), it:
 - Rewrites `.execution_state` (branch=current, commit=HEAD, working_tree_ref=HEAD)
-- Prints "Trusted snapshot; baseline advanced."
+- Prints "Trusted snapshot; baseline advanced." with a GitHub link to the trusted snapshots documentation.
 - Releases the lock
 - Returns without ever initializing the logger or creating gate logs
 
@@ -192,7 +192,7 @@ The `trusted` status is a success status (exit code 0). When reconciliation shor
 - No console log file is created
 - The run count is not incremented
 - If `--report` is used, structured output includes the status
-- The message is: "Trusted snapshot; baseline advanced."
+- The message includes "Trusted snapshot; baseline advanced." and a GitHub link to the trusted snapshots documentation.
 
 ## Decisions
 

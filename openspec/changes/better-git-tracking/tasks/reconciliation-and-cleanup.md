@@ -72,7 +72,7 @@ When reconciliation short-circuits:
 - No console log file is created
 - The run count is NOT incremented
 - If `--report` is used, structured output includes the status
-- The message is: "Trusted snapshot; baseline advanced."
+- The message includes "Trusted snapshot; baseline advanced." and a GitHub link to the trusted snapshots documentation.
 
 ### Auto-clean interaction
 
@@ -93,7 +93,7 @@ The shared ledger makes trust visible across worktrees automatically. Users merg
 ### Requirement: Startup Reconciliation
 On every `run`, `check`, and `review` invocation, the system SHALL perform ledger reconciliation BEFORE the existing auto-clean step. If the working tree is dirty, reconciliation SHALL be skipped entirely and existing auto-clean proceeds unchanged (including branch-mismatch auto-clean, which fires regardless of dirty state). If the tree is clean, reconciliation SHALL check trust in the following order:
 
-1. **HEAD already trusted** (by commit or tree match): rewrite `.execution_state` (branch=current, commit=HEAD, working_tree_ref=HEAD), exit with status `trusted` (exit code 0), message "Trusted snapshot; baseline advanced." If trust was found via tree match (dirty-tree record with `commit: null`), a materialized commit record SHALL be appended with `source: "ledger-reconciled"`, `commit: HEAD`, `tree: HEAD^{tree}`.
+1. **HEAD already trusted** (by commit or tree match): rewrite `.execution_state` (branch=current, commit=HEAD, working_tree_ref=HEAD), exit with status `trusted` (exit code 0), and print a message that includes "Trusted snapshot; baseline advanced." plus a GitHub link to the trusted snapshots documentation. If trust was found via tree match (dirty-tree record with `commit: null`), a materialized commit record SHALL be appended with `source: "ledger-reconciled"`, `commit: HEAD`, `tree: HEAD^{tree}`.
 2. **HEAD is a 2-parent merge, both parents trusted — unified merge path**: compute the synthetic automatic merge tree via `git merge-tree --write-tree parent1 parent2`, then diff it against HEAD's tree. If the diff is empty, auto-trust HEAD. If the diff is non-empty (merge-resolution delta), validate only the delta files with `fixBase` set to the synthetic merge tree. If scoped validation passes, write a trusted record for HEAD.
 3. **HEAD is a 2-parent merge, exactly one parent trusted**: set `fixBase` to the trusted parent's commit. Validation SHALL diff HEAD against the trusted parent (capturing both the untrusted parent's changes and any merge resolution edits).
 4. **HEAD has >2 parents**: no auto-promotion, validate normally.
@@ -161,7 +161,8 @@ The validator SHALL support a `trusted` status for runs that short-circuit via l
 #### Scenario: Trusted status on reconciliation short-circuit
 - **WHEN** ledger reconciliation determines HEAD is trusted
 - **THEN** the validator SHALL exit with status `trusted` and exit code 0
-- **AND** the message SHALL be "Trusted snapshot; baseline advanced."
+- **AND** the message SHALL include "Trusted snapshot; baseline advanced."
+- **AND** the message SHALL include a GitHub link to the trusted snapshots documentation
 
 #### Scenario: Trusted is success-equivalent
 - **WHEN** the validator exits with status `trusted`

@@ -6,7 +6,8 @@ The validator SHALL support a `trusted` status for `run`, `check`, and `review` 
 #### Scenario: Trusted status on reconciliation short-circuit
 - **WHEN** ledger reconciliation determines HEAD is trusted
 - **THEN** the validator SHALL exit with status `trusted` and exit code 0
-- **AND** the message SHALL be "Trusted snapshot; baseline advanced."
+- **AND** the message SHALL include "Trusted snapshot; baseline advanced."
+- **AND** the message SHALL include a GitHub link to the trusted snapshots documentation
 
 #### Scenario: Trusted is success-equivalent
 - **WHEN** the validator exits with status `trusted`

@@ -140,7 +140,7 @@ The `source`, `status`, `scope`, `scope_hash`, and `config_hash` fields are reco
 ### Requirement: Startup Reconciliation
 On every `run`, `check`, and `review` invocation, the system SHALL perform ledger reconciliation BEFORE the existing auto-clean step. If the working tree is dirty, reconciliation SHALL be skipped entirely and existing auto-clean proceeds unchanged (including branch-mismatch auto-clean, which fires regardless of dirty state). If the tree is clean, reconciliation SHALL check trust in the following order:
 
-1. **HEAD already trusted** (by commit or tree match): rewrite `.execution_state` (branch=current, commit=HEAD, working_tree_ref=HEAD), exit with status `trusted` (exit code 0), message "Trusted snapshot; baseline advanced." If trust was found via tree match (dirty-tree record with `commit: null`), a materialized commit record SHALL be appended with `source: "ledger-reconciled"`, `commit: HEAD`, `tree: HEAD^{tree}`.
+1. **HEAD already trusted** (by commit or tree match): rewrite `.execution_state` (branch=current, commit=HEAD, working_tree_ref=HEAD), exit with status `trusted` (exit code 0), and print a message that includes "Trusted snapshot; baseline advanced." plus a GitHub link to the trusted snapshots documentation. If trust was found via tree match (dirty-tree record with `commit: null`), a materialized commit record SHALL be appended with `source: "ledger-reconciled"`, `commit: HEAD`, `tree: HEAD^{tree}`.
 2. **HEAD is a 2-parent merge, both parents trusted — unified merge path**: compute the synthetic automatic merge tree via `git merge-tree --write-tree parent1 parent2`, then diff it against HEAD's tree. If the diff is empty, auto-trust HEAD. If the diff is non-empty (merge-resolution delta), validate only the delta files with `fixBase` set to the synthetic merge tree. If scoped validation passes, write a trusted record for HEAD.
 3. **HEAD is a 2-parent merge, exactly one parent trusted**: set `fixBase` to the trusted parent's commit. Validation SHALL diff HEAD against the trusted parent (capturing both the untrusted parent's changes and any merge resolution edits).
 4. **HEAD has >2 parents**: no auto-promotion, validate normally.
@@ -216,7 +216,7 @@ On every `run`, `check`, and `review` invocation, the system SHALL perform ledge
 - **AND** the validator SHALL proceed with normal validation
 
 ### Requirement: Detect Trust Reconciliation
-On every `detect` invocation without explicit `--commit` or `--uncommitted` diff source overrides, the system SHALL perform read-only trust reconciliation before normal change detection. Detect trust reconciliation SHALL use the same trust lookup and merge-parent analysis as startup reconciliation, but it SHALL NOT mutate `.execution_state`, append ledger records, acquire the run lock, prune the ledger, initialize loggers, or report the `trusted` validator status. If the working tree is dirty, detect trust reconciliation SHALL be skipped and `detect` SHALL use its existing change detection behavior.
+On every `detect` invocation without explicit `--commit` or `--uncommitted` diff source overrides, the system SHALL perform read-only trust reconciliation before normal change detection. Detect trust reconciliation SHALL use the same trust lookup and merge-parent analysis as startup reconciliation, but it SHALL NOT mutate `.execution_state`, append ledger records, acquire the run lock, prune the ledger, initialize loggers, or report the `trusted` validator status. If the working tree is dirty, detect trust reconciliation SHALL be skipped and `detect` SHALL use its existing execution-state change detection behavior. When that behavior uses `working_tree_ref` as `fixBase`, it SHALL compare the current working tree to the full `working_tree_ref` snapshot, including untracked files captured in the stash `^3` parent when present.
 
 #### Scenario: Detect sees HEAD trusted by commit
 - **WHEN** `agent-validator detect` runs on a clean worktree
@@ -259,6 +259,14 @@ On every `detect` invocation without explicit `--commit` or `--uncommitted` diff
 - **WHEN** `agent-validator detect --commit <sha>` or `agent-validator detect --uncommitted` runs
 - **THEN** trust reconciliation SHALL NOT short-circuit or alter the requested diff source
 - **AND** detect SHALL use the explicit diff source requested by the user
+
+#### Scenario: Dirty detect sees working tree still matches validated snapshot
+- **GIVEN** `.execution_state` contains `working_tree_ref` from a previous successful dirty-tree validation
+- **AND** the current dirty working tree still matches that full `working_tree_ref` snapshot
+- **WHEN** `agent-validator detect` runs
+- **THEN** dirty-tree trust reconciliation SHALL be skipped
+- **AND** execution-state change detection SHALL report no changed files
+- **AND** untracked files captured in `working_tree_ref^3` SHALL NOT be reported as new changes unless their content changed after the snapshot
 
 ### Requirement: Ledger Pruning
 The system SHALL periodically prune ledger records whose content is no longer relevant. For records with a non-null `commit`, the commit MUST be reachable from a local ref. For records with `commit: null` (dirty-tree records), the `working_tree_ref` object MUST still exist in git (not garbage collected). Reachability SHALL be checked via `git rev-list --all`; object existence via `git cat-file -t`. Pruning SHALL rewrite the file atomically (write to temp file, rename). Pruning SHALL be triggered when the ledger exceeds 1000 lines, checked at startup before reconciliation.

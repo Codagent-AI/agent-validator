@@ -1,5 +1,7 @@
 import { exec, execFile } from 'node:child_process';
+import fs from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { gitStdoutWithInput } from '../utils/git.js';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -186,21 +188,110 @@ export class ChangeDetector {
   }
 
   private async getFixBaseChangedFiles(fixBase: string): Promise<string[]> {
-    // Use two-dot diff (direct content comparison) instead of three-dot diff.
-    // Three-dot diff resolves the merge-base first, which for stash refs
-    // (working_tree_ref) points to the pre-fix commit — producing false positives
-    // when the fix has been committed and the content matches the stash.
-    const { stdout: committed } = await execFileAsync('git', [
+    // Compare the fixBase snapshot directly against the current working tree.
+    // For stash refs, untracked files live in the ^3 parent and are invisible to
+    // git diff, so handle that tree explicitly below.
+    const { stdout: tracked } = await execFileAsync('git', [
       'diff',
       '--name-only',
       fixBase,
-      'HEAD',
     ]);
-    const files = new Set([
-      ...this.parseOutput(committed),
-      ...(await this.getWorkingTreeFiles()),
+    const files = new Set(this.parseOutput(tracked));
+    const snapshotUntracked = await this.getStashUntrackedFileHashes(fixBase);
+    const currentUntracked = new Set(
+      await this.getCurrentUntrackedChangedFiles(),
+    );
+    const currentFilesToHash = new Set([
+      ...currentUntracked,
+      ...snapshotUntracked.keys(),
     ]);
+    const currentHashes = await this.getCurrentFileHashes(currentFilesToHash);
+
+    for (const file of currentUntracked) {
+      if (!snapshotUntracked.has(file)) {
+        files.add(file);
+        continue;
+      }
+
+      if (snapshotUntracked.get(file) !== currentHashes.get(file)) {
+        files.add(file);
+      } else {
+        files.delete(file);
+      }
+    }
+
+    for (const file of snapshotUntracked.keys()) {
+      if (currentUntracked.has(file)) continue;
+
+      if (snapshotUntracked.get(file) !== currentHashes.get(file)) {
+        files.add(file);
+      } else {
+        files.delete(file);
+      }
+    }
+
     return Array.from(files);
+  }
+
+  private async getCurrentUntrackedChangedFiles(): Promise<string[]> {
+    const { stdout } = await execFileAsync('git', [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+    ]);
+    return this.parseOutput(stdout);
+  }
+
+  private async getStashUntrackedFileHashes(
+    fixBase: string,
+  ): Promise<Map<string, string>> {
+    try {
+      const { stdout: hashesStdout } = await execFileAsync('git', [
+        'ls-tree',
+        '-r',
+        '-z',
+        `${fixBase}^3`,
+      ]);
+      const entries = hashesStdout.split('\0').filter(Boolean);
+      const hashes = new Map<string, string>();
+      for (const entry of entries) {
+        const match = /^\d+\s+blob\s+([0-9a-f]+)\t(.+)$/.exec(entry);
+        const hash = match?.[1];
+        const file = match?.[2];
+        if (hash && file) hashes.set(file, hash);
+      }
+      return hashes;
+    } catch {
+      return new Map();
+    }
+  }
+
+  private async getCurrentFileHashes(
+    files: Iterable<string>,
+  ): Promise<Map<string, string>> {
+    const existingFiles: string[] = [];
+    for (const file of files) {
+      try {
+        const stat = await fs.stat(file);
+        if (stat.isFile()) existingFiles.push(file);
+      } catch {
+        // Missing files stay absent from the map and compare as changed.
+      }
+    }
+
+    if (existingFiles.length === 0) return new Map();
+
+    const stdout = await gitStdoutWithInput(
+      ['hash-object', '--stdin-paths'],
+      `${existingFiles.join('\n')}\n`,
+    );
+    const hashes = this.parseOutput(stdout);
+    const result = new Map<string, string>();
+    for (const [index, file] of existingFiles.entries()) {
+      const hash = hashes[index];
+      if (hash) result.set(file, hash);
+    }
+    return result;
   }
 
   private async getUncommittedChangedFiles(): Promise<string[]> {

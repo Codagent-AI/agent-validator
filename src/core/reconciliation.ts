@@ -15,8 +15,7 @@ import {
   type TrustRecordSource,
 } from '../utils/trust-ledger.js';
 import type { ChangeOptions, LoadedConfig } from './run-executor-helpers.js';
-
-const TRUSTED_MESSAGE = 'Trusted snapshot; baseline advanced.';
+import { TRUSTED_SNAPSHOT_MESSAGE } from './trusted-message.js';
 
 export interface ReconciliationTrusted {
   kind: 'trusted';
@@ -61,7 +60,7 @@ async function trustedResult(
   await writeExecutionState(args.logDir);
   const result: RunResult = {
     status: 'trusted',
-    message: TRUSTED_MESSAGE,
+    message: TRUSTED_SNAPSHOT_MESSAGE,
     gatesRun: 0,
   };
   if (args.report) {

@@ -113,7 +113,12 @@ describe("startup reconciliation", () => {
 		expect(result.kind).toBe("trusted");
 		if (result.kind === "trusted") {
 			expect(result.result.status).toBe("trusted");
-			expect(result.result.message).toBe("Trusted snapshot; baseline advanced.");
+			expect(result.result.message).toContain(
+				"Trusted snapshot; baseline advanced.",
+			);
+			expect(result.result.message).toContain(
+				"https://github.com/Codagent-AI/agent-validator/blob/main/docs/trusted-snapshots.md",
+			);
 		}
 		const state = await readExecutionState(logDir);
 		expect(state?.commit).toBe(head);
