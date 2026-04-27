@@ -42,7 +42,7 @@ function testConfig(logDir: string): LoadedConfig {
 	} as unknown as LoadedConfig;
 }
 
-describe("trust ledger full dirty-tree snapshots", () => {
+describe.serial("trust ledger full dirty-tree snapshots", () => {
 	beforeEach(async () => {
 		originalCwd = process.cwd();
 		repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-ledger-tree-"));
@@ -69,7 +69,7 @@ describe("trust ledger full dirty-tree snapshots", () => {
 	it("records a tree that matches the later commit when dirty validation included untracked files", async () => {
 		await fs.writeFile(path.join(repoDir, "tracked.ts"), "export const a = 2;\n");
 		await fs.writeFile(
-			path.join(repoDir, "untracked.ts"),
+			path.join(repoDir, "zz-café.ts "),
 			"export const b = 1;\n",
 		);
 

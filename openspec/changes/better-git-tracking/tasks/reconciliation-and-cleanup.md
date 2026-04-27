@@ -18,7 +18,7 @@ loadConfig → initContext → handleAutoClean → acquireLock → runWithLock(l
 
 Reconciliation inserts **after lock acquisition, before `runWithLock()` is called**. If it short-circuits, it rewrites `.execution_state`, prints the message, releases the lock, and returns — the logger is never initialized and no gate logs are created.
 
-**Before reconciliation**, call `pruneIfNeeded(1000)` from the trust-ledger module to prune the ledger if it exceeds 1000 lines. The startup sequence within the lock is: prune → reconcile → (if not short-circuited) runWithLock.
+**Before reconciliation**, call `pruneIfNeeded()` from the trust-ledger module to prune the ledger if it exceeds the default line threshold. The startup sequence within the lock is: prune → reconcile → (if not short-circuited) runWithLock.
 
 The same pattern applies to `executeGateCommand()` in `src/commands/gate-command.ts` which handles `check` and `review` commands.
 

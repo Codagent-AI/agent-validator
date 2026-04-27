@@ -104,8 +104,21 @@ async function mergeTree(
   parent2: string,
 ): Promise<string | null> {
   const result = await runGit(['merge-tree', '--write-tree', parent1, parent2]);
-  const match = result.stdout.match(/\b[0-9a-f]{40,64}\b/);
-  return match?.[0] ?? null;
+  return parseMergeTreeOid(result.stdout);
+}
+
+function parseMergeTreeOid(stdout: string): string | null {
+  const firstLine = stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) return null;
+
+  const directMatch = firstLine.match(/^[0-9a-f]{40,64}$/);
+  if (directMatch) return directMatch[0];
+
+  const labeledMatch = firstLine.match(/^merged tree:\s*([0-9a-f]{40,64})$/i);
+  return labeledMatch?.[1] ?? null;
 }
 
 async function diffNames(baseTree: string): Promise<string[]> {

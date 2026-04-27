@@ -141,7 +141,7 @@ After (reformatted):
 NEW_VERSION=$(node -p "require('./package.json').version")
 ```
 
-**If `CURRENT_BRANCH` is not `main` (existing PR):**
+**If `CURRENT_BRANCH` is not `main`:**
 
 Stay on the current branch. The PR from step 2 already targets main — commit the release changes directly to it:
 
@@ -153,7 +153,18 @@ git commit -m "chore: release v${NEW_VERSION}"
 git push
 ```
 
-Print the existing PR URL (from `gh pr view --json url --jq .url`). Do **not** create a new PR or branch.
+If no PR exists yet for `CURRENT_BRANCH`, create one now:
+
+```bash
+gh pr view --json url --jq .url >/dev/null 2>&1 || \
+  gh pr create --base main --title "chore: release v${NEW_VERSION}" --body "## Release v${NEW_VERSION}"
+```
+
+Print the PR URL:
+
+```bash
+gh pr view --json url --jq .url
+```
 
 **If `CURRENT_BRANCH` is `main`:**
 

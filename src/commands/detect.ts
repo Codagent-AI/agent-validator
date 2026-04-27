@@ -9,6 +9,7 @@ import {
   readExecutionState,
   resolveFixBase,
 } from '../utils/execution-state.js';
+import { resolveBaseBranch } from '../utils/git.js';
 import {
   hasExistingLogs,
   performAutoClean,
@@ -26,8 +27,6 @@ interface DetectCliOptions {
   commit?: string;
   uncommitted?: boolean;
 }
-
-type LoadedConfig = Awaited<ReturnType<typeof loadConfig>>;
 
 async function autoCleanIfNeeded(
   logDir: string,
@@ -81,21 +80,12 @@ async function resolveChangeOptions(
     };
   }
   if (isRerun) return opts;
-  return { ...opts, ...trustedChangeOptions };
-}
-
-function resolveEffectiveBaseBranch(
-  options: DetectCliOptions,
-  config: LoadedConfig,
-): string {
-  return (
-    options.baseBranch ||
-    (process.env.GITHUB_BASE_REF &&
-    (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true')
-      ? process.env.GITHUB_BASE_REF
-      : null) ||
-    config.project.base_branch
-  );
+  return {
+    ...opts,
+    ...(trustedChangeOptions.fixBase
+      ? { fixBase: trustedChangeOptions.fixBase }
+      : {}),
+  };
 }
 
 function printNoChangesAndExit(): never {
@@ -118,7 +108,7 @@ async function resolveTrustedChangeOptions(
 
 async function executeDetect(options: DetectCliOptions): Promise<void> {
   const config = await loadConfig();
-  const effectiveBaseBranch = resolveEffectiveBaseBranch(options, config);
+  const effectiveBaseBranch = resolveBaseBranch(options, config);
   const trustedChangeOptions = await resolveTrustedChangeOptions(options);
   const changeOptions = await resolveChangeOptions(
     config.project.log_dir,

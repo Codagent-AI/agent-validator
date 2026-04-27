@@ -103,7 +103,7 @@ describe("ChangeDetector fixBase support", () => {
 	});
 });
 
-describe("ChangeDetector fixBase dirty snapshots", () => {
+describe.serial("ChangeDetector fixBase dirty snapshots", () => {
 	let repoDir: string;
 	let originalCwd: string;
 
@@ -166,5 +166,25 @@ describe("ChangeDetector fixBase dirty snapshots", () => {
 		const detector = new ChangeDetector("main", { fixBase });
 
 		await expect(detector.getChangedFiles()).resolves.toEqual(["untracked.ts"]);
+	});
+
+	it("handles untracked filenames containing newlines", async () => {
+		await fs.writeFile(
+			path.join(repoDir, "line\nbreak.ts"),
+			"export const b = 1;\n",
+		);
+		await git(["stash", "push", "--include-untracked", "-m", "snapshot"], repoDir);
+		const fixBase = await git(["rev-parse", "stash@{0}"], repoDir);
+		await git(["stash", "pop"], repoDir);
+		await fs.writeFile(
+			path.join(repoDir, "line\nbreak.ts"),
+			"export const b = 2;\n",
+		);
+
+		const detector = new ChangeDetector("main", { fixBase });
+
+		await expect(detector.getChangedFiles()).resolves.toEqual([
+			"line\nbreak.ts",
+		]);
 	});
 });

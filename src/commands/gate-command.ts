@@ -7,6 +7,7 @@ import { JobGenerator } from '../core/job.js';
 import { Runner } from '../core/runner.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { Logger } from '../output/logger.js';
+import type { ValidatorStatus } from '../types/validator-status.js';
 import {
   type DebugLogger,
   getDebugLogger,
@@ -261,6 +262,15 @@ async function detectChangesAndGenerateJobs(
 }
 
 /** Create runner, execute jobs, log results, and clean up. */
+function statusFromOutcome(outcome: {
+  allPassed: boolean;
+  anySkipped: boolean;
+}): ValidatorStatus {
+  if (!outcome.allPassed) return 'failed';
+  if (outcome.anySkipped) return 'passed_with_warnings';
+  return 'passed';
+}
+
 async function executeAndFinalize(
   config: Awaited<ReturnType<typeof loadConfig>>,
   logger: Logger,
@@ -314,17 +324,17 @@ async function executeAndFinalize(
   // Write execution state AFTER clean so the file always survives.
   await writeExecutionState(config.project.log_dir);
   if (commandName && options) {
+    const status = statusFromOutcome(outcome);
     await appendCurrentTrustRecord({
       config,
       logDir: config.project.log_dir,
       command: commandName,
-      status: outcome.allPassed ? 'passed' : 'failed',
+      status,
       source: trustSourceOnPass ?? 'validated',
       options: {
         gate: options.gate,
         enableReviews: options.enableReviews,
       },
-      trusted: trustSourceOnPass === 'ledger-reconciled' ? true : undefined,
     });
   }
 

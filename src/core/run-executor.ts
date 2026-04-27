@@ -25,12 +25,10 @@ import {
 } from '../utils/debug-log.js';
 import { writeExecutionState } from '../utils/execution-state.js';
 import { resolveBaseBranch } from '../utils/git.js';
-import {
-  appendCurrentTrustRecord,
-  pruneIfNeeded,
-} from '../utils/trust-ledger.js';
+import { pruneIfNeeded } from '../utils/trust-ledger.js';
 import { reconcileStartup } from './reconciliation.js';
 import {
+  appendRunTrustRecord,
   detectAndPrepareChanges,
   executeAndReport,
   finalizeAndReturn,
@@ -154,17 +152,7 @@ async function runWithLock(
   if ('earlyResult' in prepared) {
     if (prepared.earlyResult.status === 'no_applicable_gates') {
       await writeExecutionState(ctx.config.project.log_dir);
-      await appendCurrentTrustRecord({
-        config: ctx.config,
-        logDir: ctx.config.project.log_dir,
-        command: 'run',
-        status: prepared.earlyResult.status,
-        source: ctx.trustSourceOnPass ?? 'validated',
-        options: {
-          gate: ctx.options.gate,
-          enableReviews: ctx.options.enableReviews,
-        },
-      });
+      await appendRunTrustRecord(ctx, prepared.earlyResult.status);
     }
     if (ctx.options.report) {
       const reportText = await generateReport(
@@ -226,7 +214,7 @@ export async function executeRun(
     }
 
     try {
-      await pruneIfNeeded(1000);
+      await pruneIfNeeded();
       const reconciliation = await reconcileStartup({
         command: 'run',
         config,

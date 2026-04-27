@@ -168,7 +168,7 @@ describe("GitHubCopilotAdapter execution", () => {
 				((...args: any[]) => {
 					const callback = args[args.length - 1];
 					if (typeof callback === "function") {
-						callback(new Error("Command failed"), "", "");
+						callback(new Error("copilot: command not found"), "", "");
 					}
 					// biome-ignore lint/suspicious/noExplicitAny: mock typing
 					return {} as any;
@@ -187,7 +187,7 @@ describe("GitHubCopilotAdapter execution", () => {
 				((...args: any[]) => {
 					const callback = args[args.length - 1];
 					if (typeof callback === "function") {
-						callback(new Error("Command failed"), "", "");
+						callback(new Error("copilot: command not found"), "", "");
 					}
 					// biome-ignore lint/suspicious/noExplicitAny: mock typing
 					return {} as any;
@@ -207,17 +207,12 @@ describe("GitHubCopilotAdapter execution", () => {
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
 					const callback = args[args.length - 1];
-					const command = args[0];
 					if (typeof callback === "function") {
-						if (command === "which copilot") {
-							callback(null, "/opt/homebrew/bin/copilot\n", "");
-						} else {
-							callback(
-								new Error("Command failed"),
-								"",
-								"ERROR: SecItemCopyMatching failed -50\n",
-							);
-						}
+						callback(
+							new Error("Command failed"),
+							"",
+							"ERROR: SecItemCopyMatching failed -50\n",
+						);
 					}
 					// biome-ignore lint/suspicious/noExplicitAny: mock typing
 					return {} as any;

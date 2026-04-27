@@ -6,7 +6,7 @@ Cross-worktree merges force full re-validation of already-validated code because
 
 The current run flow in `executeRun()` (`src/core/run-executor.ts`) is:
 
-```
+```text
 loadConfig → initContext → handleAutoClean → acquireLock → runWithLock(logger.init → gates)
 ```
 
@@ -74,7 +74,7 @@ Reconciliation is skipped entirely if the working tree is dirty (`git status --p
 
 The read-only result is used only to choose detect's observable output:
 
-```
+```text
 1. If explicit --commit or --uncommitted was passed:
    → bypass trust reconciliation and use the requested diff source
 2. If the working tree is dirty:
@@ -95,7 +95,7 @@ This keeps `detect` observational while aligning its "what would run?" output wi
 
 ### Reconciliation logic (clean tree)
 
-```
+```text
 1. Compute HEAD commit SHA and HEAD^{tree}
 2. Check isTrusted(HEAD, HEAD^{tree})
    → If trusted: advance state, exit with status "trusted"
@@ -156,7 +156,7 @@ At startup (before reconciliation), check the ledger line count. If it exceeds t
 1. Read all records
 2. Collect all reachable commits via `git rev-list --all`
 3. For records with non-null `commit`: keep if commit is reachable
-4. For records with `commit: null` (dirty-tree records): keep if `working_tree_ref` object still exists (`git cat-file -t`)
+4. For records with `commit: null` (dirty-tree records): keep if either `working_tree_ref` or the recorded `tree` object still exists (`git cat-file -t`)
 5. Write surviving records to a temp file in the same directory
 6. Atomic rename to replace the ledger
 
@@ -214,7 +214,7 @@ The `trusted` status is a success status (exit code 0). When reconciliation shor
 - **Trusted merge of two trusted parents can still have semantic integration bugs** — files that don't conflict but interact incorrectly (e.g., one parent renames a function, another calls it by old name in a different file). Inherent in the "trusted parents compose" policy. If this becomes a problem, add an optional strict mode later that always runs checks after trusted merges.
 - **Tree-match lookup scans all records** — O(n) per lookup. Bounded by pruning threshold (1000). Could add an in-memory index by tree SHA if performance becomes an issue.
 - **`git merge-tree --write-tree` availability** — requires git 2.38+ (released Oct 2022). Most systems have this. Fallback to full validation on older git is safe but loses the merge optimization.
-- **Stash-based `working_tree_ref` objects can be garbage collected** — dirty-tree ledger records become invalid if the stash SHA is gc'd before pruning removes the record. The pruning step handles this by checking `git cat-file -t`.
+- **Stash-based `working_tree_ref` objects can be garbage collected** — dirty-tree ledger records remain useful for tree-based trust as long as their recorded tree object still exists. Pruning removes them only after both the stash SHA and recorded tree are gone.
 
 ## Migration Plan
 

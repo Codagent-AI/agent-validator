@@ -10,7 +10,9 @@ import {
 import * as childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import type { LoadedConfig } from "../../src/config/types.js";
 import {
 	appendRecord,
 	appendCurrentTrustRecord,
@@ -23,7 +25,7 @@ import {
 	type TrustRecord,
 } from "../../src/utils/trust-ledger.js";
 
-const TEST_DIR = path.join(import.meta.dir, "../../.test-trust-ledger");
+let TEST_DIR: string;
 
 function createMockSpawn(
 	stdout: string,
@@ -33,14 +35,17 @@ function createMockSpawn(
 	const mockProcess = new EventEmitter() as EventEmitter & {
 		stdout: EventEmitter;
 		stderr: EventEmitter;
-		stdin: { write: (_chunk?: unknown) => boolean; end: () => void };
+		stdin: EventEmitter & {
+			write: (_chunk?: unknown) => boolean;
+			end: () => void;
+		};
 	};
 	mockProcess.stdout = new EventEmitter();
 	mockProcess.stderr = new EventEmitter();
-	mockProcess.stdin = {
+	mockProcess.stdin = Object.assign(new EventEmitter(), {
 		write: () => true,
 		end: () => {},
-	};
+	});
 
 	setImmediate(() => {
 		if (stdout) mockProcess.stdout.emit("data", Buffer.from(stdout));
@@ -72,7 +77,7 @@ function record(overrides: Partial<TrustRecord> = {}): TrustRecord {
 	};
 }
 
-function config(overrides: Record<string, unknown> = {}) {
+function config(overrides: Record<string, unknown> = {}): LoadedConfig {
 	return {
 		project: {
 			base_branch: "origin/main",
@@ -109,7 +114,7 @@ function config(overrides: Record<string, unknown> = {}) {
 				enabled: true,
 			},
 		},
-	} as any;
+	} as unknown as LoadedConfig;
 }
 
 async function readLedgerLines(): Promise<string[]> {
@@ -120,7 +125,7 @@ async function readLedgerLines(): Promise<string[]> {
 
 describe("trust ledger", () => {
 	beforeEach(async () => {
-		await fs.rm(TEST_DIR, { recursive: true, force: true });
+		TEST_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "validator-ledger-"));
 		await fs.mkdir(TEST_DIR, { recursive: true });
 		spyOn(childProcess, "spawn").mockImplementation(((cmd, args) => {
 			if (cmd === "git" && Array.isArray(args)) {
@@ -294,14 +299,15 @@ describe("trust ledger", () => {
 						typeof childProcess.spawn
 					>;
 				}
-				if (command === "ls-tree -r main-tree") {
+				if (command === "ls-tree -r -z main-tree") {
 					return createMockSpawn(
-						"100644 blob tracked-1\ttracked.ts\n100644 blob tracked-2\tnested/file.ts\n",
+						"100644 blob tracked-1\ttracked.ts\0" +
+							"100644 blob tracked-2\tnested/file.ts\0",
 					) as ReturnType<typeof childProcess.spawn>;
 				}
-				if (command === "ls-tree -r untracked-tree") {
+				if (command === "ls-tree -r -z untracked-tree") {
 					return createMockSpawn(
-						"100644 blob untracked-1\tuntracked.ts\n",
+						"100644 blob untracked-1\tuntracked.ts\0",
 					) as ReturnType<typeof childProcess.spawn>;
 				}
 				if (args.includes("update-index")) {

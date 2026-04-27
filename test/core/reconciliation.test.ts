@@ -243,9 +243,14 @@ describe("startup reconciliation", () => {
 		await appendRecord(trustedRecord(parent1, await computeTreeSha(parent1)));
 		await appendRecord(trustedRecord(parent2, await computeTreeSha(parent2)));
 		await git(["checkout", "feature-a"]);
-		await git(["merge", "--no-ff", "feature-b", "-m", "merge"]).catch(
-			() => undefined,
-		);
+		let mergeConflicted = false;
+		await git(["merge", "--no-ff", "feature-b", "-m", "merge"]).catch(() => {
+			mergeConflicted = true;
+		});
+		const mergeHeadExists =
+			(await fs.stat(path.join(repoDir, ".git", "MERGE_HEAD")).catch(() => null)) !==
+			null;
+		expect(mergeConflicted || mergeHeadExists).toBe(true);
 		await fs.writeFile(
 			path.join(repoDir, "src/app.ts"),
 			"export const value = 4;\n",

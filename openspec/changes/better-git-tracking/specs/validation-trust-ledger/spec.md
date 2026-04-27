@@ -269,18 +269,26 @@ On every `detect` invocation without explicit `--commit` or `--uncommitted` diff
 - **AND** untracked files captured in `working_tree_ref^3` SHALL NOT be reported as new changes unless their content changed after the snapshot
 
 ### Requirement: Ledger Pruning
-The system SHALL periodically prune ledger records whose content is no longer relevant. For records with a non-null `commit`, the commit MUST be reachable from a local ref. For records with `commit: null` (dirty-tree records), the `working_tree_ref` object MUST still exist in git (not garbage collected). Reachability SHALL be checked via `git rev-list --all`; object existence via `git cat-file -t`. Pruning SHALL rewrite the file atomically (write to temp file, rename). Pruning SHALL be triggered when the ledger exceeds 1000 lines, checked at startup before reconciliation.
+The system SHALL periodically prune ledger records whose content is no longer relevant. For records with a non-null `commit`, the commit MUST be reachable from a local ref. For records with `commit: null` (dirty-tree records), either the `working_tree_ref` object or the recorded `tree` object MUST still exist in git. Reachability SHALL be checked via `git rev-list --all`; object existence via `git cat-file -t`. Pruning SHALL rewrite the file atomically (write to temp file, rename). Pruning SHALL be triggered when the ledger exceeds 1000 lines, checked at startup before reconciliation.
 
 #### Scenario: Unreachable commit pruned
 - **WHEN** pruning runs
 - **AND** a record's `commit` is not reachable from any local ref
 - **THEN** that record SHALL be removed from the ledger
 
-#### Scenario: Garbage-collected dirty-tree record pruned
+#### Scenario: Fully garbage-collected dirty-tree record pruned
 - **WHEN** pruning runs
 - **AND** a record has `commit: null`
 - **AND** the `working_tree_ref` object no longer exists in git
+- **AND** the recorded `tree` object no longer exists in git
 - **THEN** that record SHALL be removed from the ledger
+
+#### Scenario: Dirty-tree record with surviving tree preserved
+- **WHEN** pruning runs
+- **AND** a record has `commit: null`
+- **AND** the `working_tree_ref` object no longer exists in git
+- **AND** the recorded `tree` object still exists in git
+- **THEN** that record SHALL be preserved
 
 #### Scenario: Reachable commit preserved
 - **WHEN** pruning runs

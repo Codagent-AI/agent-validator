@@ -13,6 +13,7 @@ import {
 } from '../utils/execution-state.js';
 import {
   appendCurrentTrustRecord,
+  DEFAULT_PRUNE_THRESHOLD,
   pruneIfNeeded,
 } from '../utils/trust-ledger.js';
 import { acquireLock, cleanLogs, releaseLock } from './shared.js';
@@ -38,7 +39,7 @@ export function registerSkipCommand(program: Command): void {
         // Acquire lock BEFORE any state changes
         await acquireLock(config.project.log_dir);
         lockAcquired = true;
-        await pruneIfNeeded(1000);
+        await pruneIfNeeded(DEFAULT_PRUNE_THRESHOLD);
 
         // Log the command invocation
         const debugLogger = getDebugLogger();

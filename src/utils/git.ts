@@ -10,7 +10,7 @@ export interface GitResult {
 
 export function runGit(
   args: string[],
-  options: { env?: NodeJS.ProcessEnv } = {},
+  options: { env?: NodeJS.ProcessEnv; trim?: boolean } = {},
 ): Promise<GitResult> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {
@@ -30,7 +30,11 @@ export function runGit(
     child.on('close', (code) => {
       stdout += stdoutDecoder.end();
       stderr += stderrDecoder.end();
-      resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code });
+      resolve({
+        stdout: options.trim === false ? stdout : stdout.trim(),
+        stderr: stderr.trim(),
+        code,
+      });
     });
     child.on('error', reject);
   });
@@ -38,7 +42,7 @@ export function runGit(
 
 export async function gitStdout(
   args: string[],
-  options: { env?: NodeJS.ProcessEnv } = {},
+  options: { env?: NodeJS.ProcessEnv; trim?: boolean } = {},
 ): Promise<string> {
   const result = await runGit(args, options);
   if (result.code === 0) return result.stdout;
@@ -71,9 +75,15 @@ export function runGitWithInput(
     child.on('close', (code) => {
       stdout += stdoutDecoder.end();
       stderr += stderrDecoder.end();
+      child.stdin.off('error', handleStdinError);
       resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code });
     });
     child.on('error', reject);
+    const handleStdinError = (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EPIPE') return;
+      reject(error);
+    };
+    child.stdin.on('error', handleStdinError);
     child.stdin.write(input);
     child.stdin.end();
   });

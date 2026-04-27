@@ -12,6 +12,7 @@ import { Logger } from '../output/logger.js';
 import { writeExecutionState } from '../utils/execution-state.js';
 import {
   appendCurrentTrustRecord,
+  DEFAULT_PRUNE_THRESHOLD,
   pruneIfNeeded,
   type TrustRecordSource,
 } from '../utils/trust-ledger.js';
@@ -81,7 +82,6 @@ async function handleNoWork(
         gate: ledger.options.gate,
         enableReviews: ledger.options.enableReviews,
       },
-      trusted: ledger.source === 'ledger-reconciled' ? true : undefined,
     });
   }
   await releaseLock(logDir);
@@ -171,7 +171,7 @@ export async function acquireAndReconcileGateStartup(args: {
   try {
     await acquireLock(args.logDir);
     lockAcquired = true;
-    await pruneIfNeeded(1000);
+    await pruneIfNeeded(DEFAULT_PRUNE_THRESHOLD);
     const reconciliation = await reconcileStartup({
       command: args.commandName,
       config: args.config,

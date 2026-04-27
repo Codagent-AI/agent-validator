@@ -84,7 +84,7 @@ function getRunLogger() {
   return getCategoryLogger('run');
 }
 
-async function appendRunTrustRecord(
+export async function appendRunTrustRecord(
   ctx: RunContext,
   status: ValidatorStatus,
 ): Promise<void> {
@@ -98,7 +98,6 @@ async function appendRunTrustRecord(
       gate: ctx.options.gate,
       enableReviews: ctx.options.enableReviews,
     },
-    trusted: ctx.trustSourceOnPass === 'ledger-reconciled' ? true : undefined,
   });
 }
 

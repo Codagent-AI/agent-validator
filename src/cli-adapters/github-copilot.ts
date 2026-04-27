@@ -110,6 +110,20 @@ function verifySessionModel(
   }
 }
 
+function isMissingCommandError(error: unknown): boolean {
+  const err = error as {
+    code?: string;
+    stderr?: string;
+    stdout?: string;
+    message?: string;
+  };
+  const detail = `${err.stderr ?? ''}\n${err.stdout ?? ''}\n${err.message ?? ''}`;
+  return (
+    err.code === 'ENOENT' ||
+    /command not found|not recognized|no such file|not found/i.test(detail)
+  );
+}
+
 export class GitHubCopilotAdapter implements CLIAdapter {
   name = 'github-copilot';
 
@@ -147,19 +161,16 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     message?: string;
   }> {
     try {
-      await this.execCopilot('which copilot');
-    } catch {
-      return {
-        available: false,
-        status: 'missing',
-        message: 'Command not found',
-      };
-    }
-
-    try {
       await this.execCopilot('copilot --help');
     } catch (error) {
       const err = error as { stderr?: string; message?: string };
+      if (isMissingCommandError(error)) {
+        return {
+          available: false,
+          status: 'missing',
+          message: 'Command not found',
+        };
+      }
       return {
         available: true,
         status: 'unhealthy',

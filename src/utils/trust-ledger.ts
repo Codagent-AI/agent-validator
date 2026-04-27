@@ -11,7 +11,9 @@ import {
   hasWorkingTreeChanges,
   readExecutionState,
 } from './execution-state.js';
-import { gitStdout, gitStdoutWithInput } from './git.js';
+import { gitStdout, gitStdoutWithInput, runGit } from './git.js';
+
+export const DEFAULT_PRUNE_THRESHOLD = 1000;
 
 export type TrustRecordSource =
   | 'validated'
@@ -140,33 +142,34 @@ export async function computeTreeSha(ref: string): Promise<string> {
 
 interface TreeEntry {
   mode: string;
+  type: string;
   object: string;
   path: string;
 }
 
 async function maybeTree(ref: string): Promise<string | null> {
-  try {
-    return await gitStdout(['rev-parse', '--verify', `${ref}^{tree}`]);
-  } catch (error) {
-    if ((error as Error).message.includes('Needed a single revision')) {
-      return null;
-    }
-    if ((error as Error).message.includes('unknown revision')) {
-      return null;
-    }
-    if ((error as Error).message.includes('ambiguous argument')) {
-      return null;
-    }
-    if ((error as Error).message.includes('Not a valid object name')) {
-      return null;
-    }
-    throw error;
+  const result = await runGit(['rev-parse', '--verify', `${ref}^{tree}`], {
+    env: { LC_ALL: 'C' },
+  });
+  if (result.code === 0) return result.stdout;
+  if (
+    result.stderr.includes('Needed a single revision') ||
+    result.stderr.includes('unknown revision') ||
+    result.stderr.includes('ambiguous argument') ||
+    result.stderr.includes('Not a valid object name')
+  ) {
+    return null;
   }
+  throw new Error(
+    `git rev-parse --verify ${ref}^{tree} failed with code ${result.code}: ${result.stderr}`,
+  );
 }
 
 function indexInfoFor(entries: TreeEntry[]): string {
   return entries
-    .map((entry) => `${entry.mode} ${entry.object}\t${entry.path}\0`)
+    .map(
+      (entry) => `${entry.mode} ${entry.type} ${entry.object}\t${entry.path}\0`,
+    )
     .join('');
 }
 
@@ -188,17 +191,21 @@ async function writeCombinedTree(entries: TreeEntry[]): Promise<string> {
 }
 
 async function listTreeEntries(tree: string): Promise<TreeEntry[]> {
-  const output = await gitStdout(['ls-tree', '-r', tree]);
+  const output = await gitStdout(['ls-tree', '-r', '-z', tree], {
+    trim: false,
+  });
   if (!output) return [];
   return output
-    .split('\n')
+    .split('\0')
     .filter(Boolean)
     .flatMap((line): TreeEntry[] => {
-      const [meta, filePath] = line.split('\t');
-      if (!(meta && filePath)) return [];
-      const [mode, , object] = meta.split(' ');
-      if (!(mode && object)) return [];
-      return [{ mode, object, path: filePath }];
+      const tabIndex = line.indexOf('\t');
+      if (tabIndex === -1) return [];
+      const meta = line.slice(0, tabIndex);
+      const filePath = line.slice(tabIndex + 1);
+      const [mode, type, object] = meta.split(' ');
+      if (!(mode && type && object && filePath)) return [];
+      return [{ mode, type, object, path: filePath }];
     });
 }
 
@@ -398,7 +405,9 @@ async function gitObjectExists(ref: string | undefined): Promise<boolean> {
   return gitObjectExistsBase(ref);
 }
 
-export async function pruneIfNeeded(threshold: number): Promise<void> {
+export async function pruneIfNeeded(
+  threshold: number = DEFAULT_PRUNE_THRESHOLD,
+): Promise<void> {
   try {
     const ledgerPath = await getLedgerPath();
     if ((await lineCount(ledgerPath)) <= threshold) return;

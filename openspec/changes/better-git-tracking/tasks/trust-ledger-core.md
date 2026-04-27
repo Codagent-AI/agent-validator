@@ -48,7 +48,7 @@ interface TrustRecord {
 - `appendRecord(record)` — serialize to single-line JSON, append via `open("a")` mode. Create directory if needed. Errors caught and logged to stderr, never thrown.
 - `readRecords()` — read file line by line, parse JSON, skip corrupt/unparseable lines silently. Return empty array if file doesn't exist.
 - `isTrusted(commit, tree)` — check commit match first (record with `trusted: true` and matching `commit`). If no commit match and worktree is clean, check tree match (record with `trusted: true` and matching `tree`). Return `{ trusted: boolean, matchType: 'commit' | 'tree' | null, record?: TrustRecord }`.
-- `pruneIfNeeded(threshold)` — count lines (cheap, no parse). If > threshold (1000): read all records, collect reachable commits via `git rev-list --all`, for `commit: null` records check `git cat-file -t <working_tree_ref>`, write survivors to temp file, atomic rename.
+- `pruneIfNeeded(threshold)` — count lines (cheap, no parse). If > threshold (1000): read all records, collect reachable commits via `git rev-list --all`, for `commit: null` records check `git cat-file -t <working_tree_ref>` or `git cat-file -t <tree>`, write survivors to temp file, atomic rename.
 - `computeTreeSha(ref)` — `git rev-parse <ref>^{tree}`.
 
 ### Write rules
@@ -196,18 +196,26 @@ The `source`, `status`, `scope`, `scope_hash`, and `config_hash` fields are reco
 - **AND** the `config_hash` field SHALL be preserved in records for future strict mode
 
 ### Requirement: Ledger Pruning
-The system SHALL periodically prune ledger records whose content is no longer relevant. For records with a non-null `commit`, the commit MUST be reachable from a local ref. For records with `commit: null` (dirty-tree records), the `working_tree_ref` object MUST still exist in git (not garbage collected). Reachability SHALL be checked via `git rev-list --all`; object existence via `git cat-file -t`. Pruning SHALL rewrite the file atomically (write to temp file, rename). Pruning SHALL be triggered when the ledger exceeds 1000 lines, checked at startup before reconciliation.
+The system SHALL periodically prune ledger records whose content is no longer relevant. For records with a non-null `commit`, the commit MUST be reachable from a local ref. For records with `commit: null` (dirty-tree records), either the `working_tree_ref` object or the recorded `tree` object MUST still exist in git. Reachability SHALL be checked via `git rev-list --all`; object existence via `git cat-file -t`. Pruning SHALL rewrite the file atomically (write to temp file, rename). Pruning SHALL be triggered when the ledger exceeds 1000 lines, checked at startup before reconciliation.
 
 #### Scenario: Unreachable commit pruned
 - **WHEN** pruning runs
 - **AND** a record's `commit` is not reachable from any local ref
 - **THEN** that record SHALL be removed from the ledger
 
-#### Scenario: Garbage-collected dirty-tree record pruned
+#### Scenario: Fully garbage-collected dirty-tree record pruned
 - **WHEN** pruning runs
 - **AND** a record has `commit: null`
 - **AND** the `working_tree_ref` object no longer exists in git
+- **AND** the recorded `tree` object no longer exists in git
 - **THEN** that record SHALL be removed from the ledger
+
+#### Scenario: Dirty-tree record with surviving tree preserved
+- **WHEN** pruning runs
+- **AND** a record has `commit: null`
+- **AND** the `working_tree_ref` object no longer exists in git
+- **AND** the recorded `tree` object still exists in git
+- **THEN** that record SHALL be preserved
 
 #### Scenario: Reachable commit preserved
 - **WHEN** pruning runs
