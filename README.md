@@ -126,7 +126,7 @@ Agent Validator installs as a plugin for Claude Code, GitHub Copilot, and Cursor
 
 ### Recommended Reviewer Configuration
 
-> Based on [eval benchmarks](docs/eval-report-2026-04-05.md) across code-quality, security, and error-handling prompts.
+> Based on [April eval benchmarks](docs/eval-report-2026-04-05.md) across code-quality, security, and error-handling prompts, plus the [May follow-up eval](docs/eval-report-2026-05-02.md) comparing Haiku, GPT-5.4 Mini, and GPT-5.5.
 
 **Built-in review prompts available:**
 
@@ -138,7 +138,35 @@ Agent Validator installs as a plugin for Claude Code, GitHub Copilot, and Cursor
 | `security-and-errors` | Security + error-handling combined | GPT (combined) |
 | `all-reviewers` | All of the above in one pass | GPT (combined) |
 
-**Primary recommendation (GitHub Copilot available):** Two-pass hybrid — Sonnet for code quality, GPT for security + error-handling combined. Best price/performance ratio.
+**At a glance:**
+
+| Scenario | Recommended config | Why |
+|----------|--------------------|-----|
+| Best default value | `codex` GPT-5.3-Codex with `all-reviewers` | Best validated single-pass value config: 0.69 recall, 0.96 precision across all 56 issues. |
+| Higher-recall Copilot option | `github-copilot` Sonnet for `code-quality` + `github-copilot` GPT-5.3-Codex for `security-and-errors` | Better coverage than Codex alone, but costs more because it runs two reviewers and Copilot pricing is moving toward API-style token pricing. |
+| Fast Copilot smoke pass | `github-copilot` Claude Haiku 4.5 with `all-reviewers` | Very fast and cheap, but recall is too low to use as the primary reviewer. |
+
+GPT-5.4 Mini is not recommended for review gates. In May evals, it did not beat Haiku on value and did not beat GPT-5.3-Codex or Sonnet on recall.
+
+**Primary recommendation:** Codex single-pass combined review. Best default value: one reviewer, one prompt, strong precision, and good recall.
+
+```yaml
+# .validator/config.yml
+cli:
+  default_preference:
+    - codex
+  adapters:
+    codex:
+      allow_tool_use: false
+      thinking_budget: medium
+
+reviews:
+  all-reviewers:
+    builtin: all-reviewers
+    model: gpt-5.3-codex         # 0.69 recall, 0.96 precision across all 56 issues (~82s)
+```
+
+**Secondary recommendation (higher recall, higher cost):** GitHub Copilot two-pass hybrid — Sonnet for code quality, GPT for security + error-handling combined.
 
 ```yaml
 # .validator/config.yml
@@ -163,24 +191,6 @@ reviews:
     builtin: security-and-errors
     cli_preference: [github-copilot]
     model: gpt-5.3-codex         # 0.79 recall in single combined pass (~73s)
-```
-
-**Secondary recommendation (no Copilot, Codex only):** Single combined pass across all review types.
-
-```yaml
-# .validator/config.yml
-cli:
-  default_preference:
-    - codex
-  adapters:
-    codex:
-      allow_tool_use: false
-      thinking_budget: medium
-
-reviews:
-  all-reviewers:
-    builtin: all-reviewers
-    model: gpt-5.3-codex         # 0.69 recall, 0.96 precision across all 56 issues (~82s)
 ```
 
 > **Note:** Do not use the `claude` (Claude Code CLI) adapter for reviews — it has significantly higher overhead than `github-copilot` and will timeout on most review prompts. Use `github-copilot` with `model: claude-sonnet-4.6` to run Sonnet reviews.

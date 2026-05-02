@@ -67,6 +67,10 @@ export function evaluateOutput(
     const fromDirect = tryParseWholeOutput(output);
     if (fromDirect) return validateAndReturn(fromDirect, diffRanges);
 
+    const fromStatusObject = tryParseReviewJsonByStatus(output);
+    if (fromStatusObject)
+      return validateAndReturn(fromStatusObject, diffRanges);
+
     if (output.length <= MAX_OUTPUT_SIZE_FOR_JSON_PROBE) {
       const fromLast = tryParseLastJson(output);
       if (fromLast) return validateAndReturn(fromLast, diffRanges);
@@ -89,6 +93,30 @@ export function evaluateOutput(
       message: `Failed to parse JSON output: ${err.message}`,
     };
   }
+}
+
+const MAX_STATUS_JSON_PROBE_CHARS = 500_000;
+
+function tryParseReviewJsonByStatus(output: string): ReviewJsonOutput | null {
+  const probe =
+    output.length > MAX_STATUS_JSON_PROBE_CHARS
+      ? output.slice(-MAX_STATUS_JSON_PROBE_CHARS)
+      : output;
+  const end = probe.lastIndexOf('}');
+  if (end === -1) return null;
+
+  const starts = [...probe.matchAll(/{\s*"status"\s*:/g)].map((m) => m.index);
+  for (let i = starts.length - 1; i >= 0; i--) {
+    const start = starts[i];
+    if (start === undefined) continue;
+    try {
+      const json = JSON.parse(probe.substring(start, end + 1));
+      if (json.status) return json;
+    } catch {
+      // Not the outer review JSON object; keep searching earlier status objects.
+    }
+  }
+  return null;
 }
 
 function tryParseJsonBlock(output: string): ReviewJsonOutput | null {

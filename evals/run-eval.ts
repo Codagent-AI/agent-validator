@@ -11,6 +11,7 @@ function getArg(name: string): string | undefined {
 const options = {
 	adapterFilter: getArg("adapter"),
 	configFilter: getArg("config"),
+	configFile: getArg("config-file"),
 	dryRun: args.includes("--dry-run"),
 	skipJudge: args.includes("--skip-judge"),
 };
@@ -23,5 +24,6 @@ if (options.skipJudge) console.log("Mode: skip judge scoring");
 if (options.adapterFilter)
 	console.log(`Filter: adapter=${options.adapterFilter}`);
 if (options.configFilter) console.log(`Filter: config=${options.configFilter}`);
+if (options.configFile) console.log(`Config file: ${options.configFile}`);
 
 await runEval(options);

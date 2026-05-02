@@ -84,9 +84,10 @@ export async function runStreamingCommand(opts: {
 
         const getStderr = collectStderr(child, opts.onOutput);
 
-        child.on('close', (code) => {
+        child.on('close', (code, signal) => {
           void finalizeProcessClose({
             code,
+            signal,
             timeoutId,
             handle,
             cleanup: opts.cleanup,
@@ -125,6 +126,7 @@ export async function runStreamingCommand(opts: {
 
 export async function finalizeProcessClose(opts: {
   code: number | null;
+  signal?: NodeJS.Signals | string | null;
   timeoutId?: ReturnType<typeof setTimeout>;
   handle: FileHandle;
   cleanup: () => Promise<void>;
@@ -141,7 +143,9 @@ export async function finalizeProcessClose(opts: {
     /* ignore cleanup errors during finalization */
   }
 
-  if (opts.code === 0 || opts.code === null) {
+  if (opts.signal) {
+    opts.reject(new Error(`Process terminated by signal ${opts.signal}`));
+  } else if (opts.code === 0) {
     opts.resolve(opts.chunks.join(''));
   } else {
     opts.reject(

@@ -1,0 +1,18 @@
+fixture: fixtures/code-quality
+
+adapters:
+  - name: github-copilot
+    model: gpt-5.4-mini
+    alias: copilot-gpt5.4-mini
+    allow_tool_use: false
+    thinking_budget: "medium"
+  - name: github-copilot
+    model: claude-haiku-4.5
+    alias: copilot-haiku
+    allow_tool_use: false
+
+runs_per_config: 3
+timeout_ms: 300000
+judge:
+  adapter: claude
+  thinking_budget: "high"

@@ -13,6 +13,7 @@ export async function judgeRun(
 	groundTruth: GroundTruthIssue[],
 	judgeAdapterName: EvalAdapterName,
 	thinkingBudget: string,
+	timeoutMs = 300_000,
 ): Promise<JudgeResult> {
 	const adapter = getAdapter(judgeAdapterName);
 	if (!adapter) {
@@ -27,7 +28,7 @@ export async function judgeRun(
 		diff: "",
 		allowToolUse: false,
 		thinkingBudget,
-		timeoutMs: 300_000,
+		timeoutMs,
 		onOutput: (chunk) => judgeTelemetry.push(chunk),
 	});
 
