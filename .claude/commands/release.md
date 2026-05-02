@@ -191,5 +191,5 @@ Print the PR URL at the end.
 
 ## Notes
 
-- When this release PR is merged to main, the publish workflow checks if the version is already on npm, runs `npm publish` if not, and creates a GitHub release via `softprops/action-gh-release`.
+- When this release PR is merged to main, the publish workflow checks if the version is already on npm, runs `npm publish` if not, creates a GitHub release via `softprops/action-gh-release`, and updates `Codagent-AI/homebrew-tap/agent-validator.rb`.
 - One merge → publish. No manual changeset creation needed.

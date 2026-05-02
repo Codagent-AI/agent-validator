@@ -66,3 +66,61 @@ jobs:
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve npm tarball metadata
+        if: steps.check.outputs.published == 'false'
+        id: npm-tarball
+        run: |
+          VERSION="${{ steps.check.outputs.version }}"
+
+          for attempt in 1 2 3 4 5; do
+            TARBALL_URL=$(npm view agent-validator@"$VERSION" dist.tarball 2>/dev/null || true)
+            if [ -n "$TARBALL_URL" ]; then
+              break
+            fi
+            echo "agent-validator@$VERSION is not visible in npm yet; retrying ($attempt/5)."
+            sleep 10
+          done
+
+          if [ -z "$TARBALL_URL" ]; then
+            echo "Failed to resolve npm tarball URL for agent-validator@$VERSION." >&2
+            exit 1
+          fi
+
+          curl -fsSL "$TARBALL_URL" -o agent-validator.tgz
+          SHA256=$(sha256sum agent-validator.tgz | awk '{print $1}')
+
+          echo "url=$TARBALL_URL" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Homebrew tap
+        if: steps.check.outputs.published == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: Codagent-AI/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Homebrew formula
+        if: steps.check.outputs.published == 'false'
+        run: bun .github/scripts/homebrew-formula.ts
+        env:
+          AGENT_VALIDATOR_VERSION: ${{ steps.check.outputs.version }}
+          AGENT_VALIDATOR_TARBALL_URL: ${{ steps.npm-tarball.outputs.url }}
+          AGENT_VALIDATOR_TARBALL_SHA256: ${{ steps.npm-tarball.outputs.sha256 }}
+          HOMEBREW_FORMULA_PATH: homebrew-tap/agent-validator.rb
+
+      - name: Push Homebrew tap update
+        if: steps.check.outputs.published == 'false'
+        working-directory: homebrew-tap
+        run: |
+          if git diff --quiet -- agent-validator.rb; then
+            echo "Homebrew formula is already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add agent-validator.rb
+          git commit -m "agent-validator ${{ steps.check.outputs.version }}"
+          git push
