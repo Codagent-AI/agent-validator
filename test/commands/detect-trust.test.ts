@@ -89,6 +89,36 @@ async function appendTrustedRecord(dir: string, ref: string): Promise<void> {
 	);
 }
 
+async function appendTrustedTreeRecord(dir: string, ref: string): Promise<void> {
+	const [commonDir, tree] = await Promise.all([
+		git(["rev-parse", "--git-common-dir"], dir),
+		git(["rev-parse", `${ref}^{tree}`], dir),
+	]);
+	const ledgerDir = path.resolve(dir, commonDir, "agent-validator");
+	await fs.mkdir(ledgerDir, { recursive: true });
+	await fs.appendFile(
+		path.join(ledgerDir, "trusted-snapshots.jsonl"),
+		`${JSON.stringify({
+			commit: null,
+			tree,
+			config_hash: "config",
+			scope: {
+				command: "check",
+				gates: ["unit"],
+				entry_points: ["."],
+				cli_overrides: {},
+			},
+			scope_hash: "scope",
+			validator_version: "1.10.0",
+			source: "validated",
+			status: "passed",
+			trusted: true,
+			created_at: "2026-01-01T00:00:00.000Z",
+		})}\n`,
+		"utf-8",
+	);
+}
+
 async function trustHead(dir: string): Promise<void> {
 	await appendTrustedRecord(dir, "HEAD");
 }
@@ -145,6 +175,18 @@ describe("detect trusted snapshots", () => {
 		await expect(
 			fs.readFile(path.join(repo, "validator_logs", ".execution_state")),
 		).rejects.toThrow();
+	});
+
+	it("scopes dirty worktree changes from a trusted HEAD tree", async () => {
+		const repo = await createRepo();
+		await appendTrustedTreeRecord(repo, "HEAD");
+		await fs.writeFile(path.join(repo, "scratch.ts"), "export const x = 1;\n");
+
+		const result = await runDetect(repo);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("scratch.ts");
+		expect(result.stdout).not.toContain("app.ts");
 	});
 
 	it("preserves execution-state fixBase in rerun mode when one merge parent is trusted", async () => {
