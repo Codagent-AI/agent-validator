@@ -8,8 +8,8 @@ allow_parallel: true
 
 cli:
   default_preference:
-    - github-copilot
     - codex
+    - github-copilot
   adapters:
     codex:
       model: gpt-5.3-codex
