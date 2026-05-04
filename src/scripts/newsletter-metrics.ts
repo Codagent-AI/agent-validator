@@ -92,6 +92,13 @@ interface JsonReviewStats {
   skippedCount: number;
 }
 
+interface ConfigModels {
+  configPath?: string;
+  adapterModels: Map<string, string>;
+  reviewModels: Map<string, string>;
+  knownReviewers: Set<string>;
+}
+
 interface ComboStats {
   source: string;
   reviewer: string;
@@ -175,7 +182,7 @@ function expandHome(input: string): string {
 }
 
 function sourceName(sourcePath: string): string {
-  return path.basename(path.resolve(sourcePath));
+  return path.resolve(sourcePath);
 }
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: compact CLI parser keeps this standalone script dependency-free
@@ -270,15 +277,13 @@ function asString(value: unknown): string | undefined {
 }
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: config model inference handles inline reviews and frontmatter in one place
-function loadConfigModels(repoPath: string): {
-  configPath?: string;
-  adapterModels: Map<string, string>;
-  reviewModels: Map<string, string>;
-} {
+function loadConfigModels(repoPath: string): ConfigModels {
   const configPath = path.join(repoPath, '.validator', 'config.yml');
   const adapterModels = new Map<string, string>();
   const reviewModels = new Map<string, string>();
-  if (!fs.existsSync(configPath)) return { adapterModels, reviewModels };
+  const knownReviewers = new Set<string>();
+  if (!fs.existsSync(configPath))
+    return { adapterModels, reviewModels, knownReviewers };
 
   const config = asRecord(readYamlFile(configPath));
   const cli = asRecord(config.cli);
@@ -295,9 +300,13 @@ function loadConfigModels(repoPath: string): {
     const reviews = asRecord(entryPoint).reviews;
     if (!Array.isArray(reviews)) continue;
     for (const item of reviews) {
-      if (typeof item === 'string') continue;
+      if (typeof item === 'string') {
+        knownReviewers.add(item);
+        continue;
+      }
       const reviewRecord = asRecord(item);
       for (const [reviewer, rawReview] of Object.entries(reviewRecord)) {
+        knownReviewers.add(reviewer);
         const model = asString(asRecord(rawReview).model);
         if (model) reviewModels.set(reviewer, model);
       }
@@ -310,6 +319,7 @@ function loadConfigModels(repoPath: string): {
       if (!entry.endsWith('.md')) continue;
       const content = fs.readFileSync(path.join(reviewsDir, entry), 'utf-8');
       const match = content.match(/^---\n([\s\S]*?)\n---/);
+      knownReviewers.add(path.basename(entry, '.md'));
       if (!match) continue;
       const frontmatter = asRecord(YAML.parse(match[1] ?? ''));
       const model = asString(frontmatter.model);
@@ -317,7 +327,7 @@ function loadConfigModels(repoPath: string): {
     }
   }
 
-  return { configPath, adapterModels, reviewModels };
+  return { configPath, adapterModels, reviewModels, knownReviewers };
 }
 
 function resolveModel(
@@ -329,7 +339,9 @@ function resolveModel(
   logModel?: string,
 ): ModelResolution {
   if (logModel) return { model: logModel, source: 'log' };
-  const sourceOverride = overrides.get(`${repoName}:${cli}`);
+  const sourceOverride =
+    overrides.get(`${repoName}:${cli}`) ??
+    overrides.get(`${path.basename(repoName)}:${cli}`);
   if (sourceOverride) return { model: sourceOverride, source: 'override' };
   const cliOverride = overrides.get(cli);
   if (cliOverride) return { model: cliOverride, source: 'override' };
@@ -418,6 +430,7 @@ async function parseDebugLog(
     const body = parseEventBody(line);
 
     if (event === 'RUN_START') {
+      pendingTelemetryModels.clear();
       const kv = parseKeyValue(body);
       current =
         day >= since && day <= until
@@ -430,6 +443,10 @@ async function parseDebugLog(
             }
           : null;
       if (current) cycles.push(current);
+      continue;
+    }
+    if (event === 'RUN_END') {
+      pendingTelemetryModels.clear();
       continue;
     }
 
@@ -587,12 +604,22 @@ function walkFiles(
 function parseReviewJsonReviewer(
   filePath: string,
   adapter: string,
+  knownReviewers: Set<string>,
 ): string | undefined {
   const base = path.basename(filePath);
   const adapterMarker = `_${adapter}@`;
   const end = base.lastIndexOf(adapterMarker);
   if (!base.startsWith('review_') || end < 0) return undefined;
   const entryAndReviewer = base.slice('review_'.length, end);
+  const knownMatch = [...knownReviewers]
+    .sort((a, b) => b.length - a.length)
+    .find(
+      (reviewer) =>
+        entryAndReviewer === reviewer ||
+        entryAndReviewer.endsWith(`_${reviewer}`),
+    );
+  if (knownMatch) return knownMatch;
+  if (entryAndReviewer.startsWith('._')) return entryAndReviewer.slice(2);
   return entryAndReviewer.split('_').at(-1);
 }
 
@@ -621,7 +648,12 @@ function scanJsonReviewStats(
       if (!(raw.adapter && raw.timestamp)) continue;
       const day = localDate(raw.timestamp);
       if (day < since || day > until) continue;
-      const reviewer = parseReviewJsonReviewer(file, raw.adapter) ?? 'unknown';
+      const reviewer =
+        parseReviewJsonReviewer(
+          file,
+          raw.adapter,
+          configModels.knownReviewers,
+        ) ?? 'unknown';
       const resolved = resolveModel(
         source,
         raw.adapter,
@@ -723,25 +755,28 @@ function combineAcrossSources(combos: ComboStats[]): ComboStats[] {
   });
 }
 
-function getAllLogDates(sourcePaths: string[]): string[] {
+async function getAllLogDates(sourcePaths: string[]): Promise<string[]> {
   const dates = new Set<string>();
   for (const sourcePath of sourcePaths) {
     const debugLogPath = path.join(sourcePath, 'validator_logs', '.debug.log');
     if (!fs.existsSync(debugLogPath)) continue;
-    const content = fs.readFileSync(debugLogPath, 'utf-8');
-    for (const match of content.matchAll(/^\[(\d{4}-\d{2}-\d{2})T/gm)) {
-      if (match[1]) dates.add(match[1]);
+    const rl = readline.createInterface({
+      input: fs.createReadStream(debugLogPath),
+    });
+    for await (const line of rl) {
+      const match = line.match(/^\[(\d{4}-\d{2}-\d{2})T/);
+      if (match?.[1]) dates.add(match[1]);
     }
   }
   return [...dates].sort();
 }
 
-function resolveWindow(args: Args): {
+async function resolveWindow(args: Args): Promise<{
   since: string;
   until: string;
   inferredFromLogs: boolean;
-} {
-  const dates = getAllLogDates(args.sources);
+}> {
+  const dates = await getAllLogDates(args.sources);
   const latestLogDate = dates.at(-1);
   const today = new Date().toISOString().slice(0, 10);
   const until = args.until ?? latestLogDate ?? today;
@@ -756,7 +791,7 @@ function resolveWindow(args: Args): {
 
 export async function buildMetricsReport(args: Args): Promise<MetricsReport> {
   const sources = args.sources.map((s) => path.resolve(expandHome(s)));
-  const window = resolveWindow({ ...args, sources });
+  const window = await resolveWindow({ ...args, sources });
   const allCycles: RunCycle[] = [];
   const sourceMetrics: SourceMetrics[] = [];
   const allJsonStats = new Map<string, JsonReviewStats>();
