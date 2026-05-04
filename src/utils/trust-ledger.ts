@@ -322,6 +322,7 @@ function isTrustEligibleStatus(status: ValidatorStatus | 'skipped'): boolean {
   return (
     status === 'passed' ||
     status === 'passed_with_warnings' ||
+    status === 'no_changes' ||
     status === 'no_applicable_gates' ||
     status === 'skipped'
   );
