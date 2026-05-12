@@ -5,13 +5,10 @@ import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
-import { computeSkillChecksum } from './init-checksums.js';
+import { installAgentPluginForAgents } from '../plugin/agent-plugin-cli.js';
 import { writeConfigYml } from './init-config-helpers.js';
-import { getCodexSkillsBaseDir, installAdapterPlugin } from './init-plugin.js';
 import {
-  type OverwriteChoice,
   promptDevCLIs,
-  promptFileOverwrite,
   promptInstallScope,
   promptNumReviews,
   promptReviewCLIs,
@@ -63,7 +60,7 @@ interface InitOptions {
 }
 
 /** Native CLIs that support the /validator-setup skill invocation. */
-const NATIVE_CLIS = new Set(['claude', 'cursor', 'github-copilot']);
+const NATIVE_CLIS = new Set(['claude', 'github-copilot']);
 
 export function registerInitCommand(program: Command): void {
   program
@@ -190,68 +187,6 @@ async function scaffoldValidatorDir(
   await writeConfigYml(targetDir, reviewCLINames, numReviews, reviewConfig);
 }
 
-async function copyDirRecursive(opts: {
-  src: string;
-  dest: string;
-}): Promise<void> {
-  await fs.mkdir(opts.dest, { recursive: true });
-  const entries = await fs.readdir(opts.src, { withFileTypes: true });
-  for (const entry of entries) {
-    const srcPath = path.join(opts.src, entry.name);
-    const destPath = path.join(opts.dest, entry.name);
-    if (entry.isDirectory()) {
-      await copyDirRecursive({ src: srcPath, dest: destPath });
-    } else {
-      await fs.copyFile(srcPath, destPath);
-    }
-  }
-}
-
-interface UpdateAllState {
-  updateAll: boolean;
-}
-
-async function installSkillsWithChecksums(
-  projectRoot: string,
-  targetBaseDir: string,
-  skipPrompts: boolean,
-  updateAllState: UpdateAllState,
-): Promise<void> {
-  const skillsDir = path.isAbsolute(targetBaseDir)
-    ? targetBaseDir
-    : path.join(projectRoot, targetBaseDir);
-  for (const dirName of await getSkillDirNames()) {
-    const sourceDir = path.join(SKILLS_SOURCE_DIR, dirName);
-    const targetDir = path.join(skillsDir, dirName);
-    const relativeDir = `${path.relative(projectRoot, targetDir)}/`;
-
-    if (!(await exists(targetDir))) {
-      await copyDirRecursive({ src: sourceDir, dest: targetDir });
-      console.log(chalk.green(`Created ${relativeDir}`));
-      continue;
-    }
-
-    const sourceChecksum = await computeSkillChecksum(sourceDir);
-    const targetChecksum = await computeSkillChecksum(targetDir);
-    if (sourceChecksum === targetChecksum) continue;
-
-    let choice: OverwriteChoice;
-    if (skipPrompts || updateAllState.updateAll) {
-      choice = 'yes';
-    } else {
-      choice = await promptFileOverwrite(dirName, skipPrompts);
-      if (choice === 'all') {
-        updateAllState.updateAll = true;
-      }
-    }
-    if (choice === 'no') continue;
-
-    await fs.rm(targetDir, { recursive: true, force: true });
-    await copyDirRecursive({ src: sourceDir, dest: targetDir });
-    console.log(chalk.green(`Updated ${relativeDir}`));
-  }
-}
-
 /** Detect which adapters need plugin installation, logging already-installed adapters. */
 async function detectAdaptersNeedingInstall(
   devAdapters: CLIAdapter[],
@@ -278,40 +213,11 @@ async function detectAdaptersNeedingInstall(
   return result;
 }
 
-/** Install skills for non-Claude/Codex adapters (e.g. Gemini, Cursor). */
-async function installOtherAdapterSkills(
-  projectRoot: string,
-  devAdapters: CLIAdapter[],
-  skipPrompts: boolean,
-  updateAllState: UpdateAllState,
-): Promise<void> {
-  const seen = new Set<string>();
-  for (const adapter of devAdapters) {
-    if (
-      adapter.name === 'claude' ||
-      adapter.name === 'codex' ||
-      adapter.name === 'github-copilot'
-    )
-      continue;
-    const dir = adapter.getProjectSkillDir();
-    if (dir && !seen.has(dir)) {
-      seen.add(dir);
-      await installSkillsWithChecksums(
-        projectRoot,
-        dir,
-        skipPrompts,
-        updateAllState,
-      );
-    }
-  }
-}
-
 async function installExternalFiles(
   projectRoot: string,
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
 ): Promise<void> {
-  const updateAllState: UpdateAllState = { updateAll: false };
   const devAdapterNames = new Set(devAdapters.map((adapter) => adapter.name));
 
   const adaptersNeedingInstall = await detectAdaptersNeedingInstall(
@@ -326,26 +232,19 @@ async function installExternalFiles(
     ? await promptInstallScope(skipPrompts)
     : 'project';
 
-  for (const adapter of adaptersNeedingInstall) {
-    await installAdapterPlugin(adapter, projectRoot, installScope);
-  }
-
-  if (devAdapterNames.has('codex')) {
-    const codexBaseDir = getCodexSkillsBaseDir(installScope);
-    await installSkillsWithChecksums(
-      projectRoot,
-      codexBaseDir,
-      skipPrompts,
-      updateAllState,
-    );
-  }
-
-  await installOtherAdapterSkills(
-    projectRoot,
-    devAdapters,
-    skipPrompts,
-    updateAllState,
+  const targetNames = new Set(
+    devAdapters
+      .filter((adapter) => !adapter.installPlugin)
+      .map((adapter) => adapter.name),
   );
+  for (const adapter of adaptersNeedingInstall) {
+    targetNames.add(adapter.name);
+  }
+  installAgentPluginForAgents({
+    agents: [...targetNames],
+    scope: installScope,
+    yes: skipPrompts,
+  });
 }
 
 async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
@@ -367,25 +266,25 @@ async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
   if (hasCodex) {
     console.log(
       chalk.bold(
-        'To complete setup in Codex, reference the setup skill: .agents/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
+        'To complete setup in Codex, reference the setup skill: ~/.agents/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
       ),
     );
     console.log();
     console.log('Available Codex skills:');
     for (const dirName of await getSkillDirNames()) {
-      console.log(`  .agents/skills/${dirName}/SKILL.md`);
+      console.log(`  ~/.agents/skills/${dirName}/SKILL.md`);
     }
   }
   if (hasOtherNonNative) {
     console.log(
       chalk.bold(
-        'To complete setup, reference the setup skill in your CLI: @.claude/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
+        'To complete setup, reference the setup skill in your CLI: ~/.agents/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
       ),
     );
     console.log();
     console.log('Available skills:');
     for (const dirName of await getSkillDirNames()) {
-      console.log(`  @.claude/skills/${dirName}/SKILL.md`);
+      console.log(`  ~/.agents/skills/${dirName}/SKILL.md`);
     }
   }
 }

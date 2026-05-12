@@ -18,6 +18,9 @@ let selectedNumReviews = 1;
 
 const mockCopilotInstallPlugin = mock(async () => ({ success: true }));
 const mockCopilotDetectPlugin = mock(async () => null as "user" | null);
+const installAgentPluginForAgentsMock = mock(
+	(_opts: { agents: string[]; scope: "project" | "user"; yes?: boolean }) => {},
+);
 
 const mockAdapters = [
 	{
@@ -71,6 +74,15 @@ mock.module("../../src/plugin/claude-cli.js", () => ({
 	listPlugins: async () => [],
 	updateMarketplace: async () => ({ success: true }),
 	updatePlugin: async () => ({ success: true }),
+}));
+
+mock.module("../../src/plugin/agent-plugin-cli.js", () => ({
+	installAgentPluginForAgents: (opts: {
+		agents: string[];
+		scope: "project" | "user";
+		yes?: boolean;
+	}) => installAgentPluginForAgentsMock(opts),
+	updateAgentPluginForAgents: () => {},
 }));
 
 const { registerInitCommand } = await import("../../src/commands/init.js");
@@ -130,7 +142,13 @@ describe("init command with github-copilot", () => {
 	it("installs plugin via installPlugin when not already installed", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		expect(mockCopilotInstallPlugin).toHaveBeenCalledTimes(1);
+		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: ["github-copilot"],
+				scope: "project",
+				yes: true,
+			}),
+		);
 	});
 
 	it("skips install when plugin already detected", async () => {

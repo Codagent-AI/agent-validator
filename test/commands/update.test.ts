@@ -24,6 +24,9 @@ const updatePluginMock = mock(async (_name: string) => ({ success: true }));
 
 const addMarketplaceMock = mock(async () => ({ success: true }));
 const installPluginMock = mock(async (_scope: string) => ({ success: true }));
+const updateAgentPluginForAgentsMock = mock(
+	(_opts: { agents: string[]; scope?: "project" | "user"; yes?: boolean }) => {},
+);
 
 // Cursor adapter spies — spy on prototype methods instead of using mock.module so
 // the cursor.js module registration is not replaced (which would leak into other test
@@ -39,6 +42,15 @@ mock.module("../../src/plugin/claude-cli.js", () => ({
 	listPlugins: () => listPluginsMock(),
 	updateMarketplace: (name: string) => updateMarketplaceMock(name),
 	updatePlugin: (name: string) => updatePluginMock(name),
+}));
+
+mock.module("../../src/plugin/agent-plugin-cli.js", () => ({
+	installAgentPluginForAgents: () => {},
+	updateAgentPluginForAgents: (opts: {
+		agents: string[];
+		scope?: "project" | "user";
+		yes?: boolean;
+	}) => updateAgentPluginForAgentsMock(opts),
 }));
 
 const { registerUpdateCommand } = await import("../../src/commands/update.js");
@@ -74,6 +86,7 @@ describe("update command", () => {
 		updatePluginMock.mockClear();
 		addMarketplaceMock.mockClear();
 		installPluginMock.mockClear();
+		updateAgentPluginForAgentsMock.mockClear();
 
 		// Set up prototype spies with default implementations
 		cursorDetectPluginSpy = spyOn(
@@ -138,15 +151,13 @@ describe("update command", () => {
 		expect(updateMarketplaceMock).toHaveBeenCalledTimes(1);
 		expect(updatePluginMock).toHaveBeenCalledTimes(1);
 		expect(logs.join("\n")).toContain("project scope");
-		const updated = await fs.readFile(
-			path.join(testDir, ".agents", "skills", "validator-help", "SKILL.md"),
-			"utf-8",
+		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: expect.arrayContaining(["claude", "codex"]),
+				scope: "project",
+				yes: true,
+			}),
 		);
-		const source = await fs.readFile(
-			path.join(originalCwd, "skills", "validator-help", "SKILL.md"),
-			"utf-8",
-		);
-		expect(updated).toBe(source);
 	});
 
 	it("updates global Codex skills when only global marker exists", async () => {
@@ -169,18 +180,16 @@ describe("update command", () => {
 
 		await runPluginUpdate();
 
-		const updated = await fs.readFile(
-			path.join(homeDir, ".agents", "skills", "validator-status", "SKILL.md"),
-			"utf-8",
+		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: expect.arrayContaining(["claude", "codex"]),
+				scope: "user",
+				yes: true,
+			}),
 		);
-		const source = await fs.readFile(
-			path.join(originalCwd, "skills", "validator-status", "SKILL.md"),
-			"utf-8",
-		);
-		expect(updated).toBe(source);
 	});
 
-	it("prefers local Codex skills when both local and global markers exist", async () => {
+	it("updates Codex through agent-plugin when local and global markers exist", async () => {
 		listPluginsMock.mockImplementationOnce(async () => [
 			{ name: "agent-validator", scope: "project", projectPath: testDir },
 			{ name: "agent-validator", scope: "user" },
@@ -208,20 +217,13 @@ describe("update command", () => {
 
 		await runPluginUpdate();
 
-		const localUpdated = await fs.readFile(
-			path.join(testDir, ".agents", "skills", "validator-check", "SKILL.md"),
-			"utf-8",
+		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: expect.arrayContaining(["claude", "codex"]),
+				scope: "project",
+				yes: true,
+			}),
 		);
-		const globalUpdated = await fs.readFile(
-			path.join(homeDir, ".agents", "skills", "validator-check", "SKILL.md"),
-			"utf-8",
-		);
-		const source = await fs.readFile(
-			path.join(originalCwd, "skills", "validator-check", "SKILL.md"),
-			"utf-8",
-		);
-		expect(localUpdated).toBe(source);
-		expect(globalUpdated).toBe("global old");
 	});
 
 	it("prints manual update instructions when update fails", async () => {
@@ -287,7 +289,7 @@ describe("update command", () => {
 		expect(output).toContain("reinstalling");
 	});
 
-	it("fails when no Claude plugin and no Cursor plugin are installed", async () => {
+	it("fails when no Claude, Cursor, or Codex install is detected", async () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 		// cursorDetectPluginSpy already returns null by default
 
@@ -296,6 +298,26 @@ describe("update command", () => {
 		);
 		expect(updateMarketplaceMock).not.toHaveBeenCalled();
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
+	});
+
+	it("updates Codex fallback when only Codex skills are installed", async () => {
+		listPluginsMock.mockImplementationOnce(async () => []);
+		await fs.mkdir(path.join(homeDir, ".agents", "skills", "validator-run"), {
+			recursive: true,
+		});
+
+		await runPluginUpdate();
+
+		expect(updateMarketplaceMock).not.toHaveBeenCalled();
+		expect(updatePluginMock).not.toHaveBeenCalled();
+		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
+		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: ["codex"],
+				scope: "user",
+				yes: true,
+			}),
+		);
 	});
 
 	it("skips Claude update and updates Cursor when only Cursor is installed", async () => {
