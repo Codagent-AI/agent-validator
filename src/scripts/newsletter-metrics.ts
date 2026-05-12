@@ -68,6 +68,11 @@ interface RunCycle {
   source: string;
   timestamp: string;
   mode: string;
+  linesAdded: number;
+  linesRemoved: number;
+  hasLineStats: boolean;
+  fixed: number;
+  skipped: number;
   events: ReviewEvent[];
   skippedReviewResults: number;
 }
@@ -80,9 +85,41 @@ interface SourceMetrics {
   start?: string;
   end?: string;
   cycles: number;
+  cyclesWithLineStats: number;
+  cyclesMissingLineStats: number;
+  linesAdded: number;
+  linesRemoved: number;
+  issuesFound: number;
+  issuesFoundWithLineStats: number;
+  fixedRunEnd: number;
+  skippedRunEnd: number;
+  fixedRunEndWithLineStats: number;
+  skippedRunEndWithLineStats: number;
   reviewExecutions: number;
   skippedReviewResults: number;
   modelSources: Record<string, number>;
+}
+
+interface RateSummary {
+  cycles: number;
+  cyclesWithLineStats: number;
+  cyclesMissingLineStats: number;
+  linesAdded: number;
+  linesRemoved: number;
+  editedLines: number;
+  issuesFound: number;
+  issuesFoundWithLineStats: number;
+  fixedNextCycle: number;
+  fixedNextCycleWithLineStats: number;
+  fixedRunEnd: number;
+  skippedRunEnd: number;
+  fixedRunEndWithLineStats: number;
+  skippedRunEndWithLineStats: number;
+  approxFixedNotSkipped: number;
+  approxFixedNotSkippedWithLineStats: number;
+  issuesFoundPerKEditedLines: number | null;
+  approxFixedNotSkippedPerKEditedLines: number | null;
+  fixedRunEndPerKEditedLines: number | null;
 }
 
 interface JsonReviewStats {
@@ -111,7 +148,9 @@ interface ComboStats {
   fail: number;
   error: number;
   issuesFound: number;
+  issuesFoundWithLineStats: number;
   fixedNextCycle: number;
+  fixedNextCycleWithLineStats: number;
   durationS: number;
   jsonReviews: number;
   jsonNew: number;
@@ -126,6 +165,7 @@ interface MetricsReport {
     days: number;
     inferredFromLogs: boolean;
   };
+  summary: RateSummary;
   sources: SourceMetrics[];
   bySource: ComboStats[];
   combined: ComboStats[];
@@ -377,7 +417,9 @@ function initComboStats(combo: {
     fail: 0,
     error: 0,
     issuesFound: 0,
+    issuesFoundWithLineStats: 0,
     fixedNextCycle: 0,
+    fixedNextCycleWithLineStats: 0,
     durationS: 0,
     jsonReviews: 0,
     jsonNew: 0,
@@ -408,6 +450,16 @@ async function parseDebugLog(
     debugLogPath: fs.existsSync(debugLogPath) ? debugLogPath : undefined,
     configPath: configModels.configPath,
     cycles: 0,
+    cyclesWithLineStats: 0,
+    cyclesMissingLineStats: 0,
+    linesAdded: 0,
+    linesRemoved: 0,
+    issuesFound: 0,
+    issuesFoundWithLineStats: 0,
+    fixedRunEnd: 0,
+    skippedRunEnd: 0,
+    fixedRunEndWithLineStats: 0,
+    skippedRunEndWithLineStats: 0,
     reviewExecutions: 0,
     skippedReviewResults: 0,
     modelSources: {},
@@ -432,12 +484,19 @@ async function parseDebugLog(
     if (event === 'RUN_START') {
       pendingTelemetryModels.clear();
       const kv = parseKeyValue(body);
+      const hasLineStats =
+        kv.lines_added !== undefined || kv.lines_removed !== undefined;
       current =
         day >= since && day <= until
           ? {
               source: name,
               timestamp: ts,
               mode: kv.mode ?? 'unknown',
+              linesAdded: safeNum(kv.lines_added),
+              linesRemoved: safeNum(kv.lines_removed),
+              hasLineStats,
+              fixed: 0,
+              skipped: 0,
               events: [],
               skippedReviewResults: 0,
             }
@@ -446,6 +505,11 @@ async function parseDebugLog(
       continue;
     }
     if (event === 'RUN_END') {
+      if (current) {
+        const kv = parseKeyValue(body);
+        current.fixed = safeNum(kv.fixed);
+        current.skipped = safeNum(kv.skipped);
+      }
       pendingTelemetryModels.clear();
       continue;
     }
@@ -502,9 +566,23 @@ async function parseDebugLog(
       metrics.end = cycle.timestamp;
     }
     metrics.cycles++;
+    if (cycle.hasLineStats) {
+      metrics.cyclesWithLineStats++;
+      metrics.linesAdded += cycle.linesAdded;
+      metrics.linesRemoved += cycle.linesRemoved;
+      metrics.fixedRunEndWithLineStats += cycle.fixed;
+      metrics.skippedRunEndWithLineStats += cycle.skipped;
+    } else {
+      metrics.cyclesMissingLineStats++;
+    }
+    metrics.fixedRunEnd += cycle.fixed;
+    metrics.skippedRunEnd += cycle.skipped;
     metrics.skippedReviewResults += cycle.skippedReviewResults;
     metrics.reviewExecutions += cycle.events.length;
     for (const event of cycle.events) {
+      metrics.issuesFound += event.violations;
+      if (cycle.hasLineStats)
+        metrics.issuesFoundWithLineStats += event.violations;
       addModelSource(metrics.modelSources, event.modelSource);
     }
   }
@@ -544,6 +622,18 @@ function addStatus(stats: ComboStats, status: string): void {
   else if (status === 'error') stats.error++;
 }
 
+function addFixedNextCycle(
+  aggregate: ComboStats,
+  previous: CycleCombo | undefined,
+  current: CycleCombo,
+  hasLineStats: boolean,
+): void {
+  if (!previous || previous.violations <= current.violations) return;
+  const fixed = previous.violations - current.violations;
+  aggregate.fixedNextCycle += fixed;
+  if (hasLineStats) aggregate.fixedNextCycleWithLineStats += fixed;
+}
+
 function accumulateCycles(cycles: RunCycle[]): ComboStats[] {
   const stats = new Map<string, ComboStats>();
   const previousByCombo = new Map<string, CycleCombo>();
@@ -568,14 +658,18 @@ function accumulateCycles(cycles: RunCycle[]): ComboStats[] {
       aggregate.cycles++;
       aggregate.executions += combo.executions;
       aggregate.issuesFound += combo.violations;
+      if (cycle.hasLineStats)
+        aggregate.issuesFoundWithLineStats += combo.violations;
       aggregate.durationS += combo.durationS;
       addModelSource(aggregate.modelSources, combo.modelSource);
       for (const status of combo.statuses) addStatus(aggregate, status);
 
-      const previous = previousByCombo.get(key);
-      if (previous && previous.violations > combo.violations) {
-        aggregate.fixedNextCycle += previous.violations - combo.violations;
-      }
+      addFixedNextCycle(
+        aggregate,
+        previousByCombo.get(key),
+        combo,
+        cycle.hasLineStats,
+      );
       previousByCombo.set(key, combo);
     }
   }
@@ -738,7 +832,9 @@ function combineAcrossSources(combos: ComboStats[]): ComboStats[] {
     target.fail += combo.fail;
     target.error += combo.error;
     target.issuesFound += combo.issuesFound;
+    target.issuesFoundWithLineStats += combo.issuesFoundWithLineStats;
     target.fixedNextCycle += combo.fixedNextCycle;
+    target.fixedNextCycleWithLineStats += combo.fixedNextCycleWithLineStats;
     target.durationS += combo.durationS;
     target.jsonReviews += combo.jsonReviews;
     target.jsonNew += combo.jsonNew;
@@ -753,6 +849,84 @@ function combineAcrossSources(combos: ComboStats[]): ComboStats[] {
     if (found !== 0) return found;
     return b.executions - a.executions;
   });
+}
+
+function perK(count: number, editedLines: number): number | null {
+  return editedLines > 0 ? (count / editedLines) * 1000 : null;
+}
+
+function buildRateSummary(
+  sources: SourceMetrics[],
+  bySource: ComboStats[],
+): RateSummary {
+  const editedLines = sources.reduce(
+    (sum, source) => sum + Math.max(source.linesAdded, source.linesRemoved),
+    0,
+  );
+  const fixedNextCycle = bySource.reduce(
+    (sum, combo) => sum + combo.fixedNextCycle,
+    0,
+  );
+  const fixedNextCycleWithLineStats = bySource.reduce(
+    (sum, combo) => sum + combo.fixedNextCycleWithLineStats,
+    0,
+  );
+  const skippedRunEnd = sources.reduce(
+    (sum, source) => sum + source.skippedRunEnd,
+    0,
+  );
+  const skippedRunEndWithLineStats = sources.reduce(
+    (sum, source) => sum + source.skippedRunEndWithLineStats,
+    0,
+  );
+  const approxFixedNotSkipped = Math.max(0, fixedNextCycle - skippedRunEnd);
+  const approxFixedNotSkippedWithLineStats = Math.max(
+    0,
+    fixedNextCycleWithLineStats - skippedRunEndWithLineStats,
+  );
+
+  return {
+    cycles: sources.reduce((sum, source) => sum + source.cycles, 0),
+    cyclesWithLineStats: sources.reduce(
+      (sum, source) => sum + source.cyclesWithLineStats,
+      0,
+    ),
+    cyclesMissingLineStats: sources.reduce(
+      (sum, source) => sum + source.cyclesMissingLineStats,
+      0,
+    ),
+    linesAdded: sources.reduce((sum, source) => sum + source.linesAdded, 0),
+    linesRemoved: sources.reduce((sum, source) => sum + source.linesRemoved, 0),
+    editedLines,
+    issuesFound: sources.reduce((sum, source) => sum + source.issuesFound, 0),
+    issuesFoundWithLineStats: sources.reduce(
+      (sum, source) => sum + source.issuesFoundWithLineStats,
+      0,
+    ),
+    fixedNextCycle,
+    fixedNextCycleWithLineStats,
+    fixedRunEnd: sources.reduce((sum, source) => sum + source.fixedRunEnd, 0),
+    skippedRunEnd,
+    fixedRunEndWithLineStats: sources.reduce(
+      (sum, source) => sum + source.fixedRunEndWithLineStats,
+      0,
+    ),
+    skippedRunEndWithLineStats,
+    approxFixedNotSkipped,
+    approxFixedNotSkippedWithLineStats,
+    issuesFoundPerKEditedLines: perK(
+      sources.reduce((sum, source) => sum + source.issuesFoundWithLineStats, 0),
+      editedLines,
+    ),
+    approxFixedNotSkippedPerKEditedLines: perK(
+      approxFixedNotSkippedWithLineStats,
+      editedLines,
+    ),
+    fixedRunEndPerKEditedLines: perK(
+      sources.reduce((sum, source) => sum + source.fixedRunEndWithLineStats, 0),
+      editedLines,
+    ),
+  };
 }
 
 async function getAllLogDates(sourcePaths: string[]): Promise<string[]> {
@@ -831,9 +1005,11 @@ export async function buildMetricsReport(args: Args): Promise<MetricsReport> {
   }
 
   const bySource = mergeJsonStats(accumulateCycles(allCycles), allJsonStats);
+  const summary = buildRateSummary(sourceMetrics, bySource);
 
   return {
     window: { ...window, days: args.days },
+    summary,
     sources: sourceMetrics,
     bySource,
     combined: combineAcrossSources(bySource),
@@ -849,6 +1025,10 @@ function fmt(n: number, digits = 0): string {
 
 function avg(total: number, count: number, digits = 2): string {
   return count > 0 ? fmt(total / count, digits) : 'n/a';
+}
+
+function rate(value: number | null, digits = 2): string {
+  return value === null ? 'n/a' : fmt(value, digits);
 }
 
 function formatModelSources(sources: Record<string, number>): string {
@@ -871,6 +1051,11 @@ function formatMarkdown(report: MetricsReport): string {
   const sourceRows = report.sources.map((source) => [
     source.source,
     source.cycles.toString(),
+    source.cyclesWithLineStats.toString(),
+    source.cyclesMissingLineStats.toString(),
+    Math.max(source.linesAdded, source.linesRemoved).toString(),
+    source.issuesFoundWithLineStats.toString(),
+    source.fixedRunEndWithLineStats.toString(),
     source.reviewExecutions.toString(),
     source.skippedReviewResults.toString(),
     source.start ?? 'n/a',
@@ -903,12 +1088,50 @@ function formatMarkdown(report: MetricsReport): string {
       report.window.inferredFromLogs ? ' (ending at latest log date)' : ''
     }`,
     '',
+    '## Rate Summary',
+    '',
+    ...markdownTable(
+      ['Metric', 'Value'],
+      [
+        ['Edited lines with line stats', fmt(report.summary.editedLines)],
+        [
+          'Cycles with/missing line stats',
+          `${report.summary.cyclesWithLineStats}/${report.summary.cyclesMissingLineStats}`,
+        ],
+        [
+          'Issues found with line stats',
+          fmt(report.summary.issuesFoundWithLineStats),
+        ],
+        [
+          'Issues found / 1k edited lines',
+          rate(report.summary.issuesFoundPerKEditedLines),
+        ],
+        [
+          'Approx fixed, not skipped',
+          fmt(report.summary.approxFixedNotSkippedWithLineStats),
+        ],
+        [
+          'Approx fixed, not skipped / 1k edited lines',
+          rate(report.summary.approxFixedNotSkippedPerKEditedLines),
+        ],
+        [
+          'RUN_END fixed / 1k edited lines',
+          rate(report.summary.fixedRunEndPerKEditedLines),
+        ],
+      ],
+    ),
+    '',
     '## Source Coverage',
     '',
     ...markdownTable(
       [
         'Source',
         'Cycles',
+        'Line-stat cycles',
+        'Missing-line cycles',
+        'Edited lines',
+        'Issues found w/lines',
+        'RUN_END fixed w/lines',
         'Review executions',
         'Cached/skipped review results',
         'First cycle',
@@ -943,6 +1166,8 @@ function formatMarkdown(report: MetricsReport): string {
     '- Model source `current-config` means the model was inferred from the repo config as it exists now, not necessarily from the historical log line.',
     '- Model source `unknown` means the debug log and current config did not identify a model.',
     '- Fixed-next-cycle is inferred from a lower violation count in the next observed cycle for the same source/reviewer/CLI/model.',
+    '- Per-1k edited-line rates use `max(lines_added, lines_removed)` from `RUN_START`, so one removed line plus one added line counts as one edited line. Cycles with older `changes=N` entries are excluded from the rate numerator and denominator.',
+    '- Approx fixed-not-skipped subtracts `RUN_END skipped` from inferred fixed-next-cycle reductions. `RUN_END fixed` is also shown separately when historical logs populate it.',
     '- Retained JSON statuses come from review JSON files still present under `validator_logs`; those files may not cover the whole window.',
     '',
   ].join('\n');
