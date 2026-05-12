@@ -1,14 +1,20 @@
 ---
 name: validator-commit
 description: >-
-  Handles commit flows by detecting changes, optionally running validator validation, and completing commits for requests such as "commit with validator", "run checks before commit", "run validator then commit", or "skip validator and commit".
+  Activates only for explicit validator-aware commit requests such as "commit with validator", "run validator then commit", "run checks before commit", or "skip validator and commit". Excludes plain commit requests.
 disable-model-invocation: false
 allowed-tools: Bash, Task
 ---
 
 # /validator-commit $ARGUMENTS
 
-Commit with optional validator validation. Runs `agent-validate detect` first, validates based on intent (full run, checks only, or skip), handles failures, then commits.
+Commit with explicit validator validation intent. Runs `agent-validate detect` first, validates based on intent (full run, checks only, or skip), handles failures, then commits.
+
+## Invocation Policy
+
+Use this skill only when the user explicitly asks to involve Agent Validator in the commit flow, including full validation, checks-only validation, or intentionally skipping validator state as part of the commit.
+
+Do not choose this skill for a plain "commit", "make a commit", or "commit these changes" request that does not mention validator, gauntlet, checks, validation, or skip.
 
 ## Step 1 - Detect Changes
 

@@ -1,14 +1,19 @@
 ---
 name: validator-check
 description: >-
-  Runs validator checks only without AI reviews for requests such as "run validator checks", "check without reviews", or "validate before commit without AI review".
-disable-model-invocation: true
+  Activates only for explicit checks-only validation requests such as "run validator checks", "checks only", "check without reviews", or validation without AI review. Runs checks without AI reviews.
+disable-model-invocation: false
 allowed-tools: Bash, Task
 ---
 
 # /validator-check
 Run validator checks only — no AI reviews.
 
+## Invocation Policy
+
+Use this skill only when the user explicitly asks for validator checks only, checks without reviews, static checks, or validation without AI review.
+
+Do not choose this skill for generic "run the validator", "run the gauntlet", "run validation", or final verification requests; use `/validator-run` for those.
 
 ## Procedure
 
