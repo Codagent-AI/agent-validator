@@ -1,6 +1,12 @@
 import { checkbox, confirm, number, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 
+function toSortedChoices(names: string[]): { name: string; value: string }[] {
+  return [...names]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ name, value: name }));
+}
+
 export async function promptDevCLIs(
   detectedNames: string[],
   skipPrompts: boolean,
@@ -15,7 +21,7 @@ export async function promptDevCLIs(
   );
   const selected = await checkbox({
     message: 'Development CLIs:',
-    choices: detectedNames.map((name) => ({ name, value: name })),
+    choices: toSortedChoices(detectedNames),
     required: true,
   });
   return selected;
@@ -35,7 +41,7 @@ export async function promptReviewCLIs(
   );
   const selected = await checkbox({
     message: 'Review CLIs:',
-    choices: detectedNames.map((name) => ({ name, value: name })),
+    choices: toSortedChoices(detectedNames),
     required: true,
   });
   return selected;

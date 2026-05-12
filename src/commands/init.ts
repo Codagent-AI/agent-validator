@@ -50,14 +50,6 @@ async function getSkillDirNames(): Promise<string[]> {
     .sort();
 }
 
-const CLI_PREFERENCE_ORDER = [
-  'github-copilot',
-  'codex',
-  'claude',
-  'cursor',
-  'gemini',
-];
-
 interface InitOptions {
   yes?: boolean;
 }
@@ -391,10 +383,8 @@ async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
 }
 
 async function detectAvailableCLIs(): Promise<CLIAdapter[]> {
-  const allAdapters = [...getAllAdapters()].sort(
-    (a, b) =>
-      CLI_PREFERENCE_ORDER.indexOf(a.name) -
-      CLI_PREFERENCE_ORDER.indexOf(b.name),
+  const allAdapters = [...getAllAdapters()].sort((a, b) =>
+    a.name.localeCompare(b.name),
   );
   const available: CLIAdapter[] = [];
 

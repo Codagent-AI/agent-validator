@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 let selectValue = "yes";
+let checkboxCalls: { choices?: { name: string; value: string }[] }[] = [];
 
 // Mock @inquirer/prompts before importing our module
 mock.module("@inquirer/prompts", () => ({
-	checkbox: async () => ["claude", "codex"],
+	checkbox: async (opts: { choices?: { name: string; value: string }[] }) => {
+		checkboxCalls.push(opts);
+		return ["claude", "codex"];
+	},
 	number: async () => 2,
 	confirm: async () => true,
 	select: async () => selectValue,
@@ -22,6 +26,10 @@ const {
 const { selectReviewConfig } = await import("../../src/commands/init-reviews.js");
 
 describe("promptDevCLIs", () => {
+	beforeEach(() => {
+		checkboxCalls = [];
+	});
+
 	it("should return all CLI names when skipPrompts is true", async () => {
 		const result = await promptDevCLIs(["claude", "codex", "gemini"], true);
 		expect(result).toEqual(["claude", "codex", "gemini"]);
@@ -30,6 +38,17 @@ describe("promptDevCLIs", () => {
 	it("should call checkbox when skipPrompts is false", async () => {
 		const result = await promptDevCLIs(["claude", "codex", "gemini"], false);
 		expect(result).toEqual(["claude", "codex"]); // mocked return
+	});
+
+	it("should show CLI choices alphabetically", async () => {
+		await promptDevCLIs(["opencode", "github-copilot", "codex", "claude"], false);
+
+		expect(checkboxCalls[0]?.choices?.map((choice) => choice.name)).toEqual([
+			"claude",
+			"codex",
+			"github-copilot",
+			"opencode",
+		]);
 	});
 });
 
@@ -51,6 +70,10 @@ describe("promptInstallScope", () => {
 });
 
 describe("promptReviewCLIs", () => {
+	beforeEach(() => {
+		checkboxCalls = [];
+	});
+
 	it("should return all CLI names when skipPrompts is true", async () => {
 		const result = await promptReviewCLIs(["claude", "codex"], true);
 		expect(result).toEqual(["claude", "codex"]);
@@ -59,6 +82,17 @@ describe("promptReviewCLIs", () => {
 	it("should call checkbox when skipPrompts is false", async () => {
 		const result = await promptReviewCLIs(["claude", "codex", "gemini"], false);
 		expect(result).toEqual(["claude", "codex"]); // mocked return
+	});
+
+	it("should show CLI choices alphabetically", async () => {
+		await promptReviewCLIs(["opencode", "github-copilot", "codex", "claude"], false);
+
+		expect(checkboxCalls[0]?.choices?.map((choice) => choice.name)).toEqual([
+			"claude",
+			"codex",
+			"github-copilot",
+			"opencode",
+		]);
 	});
 });
 
