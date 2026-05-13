@@ -542,8 +542,6 @@ async function parseDebugLog(
       overrides,
       logModel,
     );
-    pendingTelemetryModels.delete(kv.cli);
-
     current.events.push({
       source: name,
       sourcePath: repoPath,

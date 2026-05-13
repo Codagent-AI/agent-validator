@@ -57,9 +57,9 @@ describe("promptInstallScope", () => {
 		selectValue = "project";
 	});
 
-	it("returns project scope when skipPrompts is true", async () => {
+	it("returns user scope when skipPrompts is true", async () => {
 		const result = await promptInstallScope(true);
-		expect(result).toBe("project");
+		expect(result).toBe("user");
 	});
 
 	it("returns selected scope when prompting", async () => {

@@ -210,4 +210,36 @@ describe('newsletter metrics script', () => {
     expect(telemetryCombo?.executions).toBe(1);
     expect(unknownCombo?.executions).toBe(1);
   });
+
+  it('reuses telemetry model hints for multiple review gates in the same cycle', async () => {
+    const repo = await writeRepo(
+      'telemetry-same-cycle',
+      `[2026-05-01T10:00:00.000] RUN_START mode=full files_changed=1 gates=2
+[2026-05-01T10:00:01.000] TELEMETRY adapter=codex model=from-telemetry
+[2026-05-01T10:00:10.000] GATE_RESULT review:.:code-quality cli=codex status=pass duration=10.0s violations=0
+[2026-05-01T10:00:11.000] GATE_RESULT review:.:security-and-errors cli=codex status=pass duration=8.0s violations=0
+[2026-05-01T10:00:11.100] RUN_END status=pass fixed=0 skipped=0 failed=0 iterations=1 duration=11.1s
+`,
+      undefined,
+      { model: null },
+    );
+
+    const report = await buildMetricsReport({
+      sources: [repo],
+      since: '2026-05-01',
+      until: '2026-05-01',
+      days: 30,
+      format: 'markdown',
+      modelOverrides: new Map(),
+    });
+
+    const telemetryCombos = report.combined.filter(
+      (item) => item.model === 'from-telemetry',
+    );
+    expect(telemetryCombos).toHaveLength(2);
+    expect(telemetryCombos.map((item) => item.reviewer).sort()).toEqual([
+      'code-quality',
+      'security-and-errors',
+    ]);
+  });
 });

@@ -50,15 +50,28 @@ export async function promptReviewCLIs(
 export async function promptInstallScope(
   skipPrompts: boolean,
 ): Promise<'user' | 'project'> {
-  if (skipPrompts) return 'project';
+  if (skipPrompts) return 'user';
 
   console.log();
   return select({
-    message: 'Install scope for Claude plugin and Codex skills:',
+    message: 'Install scope for agent plugins and skills:',
+    default: 'user' as const,
     choices: [
       { name: 'Local (project)', value: 'project' as const },
       { name: 'Global (user)', value: 'user' as const },
     ],
+  });
+}
+
+export async function promptAgentPluginInstallConfirmation(
+  skipPrompts: boolean,
+): Promise<boolean> {
+  if (skipPrompts) return true;
+
+  console.log();
+  return confirm({
+    message: 'Proceed with plugin installation?',
+    default: true,
   });
 }
 
