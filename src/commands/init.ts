@@ -25,6 +25,12 @@ interface InitOptions {
   agents?: string[];
 }
 
+interface InitReviewSelection {
+  reviewCLINames: string[];
+  numReviews: number;
+  reviewConfig: ReviewConfig;
+}
+
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
@@ -134,33 +140,20 @@ async function runInit(options: InitOptions): Promise<void> {
       explicitDevCLINames ?? (await promptDevCLIs(detectedNames, skipPrompts));
     devAdapters = availableAdapters.filter((a) => devCLINames.includes(a.name));
 
-    for (const adapter of devAdapters) {
-      if (!adapter.supportsHooks()) {
-        console.log(
-          chalk.yellow(
-            `  ${adapter.name} doesn't support hooks yet, skipping hook installation`,
-          ),
-        );
-      }
-    }
-
-    const reviewCLINames = await promptReviewCLIs(detectedNames, skipPrompts);
-    const numReviews = await promptNumReviews(
-      reviewCLINames.length,
+    const reviewSelection = await selectReviewsAndConfirmInstall(
+      detectedNames,
+      projectRoot,
+      devAdapters,
       skipPrompts,
     );
-    const reviewConfig = selectReviewConfig(reviewCLINames);
-    printReviewConfigExplanation(reviewConfig);
-
+    instructionCLINames = devCLINames;
     await scaffoldValidatorDir(
       projectRoot,
       targetDir,
-      reviewCLINames,
-      numReviews,
-      reviewConfig,
+      reviewSelection.reviewCLINames,
+      reviewSelection.numReviews,
+      reviewSelection.reviewConfig,
     );
-    instructionCLINames = devCLINames;
-    await installExternalFiles(projectRoot, devAdapters, skipPrompts);
   }
   await addToGitignore(projectRoot, 'validator_logs');
   await printPostInitInstructions(instructionCLINames);
@@ -192,17 +185,51 @@ async function scaffoldValidatorDir(
   await writeConfigYml(targetDir, reviewCLINames, numReviews, reviewConfig);
 }
 
+async function selectReviewsAndConfirmInstall(
+  detectedNames: string[],
+  projectRoot: string,
+  devAdapters: CLIAdapter[],
+  skipPrompts: boolean,
+): Promise<InitReviewSelection> {
+  while (true) {
+    const reviewCLINames = await promptReviewCLIs(detectedNames, skipPrompts);
+    const numReviews = await promptNumReviews(
+      reviewCLINames.length,
+      skipPrompts,
+    );
+    const reviewConfig = selectReviewConfig(reviewCLINames);
+    printReviewConfigExplanation(reviewConfig);
+
+    const confirmed = await installExternalFiles(
+      projectRoot,
+      devAdapters,
+      skipPrompts,
+    );
+    if (confirmed) {
+      return { reviewCLINames, numReviews, reviewConfig };
+    }
+
+    console.log(chalk.yellow('Returning to reviewer CLI selection.'));
+  }
+}
+
 async function installExternalFiles(
   _projectRoot: string,
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
-): Promise<void> {
+): Promise<boolean> {
   const targetNames = devAdapters.map((adapter) => adapter.name);
   if (targetNames.length === 0) {
-    return;
+    return true;
   }
 
   const installScope = await promptInstallScope(skipPrompts);
+  console.log();
+  console.log(
+    chalk.bold(
+      'Agent Validator will install the following skills and agent plugins:',
+    ),
+  );
   installAgentPluginForAgents({
     agents: targetNames,
     scope: installScope,
@@ -212,7 +239,7 @@ async function installExternalFiles(
   const confirmed = await promptAgentPluginInstallConfirmation(skipPrompts);
   if (!confirmed) {
     console.log(chalk.yellow('Plugin installation cancelled.'));
-    return;
+    return false;
   }
 
   installAgentPluginForAgents({
@@ -220,6 +247,7 @@ async function installExternalFiles(
     scope: installScope,
     yes: skipPrompts,
   });
+  return true;
 }
 
 async function printPostInitInstructions(

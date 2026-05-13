@@ -7,6 +7,21 @@ function toSortedChoices(names: string[]): { name: string; value: string }[] {
     .map((name) => ({ name, value: name }));
 }
 
+function toReviewChoices(names: string[]): { name: string; value: string }[] {
+  const recommended = new Set(['codex', 'github-copilot']);
+  return [...names]
+    .sort((a, b) => {
+      const aRecommended = recommended.has(a);
+      const bRecommended = recommended.has(b);
+      if (aRecommended !== bRecommended) return aRecommended ? -1 : 1;
+      return a.localeCompare(b);
+    })
+    .map((name) => ({
+      name: recommended.has(name) ? `${name} (recommended)` : name,
+      value: name,
+    }));
+}
+
 export async function promptDevCLIs(
   detectedNames: string[],
   skipPrompts: boolean,
@@ -41,7 +56,7 @@ export async function promptReviewCLIs(
   );
   const selected = await checkbox({
     message: 'Review CLIs:',
-    choices: toSortedChoices(detectedNames),
+    choices: toReviewChoices(detectedNames),
     required: true,
   });
   return selected;
@@ -54,7 +69,8 @@ export async function promptInstallScope(
 
   console.log();
   return select({
-    message: 'Install scope for agent plugins and skills:',
+    message:
+      'Where should Agent Validator install skills and agent plugins from https://github.com/Codagent-AI/agent-validator?\n',
     default: 'user' as const,
     choices: [
       { name: 'Local (project)', value: 'project' as const },

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 let selectValue = "yes";
 let checkboxCalls: { choices?: { name: string; value: string }[] }[] = [];
+let selectCalls: { message?: string }[] = [];
 
 // Mock @inquirer/prompts before importing our module
 mock.module("@inquirer/prompts", () => ({
@@ -11,7 +12,10 @@ mock.module("@inquirer/prompts", () => ({
 	},
 	number: async () => 2,
 	confirm: async () => true,
-	select: async () => selectValue,
+	select: async (opts: { message?: string }) => {
+		selectCalls.push(opts);
+		return selectValue;
+	},
 }));
 
 const {
@@ -55,6 +59,7 @@ describe("promptDevCLIs", () => {
 describe("promptInstallScope", () => {
 	beforeEach(() => {
 		selectValue = "project";
+		selectCalls = [];
 	});
 
 	it("returns user scope when skipPrompts is true", async () => {
@@ -66,6 +71,14 @@ describe("promptInstallScope", () => {
 		selectValue = "user";
 		const result = await promptInstallScope(false);
 		expect(result).toBe("user");
+	});
+
+	it("explains that it will install Agent Validator assets from the repository", async () => {
+		await promptInstallScope(false);
+
+		expect(selectCalls[0]?.message).toBe(
+			"Where should Agent Validator install skills and agent plugins from https://github.com/Codagent-AI/agent-validator?\n",
+		);
 	});
 });
 
@@ -84,13 +97,19 @@ describe("promptReviewCLIs", () => {
 		expect(result).toEqual(["claude", "codex"]); // mocked return
 	});
 
-	it("should show CLI choices alphabetically", async () => {
+	it("should show recommended CLI choices first", async () => {
 		await promptReviewCLIs(["opencode", "github-copilot", "codex", "claude"], false);
 
 		expect(checkboxCalls[0]?.choices?.map((choice) => choice.name)).toEqual([
+			"codex (recommended)",
+			"github-copilot (recommended)",
 			"claude",
+			"opencode",
+		]);
+		expect(checkboxCalls[0]?.choices?.map((choice) => choice.value)).toEqual([
 			"codex",
 			"github-copilot",
+			"claude",
 			"opencode",
 		]);
 	});

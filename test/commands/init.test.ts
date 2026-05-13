@@ -13,6 +13,7 @@ import { Command } from "commander";
 
 let selectedDevCliNames: string[] = ["claude", "codex", "gemini", "cursor"];
 let selectedReviewCliNames: string[] = ["claude", "codex", "gemini", "cursor"];
+let selectedReviewCliNameResponses: string[][] = [];
 let selectedBuiltInReviews: string[] = ["code-quality", "security", "error-handling"];
 let selectedInstallScope: "project" | "user" = "project";
 let selectedNumReviews = 1;
@@ -39,6 +40,7 @@ const installAgentPluginForAgentsMock = mock(
 	}) => {},
 );
 let confirmAgentPluginInstall = true;
+let confirmAgentPluginInstallResponses: boolean[] = [];
 
 const mockAdapters = [
 	{
@@ -131,15 +133,23 @@ mock.module("@inquirer/prompts", () => ({
 		if (opts.message) checkboxMessages.push(opts.message);
 		if (opts.message?.includes("Development")) return selectedDevCliNames;
 		if (opts.message?.includes("Built-in")) return selectedBuiltInReviews;
+		if (selectedReviewCliNameResponses.length > 0) {
+			return selectedReviewCliNameResponses.shift() ?? selectedReviewCliNames;
+		}
 		return selectedReviewCliNames;
 	},
 	number: async () => selectedNumReviews,
 	select: async (opts: { message?: string }) => {
-		if (opts.message?.includes("Install scope")) return selectedInstallScope;
+		if (opts.message?.includes("Agent Validator install skills")) {
+			return selectedInstallScope;
+		}
 		return "yes";
 	},
 	confirm: async (opts: { message?: string }) => {
 		if (opts.message?.includes("Proceed with plugin installation")) {
+			if (confirmAgentPluginInstallResponses.length > 0) {
+				return confirmAgentPluginInstallResponses.shift() ?? confirmAgentPluginInstall;
+			}
 			return confirmAgentPluginInstall;
 		}
 		return true;
@@ -191,11 +201,13 @@ describe("init command plugin installation", () => {
 		process.chdir(testDir);
 		selectedDevCliNames = ["claude", "codex", "gemini", "cursor"];
 		selectedReviewCliNames = ["claude", "codex", "gemini", "cursor"];
+		selectedReviewCliNameResponses = [];
 		selectedBuiltInReviews = ["code-quality", "security", "error-handling"];
 		selectedInstallScope = "user";
 		selectedNumReviews = 1;
 		checkboxMessages = [];
 		confirmAgentPluginInstall = true;
+		confirmAgentPluginInstallResponses = [];
 		addMarketplaceMock.mockClear();
 		installPluginMock.mockClear();
 		listPluginsMock.mockClear();
@@ -333,6 +345,22 @@ describe("init command plugin installation", () => {
 		);
 	});
 
+	it("explains agent-plugin dry-run output before printing it", async () => {
+		selectedDevCliNames = ["claude"];
+		selectedReviewCliNames = ["claude"];
+
+		await program.parseAsync(["node", "test", "init"]);
+
+		const output = logs.join("\n");
+		expect(output).toContain(
+			"Agent Validator will install the following skills and agent plugins:",
+		);
+		expect(installAgentPluginForAgentsMock).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ agents: ["claude"], dryRun: true }),
+		);
+	});
+
 	it("delegates Codex fallback to agent-plugin when user scope is selected", async () => {
 		selectedInstallScope = "user";
 		const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "validator-home-"));
@@ -395,21 +423,45 @@ describe("init command plugin installation", () => {
 		);
 	});
 
-	it("runs agent-plugin dry-run and skips install when confirmation is declined", async () => {
+	it("returns to reviewer CLI selection when plugin installation is declined", async () => {
 		selectedDevCliNames = ["claude"];
-		selectedReviewCliNames = ["claude"];
-		confirmAgentPluginInstall = false;
+		selectedReviewCliNameResponses = [["claude"], ["cursor"]];
+		confirmAgentPluginInstallResponses = [false, true];
 
 		await program.parseAsync(["node", "test", "init"]);
 
-		expect(installAgentPluginForAgentsMock).toHaveBeenCalledTimes(1);
-		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+		expect(checkboxMessages.filter((m) => m === "Review CLIs:")).toHaveLength(2);
+		expect(installAgentPluginForAgentsMock).toHaveBeenCalledTimes(3);
+		expect(installAgentPluginForAgentsMock).toHaveBeenNthCalledWith(
+			1,
 			expect.objectContaining({
 				agents: ["claude"],
 				scope: "user",
 				dryRun: true,
 			}),
 		);
+		expect(installAgentPluginForAgentsMock).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				agents: ["claude"],
+				scope: "user",
+				dryRun: true,
+			}),
+		);
+		expect(installAgentPluginForAgentsMock).toHaveBeenNthCalledWith(
+			3,
+			expect.objectContaining({
+				agents: ["claude"],
+				scope: "user",
+				yes: false,
+			}),
+		);
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("    - cursor");
+		expect(configContent).not.toContain("    - claude");
 	});
 
 	it("on re-run with existing .validator, delegates to plugin update logic", async () => {
