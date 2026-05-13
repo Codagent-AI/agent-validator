@@ -109,7 +109,9 @@ function printManualUpdateInstructions(installedName: string): void {
   );
 }
 
-async function hasCodexSkills(cwd: string): Promise<boolean> {
+async function detectCodexSkillScope(
+  cwd: string,
+): Promise<'project' | 'user' | null> {
   const localBase = path.join(cwd, '.agents', 'skills');
   // Check for new name first, then legacy name
   const localMarker = (await exists(path.join(localBase, 'validator-run')))
@@ -122,7 +124,13 @@ async function hasCodexSkills(cwd: string): Promise<boolean> {
     ? path.join(globalBase, 'validator-run')
     : path.join(globalBase, 'gauntlet-run');
 
-  return (await exists(localMarker)) || (await exists(globalMarker));
+  if (await exists(localMarker)) {
+    return 'project';
+  }
+  if (await exists(globalMarker)) {
+    return 'user';
+  }
+  return null;
 }
 
 function isCliUnavailableError(err: unknown): boolean {
@@ -234,10 +242,10 @@ export async function runPluginUpdate(
   // Detect Cursor plugin installation
   const cursorAdapter = new CursorAdapter();
   const cursorScope = await cursorAdapter.detectPlugin(cwd);
-  const codexSkillsInstalled = await hasCodexSkills(cwd);
+  const codexScope = await detectCodexSkillScope(cwd);
 
   // Error if nothing is installed at all
-  if (!(claudeDetected || cursorScope || codexSkillsInstalled)) {
+  if (!(claudeDetected || cursorScope || codexScope)) {
     throw new Error(
       'No agent-validator plugin is installed for this project. Please run `agent-validate init` first.',
     );
@@ -254,12 +262,20 @@ export async function runPluginUpdate(
   const agentPluginTargets = [
     ...(claudeDetected ? ['claude'] : []),
     ...(cursorScope ? ['cursor'] : []),
-    ...(codexSkillsInstalled ? ['codex'] : []),
+    ...(codexScope ? ['codex'] : []),
   ];
   if (agentPluginTargets.length > 0) {
+    const agentPluginScope: 'project' | 'user' = [
+      claudeDetected?.scope,
+      cursorScope,
+      codexScope,
+    ].includes('project')
+      ? 'project'
+      : 'user';
+
     updateAgentPluginForAgents({
       agents: agentPluginTargets,
-      scope: claudeDetected?.scope ?? cursorScope ?? 'user',
+      scope: agentPluginScope,
       yes: true,
     });
   }

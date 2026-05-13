@@ -300,7 +300,7 @@ describe("update command", () => {
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 	});
 
-	it("updates Codex fallback when only Codex skills are installed", async () => {
+	it("updates Codex fallback with user scope when only global Codex skills are installed", async () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 		await fs.mkdir(path.join(homeDir, ".agents", "skills", "validator-run"), {
 			recursive: true,
@@ -315,6 +315,26 @@ describe("update command", () => {
 			expect.objectContaining({
 				agents: ["codex"],
 				scope: "user",
+				yes: true,
+			}),
+		);
+	});
+
+	it("updates Codex fallback with project scope when only local Codex skills are installed", async () => {
+		listPluginsMock.mockImplementationOnce(async () => []);
+		await fs.mkdir(path.join(testDir, ".agents", "skills", "validator-run"), {
+			recursive: true,
+		});
+
+		await runPluginUpdate();
+
+		expect(updateMarketplaceMock).not.toHaveBeenCalled();
+		expect(updatePluginMock).not.toHaveBeenCalled();
+		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
+		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: ["codex"],
+				scope: "project",
 				yes: true,
 			}),
 		);
@@ -353,6 +373,13 @@ describe("update command", () => {
 		expect(cursorUpdatePluginSpy).toHaveBeenCalledTimes(1);
 		const [calledScope] = cursorUpdatePluginSpy.mock.calls[0] as [string];
 		expect(calledScope).toBe("project");
+		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: expect.arrayContaining(["claude", "cursor"]),
+				scope: "project",
+				yes: true,
+			}),
+		);
 	});
 
 	it("warns and continues when Cursor update fails", async () => {

@@ -1,4 +1,4 @@
-// .claude/skills/capture-eval-issues/scripts/append-inventory.ts
+// .agents/skills/capture-eval-issues/scripts/append-inventory.ts
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { parse, stringify } from "yaml";
