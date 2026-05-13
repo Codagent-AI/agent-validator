@@ -1,12 +1,18 @@
 ---
 name: validator-run
 description: >-
-  Runs the full validator workflow after coding tasks for requests such as "run the validator", "run final verification", "validate before commit", or "run validation". Executes checks and reviews before commit, push, or PR creation.
+  Activates only for explicit full-validator requests such as "run the validator", "run the gauntlet", "run validation", or validation before commit, push, or PR creation. Includes checks and reviews, and excludes checks-only requests.
 disable-model-invocation: false
 allowed-tools: Bash, Task
 ---
 # /validator-run
 Execute the autonomous verification suite.
+
+## Invocation Policy
+
+Use this skill only for explicit validation requests, such as "run the validator", "run the gauntlet", "run validation", "validate this", or "validate before commit/push/PR".
+
+Do not choose this skill merely because a coding task was completed, because the user asked for a generic review, or because the user asked for checks only.
 
 ## Procedure
 

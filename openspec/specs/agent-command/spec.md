@@ -180,8 +180,8 @@ The system SHALL store canonical skill files under `.validator/skills/validator-
 #### Scenario: Skill frontmatter format
 - **WHEN** a skill `SKILL.md` file is created
 - **THEN** it SHALL contain YAML frontmatter with `name`, `description`, and `allowed-tools` fields
-- **AND** non-auto-invoked validator skills (`validator-check`, `validator-status`) SHALL set `disable-model-invocation: true`
-- **AND** `validator-run` SHALL set `disable-model-invocation: false` for auto-invocation
+- **AND** non-model-invoked validator skills (`validator-status`) SHALL set `disable-model-invocation: true`
+- **AND** `validator-run` and `validator-check` SHALL set `disable-model-invocation: false` so explicit validation requests can invoke them through model skill selection
 
 #### Scenario: Hyphenated skill invocation
 - **GIVEN** a skill at `.claude/skills/validator-run/SKILL.md`
@@ -428,17 +428,17 @@ The `run` and `review` commands SHALL accept a repeatable `--enable-review <name
 - **WHEN** `agent-validate run --enable-review nonexistent` is invoked
 - **THEN** the run SHALL proceed normally without error
 
-### Requirement: Validator-Run Skill Auto-Invocation
-The validator-run skill SHALL have auto-invocation enabled so that Claude's skill invocation logic can trigger it automatically when the agent completes a coding task. The skill content is stored as static files under `skills/validator-run/` and installed to `.claude/skills/validator-run/` during init.
+### Requirement: Validator-Run Skill Model Invocation
+The validator-run skill SHALL allow model invocation for explicit user validation requests. The skill content is stored as static files under `skills/validator-run/` and installed to `.claude/skills/validator-run/` during init.
 
 The validator-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review.
 
-#### Scenario: Validator-run skill auto-invocation enabled
+#### Scenario: Validator-run skill model invocation enabled
 - **GIVEN** the validator-run skill is installed at `.claude/skills/validator-run/SKILL.md`
 - **WHEN** a user views the skill frontmatter
 - **THEN** the skill frontmatter SHALL set `disable-model-invocation: false`
-- **AND** the `description` field SHALL contain the phrase "final step after completing a coding task"
-- **AND** the `description` field SHALL contain the phrase "before committing, pushing, or creating PRs"
+- **AND** the `description` field SHALL state that the skill runs only when explicitly requested
+- **AND** the invocation policy SHALL tell agents not to choose the skill merely because a coding task was completed
 
 #### Scenario: Agent Validator-run skill passes caller-requested reviews
 - **GIVEN** the validator-run skill is installed and configured
@@ -449,4 +449,3 @@ The validator-run skill SHALL accept `--enable-review <name>` flags from the cal
 - **GIVEN** the validator-run skill is installed and configured
 - **WHEN** the validator-run skill is executed without any review requests from the caller
 - **THEN** the run command SHALL NOT include any `--enable-review` flags
-
