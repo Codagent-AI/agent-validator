@@ -1,4 +1,9 @@
-## ADDED Requirements
+# skip-command Specification
+
+## Purpose
+Defines the `agent-validate skip` command, which advances validator execution state without running checks or reviews.
+
+## Requirements
 
 ### Requirement: Skip CLI Command
 

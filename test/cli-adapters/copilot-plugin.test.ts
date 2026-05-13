@@ -11,6 +11,7 @@ import * as childProcess from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 
 // Mock copilot-cli module before importing the adapter
 const mockInstallPlugin = mock(() =>
@@ -125,21 +126,53 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 	});
 });
 
-describe("GitHubCopilotAdapter execution", () => {
-	// biome-ignore lint/suspicious/noExplicitAny: dynamic import typing
-	let adapter: any;
-	let execSpy: ReturnType<typeof spyOn>;
+	describe("GitHubCopilotAdapter execution", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: dynamic import typing
+		let adapter: any;
+		let execSpy: ReturnType<typeof spyOn>;
+		let spawnSpy: ReturnType<typeof spyOn>;
 
-	beforeEach(async () => {
-		const { GitHubCopilotAdapter } = await import(
-			"../../src/cli-adapters/github-copilot.js"
-		);
-		adapter = new GitHubCopilotAdapter();
-	});
+		function mockSpawnSuccess(stdout = "review output", stderr = "") {
+			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
+				// biome-ignore lint/suspicious/noExplicitAny: mock child process typing
+				((..._args: any[]) => {
+					const child = {
+						stdin: new PassThrough(),
+						stdout: new PassThrough(),
+						stderr: new PassThrough(),
+						kill: mock(() => true),
+						// biome-ignore lint/suspicious/noExplicitAny: minimal EventEmitter-compatible surface
+						on(event: string, callback: (...args: any[]) => void) {
+							if (event === "close") {
+								queueMicrotask(() => {
+									if (stdout) child.stdout.write(stdout);
+									if (stderr) child.stderr.write(stderr);
+									child.stdout.end();
+									child.stderr.end();
+									callback(0, null);
+								});
+							}
+							return child;
+						},
+					};
+					return child;
+					// biome-ignore lint/suspicious/noExplicitAny: mock typing
+				}) as any,
+			);
+		}
 
-	afterEach(() => {
-		execSpy?.mockRestore();
-	});
+		beforeEach(async () => {
+			const { GitHubCopilotAdapter } = await import(
+				"../../src/cli-adapters/github-copilot.js"
+			);
+			adapter = new GitHubCopilotAdapter();
+			mockSpawnSuccess();
+		});
+
+		afterEach(() => {
+			execSpy?.mockRestore();
+			spawnSpy?.mockRestore();
+		});
 
 	describe("isAvailable", () => {
 		it("runs copilot --help to check availability", async () => {
@@ -248,10 +281,8 @@ describe("GitHubCopilotAdapter execution", () => {
 				diff: "some diff",
 			});
 
-			const cmd = execSpy.mock.calls[0][0] as string;
-			expect(cmd).toContain("copilot");
-			expect(cmd).not.toContain("gh copilot");
-		});
+				expect(spawnSpy.mock.calls[0][0]).toBe("copilot");
+			});
 
 		it("includes --allow-tool flags when allowToolUse is not false", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
@@ -273,12 +304,12 @@ describe("GitHubCopilotAdapter execution", () => {
 				allowToolUse: true,
 			});
 
-			const cmd = execSpy.mock.calls[0][0] as string;
-			expect(cmd).toContain("--allow-tool");
-			expect(cmd).toContain("shell(cat)");
-		});
+				const args = spawnSpy.mock.calls[0][1] as string[];
+				expect(args).toContain("--allow-tool");
+				expect(args).toContain("shell(cat)");
+			});
 
-		it("omits --allow-tool flags when allowToolUse is false", async () => {
+		it("keeps only the prompt-file reader tool when allowToolUse is false", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
@@ -298,9 +329,11 @@ describe("GitHubCopilotAdapter execution", () => {
 				allowToolUse: false,
 			});
 
-			const cmd = execSpy.mock.calls[0][0] as string;
-			expect(cmd).not.toContain("--allow-tool");
-		});
+				const args = spawnSpy.mock.calls[0][1] as string[];
+				expect(args).toContain("--allow-tool");
+				expect(args).toContain("shell(cat)");
+				expect(args).not.toContain("shell(grep)");
+			});
 
 		it("maps thinkingBudget to --effort flag", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
@@ -322,9 +355,10 @@ describe("GitHubCopilotAdapter execution", () => {
 				thinkingBudget: "medium",
 			});
 
-			const cmd = execSpy.mock.calls[0][0] as string;
-			expect(cmd).toContain("--effort medium");
-		});
+				const args = spawnSpy.mock.calls[0][1] as string[];
+				expect(args).toContain("--effort");
+				expect(args).toContain("medium");
+			});
 
 		it("omits --effort flag when thinkingBudget is off", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
@@ -346,11 +380,37 @@ describe("GitHubCopilotAdapter execution", () => {
 				thinkingBudget: "off",
 			});
 
-			const cmd = execSpy.mock.calls[0][0] as string;
-			expect(cmd).not.toContain("--effort");
+				const args = spawnSpy.mock.calls[0][1] as string[];
+				expect(args).not.toContain("--effort");
+			});
+
+		it("parses session telemetry from stdout and verifies requested model", async () => {
+			spawnSpy.mockRestore();
+			mockSpawnSuccess(
+				[
+					"review output",
+					"Total usage est:        1 Premium request",
+					"Breakdown by AI model:",
+					" gpt-5.3-codex           17.7k in, 45 out, 1.5k cached (Est. 1 Premium request)",
+				].join("\n"),
+				"",
+			);
+			const chunks: string[] = [];
+
+			const result = await adapter.execute({
+				prompt: "Review this",
+				diff: "some diff",
+				model: "gpt-5.3-codex",
+				onOutput: (chunk: string) => chunks.push(chunk),
+			});
+
+			expect(result).toContain("review output");
+			expect(chunks.some((chunk) => chunk.includes("[copilot-telemetry]"))).toBe(
+				true,
+			);
 		});
 
-		it("pipes prompt+diff via stdin using cat tmpFile pattern", async () => {
+		it("keeps prompt+diff out of argv while using --prompt non-interactive mode", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
 				((...args: any[]) => {
@@ -369,10 +429,17 @@ describe("GitHubCopilotAdapter execution", () => {
 				diff: "--- a/file.ts\n+++ b/file.ts",
 			});
 
-			const cmd = execSpy.mock.calls[0][0] as string;
-			// Verify the command uses cat to pipe temp file content to copilot via stdin
-			expect(cmd).toMatch(/^cat ".*validator-copilot-.*\.txt" \| copilot /);
-		});
+				expect(spawnSpy.mock.calls[0][0]).toBe("copilot");
+				const args = spawnSpy.mock.calls[0][1] as string[];
+				const promptIndex = args.indexOf("--prompt");
+				expect(promptIndex).toBeGreaterThanOrEqual(0);
+				expect(args[promptIndex + 1]).toContain("validator-copilot-");
+				const addDirIndex = args.indexOf("--add-dir");
+				expect(addDirIndex).toBeGreaterThanOrEqual(0);
+				expect(args[addDirIndex + 1]).toContain("validator-copilot-");
+				expect(args.join(" ")).not.toContain("Review this code");
+				expect(args.join(" ")).not.toContain("--- DIFF ---");
+			});
 
 		it("maps all thinkingBudget levels correctly", async () => {
 			const levels = ["low", "medium", "high"];
@@ -398,9 +465,11 @@ describe("GitHubCopilotAdapter execution", () => {
 					thinkingBudget: level,
 				});
 
-				const cmd = execSpy.mock.calls[0][0] as string;
-				expect(cmd).toContain(`--effort ${level}`);
-			}
-		});
+					const lastCall = spawnSpy.mock.calls[spawnSpy.mock.calls.length - 1];
+					const args = lastCall![1] as string[];
+					expect(args).toContain("--effort");
+					expect(args).toContain(level);
+				}
+			});
 	});
 });

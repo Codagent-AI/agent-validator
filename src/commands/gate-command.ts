@@ -4,6 +4,7 @@ import { loadConfig } from '../config/loader.js';
 import { ChangeDetector } from '../core/change-detector.js';
 import { EntryPointExpander } from '../core/entry-point.js';
 import { JobGenerator } from '../core/job.js';
+import { findPreviousFailedCheckJobs } from '../core/rerun-check-recovery.js';
 import { Runner } from '../core/runner.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { Logger } from '../output/logger.js';
@@ -381,6 +382,20 @@ async function prepareGateWork(args: {
     args.options,
     args.commandName,
   );
+  if (changes.length === 0 && args.commandName === 'check') {
+    const previousFailedCheckJobs = await findPreviousFailedCheckJobs(
+      { config: args.config, options: args.options },
+      rerunResult.failuresMap,
+    );
+    if (previousFailedCheckJobs.length > 0) {
+      return {
+        rerunResult,
+        changeOptions,
+        changes,
+        jobs: previousFailedCheckJobs,
+      };
+    }
+  }
   return { rerunResult, changeOptions, changes, jobs };
 }
 

@@ -12,6 +12,7 @@ const options = {
 	evalConfigPath: getArg("eval-config"),
 	adapterFilter: getArg("adapter"),
 	configFilter: getArg("config"),
+	configFile: getArg("config-file"),
 	dryRun: args.includes("--dry-run"),
 	skipJudge: args.includes("--skip-judge"),
 };
@@ -26,5 +27,6 @@ if (options.evalConfigPath)
 if (options.adapterFilter)
 	console.log(`Filter: adapter=${options.adapterFilter}`);
 if (options.configFilter) console.log(`Filter: config=${options.configFilter}`);
+if (options.configFile) console.log(`Config file: ${options.configFile}`);
 
 await runEval(options);

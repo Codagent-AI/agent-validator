@@ -1,10 +1,9 @@
-import { realpathSync, statSync } from 'node:fs';
-import fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { CursorAdapter } from '../cli-adapters/cursor.js';
+import { updateAgentPluginForAgents as realUpdateAgentPluginForAgents } from '../plugin/agent-plugin-cli.js';
 import {
   addMarketplace,
   installPlugin,
@@ -12,25 +11,7 @@ import {
   updateMarketplace,
   updatePlugin,
 } from '../plugin/claude-cli.js';
-import { computeSkillChecksum } from './init-checksums.js';
 import { addToGitignore, exists } from './shared.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// After bundling, __dirname is `dist/` (one level below package root).
-// In dev, __dirname is `src/commands/` (two levels below package root).
-const SKILLS_SOURCE_DIR = (() => {
-  const bundled = path.join(__dirname, '..', 'skills');
-  const dev = path.join(__dirname, '..', '..', 'skills');
-  try {
-    statSync(bundled);
-    return bundled;
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return dev;
-    throw err;
-  }
-})();
 
 interface PluginEntry {
   name?: unknown;
@@ -43,29 +24,8 @@ export interface PluginUpdateOptions {
   skipPrompts?: boolean;
 }
 
-async function getSkillDirNames(): Promise<string[]> {
-  const entries = await fs.readdir(SKILLS_SOURCE_DIR, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-}
-
-async function copyDirRecursive(opts: {
-  src: string;
-  dest: string;
-}): Promise<void> {
-  await fs.mkdir(opts.dest, { recursive: true });
-  const entries = await fs.readdir(opts.src, { withFileTypes: true });
-  for (const entry of entries) {
-    const srcPath = path.join(opts.src, entry.name);
-    const destPath = path.join(opts.dest, entry.name);
-    if (entry.isDirectory()) {
-      await copyDirRecursive({ src: srcPath, dest: destPath });
-    } else {
-      await fs.copyFile(srcPath, destPath);
-    }
-  }
+export interface PluginUpdateDependencies {
+  updateAgentPluginForAgents?: typeof realUpdateAgentPluginForAgents;
 }
 
 function isInProjectScope(cwd: string, projectPath: string): boolean {
@@ -153,46 +113,9 @@ function printManualUpdateInstructions(installedName: string): void {
   );
 }
 
-async function warnAndRemoveOldGauntletSkills(
-  targetBase: string,
-): Promise<void> {
-  try {
-    const existing = await fs.readdir(targetBase, { withFileTypes: true });
-    const oldSkills = existing
-      .filter(
-        (entry) => entry.isDirectory() && entry.name.startsWith('gauntlet-'),
-      )
-      .map((entry) => entry.name);
-
-    if (oldSkills.length === 0) return;
-
-    console.log(
-      chalk.yellow(
-        `\nRenamed ${oldSkills.length} skill(s) from "gauntlet-*" to "validator-*":`,
-      ),
-    );
-    for (const name of oldSkills) {
-      const newName = name.replace(/^gauntlet-/, 'validator-');
-      console.log(chalk.yellow(`  ${name} → ${newName}`));
-    }
-    console.log(
-      chalk.yellow(
-        'If you reference these skills by name (e.g. in AGENTS.md), please update to the new names.\n',
-      ),
-    );
-
-    for (const name of oldSkills) {
-      await fs.rm(path.join(targetBase, name), {
-        recursive: true,
-        force: true,
-      });
-    }
-  } catch {
-    // Best effort — ignore errors reading the directory
-  }
-}
-
-async function refreshCodexSkills(cwd: string): Promise<void> {
+async function detectCodexSkillScope(
+  cwd: string,
+): Promise<'project' | 'user' | null> {
   const localBase = path.join(cwd, '.agents', 'skills');
   // Check for new name first, then legacy name
   const localMarker = (await exists(path.join(localBase, 'validator-run')))
@@ -205,37 +128,13 @@ async function refreshCodexSkills(cwd: string): Promise<void> {
     ? path.join(globalBase, 'validator-run')
     : path.join(globalBase, 'gauntlet-run');
 
-  let targetBase: string | null = null;
   if (await exists(localMarker)) {
-    targetBase = localBase;
-  } else if (await exists(globalMarker)) {
-    targetBase = globalBase;
+    return 'project';
   }
-
-  if (!targetBase) {
-    return;
+  if (await exists(globalMarker)) {
+    return 'user';
   }
-
-  for (const dirName of await getSkillDirNames()) {
-    const sourceDir = path.join(SKILLS_SOURCE_DIR, dirName);
-    const targetDir = path.join(targetBase, dirName);
-    if (!(await exists(targetDir))) {
-      await copyDirRecursive({ src: sourceDir, dest: targetDir });
-      continue;
-    }
-
-    const sourceChecksum = await computeSkillChecksum(sourceDir);
-    const targetChecksum = await computeSkillChecksum(targetDir);
-    if (sourceChecksum === targetChecksum) {
-      continue;
-    }
-
-    await fs.rm(targetDir, { recursive: true, force: true });
-    await copyDirRecursive({ src: sourceDir, dest: targetDir });
-  }
-
-  // Warn about and remove old gauntlet-* skill directories
-  await warnAndRemoveOldGauntletSkills(targetBase);
+  return null;
 }
 
 function isCliUnavailableError(err: unknown): boolean {
@@ -338,8 +237,11 @@ async function updateCursorPlugin(
 
 export async function runPluginUpdate(
   options?: PluginUpdateOptions,
+  dependencies: PluginUpdateDependencies = {},
 ): Promise<void> {
   void options?.skipPrompts;
+  const updateAgentPluginForAgents =
+    dependencies.updateAgentPluginForAgents ?? realUpdateAgentPluginForAgents;
 
   const cwd = process.cwd();
   const claudeDetected = await detectClaudePlugin(cwd);
@@ -347,9 +249,10 @@ export async function runPluginUpdate(
   // Detect Cursor plugin installation
   const cursorAdapter = new CursorAdapter();
   const cursorScope = await cursorAdapter.detectPlugin(cwd);
+  const codexScope = await detectCodexSkillScope(cwd);
 
   // Error if nothing is installed at all
-  if (!(claudeDetected || cursorScope)) {
+  if (!(claudeDetected || cursorScope || codexScope)) {
     throw new Error(
       'No agent-validator plugin is installed for this project. Please run `agent-validate init` first.',
     );
@@ -363,7 +266,26 @@ export async function runPluginUpdate(
     await updateCursorPlugin(cursorAdapter, cursorScope, cwd);
   }
 
-  await refreshCodexSkills(cwd);
+  const agentPluginTargets = [
+    ...(claudeDetected ? ['claude'] : []),
+    ...(cursorScope ? ['cursor'] : []),
+    ...(codexScope ? ['codex'] : []),
+  ];
+  if (agentPluginTargets.length > 0) {
+    const agentPluginScope: 'project' | 'user' = [
+      claudeDetected?.scope,
+      cursorScope,
+      codexScope,
+    ].includes('project')
+      ? 'project'
+      : 'user';
+
+    updateAgentPluginForAgents({
+      agents: agentPluginTargets,
+      scope: agentPluginScope,
+      yes: true,
+    });
+  }
 
   // Ensure validator_logs is in .gitignore (backwards compat: log dir was renamed)
   await addToGitignore(cwd, 'validator_logs');

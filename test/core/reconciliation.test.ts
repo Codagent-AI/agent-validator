@@ -162,7 +162,46 @@ describe("startup reconciliation", () => {
 		);
 	});
 
-	it("skips reconciliation entirely when the worktree is dirty", async () => {
+	it("skips reconciliation entirely when the dirty worktree has no trusted HEAD", async () => {
+		const logDir = path.join(repoDir, "validator_logs");
+		await fs.writeFile(
+			path.join(repoDir, "src/app.ts"),
+			"export const value = 2;\n",
+			"utf-8",
+		);
+
+		const result = await reconcileStartup({
+			command: "run",
+			config: testConfig(logDir),
+			logDir,
+		});
+
+		expect(result).toEqual({ kind: "continue" });
+		expect(await readExecutionState(logDir)).toBeNull();
+	});
+
+	it("continues without throwing when a dirty worktree has no HEAD yet", async () => {
+		await git(["checkout", "--orphan", "unborn"]);
+		await git(["rm", "-rf", "."]);
+		const logDir = path.join(repoDir, "validator_logs");
+		await fs.mkdir(path.join(repoDir, "src"), { recursive: true });
+		await fs.writeFile(
+			path.join(repoDir, "src/app.ts"),
+			"export const value = 1;\n",
+			"utf-8",
+		);
+
+		const result = await reconcileStartup({
+			command: "run",
+			config: testConfig(logDir),
+			logDir,
+		});
+
+		expect(result).toEqual({ kind: "continue" });
+		expect(await readExecutionState(logDir)).toBeNull();
+	});
+
+	it("scopes dirty worktree reconciliation to a trusted HEAD", async () => {
 		const head = await git(["rev-parse", "HEAD"]);
 		const tree = await computeTreeSha("HEAD");
 		const logDir = path.join(repoDir, "validator_logs");
@@ -179,7 +218,10 @@ describe("startup reconciliation", () => {
 			logDir,
 		});
 
-		expect(result).toEqual({ kind: "continue" });
+		expect(result).toEqual({
+			kind: "continue",
+			changeOptions: { fixBase: head },
+		});
 		expect(await readExecutionState(logDir)).toBeNull();
 	});
 

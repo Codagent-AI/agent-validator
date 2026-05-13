@@ -146,9 +146,9 @@ Static application security testing (SAST). Scans source code for security vulne
 
 ---
 
-## Check YAML Schema
+## Inline Check Schema
 
-Checks can be defined inline in `config.yml` under the top-level `checks` map (preferred) or as separate files at `.validator/checks/<name>.yml`.
+Checks should be defined inline in `.validator/config.yml` under the relevant `entry_points[].checks` array. Legacy file-based checks at `.validator/checks/<name>.yml` may still be read by existing projects, but `/validator-setup` should create inline checks.
 
 ### Fields
 
@@ -183,71 +183,73 @@ fix_with_skill: "validator-fix-lint"                 # Skill name that the agent
 
 ---
 
-## Example Check Files
+## Example Inline Checks
 
-One complete example per category. These use npm/Node.js conventions; adapt the commands for your project's toolchain.
+One complete example per category. These use npm/Node.js conventions; adapt the commands for your project's toolchain and insert them as single-key objects under an entry point's `checks` array.
 
-### build.yml
+### build
 
 ```yaml
-command: npm run build
+- build:
+    command: npm run build
 ```
 
-### lint.yml
+### lint
 
 ```yaml
-command: npx eslint . --max-warnings 0
+- lint:
+    command: npx eslint . --max-warnings 0
 ```
 
-### typecheck.yml
+### typecheck
 
 ```yaml
-command: npx tsc --noEmit
+- typecheck:
+    command: npx tsc --noEmit
 ```
 
-### test.yml
+### test
 
 ```yaml
-command: npm test
+- test:
+    command: npm test
 ```
 
-### security-deps.yml
+### security-deps
 
 ```yaml
-command: npm audit --audit-level=moderate
-run_locally: false
+- security-deps:
+    command: npm audit --audit-level=moderate
+    run_locally: false
 ```
 
-### security-code.yml
+### security-code
 
 ```yaml
-command: semgrep --config auto . --error
-run_locally: false
+- security-code:
+    command: semgrep --config auto . --error
+    run_locally: false
 ```
 
 ---
 
-## Review YAML Schema
+## Review Schema
 
-Review files are stored at `.validator/reviews/`. There are two formats: YAML files (`.yml`) for built-in or referenced reviews, and Markdown files (`.md`) for custom review prompts.
+Built-in reviews should be defined inline in `.validator/config.yml` under the relevant `entry_points[].reviews` array. Custom prompt reviews can be stored as Markdown files at `.validator/reviews/<name>.md`.
 
-### YAML Format (`.validator/reviews/<name>.yml`)
+### Inline Built-in Format
 
-Use this format to reference a built-in review or delegate to a skill.
+Use this format under an entry point's `reviews` array to reference a built-in review or delegate to a skill.
 
 ```yaml
-# Exactly one of these three sources is required (mutually exclusive):
-builtin: code-quality              # Reference to a built-in review prompt.
-# prompt_file: "path/to/prompt.md" # Path to an external prompt file.
-# skill_name: "my-review-skill"    # Skill name for prompt delegation.
-
-# Optional
-num_reviews: 1                     # Number of review passes (default: 1).
+- code-quality:
+    builtin: code-quality          # Reference to a built-in review prompt.
+    num_reviews: 1                 # Number of review passes (default: 1).
                                    # Higher values dispatch multiple independent reviews.
-run_in_ci: true                    # Run in CI environments (default: true).
-run_locally: true                  # Run locally (default: true).
-cli_preference:                    # Override the default CLI preference for this review (optional).
-  - claude
+    run_in_ci: true                # Run in CI environments (default: true).
+    run_locally: true              # Run locally (default: true).
+    cli_preference:                # Override the default CLI preference for this review (optional).
+      - claude
 ```
 
 ### Markdown Format (`.validator/reviews/<name>.md`)
@@ -274,8 +276,9 @@ evaluate, what standards to apply, and how to report findings.
 The `code-quality` built-in is the standard review for general code quality. Reference it with:
 
 ```yaml
-builtin: code-quality
-num_reviews: 1
+- code-quality:
+    builtin: code-quality
+    num_reviews: 1
 ```
 
 ---
@@ -288,15 +291,18 @@ Entry points are defined in `.validator/config.yml` under the `entry_points` key
 entry_points:
   - path: "src"                    # Directory path to monitor for changes.
                                    # Use "." for the entire project root.
-    checks:                        # List of check names (optional).
-                                   # Each name must match an inline check in config.yml or a file at .validator/checks/<name>.yml.
-      - build
-      - lint
-      - typecheck
-      - test
-    reviews:                       # List of review names (optional).
-                                   # Each name must match a file at .validator/reviews/<name>.yml or .md.
-      - code-quality
+    checks:                        # Inline check definitions or names that reference another inline check.
+      - build:
+          command: npm run build
+      - lint:
+          command: npx eslint . --max-warnings 0
+      - typecheck:
+          command: npx tsc --noEmit
+      - test:
+          command: npm test
+    reviews:                       # Inline review definitions or names that reference another inline/custom review.
+      - code-quality:
+          builtin: code-quality
     exclude:                       # Glob patterns to exclude from change detection (optional).
       - "**/*.test.ts"
       - "**/__mocks__/**"
@@ -310,13 +316,20 @@ You can define multiple entry points to apply different checks and reviews to di
 entry_points:
   - path: "src"
     checks:
-      - build
-      - lint
-      - typecheck
-      - test
-      - security-deps
+      - build:
+          command: npm run build
+      - lint:
+          command: npx eslint . --max-warnings 0
+      - typecheck:
+          command: npx tsc --noEmit
+      - test:
+          command: npm test
+      - security-deps:
+          command: npm audit --audit-level=moderate
+          run_locally: false
     reviews:
-      - code-quality
+      - code-quality:
+          builtin: code-quality
 
   - path: "docs"
     checks:
@@ -334,20 +347,27 @@ entry_points:
   # Root: project-wide checks
   - path: "."
     checks:
-      - security-deps
+      - security-deps:
+          command: npm audit --audit-level=moderate
+          run_locally: false
     reviews:
-      - code-quality
+      - code-quality:
+          builtin: code-quality
 
   # Per-package: expands to one job per changed package
   - path: "packages/*"
     checks:
-      - build
-      - lint
-      - typecheck
-      - test
+      - build:
+          command: npm run build
+      - lint:
+          command: npx eslint . --max-warnings 0
+      - typecheck:
+          command: npx tsc --noEmit
+      - test:
+          command: npm test
 ```
 
-Check commands run with the working directory set to the matched package (e.g., `packages/api`), so a single `test.yml` works for all packages sharing the same test runner.
+Check commands run with the working directory set to the matched package (e.g., `packages/api`), so one inline `test` definition works for all packages sharing the same test runner.
 
 ### Split Project Entry Points
 
@@ -357,28 +377,35 @@ For projects with distinct parts (e.g., frontend + backend) that may use differe
 entry_points:
   - path: "frontend"
     checks:
-      - build
-      - lint-frontend
-      - test-frontend
+      - build-frontend:
+          command: npm run build --workspace frontend
+      - lint-frontend:
+          command: npm run lint --workspace frontend
+      - test-frontend:
+          command: npm test --workspace frontend
     reviews:
-      - code-quality
+      - code-quality:
+          builtin: code-quality
 
   - path: "backend"
     checks:
-      - build-backend
-      - lint-backend
-      - test-backend
+      - build-backend:
+          command: npm run build --workspace backend
+      - lint-backend:
+          command: npm run lint --workspace backend
+      - test-backend:
+          command: npm test --workspace backend
     reviews:
       - code-quality
 ```
 
-When parts share the same command for a category (e.g., both run `npm test`), use one shared check file — the working directory is set per entry point at runtime. When they use different commands, create separate check files with a suffix (e.g., `test-frontend.yml`, `test-backend.yml`).
+When parts share the same command for a category (e.g., both run `npm test`), define the check inline once and reference it by name from other entry points. When they use different commands, define separate inline checks with a suffix (e.g., `test-frontend`, `test-backend`).
 
 ### Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `path` | string | Yes | Directory path to monitor. Relative to project root. Supports single-level wildcards (e.g., `packages/*`). |
-| `checks` | string[] | No | List of check names matching inline checks in `config.yml` or `.validator/checks/<name>.yml` files. |
-| `reviews` | string[] | No | List of review names matching inline reviews in `config.yml` or `.validator/reviews/<name>.yml`/`.md` files. |
+| `checks` | array | No | Inline check definitions or names referencing checks defined inline elsewhere in `config.yml`. |
+| `reviews` | array | No | Inline review definitions, names referencing reviews defined inline elsewhere in `config.yml`, or custom prompt review names backed by `.validator/reviews/<name>.md`. |
 | `exclude` | string[] | No | Glob patterns for files to exclude from change detection within this path. |

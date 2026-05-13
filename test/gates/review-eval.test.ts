@@ -42,14 +42,49 @@ describe('evaluateOutput size guard', () => {
     expect(result.status).toBe('fail');
   });
 
-  it('still finds ```json``` block in oversized output', () => {
-    const padding = 'x'.repeat(200_000);
-    const output = `${padding}\n\`\`\`json\n{"status":"pass","message":"ok"}\n\`\`\`\n${padding}`;
-    const result = evaluateOutput(output);
-    expect(result.status).toBe('pass');
-  });
+	it('still finds ```json``` block in oversized output', () => {
+		const padding = 'x'.repeat(200_000);
+		const output = `${padding}\n\`\`\`json\n{"status":"pass","message":"ok"}\n\`\`\`\n${padding}`;
+		const result = evaluateOutput(output);
+		expect(result.status).toBe('pass');
+	});
 
-  it('returns error with size message when output > 100KB and no fenced block', () => {
+	it('parses trailing review JSON after large noisy transcript output', () => {
+		const transcript = Array.from(
+			{ length: 2500 },
+			(_, i) => `● Read file_${i}.ts\n  │ { not: "json", nested: { index: ${i} } }`,
+		).join('\n');
+		const output = `${transcript}\n{"status":"pass","message":"ok"}`;
+		expect(output.length).toBeGreaterThan(100_000);
+
+		const result = evaluateOutput(output);
+
+		expect(result.status).toBe('pass');
+		expect(result.message).toBe('ok');
+	});
+
+		it('parses status JSON without spanning into a later object', () => {
+			const output =
+				'prefix {"status":"pass","message":"first"} suffix {"other":true}';
+
+			const result = evaluateOutput(output);
+
+			expect(result.status).toBe('pass');
+			expect(result.message).toBe('first');
+		});
+
+		it('falls back to the legacy status JSON probe window', () => {
+			const paddingBeforeJson = 'x'.repeat(340_000);
+			const paddingAfterJson = 'y'.repeat(200_000);
+			const output = `${paddingBeforeJson}{"status":"pass","message":"legacy window"}${paddingAfterJson}`;
+
+			const result = evaluateOutput(output);
+
+			expect(result.status).toBe('pass');
+			expect(result.message).toBe('legacy window');
+		});
+
+		it('returns error with size message when output > 100KB and no fenced block', () => {
     // Build a large string with many { characters but no valid review JSON
     const lines: string[] = [];
     for (let i = 0; i < 5000; i++) {

@@ -1,7 +1,7 @@
 # cursor-plugin-update Specification
 
 ## Purpose
-TBD - created by archiving change cursor-plugin-update. Update Purpose after archive.
+Cursor plugin update behavior for `agent-validate update`. Covers direct refresh of existing Cursor plugin files and coexistence with centralized agent-plugin update delegation.
 ## Requirements
 ### Requirement: Cursor plugin detection for update
 
@@ -39,7 +39,7 @@ The `update` command SHALL refresh Cursor plugin files by re-copying assets from
 #### Scenario: Update reports failure
 - **WHEN** copying Cursor plugin assets fails
 - **THEN** update SHALL log a warning with the error message
-- **AND** SHALL continue with remaining update steps (Claude plugin, Codex skills)
+- **AND** SHALL continue with remaining update steps, including centralized agent-plugin update when applicable
 - **AND** SHALL NOT cause the overall update command to fail
 
 ### Requirement: CLIAdapter updatePlugin interface
@@ -53,4 +53,3 @@ The `CLIAdapter` interface SHALL include an optional `updatePlugin` method so th
 #### Scenario: Adapter without updatePlugin
 - **WHEN** an adapter does not implement `updatePlugin`
 - **THEN** the update command SHALL skip that adapter during update
-

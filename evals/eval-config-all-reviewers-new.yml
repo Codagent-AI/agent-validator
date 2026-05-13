@@ -1,0 +1,29 @@
+fixture: fixtures/all-reviewers
+
+adapters:
+  - name: github-copilot
+    model: gpt-5.4-mini
+    alias: copilot-gpt5.4-mini
+    allow_tool_use: false
+    thinking_budget: "medium"
+  - name: github-copilot
+    model: claude-haiku-4.5
+    alias: copilot-haiku
+    allow_tool_use: false
+  - name: codex
+    model: gpt-5.4-mini
+    alias: codex-gpt5.4-mini
+    allow_tool_use: false
+    thinking_budget: "medium"
+  - name: codex
+    model: gpt-5.5
+    alias: codex-gpt5.5
+    allow_tool_use: false
+    thinking_budget: "medium"
+
+runs_per_config: 3
+timeout_ms: 600000
+judge:
+  adapter: claude
+  thinking_budget: "high"
+  timeout_ms: 600000

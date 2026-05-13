@@ -1,6 +1,27 @@
 import { checkbox, confirm, number, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 
+function toSortedChoices(names: string[]): { name: string; value: string }[] {
+  return [...names]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ name, value: name }));
+}
+
+function toReviewChoices(names: string[]): { name: string; value: string }[] {
+  const recommended = new Set(['codex', 'github-copilot']);
+  return [...names]
+    .sort((a, b) => {
+      const aRecommended = recommended.has(a);
+      const bRecommended = recommended.has(b);
+      if (aRecommended !== bRecommended) return aRecommended ? -1 : 1;
+      return a.localeCompare(b);
+    })
+    .map((name) => ({
+      name: recommended.has(name) ? `${name} (recommended)` : name,
+      value: name,
+    }));
+}
+
 export async function promptDevCLIs(
   detectedNames: string[],
   skipPrompts: boolean,
@@ -15,7 +36,7 @@ export async function promptDevCLIs(
   );
   const selected = await checkbox({
     message: 'Development CLIs:',
-    choices: detectedNames.map((name) => ({ name, value: name })),
+    choices: toSortedChoices(detectedNames),
     required: true,
   });
   return selected;
@@ -35,24 +56,61 @@ export async function promptReviewCLIs(
   );
   const selected = await checkbox({
     message: 'Review CLIs:',
-    choices: detectedNames.map((name) => ({ name, value: name })),
+    choices: toReviewChoices(detectedNames),
     required: true,
   });
   return selected;
 }
 
+export async function promptLocalAIReviews(
+  skipPrompts: boolean,
+): Promise<boolean> {
+  if (skipPrompts) return true;
+
+  console.log();
+  const enabled = await confirm({
+    message: 'Enable local AI reviews? (strongly recommended)',
+    default: true,
+  });
+  if (enabled) return true;
+
+  console.log();
+  const skipReviews = await confirm({
+    message:
+      'Are you sure you want to skip local AI reviews? They catch bugs, security issues, and error-handling gaps before code leaves your machine, and are the strongest part of Agent Validator.',
+    default: false,
+  });
+  return !skipReviews;
+}
+
 export async function promptInstallScope(
   skipPrompts: boolean,
 ): Promise<'user' | 'project'> {
-  if (skipPrompts) return 'project';
+  // Non-interactive init uses the same global/user default as the interactive
+  // prompt so automation does not create project-local agent assets by default.
+  if (skipPrompts) return 'user';
 
   console.log();
   return select({
-    message: 'Install scope for Claude plugin and Codex skills:',
+    message:
+      'Where should Agent Validator install skills and agent plugins from https://github.com/Codagent-AI/agent-validator?\n',
+    default: 'user' as const,
     choices: [
       { name: 'Local (project)', value: 'project' as const },
       { name: 'Global (user)', value: 'user' as const },
     ],
+  });
+}
+
+export async function promptAgentPluginInstallConfirmation(
+  skipPrompts: boolean,
+): Promise<boolean> {
+  if (skipPrompts) return true;
+
+  console.log();
+  return confirm({
+    message: 'Proceed with plugin installation?',
+    default: true,
   });
 }
 

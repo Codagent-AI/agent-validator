@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { appendToInventory } from "../../.claude/skills/capture-eval-issues/scripts/append-inventory.ts";
+import { appendToInventory } from "../../.agents/skills/capture-eval-issues/scripts/append-inventory.ts";
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from "fs";
 import { resolve } from "path";
 import { tmpdir } from "os";
@@ -26,6 +26,7 @@ describe("appendToInventory", () => {
         file: "src/foo.ts",
         line_range: [10, 12],
         description: "A test issue",
+        code_snippet: "const value = unsafe();",
         category: "bug",
         difficulty: "medium",
         priority: "high",
@@ -51,6 +52,7 @@ describe("appendToInventory", () => {
             file: "src/bar.ts",
             line_range: [1, 1],
             description: "Already here",
+            code_snippet: "existing();",
             category: "security",
             difficulty: "easy",
             priority: "critical",
@@ -67,6 +69,7 @@ describe("appendToInventory", () => {
         file: "src/baz.ts",
         line_range: [5, 7],
         description: "A new issue",
+        code_snippet: "newIssue();",
         category: "performance",
         difficulty: "hard",
         priority: "high",
@@ -90,6 +93,7 @@ describe("appendToInventory", () => {
           file: "src/wrap.ts",
           line_range: [1, 1],
           description: "Wrapped format test",
+          code_snippet: "wrapped();",
           category: "bug",
           difficulty: "easy",
           priority: "high",
@@ -108,6 +112,42 @@ describe("appendToInventory", () => {
   it("returns 0 when input has no issues", () => {
     const result = appendToInventory(inventoryPath, "");
     expect(result.added).toBe(0);
+    expect(existsSync(inventoryPath)).toBe(false);
+  });
+
+  it("rejects malformed inventory issues before writing", () => {
+    const yaml = stringify([
+      {
+        id: "bad-issue",
+        file: "src/bad.ts",
+        description: "Missing fields",
+      },
+    ]);
+
+    expect(() => appendToInventory(inventoryPath, yaml)).toThrow(
+      "Invalid inventory issue",
+    );
+    expect(existsSync(inventoryPath)).toBe(false);
+  });
+
+  it("rejects invalid line ranges before writing", () => {
+    const yaml = stringify([
+      {
+        id: "bad-range",
+        file: "src/bad.ts",
+        line_range: [10, 7],
+        description: "Invalid range",
+        code_snippet: "badRange();",
+        category: "bug",
+        difficulty: "easy",
+        priority: "medium",
+        source: "2026-02-16 test",
+      },
+    ]);
+
+    expect(() => appendToInventory(inventoryPath, yaml)).toThrow(
+      "line_range must be",
+    );
     expect(existsSync(inventoryPath)).toBe(false);
   });
 });

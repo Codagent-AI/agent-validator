@@ -34,9 +34,9 @@ Ground truth sizes: code-quality **24** issues, all-reviewers **56**, security-e
 
 **Result JSON (local, not in git):** each run writes under `evals/results/` (gitignored). This session’s timestamped files were:
 
-- `eval-2026-04-24T15-19-09.json` — code-quality  
-- `eval-2026-04-24T15-32-21.json` — all-reviewers  
-- `eval-2026-04-24T15-43-52.json` — security-errors  
+- `eval-2026-04-24T15-19-09.json` — code-quality
+- `eval-2026-04-24T15-32-21.json` — all-reviewers
+- `eval-2026-04-24T15-43-52.json` — security-errors
 
 Regenerate: from the repo root, run `bun evals/run-eval.ts` with each of the three `--eval-config=evals/eval-config.cursor-composer2-*.yml` files (no `--skip-judge` for full scoring). New files appear in `evals/results/`.
 

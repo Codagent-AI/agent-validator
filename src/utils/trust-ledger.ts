@@ -47,6 +47,10 @@ export interface TrustLookupResult {
   record?: TrustRecord;
 }
 
+interface TrustLookupOptions {
+  allowDirtyTree?: boolean;
+}
+
 export async function getLedgerPath(): Promise<string> {
   const commonDir = await gitStdout(['rev-parse', '--git-common-dir']);
   return path.join(commonDir, 'agent-validator', 'trusted-snapshots.jsonl');
@@ -112,6 +116,7 @@ export async function readRecords(): Promise<TrustRecord[]> {
 export async function isTrusted(
   commit: string,
   tree: string,
+  options: TrustLookupOptions = {},
 ): Promise<TrustLookupResult> {
   const records = await readRecords();
   const commitMatch = records.find(
@@ -121,8 +126,7 @@ export async function isTrusted(
     return { trusted: true, matchType: 'commit', record: commitMatch };
   }
 
-  const dirty = await hasWorkingTreeChanges();
-  if (dirty) {
+  if (!options.allowDirtyTree && (await hasWorkingTreeChanges())) {
     return { trusted: false, matchType: null };
   }
 
@@ -318,6 +322,7 @@ function isTrustEligibleStatus(status: ValidatorStatus | 'skipped'): boolean {
   return (
     status === 'passed' ||
     status === 'passed_with_warnings' ||
+    status === 'no_changes' ||
     status === 'no_applicable_gates' ||
     status === 'skipped'
   );

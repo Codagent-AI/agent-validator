@@ -239,7 +239,9 @@ export class CodexAdapter implements CLIAdapter {
       'ask_for_approval="never"',
     ];
     if (allowToolUse === false) {
-      args.push('--disable', 'shell_tool');
+      // Codex plugins can expose MCP tools from user config. In tools-off
+      // mode, ignore that config so the eval/review cannot call them.
+      args.push('--disable', 'shell_tool', '--ignore-user-config');
     }
     if (thinkingBudget && thinkingBudget in CODEX_REASONING_EFFORT) {
       const effort = CODEX_REASONING_EFFORT[thinkingBudget];

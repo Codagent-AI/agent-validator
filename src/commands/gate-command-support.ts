@@ -50,7 +50,7 @@ async function handleNoWork(
   ledger?: {
     config: LoadedConfig;
     commandName: GateCommandName;
-    status: 'no_applicable_gates';
+    status: 'no_changes' | 'no_applicable_gates';
     options: GateCommandOptions;
     source?: TrustRecordSource;
   },
@@ -102,8 +102,19 @@ export async function checkEarlyExit(
     source?: TrustRecordSource;
   },
 ): Promise<void> {
-  if (changes.length === 0) {
-    await handleNoWork(logDir, restoreConsole, failuresMap);
+  if (changes.length === 0 && jobs.length === 0) {
+    await handleNoWork(
+      logDir,
+      restoreConsole,
+      failuresMap,
+      ledger && {
+        config: ledger.config,
+        commandName,
+        status: 'no_changes',
+        options: ledger.options,
+        source: ledger.source,
+      },
+    );
   }
   if (jobs.length === 0) {
     console.log(

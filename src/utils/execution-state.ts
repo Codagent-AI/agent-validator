@@ -17,7 +17,9 @@ function getStatePath(logDir: string): string {
  */
 function spawnGit(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('git', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     // StringDecoder correctly handles multi-byte UTF-8 characters split across
     // chunk boundaries. Both pipes are consumed to prevent OS buffer deadlock (~64 KB).
@@ -138,11 +140,64 @@ export async function readExecutionState(
   }
 }
 
+const INDEX_LOCK_HELP =
+  'Git index lock file exists. Another Git process may be running. If no Git command is active, remove the stale .git/index.lock file and rerun agent-validator.';
+
+export class GitIndexLockError extends Error {
+  constructor(lockPath?: string) {
+    super(
+      lockPath ? `${INDEX_LOCK_HELP} Lock file: ${lockPath}` : INDEX_LOCK_HELP,
+    );
+    this.name = 'GitIndexLockError';
+  }
+}
+
+function isIndexLockError(error: unknown): boolean {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+  return (
+    (message.includes('unable to create') && message.includes('index.lock')) ||
+    (message.includes('file exists') && message.includes('index.lock')) ||
+    message.includes('could not write index') ||
+    message.includes('fatal: index file')
+  );
+}
+
+async function getGitIndexLockPath(): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    execFile(
+      'git',
+      ['rev-parse', '--git-path', 'index.lock'],
+      (error, stdout) => {
+        if (error) reject(error);
+        else resolve(stdout.trim());
+      },
+    );
+  });
+}
+
+async function hasGitIndexLock(lockPath: string): Promise<boolean> {
+  return fs.access(lockPath).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function throwIfGitIndexLocked(): Promise<void> {
+  const lockPath = await getGitIndexLockPath();
+
+  if (await hasGitIndexLock(lockPath)) {
+    throw new GitIndexLockError(lockPath);
+  }
+}
+
 /**
  * Create a stash SHA that captures the current working tree state.
  * Uses `git stash push --include-untracked` which creates a proper 3-parent stash,
  * then immediately pops it to restore the working tree.
- * Returns the stash SHA, or HEAD SHA if working tree is clean or on error.
+ * Returns the stash SHA, or HEAD SHA if working tree is clean.
+ * Throws a clear error when Git cannot write the index because index.lock exists.
  */
 export async function createWorkingTreeRef(): Promise<string> {
   const hasChanges = await hasWorkingTreeChanges();
@@ -150,12 +205,17 @@ export async function createWorkingTreeRef(): Promise<string> {
     return getCurrentCommit();
   }
 
+  await throwIfGitIndexLocked();
+
   // Returns trimmed stdout, or rejects on git error.
   const runGit = (args: string[]) =>
     new Promise<string>((resolve, reject) => {
-      execFile('git', args, (error, stdout) => {
-        if (error) reject(error);
-        else resolve(stdout.trim());
+      execFile('git', args, (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr || error.message));
+        } else {
+          resolve(stdout.trim());
+        }
       });
     });
 
@@ -174,7 +234,12 @@ export async function createWorkingTreeRef(): Promise<string> {
       '-m',
       'validator-snapshot',
     ]);
-  } catch {
+  } catch (error) {
+    const lockPath = await getGitIndexLockPath().catch(() => undefined);
+    const lockExists = lockPath ? await hasGitIndexLock(lockPath) : false;
+    if (lockExists && isIndexLockError(error)) {
+      throw new GitIndexLockError(lockPath);
+    }
     return getCurrentCommit();
   }
 

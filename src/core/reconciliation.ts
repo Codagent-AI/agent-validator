@@ -126,9 +126,46 @@ async function diffNames(baseTree: string): Promise<string[]> {
   return stdout.split('\n').filter(Boolean);
 }
 
+function isUnbornHeadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("ambiguous argument 'HEAD'") &&
+    message.includes('unknown revision or path not in the working tree')
+  );
+}
+
+async function readHeadSnapshotIfAvailable(): Promise<{
+  head: string;
+  headTree: string;
+} | null> {
+  try {
+    return {
+      head: await getCurrentCommit(),
+      headTree: await computeTreeSha('HEAD'),
+    };
+  } catch (error) {
+    if (isUnbornHeadError(error)) return null;
+    throw error;
+  }
+}
+
+async function analyzeDirtyWorktree(): Promise<ReconciliationContinue> {
+  const snapshot = await readHeadSnapshotIfAvailable();
+  if (!snapshot) {
+    return { kind: 'continue' };
+  }
+  const trust = await isTrusted(snapshot.head, snapshot.headTree, {
+    allowDirtyTree: true,
+  });
+  if (trust.trusted) {
+    return { kind: 'continue', changeOptions: { fixBase: snapshot.head } };
+  }
+  return { kind: 'continue' };
+}
+
 async function analyzeReconciliation(): Promise<ReconciliationAnalysis> {
   if (await hasWorkingTreeChanges()) {
-    return { kind: 'continue' };
+    return analyzeDirtyWorktree();
   }
 
   const head = await getCurrentCommit();

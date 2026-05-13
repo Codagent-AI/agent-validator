@@ -1,18 +1,16 @@
-import { exec } from 'node:child_process';
+import { exec, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import {
   detectPlugin as detectCopilotPlugin,
   installPlugin as installCopilotPlugin,
 } from '../plugin/copilot-cli.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import type { CLIAdapter } from './shared.js';
 
-// Module-level counter for unique tmp file names across parallel invocations
-let _tmpCounter = 0;
+let tmpCounter = 0;
 
 const log = getCategoryLogger('github-copilot');
 
@@ -243,30 +241,34 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     return ['copilot plugin install Codagent-AI/agent-validator'];
   }
 
-  /** Build CLI args: -s, optional --allow-tool, --model, --effort flags. */
+  /** Build CLI args: prompt-file handoff plus optional reviewer tools, model, and effort flags. */
   private buildArgs(opts: {
     allowToolUse?: boolean;
     model?: string;
+    promptFile: string;
     thinkingBudget?: string;
   }): string[] {
     const args: string[] = [];
+    const allowedTools = new Set<string>(['shell(cat)']);
 
     // Tool whitelist: cat/grep/ls/find/head/tail are read-only tools for code review.
+    // shell(cat) is also the transport used for Copilot's non-interactive mode:
+    // the CLI does not accept stdin as a prompt, so --prompt points it at the
+    // secure temp file instead of embedding the full diff in argv.
     if (opts.allowToolUse !== false) {
-      args.push(
-        '--allow-tool',
-        'shell(cat)',
-        '--allow-tool',
+      for (const tool of [
         'shell(grep)',
-        '--allow-tool',
         'shell(ls)',
-        '--allow-tool',
         'shell(find)',
-        '--allow-tool',
         'shell(head)',
-        '--allow-tool',
         'shell(tail)',
-      );
+      ]) {
+        allowedTools.add(tool);
+      }
+    }
+
+    for (const tool of allowedTools) {
+      args.push('--allow-tool', tool);
     }
 
     if (opts.model && SAFE_MODEL_ID_PATTERN.test(opts.model)) {
@@ -275,7 +277,17 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     if (opts.thinkingBudget && EFFORT_LEVELS.has(opts.thinkingBudget)) {
       args.push('--effort', opts.thinkingBudget);
     }
+    args.push('--add-dir', path.dirname(opts.promptFile));
+    args.push('--prompt', this.buildPromptFileInstruction(opts.promptFile));
     return args;
+  }
+
+  private buildPromptFileInstruction(promptFile: string): string {
+    return [
+      'Read the complete review request from this exact file using shell(cat):',
+      promptFile,
+      'Then follow the instructions in that file exactly. Do not answer until you have read it.',
+    ].join('\n');
   }
 
   async execute(opts: {
@@ -288,70 +300,32 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     thinkingBudget?: string;
   }): Promise<string> {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-
-    const tmpDir = os.tmpdir();
-    // Include process.pid and a counter for uniqueness across concurrent invocations
-    const tmpFile = path.join(
-      tmpDir,
-      `validator-copilot-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+    const tmpDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'validator-copilot-'),
     );
-    await fs.writeFile(tmpFile, fullContent);
+    const tmpFile = path.join(tmpDir, `prompt-${tmpCounter++}.txt`);
+    await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
 
     const args = this.buildArgs({
       ...opts,
       model: opts.model,
+      promptFile: tmpFile,
     });
-    const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+    const cleanup = () => fs.rm(tmpDir, { recursive: true, force: true });
 
     log.debug(`copilot args: ${args.join(' ')}`);
 
-    if (opts.onOutput) {
-      // Collect stderr separately to parse the session summary (printed to stderr by copilot).
-      // stderr is also forwarded to onOutput by runStreamingCommand via collectStderr.
-      const stderrChunks: string[] = [];
-      const wrappedOnOutput = (chunk: string) => {
-        stderrChunks.push(chunk);
-        opts.onOutput?.(chunk);
-      };
-      const raw = await runStreamingCommand({
-        command: 'copilot',
-        args,
-        tmpFile,
-        timeoutMs: opts.timeoutMs,
-        onOutput: wrappedOnOutput,
-        cleanup,
-      });
-      const summary = parseCopilotSessionSummary(stderrChunks.join(''));
-      if (summary) {
-        opts.onOutput(summary.telemetryLine);
-        log.debug(`copilot session: ${summary.telemetryLine}`);
-        verifySessionModel(summary, opts.model);
-      }
-      return raw;
-    }
-
-    // Uses exec() directly (instead of promisify) so that
-    // spyOn(childProcess, "exec") can intercept calls in tests.
     try {
-      const argsStr = args
-        .map((a) => (a.includes('(') ? `"${a}"` : a))
-        .join(' ');
-      const cmd = `cat "${tmpFile}" | copilot ${argsStr}`;
-      const { stdout, stderr } = await new Promise<{
-        stdout: string;
-        stderr: string;
-      }>((resolve, reject) => {
-        exec(
-          cmd,
-          { timeout: opts.timeoutMs, maxBuffer: MAX_BUFFER_BYTES },
-          (error, stdout, stderr) => {
-            if (error) reject(error);
-            else resolve({ stdout, stderr });
-          },
-        );
+      const { stdout, stderr } = await this.runCopilot({
+        args,
+        timeoutMs: opts.timeoutMs,
+        onOutput: opts.onOutput,
       });
-      const summary = parseCopilotSessionSummary(stderr);
+      const summary =
+        parseCopilotSessionSummary(stdout) ??
+        parseCopilotSessionSummary(stderr);
       if (summary) {
+        opts.onOutput?.(summary.telemetryLine);
         log.debug(`copilot session: ${summary.telemetryLine}`);
         verifySessionModel(summary, opts.model);
       }
@@ -359,5 +333,68 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     } finally {
       await cleanup();
     }
+  }
+
+  private async runCopilot(opts: {
+    args: string[];
+    timeoutMs?: number;
+    onOutput?: (chunk: string) => void;
+  }): Promise<{ stdout: string; stderr: string }> {
+    return new Promise((resolve, reject) => {
+      const stdoutChunks: string[] = [];
+      const stderrChunks: string[] = [];
+      const child = spawn('copilot', opts.args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let settled = false;
+      const settle = async (
+        callback: () => void,
+        timeoutId?: ReturnType<typeof setTimeout>,
+      ) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        callback();
+      };
+
+      const timeoutId = opts.timeoutMs
+        ? setTimeout(() => {
+            child.kill('SIGTERM');
+            void settle(() => reject(new Error('Command timed out')));
+          }, opts.timeoutMs)
+        : undefined;
+
+      child.stdout.on('data', (data: Buffer) => {
+        const chunk = data.toString();
+        stdoutChunks.push(chunk);
+        opts.onOutput?.(chunk);
+      });
+      child.stderr.on('data', (data: Buffer) => {
+        const chunk = data.toString();
+        stderrChunks.push(chunk);
+        opts.onOutput?.(chunk);
+      });
+      child.on('close', (code, signal) => {
+        void settle(() => {
+          const stdout = stdoutChunks.join('');
+          const stderr = stderrChunks.join('');
+          if (signal) {
+            reject(new Error(`Process terminated by signal ${signal}`));
+          } else if (code === 0) {
+            resolve({ stdout, stderr });
+          } else {
+            reject(
+              new Error(
+                `Process exited with code ${code}${stderr ? `\n${stderr}` : ''}`,
+              ),
+            );
+          }
+        }, timeoutId);
+      });
+      child.on('error', (error) => {
+        void settle(() => reject(error), timeoutId);
+      });
+    });
   }
 }

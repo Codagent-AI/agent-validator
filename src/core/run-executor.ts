@@ -23,7 +23,10 @@ import {
   initDebugLogger,
   mergeDebugLogConfig,
 } from '../utils/debug-log.js';
-import { writeExecutionState } from '../utils/execution-state.js';
+import {
+  GitIndexLockError,
+  writeExecutionState,
+} from '../utils/execution-state.js';
 import { resolveBaseBranch } from '../utils/git.js';
 import { pruneIfNeeded } from '../utils/trust-ledger.js';
 import { reconcileStartup } from './reconciliation.js';
@@ -255,9 +258,13 @@ export async function executeRun(
       }
     }
     const err = error as { message?: string };
+    const message =
+      error instanceof GitIndexLockError
+        ? err.message || getStatusMessage('error')
+        : getStatusMessage('error');
     return {
       status: 'error',
-      message: getStatusMessage('error'),
+      message,
       errorMessage: err.message || 'unknown error',
     };
   }

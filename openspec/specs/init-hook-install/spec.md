@@ -1,11 +1,11 @@
 # init-hook-install Specification
 
 ## Purpose
-Hook installation during `agent-validate init`. Covers plugin-based hook delivery for Claude and checksum computation for skills.
+Hook delivery for Agent Validator integrations. Covers plugin-based hook delivery through installed plugins and checksum computation utilities for skill bundles.
 ## Requirements
 ### Requirement: Hook delivery via plugin
 
-Claude Code and Cursor hooks SHALL be delivered as part of the agent-validator plugin via `hooks/hooks.json` in the plugin directory, instead of being written to settings files during init.
+Claude Code and Cursor hooks SHALL be delivered as part of the agent-validator plugin via `hooks/hooks.json` in the plugin directory, instead of being written to settings files during init. Init-time plugin installation is delegated to agent-plugin.
 
 #### Scenario: Claude hooks delivered through plugin
 - **GIVEN** the user runs `agent-validate init`
@@ -46,4 +46,3 @@ Skill checksums SHALL be computed over the combined content of all files in the 
 - **GIVEN** a skill directory contains `SKILL.md` and `references/config.md`
 - **WHEN** the checksum is computed
 - **THEN** it SHALL be the hash of the concatenated content of all files (sorted by path for determinism)
-

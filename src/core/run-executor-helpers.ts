@@ -28,6 +28,7 @@ import { ChangeDetector } from './change-detector.js';
 import { computeDiffStats } from './diff-stats.js';
 import { EntryPointExpander } from './entry-point.js';
 import { JobGenerator } from './job.js';
+import { findPreviousFailedCheckJobs } from './rerun-check-recovery.js';
 import { findLatestConsoleLog, tryAcquireLock } from './run-executor-lock.js';
 import { Runner } from './runner.js';
 import { TRUSTED_SNAPSHOT_MESSAGE } from './trusted-message.js';
@@ -269,6 +270,9 @@ export async function handleNoChanges(
     return { status: 'failed', message, gatesRun: 0 };
   }
 
+  await writeExecutionState(ctx.config.project.log_dir);
+  await appendRunTrustRecord(ctx, 'no_changes');
+
   log.info('No changes detected.');
   return {
     status: 'no_changes',
@@ -306,6 +310,19 @@ export async function detectAndPrepareChanges(
   const changes = await changeDetector.getChangedFiles();
 
   if (changes.length === 0 && isRerun) {
+    const previousFailedCheckJobs = await findPreviousFailedCheckJobs(
+      ctx,
+      failuresMap,
+    );
+    if (previousFailedCheckJobs.length > 0) {
+      log.warn(
+        `No changes detected, but ${previousFailedCheckJobs.length} previous check failure(s) will be re-run.`,
+      );
+      return {
+        jobs: previousFailedCheckJobs,
+        changeOpts: effectiveChangeOptions,
+      };
+    }
     return { earlyResult: await handleNoChanges(ctx, failuresMap) };
   }
   if (changes.length === 0) {

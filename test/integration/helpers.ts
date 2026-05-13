@@ -64,7 +64,7 @@ export async function spawnValidator(
 		timeoutMs?: number;
 	},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-	const proc = Bun.spawn(["node", DIST_BIN, ...args], {
+	const proc = Bun.spawn([process.execPath, DIST_BIN, ...args], {
 		cwd: opts.cwd,
 		stdout: "pipe",
 		stderr: "pipe",

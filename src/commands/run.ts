@@ -50,6 +50,8 @@ export function registerRunCommand(program: Command): void {
         // for early-return paths (no_changes, no_applicable_gates, etc.)
         const text = result.reportText ?? statusLineText(result.status);
         process.stdout.write(`${text}\n`);
+      } else if (result.status === 'error') {
+        process.stderr.write(`${result.errorMessage ?? result.message}\n`);
       }
 
       const code = isSuccessStatus(result.status) ? 0 : 1;

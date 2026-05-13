@@ -34,15 +34,11 @@ For Cursor, skills and hooks are delivered as part of the **agent-validator Curs
 
 The plugin bundles skills in `skills/` and hooks in `hooks/hooks.json`.
 
-### Codex (File Copy)
+### Agent Plugin Installation
 
-For Codex, skills are copied to `.agents/skills/` (local scope) or `$HOME/.agents/skills/` (global scope) during init. Installation uses **checksum-based comparison**:
+During init, Agent Validator delegates skill and plugin installation to agent-plugin for the selected development agents. The init command previews the install with `--dry-run`, asks for confirmation, then applies the install.
 
-- **Missing skills** are created silently
-- **Unchanged skills** (checksum matches) are skipped silently
-- **Changed skills** (checksum differs) prompt for confirmation before overwriting
-
-With `--yes`, changed files are overwritten without prompting.
+Use `agent-validator init --agents claude codex` to preselect development agents while still choosing review agents interactively.
 
 ### Skill File Structure
 
@@ -125,7 +121,7 @@ Gate a commit behind optional Agent Validator validation.
 
 **Workflow:**
 1. Runs `agent-validator detect` — if no changes found, commits immediately (no validation)
-2. Parses inline intent from arguments: "run"/"full" → `/validator-run`; "check"/"checks" → `/validator-check`; "skip" → `agent-validator skip`; unclear → prompts user to choose
+2. Parses inline validator intent from arguments: "run"/"full" → `/validator-run`; "check"/"checks" → `/validator-check`; "skip" → `agent-validator skip`; unclear → prompts user to choose. Do not use for plain commit requests that do not mention validator, gauntlet, checks, validation, or skip.
 3. Runs the chosen validation skill; if it fails, asks "Ready to commit?" before proceeding
 4. Commits using an available commit skill if found, otherwise stages and commits directly
 
@@ -151,13 +147,14 @@ Skills are plain Markdown files with YAML frontmatter. You can edit them directl
 ```yaml
 ---
 name: validator-run
-description: Run the full verification Agent Validator
-disable-model-invocation: true
+description: Run the full Agent Validator only when explicitly requested
+disable-model-invocation: false
 allowed-tools: Bash
 ---
 ```
 
-- `disable-model-invocation: true` prevents Claude from automatically loading and invoking the skill. The user can still invoke it via `/name`. Use this for workflows with side effects (the default for Agent Validator skills).
+- `disable-model-invocation: true` prevents Claude from automatically loading and invoking the skill. The user can still invoke it via `/name`. Use this for workflows that should never be selected by model invocation.
+- `disable-model-invocation: false` allows model invocation. Keep the `description` and invocation policy narrow for side-effecting workflows so agents select them only when the user explicitly asks.
 - `user-invocable: false` hides the skill from the `/` autocomplete menu entirely.
 - `allowed-tools` restricts which tools the agent can use during execution
 

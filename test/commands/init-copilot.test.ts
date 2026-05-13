@@ -18,6 +18,9 @@ let selectedNumReviews = 1;
 
 const mockCopilotInstallPlugin = mock(async () => ({ success: true }));
 const mockCopilotDetectPlugin = mock(async () => null as "user" | null);
+const installAgentPluginForAgentsMock = mock(
+	(_opts: { agents: string[]; scope: "project" | "user"; yes?: boolean }) => {},
+);
 
 const mockAdapters = [
 	{
@@ -88,7 +91,9 @@ describe("init command with github-copilot", () => {
 			path.join(os.tmpdir(), "validator-init-copilot-test-"),
 		);
 		program = new Command();
-		registerInitCommand(program);
+		registerInitCommand(program, {
+			installAgentPluginForAgents: installAgentPluginForAgentsMock,
+		});
 		logs = [];
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
@@ -117,30 +122,43 @@ describe("init command with github-copilot", () => {
 		await fs.rm(testDir, { recursive: true, force: true });
 	});
 
-	it("prints /validator-setup instructions for github-copilot (NATIVE_CLIS)", async () => {
+	it("prints validator-setup skill instructions for github-copilot", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("/validator-setup");
+		expect(output).toContain("run the validator-setup skill in your agent");
 		expect(output).toContain(
 			"configuring the static checks",
 		);
 	});
 
-	it("installs plugin via installPlugin when not already installed", async () => {
+	it("installs plugin via agent-plugin when not already installed", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		expect(mockCopilotInstallPlugin).toHaveBeenCalledTimes(1);
+		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: ["github-copilot"],
+				scope: "user",
+				yes: true,
+			}),
+		);
 	});
 
-	it("skips install when plugin already detected", async () => {
+	it("passes github-copilot through to agent-plugin even when adapter detection would find an existing install", async () => {
 		mockCopilotDetectPlugin.mockImplementation(async () => "user" as const);
 
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("already installed");
+		expect(output).not.toContain("already installed");
 		expect(mockCopilotInstallPlugin).not.toHaveBeenCalled();
+		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: ["github-copilot"],
+				scope: "user",
+				yes: true,
+			}),
+		);
 	});
 
 	it("does NOT copy skills to .github/skills via file copy", async () => {

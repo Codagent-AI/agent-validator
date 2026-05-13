@@ -5,6 +5,18 @@ Specifies the `validator-commit` skill, which orchestrates change detection, val
 
 ## Requirements
 
+### Requirement: Explicit Validator Intent
+
+The `validator-commit` skill SHALL only be selected for commit requests that explicitly ask to involve Agent Validator, gauntlet validation, checks, validation, or skip behavior.
+
+#### Scenario: Plain commit request
+
+- **WHEN** the user asks only to commit changes without mentioning validator, gauntlet, checks, validation, or skip
+- **THEN** the agent SHALL NOT invoke `validator-commit`
+- **AND** the agent SHALL use its normal commit workflow instead
+
+---
+
 ### Requirement: Inline Validation Intent Parsing
 
 The `validator-commit` skill SHALL parse its ARGUMENTS string for a validation intent before prompting the user. If a clear intent is found, it SHALL use it directly without prompting.
