@@ -129,11 +129,11 @@ describe("init command with github-copilot", () => {
 		await fs.rm(testDir, { recursive: true, force: true });
 	});
 
-	it("prints /validator-setup instructions for github-copilot (NATIVE_CLIS)", async () => {
+	it("prints validator-setup skill instructions for github-copilot", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("/validator-setup");
+		expect(output).toContain("run the validator-setup skill in your agent");
 		expect(output).toContain(
 			"configuring the static checks",
 		);

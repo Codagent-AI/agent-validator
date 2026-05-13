@@ -56,9 +56,9 @@ npm install -g agent-validator
 agent-validator init
 ```
 
-`init` detects your installed AI CLIs, creates `.validator/config.yml` with an empty config skeleton, and installs skills/hooks for your AI agent (Claude Code plugin, Copilot plugin, Cursor plugin, or Codex skills). Use `--yes` to skip prompts.
+`init` detects your installed AI CLIs, creates `.validator/config.yml` with an empty config skeleton, and installs agent plugins and skills through agent-plugin. Use `--agents claude codex` to preselect development agents, or `--yes` to skip prompts.
 
-After init, run `/validator-setup` in your AI agent session to auto-discover your project's tooling and populate the config. See the [Skills Guide](docs/skills-guide.md) for details.
+After init, run the `validator-setup` skill in your AI agent session to auto-discover your project's tooling and populate the config. See the [Skills Guide](docs/skills-guide.md) for details.
 
 ### Configuration Concepts
 

@@ -1,7 +1,5 @@
-import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
@@ -22,47 +20,56 @@ import {
 import { runPluginUpdate } from './plugin-update.js';
 import { addToGitignore, exists } from './shared.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// After bundling, __dirname is `dist/` (one level below package root).
-// In dev, __dirname is `src/commands/` (two levels below package root).
-// Detect context by checking which path actually contains the skills directory.
-const SKILLS_SOURCE_DIR = (() => {
-  const bundled = path.join(__dirname, '..', 'skills');
-  const dev = path.join(__dirname, '..', '..', 'skills');
-  try {
-    statSync(bundled);
-    return bundled;
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return dev;
-    throw err;
-  }
-})();
-
-async function getSkillDirNames(): Promise<string[]> {
-  const entries = await fs.readdir(SKILLS_SOURCE_DIR, { withFileTypes: true });
-  return entries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
-}
-
 interface InitOptions {
   yes?: boolean;
+  agents?: string[];
 }
-
-/** Native CLIs that support the /validator-setup skill invocation. */
-const NATIVE_CLIS = new Set(['claude', 'github-copilot']);
 
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
     .description('Initialize .validator configuration')
     .option('-y, --yes', 'Skip prompts and use defaults')
+    .option(
+      '--agents <names...>',
+      'Development/coding agent names to install for (comma or space separated); skips the development agent prompt',
+    )
     .action(async (options: InitOptions) => {
       await runInit(options);
     });
+}
+
+function parseAgentNameList(agentArgs: string[] | undefined): string[] | null {
+  if (!agentArgs) return null;
+
+  const names = agentArgs
+    .flatMap((arg) => arg.split(','))
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+
+  return [...new Set(names)];
+}
+
+function validateExplicitDevCLINames(
+  requestedNames: string[] | null,
+  detectedNames: string[],
+): string[] | null {
+  if (!requestedNames) return null;
+  if (requestedNames.length === 0) {
+    throw new Error('At least one development agent name must be provided.');
+  }
+
+  const detectedSet = new Set(detectedNames);
+  const unknownNames = requestedNames.filter((name) => !detectedSet.has(name));
+  if (unknownNames.length > 0) {
+    const available =
+      detectedNames.length > 0 ? detectedNames.join(', ') : 'none';
+    throw new Error(
+      `Unknown or unavailable development agent(s): ${unknownNames.join(', ')}. Detected agents: ${available}`,
+    );
+  }
+
+  return requestedNames;
 }
 
 async function handleRerun(
@@ -103,6 +110,10 @@ async function runInit(options: InitOptions): Promise<void> {
   }
 
   const detectedNames = availableAdapters.map((a) => a.name);
+  const explicitDevCLINames = validateExplicitDevCLINames(
+    parseAgentNameList(options.agents),
+    detectedNames,
+  );
   let existingConfigDir: string | null = null;
   if (await exists(targetDir)) {
     existingConfigDir = targetDir;
@@ -119,7 +130,8 @@ async function runInit(options: InitOptions): Promise<void> {
     instructionCLINames = detectedNames;
     await handleRerun(projectRoot, availableAdapters, skipPrompts);
   } else {
-    const devCLINames = await promptDevCLIs(detectedNames, skipPrompts);
+    const devCLINames =
+      explicitDevCLINames ?? (await promptDevCLIs(detectedNames, skipPrompts));
     devAdapters = availableAdapters.filter((a) => devCLINames.includes(a.name));
 
     for (const adapter of devAdapters) {
@@ -210,46 +222,15 @@ async function installExternalFiles(
   });
 }
 
-async function printPostInitInstructions(devCLINames: string[]): Promise<void> {
-  const hasNative = devCLINames.some((name) => NATIVE_CLIS.has(name));
-  const hasCodex = devCLINames.includes('codex');
-  const otherNonNativeNames = devCLINames.filter(
-    (name) => !NATIVE_CLIS.has(name) && name !== 'codex',
-  );
-  const hasOtherNonNative = otherNonNativeNames.length > 0;
-
+async function printPostInitInstructions(
+  _devCLINames: string[],
+): Promise<void> {
   console.log();
-  if (hasNative) {
-    console.log(
-      chalk.bold(
-        'To complete setup, run /validator-setup in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
-      ),
-    );
-  }
-  if (hasCodex) {
-    console.log(
-      chalk.bold(
-        'To complete setup in Codex, reference the setup skill: ~/.agents/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
-      ),
-    );
-    console.log();
-    console.log('Available Codex skills:');
-    for (const dirName of await getSkillDirNames()) {
-      console.log(`  ~/.agents/skills/${dirName}/SKILL.md`);
-    }
-  }
-  if (hasOtherNonNative) {
-    console.log(
-      chalk.bold(
-        'To complete setup, reference the setup skill in your CLI: ~/.agents/skills/validator-setup/SKILL.md. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
-      ),
-    );
-    console.log();
-    console.log('Available skills:');
-    for (const dirName of await getSkillDirNames()) {
-      console.log(`  ~/.agents/skills/${dirName}/SKILL.md`);
-    }
-  }
+  console.log(
+    chalk.bold(
+      'To complete setup, run the validator-setup skill in your agent. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run.',
+    ),
+  );
 }
 
 async function detectAvailableCLIs(): Promise<CLIAdapter[]> {

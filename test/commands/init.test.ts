@@ -16,6 +16,7 @@ let selectedReviewCliNames: string[] = ["claude", "codex", "gemini", "cursor"];
 let selectedBuiltInReviews: string[] = ["code-quality", "security", "error-handling"];
 let selectedInstallScope: "project" | "user" = "project";
 let selectedNumReviews = 1;
+let checkboxMessages: string[] = [];
 
 const addMarketplaceMock = mock(async () => ({ success: true }));
 const installPluginMock = mock(async (_scope: "project" | "user") => ({
@@ -127,6 +128,7 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 
 mock.module("@inquirer/prompts", () => ({
 	checkbox: async (opts: { message?: string }) => {
+		if (opts.message) checkboxMessages.push(opts.message);
 		if (opts.message?.includes("Development")) return selectedDevCliNames;
 		if (opts.message?.includes("Built-in")) return selectedBuiltInReviews;
 		return selectedReviewCliNames;
@@ -192,6 +194,7 @@ describe("init command plugin installation", () => {
 		selectedBuiltInReviews = ["code-quality", "security", "error-handling"];
 		selectedInstallScope = "user";
 		selectedNumReviews = 1;
+		checkboxMessages = [];
 		confirmAgentPluginInstall = true;
 		addMarketplaceMock.mockClear();
 		installPluginMock.mockClear();
@@ -255,6 +258,62 @@ describe("init command plugin installation", () => {
 		await fs.rm(fakeHome, { recursive: true, force: true });
 	});
 
+	it("uses --agents for development CLIs while still prompting for review CLIs", async () => {
+		selectedDevCliNames = ["gemini"];
+		selectedReviewCliNames = ["cursor"];
+		selectedNumReviews = 1;
+
+		await program.parseAsync([
+			"node",
+			"test",
+			"init",
+			"--agents",
+			"claude,codex",
+		]);
+
+		expect(checkboxMessages).not.toContain("Development CLIs:");
+		expect(checkboxMessages).toContain("Review CLIs:");
+		expect(installAgentPluginForAgentsMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				agents: expect.arrayContaining(["claude", "codex"]),
+				scope: "user",
+			}),
+		);
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("    - cursor");
+		expect(configContent).not.toContain("    - claude");
+	});
+
+	it("accepts space-separated --agents values", async () => {
+		selectedReviewCliNames = ["claude"];
+
+		await program.parseAsync([
+			"node",
+			"test",
+			"init",
+			"--agents",
+			"claude",
+			"codex",
+		]);
+
+		expect(installAgentPluginForAgentsMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				agents: expect.arrayContaining(["claude", "codex"]),
+			}),
+		);
+	});
+
+	it("rejects --agents names that were not detected", async () => {
+		await expect(
+			program.parseAsync(["node", "test", "init", "--agents", "missing-agent"]),
+		).rejects.toThrow("Unknown or unavailable development agent");
+
+		expect(installAgentPluginForAgentsMock).not.toHaveBeenCalled();
+	});
+
 	it("does not write Claude hooks to settings.local.json", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
@@ -288,6 +347,16 @@ describe("init command plugin installation", () => {
 			}),
 		);
 		await fs.rm(fakeHome, { recursive: true, force: true });
+	});
+
+	it("prints one generic validator-setup skill instruction without listing skill files", async () => {
+		await program.parseAsync(["node", "test", "init", "--yes"]);
+
+		const output = logs.join("\n");
+		expect(output).toContain("run the validator-setup skill in your agent");
+		expect(output).not.toContain("To complete setup in Codex");
+		expect(output).not.toContain("Available Codex skills");
+		expect(output).not.toContain("~/.agents/skills/validator-run/SKILL.md");
 	});
 
 	it("delegates Gemini/Cursor fallback to agent-plugin instead of copying skills", async () => {

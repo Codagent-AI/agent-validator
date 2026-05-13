@@ -351,20 +351,21 @@ Guided interactive setup that creates `.validator/`, installs skills, and config
 The `init` command walks you through the following steps:
 
 1. **CLI Detection**: Discovers available CLIs on the system
-2. **Development CLI Selection**: Multi-select prompt for your development tools.
+2. **Development CLI Selection**: Multi-select prompt for your development tools, unless development agents were provided with `--agents`.
 3. **Install Scope Selection**: Choose local (project) or global (user) scope for plugin and skill installation.
 4. **Review CLI Selection**: Multi-select prompt for review tools. Populates `cli.default_preference` in the user's selection order. If one review CLI is selected, `num_reviews` is set to 1 automatically. If multiple are selected, you're prompted for how many to run per review.
 5. **Scaffold `.validator/`**: Creates the directory, config skeleton (`entry_points: []`), and built-in code-quality review. **Skipped entirely** if `.validator/` already exists (config is never overwritten).
-6. **Install Plugin & Skills**: For Claude Code, registers the marketplace and installs the agent-validator plugin (which delivers skills and hooks). For GitHub Copilot, installs via `copilot plugin install` (discovers the same `.claude-plugin/` manifest; always user scope). For Cursor, copies plugin files (manifest, skills, hooks) to `.cursor/plugins/agent-validator/` (project) or `~/.cursor/plugins/agent-validator/` (user). For Codex, copies skill files to `.agents/skills/` (local or `$HOME/.agents/skills/` for global scope). Uses SHA-256 checksums for Codex skill files.
-7. **Post-Init Instructions**: Prints context-aware next steps. Native CLIs (Claude Code, Cursor, GitHub Copilot) get `/validator-setup` instructions. Non-native CLIs get `@file_path` skill references with descriptions.
+6. **Install Plugin & Skills**: Runs agent-plugin first with `--dry-run`, asks for confirmation, then installs the agent-validator plugin and skills for the selected development agents. Local scope passes `--project`; global scope omits it.
+7. **Post-Init Instructions**: Prints the next step: run the `validator-setup` skill in your agent.
 
-**Re-running init:** When `.validator/` already exists, init delegates to the update flow — refreshing the Claude Code plugin via marketplace and updating Codex skills via checksums. If the plugin isn't installed yet, it falls back to a fresh install. This lets you update after upgrading Agent Validator without re-configuring your project.
+**Re-running init:** When `.validator/` already exists, init delegates to the update flow. If the plugin isn't installed yet, it falls back to a fresh install. This lets you update after upgrading Agent Validator without re-configuring your project.
 
-After `init`, run `/validator-setup` in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
+After `init`, run the `validator-setup` skill in your AI agent session to scan the project, discover tooling, and configure checks and entry points. See the [Skills Guide](skills-guide.md) for details.
 
 #### Options
 
-- `-y, --yes`: Skip all interactive prompts. Selects all detected CLIs as both development and review CLIs, sets `num_reviews` to the detected count, and overwrites changed files without asking.
+- `--agents <names...>`: Development/coding agents to install for, space- or comma-separated. Skips only the development agent prompt; review agents are still prompted unless `--yes` is also passed.
+- `-y, --yes`: Skip all interactive prompts. Selects all detected CLIs as both development and review CLIs, defaults install scope to global/user, sets `num_reviews` to the detected count, and auto-confirms agent-plugin installation.
 
 ### `agent-validator ci`
 
