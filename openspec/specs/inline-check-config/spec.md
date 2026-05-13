@@ -3,7 +3,7 @@
 ## Purpose
 Defines inline check gate configuration within entry_points in config.yml as an alternative to separate check files.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Entry points support inline check definitions in their checks array
 The system MUST support inline check definitions within each entry point's `checks` array. Each inline item is a single-key object where the key is the check name and the value is a check configuration object using the same schema as `.validator/checks/*.yml` files. Inline checks and file-based checks are merged at load time; if the same name appears in both sources, the system MUST reject with a validation error. A check name may only be defined inline in one entry point; other entry points reference it by name as a string.
@@ -48,3 +48,8 @@ The system MUST support inline check definitions within each entry point's `chec
 
 ### Requirement: Top-level checks map is NOT allowed
 The system MUST reject a `checks` key at the top level of `config.yml`. Check definitions belong either as files in `.validator/checks/` or inline within entry points.
+
+#### Scenario: Top-level checks map rejected
+- **WHEN** `config.yml` contains a top-level `checks` map
+- **THEN** the system MUST reject config loading with a validation error
+- **AND** the error SHALL direct users to define checks in entry points or `.validator/checks/`

@@ -30,40 +30,18 @@ The `init` command SHALL write review entries in `config.yml` based on the revie
 
 ### Requirement: Init outputs next-step message
 
-After completing setup, `init` SHALL print context-aware instructions based on the selected development CLIs. Native CLI users (Claude Code, Cursor, GitHub Copilot) SHALL receive `/validator-setup` slash-command instructions. Non-native CLI users SHALL receive `@file_path` reference instructions. Codex users SHALL receive Codex-native `.agents/skills/` path references.
+After completing setup, `init` SHALL print one agent-neutral instruction for all selected development CLIs. The message SHALL tell the user to run the `validator-setup` skill in their agent and SHALL NOT include Codex-specific file paths or a list of installed skill files.
 
-#### Scenario: Claude Code user instructions
-- **GIVEN** the user selected `claude` as a development CLI
+#### Scenario: Generic setup instruction
+- **GIVEN** the user selected any supported development CLI
 - **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
+- **THEN** the output SHALL include: "To complete setup, run the validator-setup skill in your agent. This will guide you through configuring the static checks (unit tests, linters, etc.) that Agent Validator will run."
 
-#### Scenario: Cursor user instructions
-- **GIVEN** the user selected `cursor` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
-
-#### Scenario: GitHub Copilot user instructions
-- **GIVEN** the user selected `github-copilot` as a development CLI
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include: "To complete setup, run `/validator-setup` in your CLI. This will guide you through configuring the static checks (unit tests, linters, etc) that Agent Validator will run."
-
-#### Scenario: Codex user instructions
+#### Scenario: Codex-specific skill list is omitted
 - **GIVEN** the user selected `codex` as a development CLI
 - **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL reference skills using `.agents/skills/` paths
-- **AND** the output SHALL list all available skills with `.agents/skills/<skill-name>/SKILL.md` syntax
-
-#### Scenario: Non-native non-codex CLI user instructions
-- **GIVEN** the user selected a non-native, non-codex CLI (e.g., `gemini`) as a development CLI
-- **AND** the user did NOT select `claude`, `cursor`, `github-copilot`, or `codex`
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include `@.claude/skills/` path references (existing behavior)
-
-#### Scenario: Mixed CLI selection instructions
-- **GIVEN** the user selected both `claude` and `codex` as development CLIs
-- **WHEN** the init command completes (Phase 6)
-- **THEN** the output SHALL include BOTH the `/validator-setup` instructions AND the Codex `.agents/skills/` instructions
-- **AND** the instructions SHALL be grouped by CLI type
+- **THEN** the output SHALL NOT include `Available Codex skills`
+- **AND** the output SHALL NOT list `~/.agents/skills/<skill-name>/SKILL.md` paths
 
 #### Scenario: --yes flag still shows instructions
 - **GIVEN** the user runs `agent-validate init --yes`
@@ -105,6 +83,27 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **THEN** the user SHALL be presented with a multi-select prompt listing all detected CLIs
 - **AND** the prompt SHALL include the explanation: "Select your development CLI(s). These are the main tools you work in."
 - **AND** at least one CLI must be selected to proceed
+
+#### Scenario: Development CLI names supplied by flag
+- **GIVEN** the user runs `agent-validate init --agents claude codex`
+- **AND** `claude` and `codex` are detected as available
+- **WHEN** Phase 2 begins
+- **THEN** init SHALL use `claude` and `codex` as the selected development CLIs
+- **AND** init SHALL NOT show the development CLI multi-select prompt
+- **AND** init SHALL still show the reviewer CLI multi-select prompt in Phase 3
+
+#### Scenario: Comma-separated development CLI names supplied by flag
+- **GIVEN** the user runs `agent-validate init --agents claude,codex`
+- **AND** `claude` and `codex` are detected as available
+- **WHEN** Phase 2 begins
+- **THEN** init SHALL use `claude` and `codex` as the selected development CLIs
+
+#### Scenario: Unknown development CLI name supplied by flag
+- **GIVEN** the user runs `agent-validate init --agents missing-agent`
+- **AND** `missing-agent` is not detected as available
+- **WHEN** Phase 2 begins
+- **THEN** init SHALL fail with an error naming the unknown or unavailable development agent
+- **AND** init SHALL NOT install plugins or scaffold `.validator/config.yml`
 
 #### Scenario: Installation scope prompt
 - **GIVEN** the user runs `agent-validate init`
@@ -179,10 +178,10 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **WHEN** Phase 2 runs
 - **THEN** all detected CLIs SHALL be selected as development CLIs without prompting
 
-#### Scenario: --yes defaults to local scope
+#### Scenario: --yes defaults to global scope
 - **GIVEN** the user runs `agent-validate init --yes`
 - **WHEN** Phase 2 runs
-- **THEN** installation scope SHALL default to local (project) without prompting
+- **THEN** installation scope SHALL default to global (user) without prompting
 
 #### Scenario: --yes selects all detected CLIs as review CLIs
 - **GIVEN** the user runs `agent-validate init --yes`
@@ -197,11 +196,11 @@ When `--yes` is passed, `init` SHALL skip all interactive prompts and apply defa
 - **THEN** the auto-selected review configuration SHALL be applied without prompting
 - **AND** the review config SHALL be determined by `selectReviewConfig()` based on detected CLIs
 
-#### Scenario: --yes overwrites changed files without asking
+#### Scenario: --yes auto-confirms plugin installation
 - **GIVEN** the user runs `agent-validate init --yes`
-- **AND** a Codex skill file exists with a different checksum
 - **WHEN** Phase 5 runs
-- **THEN** the file SHALL be overwritten without prompting
+- **THEN** init SHALL run the agent-plugin dry-run without prompting
+- **AND** init SHALL run the real agent-plugin install with `--yes`
 
 ### Requirement: Phase 4 scaffold skips when .validator/ exists
 
@@ -223,50 +222,35 @@ When `.validator/` already exists, Phase 4 SHALL skip entirely without modifying
 - **THEN** no files inside `.validator/` SHALL be created or modified
 - **AND** init SHALL delegate to update logic (not run Phase 5 directly)
 
-### Requirement: Init installs Claude plugin instead of copying skills
+### Requirement: Init delegates development plugin installation to agent-plugin
 
-When Claude is a selected development CLI, init SHALL install the agent-validator Claude plugin instead of copying skill files to `.claude/skills/`.
+When development CLIs are selected, init SHALL pass the selected agents to `agent-plugin add Codagent-AI/agent-validator` instead of running adapter-specific install methods or copying skill files directly.
 
-#### Scenario: Claude selected installs plugin at local scope
-- **GIVEN** the user selects `claude` as a development CLI
+#### Scenario: Selected agents are passed to agent-plugin
+- **GIVEN** the user selects `claude`, `codex`, and `cursor` as development CLIs
 - **AND** the user selects local scope
 - **WHEN** Phase 5 runs
-- **THEN** init SHALL run `claude plugin marketplace add Codagent-AI/agent-validator`
-- **AND** init SHALL run `claude plugin install agent-validator --scope project`
-- **AND** no skill files SHALL be copied to `.claude/skills/`
+- **THEN** init SHALL invoke `agent-plugin add Codagent-AI/agent-validator`
+- **AND** SHALL pass `--agent claude`, `--agent codex`, and `--agent cursor`
+- **AND** SHALL pass `--project`
 
-#### Scenario: Claude selected installs plugin at global scope
-- **GIVEN** the user selects `claude` as a development CLI
+#### Scenario: Global scope omits project flag
+- **GIVEN** the user selects any development CLI
 - **AND** the user selects global scope
 - **WHEN** Phase 5 runs
-- **THEN** init SHALL run `claude plugin install agent-validator --scope user`
-- **AND** no skill files SHALL be copied to `.claude/skills/`
+- **THEN** init SHALL invoke `agent-plugin add Codagent-AI/agent-validator`
+- **AND** SHALL NOT pass `--project`
 
-### Requirement: Init installs Codex skills based on scope
-
-When Codex is a selected development CLI, init SHALL install skills to the appropriate directory based on the selected scope.
-
-#### Scenario: Codex selected with local scope
+#### Scenario: Codex install is delegated
 - **GIVEN** the user selects `codex` as a development CLI
-- **AND** the user selects local scope
 - **WHEN** Phase 5 runs
-- **THEN** validator skills SHALL be copied to `.agents/skills/<skill-name>/`
+- **THEN** init SHALL pass `--agent codex` to agent-plugin
+- **AND** init SHALL NOT copy files directly into `.agents/skills/` or `$HOME/.agents/skills/`
 
-#### Scenario: Codex selected with global scope
-- **GIVEN** the user selects `codex` as a development CLI
-- **AND** the user selects global scope
-- **WHEN** Phase 5 runs
-- **THEN** validator skills SHALL be copied to `$HOME/.agents/skills/<skill-name>/`
-
-#### Scenario: Codex skill checksum matches skips update
-- **GIVEN** a skill already exists at the target Codex skill location
-- **WHEN** its checksum matches the source skill
-- **THEN** the skill SHALL be skipped without prompting
-
-#### Scenario: Codex skill checksum differs prompts for overwrite
-- **GIVEN** a skill already exists at the target Codex skill location
-- **WHEN** its checksum differs from the source skill
-- **THEN** the user SHALL be prompted to overwrite (unless `--yes` is passed)
+#### Scenario: GitHub Copilot agent name mapping
+- **GIVEN** the user selects `github-copilot` as a development CLI
+- **WHEN** Phase 5 invokes agent-plugin
+- **THEN** init SHALL pass `--agent copilot`
 
 ### Requirement: CodexAdapter reports project skill directory
 
@@ -327,24 +311,24 @@ The `init` command SHALL include a `model` field in the adapter configuration de
 - **WHEN** `.validator/config.yml` is generated
 - **THEN** the `cli.adapters.gemini` section SHALL NOT include a `model` field
 
-### Requirement: Non-Claude non-Codex CLIs keep current behavior
+### Requirement: Non-native CLIs are delegated to agent-plugin
 
-CLIs that are not Claude, Codex, Cursor, or GitHub Copilot SHALL continue using the existing skill-copy installation approach during init.
+CLIs that do not have local hook support SHALL still use the centralized agent-plugin installation path during init.
 
-#### Scenario: Gemini selected copies skills to .claude/skills/
+#### Scenario: Gemini selected uses agent-plugin
 - **GIVEN** the user selects `gemini` as a development CLI
 - **WHEN** Phase 5 runs
-- **THEN** skills SHALL be copied to `.claude/skills/` with `@file_path` references (existing behavior)
+- **THEN** init SHALL pass `--agent gemini` to agent-plugin
+- **AND** init SHALL NOT copy skill files directly
 
-#### Scenario: Cursor selected copies skills only (no hooks)
+#### Scenario: Cursor selected uses agent-plugin
 - **GIVEN** the user selects `cursor` as a development CLI
 - **WHEN** Phase 5 runs
-- **THEN** skills SHALL be installed using the existing Cursor adapter behavior
-- **AND** no Cursor hook configuration SHALL be performed (Cursor hook support is deferred)
+- **THEN** init SHALL pass `--agent cursor` to agent-plugin
+- **AND** init SHALL NOT call the Cursor adapter's `installPlugin()` method directly
 
-#### Scenario: GitHub Copilot is NOT in the file-copy bucket
-- **GIVEN** the user selects `github-copilot` as a development CLI
+#### Scenario: Already-installed handling belongs to agent-plugin
+- **GIVEN** the user selects a development CLI whose plugin may already be installed
 - **WHEN** Phase 5 runs
-- **THEN** skills SHALL NOT be copied to `.claude/skills/` or `.github/skills/` via file copy
-- **AND** the plugin install mechanism SHALL be used instead
-
+- **THEN** init SHALL still include that agent in the agent-plugin invocation
+- **AND** init SHALL NOT skip the agent based on adapter-specific plugin detection

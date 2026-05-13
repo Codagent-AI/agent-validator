@@ -170,11 +170,11 @@ The `validator-help` skill SHALL provide situation-based troubleshooting referen
 - **AND** it SHALL explain the observed result using the relevant troubleshooting reference
 
 ### Requirement: Skill Directory Structure
-The system SHALL store canonical skill files under `.validator/skills/validator-<action>/SKILL.md` using a flat directory structure with hyphenated naming to achieve `/validator-<action>` invocation.
+The system SHALL store canonical distributable skill files under `skills/validator-<action>/SKILL.md` using a flat directory structure with hyphenated naming. Runtime installation locations SHALL be owned by the agent-plugin installer for each target agent.
 
-#### Scenario: Canonical skill files created during init
-- **WHEN** `agent-validate init` creates the validator configuration
-- **THEN** skill directories SHALL be created under `.validator/skills/` for each action: `validator-run`, `validator-check`, `validator-status`
+#### Scenario: Canonical skill files are shipped in the package
+- **WHEN** the package is built or published
+- **THEN** skill directories SHALL exist under `skills/` for each action: `validator-run`, `validator-check`, `validator-status`
 - **AND** each directory SHALL contain a `SKILL.md` file with YAML frontmatter
 
 #### Scenario: Skill frontmatter format
@@ -184,38 +184,43 @@ The system SHALL store canonical skill files under `.validator/skills/validator-
 - **AND** `validator-run` and `validator-check` SHALL set `disable-model-invocation: false` so explicit validation requests can invoke them through model skill selection
 
 #### Scenario: Hyphenated skill invocation
-- **GIVEN** a skill at `.claude/skills/validator-run/SKILL.md`
+- **GIVEN** a target agent has installed the `validator-run` skill from the agent-validator plugin
 - **WHEN** the user types `/validator-run`
 - **THEN** Claude Code SHALL invoke the skill from the flat `validator-run/` directory
 
-### Requirement: Skill Installation for Claude
-The init command SHALL install skills into `.claude/skills/` for Claude Code by writing skill files directly via `installSkill`.
+### Requirement: Skill Installation Delegation
 
-#### Scenario: Project-level Claude skill installation
+The init command SHALL delegate skill and plugin installation to agent-plugin rather than writing agent-specific skill files directly.
+
+#### Scenario: Project-level skill installation
 - **GIVEN** a user selects project-level installation during init
-- **AND** Claude is a selected agent
+- **AND** one or more development agents are selected
 - **WHEN** skills are installed
-- **THEN** skill directories SHALL be created under `.claude/skills/validator-<action>/` for each skill
-- **AND** each `SKILL.md` SHALL be written directly (not symlinked) by the `installSkill` function
+- **THEN** init SHALL invoke agent-plugin with project scope
+- **AND** agent-plugin SHALL choose the target-specific skill location
 
-#### Scenario: User-level Claude skill installation
+#### Scenario: User-level skill installation
 - **GIVEN** a user selects user-level installation during init
-- **AND** Claude is a selected agent
+- **AND** one or more development agents are selected
 - **WHEN** skills are installed
-- **THEN** skill files SHALL be written directly to `~/.claude/skills/validator-<action>/SKILL.md`
+- **THEN** init SHALL invoke agent-plugin with user scope
+- **AND** agent-plugin SHALL choose the target-specific skill location
 
 ### Requirement: Command Installation for Non-Claude Agents
-The init command SHALL continue installing flat command files for agents that do not support the skills directory model.
+
+The init command SHALL rely on agent-plugin for command or skill installation for agents that do not use Claude's skill directory model.
 
 #### Scenario: Gemini command installation
 - **GIVEN** a user selects Gemini as an agent during init
 - **WHEN** commands are installed
-- **THEN** flat command files SHALL be created in the Gemini command directory
+- **THEN** init SHALL pass `--agent gemini` to agent-plugin
+- **AND** init SHALL NOT write Gemini command files directly
 
 #### Scenario: Codex command installation
 - **GIVEN** a user selects Codex as an agent during init
 - **WHEN** commands are installed
-- **THEN** flat command files SHALL be created in the Codex command directory
+- **THEN** init SHALL pass `--agent codex` to agent-plugin
+- **AND** init SHALL NOT write Codex command files directly
 
 ### Requirement: Check Skill
 The system SHALL provide a `/validator-check` skill that runs only check gates (no reviews), following the same iterative fix workflow as `/validator-run`.
@@ -274,18 +279,19 @@ All validator skills SHALL use a flat `validator-<action>/` directory structure 
 
 ### Requirement: Setup Skill Installation
 
-The `init` command SHALL install the `/validator-setup` skill alongside existing skills (run, check, status, help). The setup skill SHALL be installed as a multi-file skill with a SKILL.md and a references directory.
+The `validator-setup` skill SHALL be distributed alongside existing skills (run, check, status, help). The setup skill SHALL be packaged as a multi-file skill with a SKILL.md and a references directory, and installation SHALL be delegated to agent-plugin.
 
 #### Scenario: Setup skill installed during init
 - **GIVEN** a user runs `agent-validate init`
-- **AND** selects CLI agents that support skills
+- **AND** selects development agents
 - **WHEN** skills are installed
-- **THEN** the `validator-setup` skill SHALL be installed with `SKILL.md` and `references/check-catalog.md`
+- **THEN** init SHALL delegate installation to agent-plugin
+- **AND** the plugin source SHALL include `validator-setup/SKILL.md` and `validator-setup/references/check-catalog.md`
 
-#### Scenario: Setup skill not overwritten
+#### Scenario: Setup skill overwrite behavior
 - **GIVEN** the `validator-setup` skill already exists
 - **WHEN** `agent-validate init` runs
-- **THEN** existing skill files SHALL NOT be overwritten, but any missing skill files SHALL be created
+- **THEN** overwrite, no-op, or upgrade behavior SHALL be handled by agent-plugin
 
 ### Requirement: Setup Skill Fresh Configuration
 
@@ -429,12 +435,12 @@ The `run` and `review` commands SHALL accept a repeatable `--enable-review <name
 - **THEN** the run SHALL proceed normally without error
 
 ### Requirement: Validator-Run Skill Model Invocation
-The validator-run skill SHALL allow model invocation for explicit user validation requests. The skill content is stored as static files under `skills/validator-run/` and installed to `.claude/skills/validator-run/` during init.
+The validator-run skill SHALL allow model invocation for explicit user validation requests. The skill content is stored as static files under `skills/validator-run/` and installed into target agents by agent-plugin.
 
 The validator-run skill SHALL accept `--enable-review <name>` flags from the caller, appending them to the run command for each requested review.
 
 #### Scenario: Validator-run skill model invocation enabled
-- **GIVEN** the validator-run skill is installed at `.claude/skills/validator-run/SKILL.md`
+- **GIVEN** the validator-run skill is available from `skills/validator-run/SKILL.md`
 - **WHEN** a user views the skill frontmatter
 - **THEN** the skill frontmatter SHALL set `disable-model-invocation: false`
 - **AND** the `description` field SHALL state that the skill runs only when explicitly requested

@@ -3,7 +3,7 @@
 ## Purpose
 Update the GitHub Copilot adapter to use the standalone `copilot` CLI invocation (replacing the deprecated `gh copilot` extension), declare skill directories, support hooks, and implement the plugin lifecycle.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Adapter invokes via standalone copilot CLI
 
@@ -23,7 +23,7 @@ The `github-copilot` adapter SHALL invoke the Copilot CLI through the standalone
 
 ### Requirement: Adapter declares skill directories
 
-The adapter SHALL report Copilot CLI's native skill directories so the init system can install skills to the correct locations.
+The adapter SHALL report Copilot CLI's native skill directories for compatibility with adapter metadata and helper utilities. Init-time installation SHALL still be delegated to agent-plugin.
 
 #### Scenario: Project skill directory
 - **WHEN** `getProjectSkillDir()` is called

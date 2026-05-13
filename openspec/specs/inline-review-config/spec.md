@@ -3,7 +3,7 @@
 ## Purpose
 Defines inline review gate configuration within entry_points in config.yml as an alternative to separate review files.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Entry points support inline review definitions in their reviews array
 The system MUST support inline review definitions within each entry point's `reviews` array. Each inline item is a single-key object where the key is the review name and the value is a review configuration object using the same schema as `.validator/reviews/*.yml` files (one of `builtin`/`prompt_file`/`skill_name` plus optional attributes). Inline reviews and file-based reviews are merged at load time; if the same name appears in both sources, the system MUST reject with a validation error. A review name may only be defined inline in one entry point; other entry points reference it by name as a string.
@@ -42,3 +42,8 @@ The system MUST support inline review definitions within each entry point's `rev
 
 ### Requirement: Top-level reviews map is NOT allowed
 The system MUST reject a `reviews` key at the top level of `config.yml`. Review definitions belong either as files in `.validator/reviews/` or inline within entry points.
+
+#### Scenario: Top-level reviews map rejected
+- **WHEN** `config.yml` contains a top-level `reviews` map
+- **THEN** the system MUST reject config loading with a validation error
+- **AND** the error SHALL direct users to define reviews in entry points or `.validator/reviews/`

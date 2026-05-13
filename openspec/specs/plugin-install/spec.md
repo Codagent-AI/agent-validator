@@ -1,59 +1,86 @@
 # plugin-install Specification
 
 ## Purpose
-Plugin installation during `agent-validate init`. Covers Claude plugin marketplace registration, plugin installation with scope, and plugin manifest requirements.
+Plugin and skill installation during `agent-validate init`. Covers centralized installation through the bundled `agent-plugin` dependency, dry-run confirmation, install scope handling, and plugin manifest requirements.
+
 ## Requirements
-### Requirement: Plugin marketplace registration
 
-The `init` command SHALL run `claude plugin marketplace add Codagent-AI/agent-validator` before attempting plugin installation. The command SHALL be run unconditionally (no pre-check).
+### Requirement: Centralized agent-plugin installation
 
-#### Scenario: Marketplace add succeeds
-- **GIVEN** the user runs `agent-validate init` with Claude selected
-- **WHEN** `init` runs the marketplace add command
-- **AND** the command succeeds
-- **THEN** init SHALL proceed to plugin installation
+The `init` command SHALL install selected development-agent plugins and skills by invoking the bundled `agent-plugin` CLI rather than running adapter-specific install or skill-copy logic directly. The command SHALL pass the canonical source `Codagent-AI/agent-validator`, one `--agent` option per selected development CLI, and `--project` only when the selected scope is project/local.
 
-#### Scenario: Marketplace add fails
-- **GIVEN** the user runs `agent-validate init` with Claude selected
-- **WHEN** `init` runs the marketplace add command
-- **AND** the command fails
-- **THEN** init SHALL warn the user that plugin installation failed
-- **AND** SHALL print manual installation instructions (the marketplace add and plugin install commands)
-- **AND** SHALL continue with remaining init steps (Codex skills, other CLIs)
+#### Scenario: Selected agents are passed through
+- **GIVEN** the user runs `agent-validate init`
+- **AND** selects `claude`, `codex`, and `cursor` as development CLIs
+- **WHEN** Phase 5 runs
+- **THEN** init SHALL invoke `agent-plugin add Codagent-AI/agent-validator`
+- **AND** SHALL include `--agent claude`, `--agent codex`, and `--agent cursor`
 
-### Requirement: Plugin installation with scope
+#### Scenario: Selected agents are passed from --agents
+- **GIVEN** the user runs `agent-validate init --agents claude,codex`
+- **AND** `claude` and `codex` are detected as available
+- **WHEN** Phase 5 runs
+- **THEN** init SHALL invoke `agent-plugin add Codagent-AI/agent-validator`
+- **AND** SHALL include `--agent claude` and `--agent codex`
+- **AND** SHALL NOT include unselected detected agents
 
-The `init` command SHALL support plugin installation for any adapter that provides a plugin install mechanism. Each adapter SHALL define its own installation strategy (e.g., CLI commands, local file copy). The init flow SHALL prompt for scope (user/project), delegate to the adapter's install mechanism, and handle success/failure uniformly.
-
-#### Scenario: Adapter-specific installation dispatched
-- **GIVEN** the user runs `agent-validate init` with a plugin-capable CLI selected
-- **WHEN** the user selects a development CLI that supports plugin installation
-- **THEN** init SHALL delegate to that adapter's installation strategy with the selected scope
-
-#### Scenario: Already-installed detection
-- **GIVEN** the user runs `agent-validate init` with a plugin-capable CLI selected
-- **WHEN** the plugin is already installed for the selected adapter at any scope
-- **THEN** init SHALL inform the user it is already installed and at which scope
-- **AND** SHALL skip the scope prompt
-- **AND** SHALL skip the install step
-
-#### Scenario: Installation failure
-- **GIVEN** the user runs `agent-validate init` with a plugin-capable CLI selected
-- **WHEN** the adapter's installation strategy fails
-- **THEN** init SHALL warn the user that plugin installation failed
-- **AND** SHALL print adapter-specific manual installation instructions
-- **AND** SHALL continue with remaining init steps
-
-#### Scenario: Copilot adapter dispatched for plugin install
+#### Scenario: GitHub Copilot name mapping
 - **GIVEN** the user selects `github-copilot` as a development CLI
-- **WHEN** init delegates to the Copilot adapter's `installPlugin()`
-- **THEN** the adapter SHALL run the Copilot CLI plugin install command targeting `Codagent-AI/agent-validator`
-- **AND** the Copilot CLI SHALL discover the plugin via the existing `.claude-plugin/plugin.json` manifest
+- **WHEN** init invokes `agent-plugin`
+- **THEN** init SHALL pass `--agent copilot` to match the agent-plugin agent name
 
-#### Scenario: Copilot adapter manual install instructions
-- **GIVEN** the Copilot adapter's `installPlugin()` has failed
-- **WHEN** init prints manual installation instructions
-- **THEN** the instructions SHALL include the `copilot plugin install Codagent-AI/agent-validator` command
+#### Scenario: Project scope flag
+- **GIVEN** the user selects local/project installation scope
+- **WHEN** init invokes `agent-plugin`
+- **THEN** init SHALL include `--project`
+
+#### Scenario: User scope omits project flag
+- **GIVEN** the user selects global/user installation scope
+- **WHEN** init invokes `agent-plugin`
+- **THEN** init SHALL NOT include `--project`
+
+### Requirement: Dry-run before install
+
+The `init` command SHALL preview the `agent-plugin` plan before applying it. It SHALL run `agent-plugin add ... --dry-run`, then ask the user to confirm, then run the same add command without `--dry-run` only when confirmed. With `--yes`, confirmation SHALL be accepted automatically and the real install SHALL include `--yes`.
+
+#### Scenario: Dry-run precedes install
+- **GIVEN** the user runs `agent-validate init`
+- **WHEN** Phase 5 runs
+- **THEN** init SHALL invoke `agent-plugin add Codagent-AI/agent-validator ... --dry-run`
+- **AND** SHALL prompt the user to proceed with plugin installation
+
+#### Scenario: Confirmation accepted
+- **GIVEN** the dry-run has completed
+- **WHEN** the user confirms installation
+- **THEN** init SHALL invoke `agent-plugin add Codagent-AI/agent-validator ...` without `--dry-run`
+
+#### Scenario: Confirmation declined
+- **GIVEN** the dry-run has completed
+- **WHEN** the user declines installation
+- **THEN** init SHALL NOT invoke the real install
+- **AND** SHALL continue remaining init steps
+
+#### Scenario: --yes auto-confirms
+- **GIVEN** the user runs `agent-validate init --yes`
+- **WHEN** Phase 5 runs
+- **THEN** init SHALL run the dry-run command
+- **AND** SHALL run the real install command with `--yes`
+- **AND** SHALL NOT prompt for confirmation
+
+### Requirement: Agent-plugin dependency resolution
+
+The package SHALL depend on `agent-plugin` as the npm alias `npm:@codagent-ai/agent-plugin`. The wrapper SHALL execute that package's `dist/index.js` with the current Node executable. For local development and tests, `AGENT_PLUGIN_BIN` MAY override the resolved binary path.
+
+#### Scenario: Bundled dependency is used by default
+- **GIVEN** `AGENT_PLUGIN_BIN` is not set
+- **WHEN** init invokes `agent-plugin`
+- **THEN** the wrapper SHALL resolve `agent-plugin/package.json`
+- **AND** SHALL execute `<agent-plugin package root>/dist/index.js`
+
+#### Scenario: Local override is used
+- **GIVEN** `AGENT_PLUGIN_BIN` is set to a local script path
+- **WHEN** init invokes `agent-plugin`
+- **THEN** the wrapper SHALL execute the override path
 
 ### Requirement: Plugin manifest
 
@@ -66,8 +93,7 @@ The npm package SHALL include a `.claude-plugin/plugin.json` manifest so the pac
 - **AND** the `version` field SHALL match the version in `package.json`
 
 #### Scenario: Copilot CLI discovers plugin via .claude-plugin/
-- **GIVEN** a user runs `copilot plugin install Codagent-AI/agent-validator`
+- **GIVEN** agent-plugin installs agent-validator for GitHub Copilot
 - **WHEN** the Copilot CLI fetches the repository
 - **THEN** it SHALL discover `plugin.json` at `.claude-plugin/plugin.json`
 - **AND** it SHALL use the default `skills/` directory for skill discovery
-
