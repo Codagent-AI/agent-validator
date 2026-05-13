@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.11.1
+
+### Patch Changes
+
+- [#137](https://github.com/Codagent-AI/agent-validator/pull/137) Update the bundled `agent-plugin` dependency to 0.1.3 and use the canonical repository source for plugin updates.
+
 ## 1.11.0
 
 ### Minor Changes
