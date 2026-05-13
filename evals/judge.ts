@@ -13,7 +13,7 @@ export async function judgeRun(
 	groundTruth: GroundTruthIssue[],
 	judgeAdapterName: EvalAdapterName,
 	thinkingBudget: string,
-	timeoutMs = 300_000,
+	options: { model?: string; timeoutMs?: number } | number = {},
 ): Promise<JudgeResult> {
 	const adapter = getAdapter(judgeAdapterName);
 	if (!adapter) {
@@ -21,11 +21,15 @@ export async function judgeRun(
 	}
 
 	const prompt = buildJudgePrompt(groundTruth, violations);
+	const model = typeof options === "number" ? undefined : options.model;
+	const timeoutMs =
+		typeof options === "number" ? options : (options.timeoutMs ?? 300_000);
 
 	const judgeTelemetry: string[] = [];
 	const rawOutput = await adapter.execute({
 		prompt,
 		diff: "",
+		model,
 		allowToolUse: false,
 		thinkingBudget,
 		timeoutMs,

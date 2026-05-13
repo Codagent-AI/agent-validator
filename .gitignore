@@ -42,3 +42,6 @@ bin/
 
 # eval results
 evals/results/
+
+# local review output left in fixture codebases during eval development
+evals/fixtures/**/.review-output*.json

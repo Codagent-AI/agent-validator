@@ -1,0 +1,16 @@
+# Cursor CLI (agent) + Composer — security + error-handling combined fixture, 3 runs.
+fixture: fixtures/security-errors
+builtin_prompt: security-and-errors
+
+adapters:
+  - name: cursor
+    model: composer-2
+    alias: cursor-composer2
+    allow_tool_use: false
+    thinking_budget: low
+
+runs_per_config: 3
+timeout_ms: 600000
+judge:
+  adapter: claude
+  thinking_budget: high
