@@ -395,7 +395,7 @@ Updates installed plugins and skills for all supported adapters.
 - If Claude plugin found → runs `claude plugin marketplace update` followed by `claude plugin update`
 - Detects where the Cursor plugin is installed (file-system check for `.cursor/plugins/agent-validator/`)
 - If Cursor plugin found → re-copies plugin assets from the npm package (always overwrite)
-- Refreshes Codex skills if installed (using checksum comparison)
+- Delegates installed agent plugin and skill refreshes to `agent-plugin update Codagent-AI/agent-validator`
 - If no plugins are found at all, exits with an error suggesting `agent-validator init`
 
 ### `agent-validator update-review`

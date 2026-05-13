@@ -61,12 +61,12 @@ The `update` command SHALL keep supporting direct updates for existing Claude an
 
 ### Requirement: Agent-plugin update delegation
 
-After detecting installed integrations, `update` SHALL call `agent-plugin update agent-validator` for the agents represented by those integrations. It SHALL pass `--yes`, one `--agent` option for each detected target, and `--project` only when the selected update scope is project/local.
+After detecting installed integrations, `update` SHALL call `agent-plugin update Codagent-AI/agent-validator` for the agents represented by those integrations. It SHALL pass `--yes`, one `--agent` option for each detected target, and `--project` only when the selected update scope is project/local.
 
 #### Scenario: Detected agents are delegated to agent-plugin
 - **GIVEN** Claude, Cursor, and Codex integrations are detected
 - **WHEN** update reaches the centralized update step
-- **THEN** update SHALL invoke `agent-plugin update agent-validator`
+- **THEN** update SHALL invoke `agent-plugin update Codagent-AI/agent-validator`
 - **AND** SHALL pass `--agent claude`, `--agent cursor`, and `--agent codex`
 - **AND** SHALL pass `--yes`
 

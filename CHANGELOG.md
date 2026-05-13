@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.11.1
+
+### Patch Changes
+
+- [#137](https://github.com/Codagent-AI/agent-validator/pull/137) Update the bundled `agent-plugin` dependency to 0.1.3 and use the canonical repository source for plugin updates.
+
 ## 1.11.0
 
 ### Minor Changes
@@ -10,7 +16,7 @@
 
 - [#133](https://github.com/Codagent-AI/agent-validator/pull/133) Add Cursor adapter coverage to the eval harness, Composer-2 evaluation configs, and the April 2026 evaluation report.
 
-- [#136](https://github.com/Codagent-AI/agent-validator/pull/136) Update the init flow to delegate skill and plugin installation to `agent-plugin`, support explicit development agent selection, and improve local AI review setup.
+- [#136](https://github.com/Codagent-AI/agent-validator/pull/136) Update the init flow to delegate skill and plugin installation to `agent-plugin`, support explicit development agent selection, improve local AI review setup, and use the latest bundled `agent-plugin` update behavior.
 
 ## 1.10.0
 

@@ -74,7 +74,7 @@ This command:
 4. If Copilot plugin found → re-runs `copilot plugin install` to update
 5. Detects where the Cursor plugin is installed (file-system check)
 6. If Cursor plugin found → re-copies plugin assets from the npm package
-7. Refreshes Codex skills if installed (checksum-based)
+7. Delegates installed agent plugin and skill refreshes to `agent-plugin update Codagent-AI/agent-validator`
 
 ### Scope Detection
 
