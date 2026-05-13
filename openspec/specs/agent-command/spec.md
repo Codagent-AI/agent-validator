@@ -371,44 +371,45 @@ When `entry_points` is already populated, the `/validator-setup` skill SHALL off
 #### Scenario: Reconfigure backs up existing
 - **GIVEN** the user selects "reconfigure" on an existing configuration
 - **WHEN** the agent starts fresh setup
-- **THEN** existing check files (`.validator/checks/*.yml`) and custom review files (`.validator/reviews/*.md` — reviews with user-authored prompts, not built-in `.yml` references) SHALL be renamed with a `.bak` suffix before being replaced (overwriting any previous `.bak` files)
+- **THEN** legacy file-based check files (`.validator/checks/*.yml`) and custom review prompt files (`.validator/reviews/*.md`) SHALL be renamed with a `.bak` suffix before being replaced (overwriting any previous `.bak` files)
+- **AND** the generated `entry_points` configuration in `.validator/config.yml` SHALL be cleared so fresh setup can recreate inline checks and inline built-in reviews
 
 ### Requirement: Setup Skill Custom Additions
 
-The `/validator-setup` skill SHALL support adding custom checks and reviews that the agent did not discover through scanning.
+The `/validator-setup` skill SHALL support adding custom checks and reviews that the agent did not discover through scanning. Custom checks and built-in reviews SHALL be stored inline under the selected entry point; custom prompt reviews MAY use `.validator/reviews/<name>.md` for user-authored prompt text.
 
 #### Scenario: Add custom check
 - **GIVEN** the user wants to add a custom check
 - **WHEN** the agent prompts for details
 - **THEN** the agent SHALL ask for the command, target entry point, and optional settings (timeout, parallel, etc.)
-- **AND** create the corresponding `.validator/checks/<name>.yml` file
+- **AND** add the check inline under the target entry point's `checks` array
 
 #### Scenario: Add custom review
 - **GIVEN** the user wants to add a custom review
 - **WHEN** the agent prompts for details
 - **THEN** the agent SHALL ask whether to use the built-in code-quality review or write a custom prompt
-- **AND** for built-in reviews, create `.validator/reviews/<name>.yml` with `builtin: code-quality`
+- **AND** for built-in reviews, add the review inline under the target entry point's `reviews` array
 - **AND** for custom reviews, create `.validator/reviews/<name>.md` with the user's review prompt
 - **AND** add the review name to the target entry point's `reviews` array in `config.yml`
 
 #### Scenario: Add something else loop
-- **GIVEN** the agent has created check or review files
-- **WHEN** the files are written
+- **GIVEN** the agent has added inline checks, inline built-in reviews, or custom review prompt files
+- **WHEN** the configuration is updated
 - **THEN** the agent SHALL ask "Add something else?"
 - **AND** if yes, loop back to the custom addition flow
 - **AND** if no, proceed to the validation step (run `agent-validate validate`)
 
 ### Requirement: Setup Skill Check Catalog Reference
 
-The setup skill SHALL include a `references/check-catalog.md` file that documents check categories, the check YAML schema, and example configurations. This reference is loaded by the agent when the skill is activated.
+The setup skill SHALL include a `references/check-catalog.md` file that documents check categories, the inline check schema, and example configurations. This reference is loaded by the agent when the skill is activated.
 
 #### Scenario: Check catalog content
 - **GIVEN** the setup skill is activated
 - **WHEN** the agent loads the check catalog reference
 - **THEN** it SHALL contain definitions for 6 check categories (build, lint, typecheck, test, security-deps, security-code)
-- **AND** the check YAML schema with all available fields
-- **AND** at least one example check file per category
-- **AND** the review YAML schema including built-in reviewer reference
+- **AND** the inline check schema with all available fields
+- **AND** at least one inline check example per category
+- **AND** the inline built-in review schema and custom prompt review file schema
 - **AND** the config entry_points schema
 
 ### Requirement: Enable-review CLI option on run and review commands
