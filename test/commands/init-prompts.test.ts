@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 let selectValue = "yes";
+let confirmResponses: boolean[] = [];
 let checkboxCalls: { choices?: { name: string; value: string }[] }[] = [];
 let selectCalls: { message?: string }[] = [];
+let confirmCalls: { message?: string; default?: boolean }[] = [];
 
 // Mock @inquirer/prompts before importing our module
 mock.module("@inquirer/prompts", () => ({
@@ -11,7 +13,10 @@ mock.module("@inquirer/prompts", () => ({
 		return ["claude", "codex"];
 	},
 	number: async () => 2,
-	confirm: async () => true,
+	confirm: async (opts: { message?: string; default?: boolean }) => {
+		confirmCalls.push(opts);
+		return confirmResponses.length > 0 ? (confirmResponses.shift() ?? true) : true;
+	},
 	select: async (opts: { message?: string }) => {
 		selectCalls.push(opts);
 		return selectValue;
@@ -21,6 +26,7 @@ mock.module("@inquirer/prompts", () => ({
 const {
 	promptDevCLIs,
 	promptInstallScope,
+	promptLocalAIReviews,
 	promptReviewCLIs,
 	promptNumReviews,
 	promptFileOverwrite,
@@ -53,6 +59,58 @@ describe("promptDevCLIs", () => {
 			"github-copilot",
 			"opencode",
 		]);
+	});
+});
+
+describe("promptLocalAIReviews", () => {
+	beforeEach(() => {
+		confirmCalls = [];
+		confirmResponses = [];
+	});
+
+	it("returns true when skipPrompts is true", async () => {
+		const result = await promptLocalAIReviews(true);
+
+		expect(result).toBe(true);
+		expect(confirmCalls).toHaveLength(0);
+	});
+
+	it("returns true when the user enables local AI reviews", async () => {
+		confirmResponses = [true];
+
+		const result = await promptLocalAIReviews(false);
+
+		expect(result).toBe(true);
+		expect(confirmCalls).toHaveLength(1);
+		expect(confirmCalls[0]?.message).toBe(
+			"Enable local AI reviews? (strongly recommended)",
+		);
+		expect(confirmCalls[0]?.default).toBe(true);
+	});
+
+	it("asks for confirmation before disabling local AI reviews", async () => {
+		confirmResponses = [false, true];
+
+		const result = await promptLocalAIReviews(false);
+
+		expect(result).toBe(false);
+		expect(confirmCalls).toHaveLength(2);
+		expect(confirmCalls[1]?.message).toContain(
+			"Are you sure you want to skip local AI reviews?",
+		);
+		expect(confirmCalls[1]?.message).toContain(
+			"catch bugs, security issues, and error-handling gaps",
+		);
+		expect(confirmCalls[1]?.default).toBe(false);
+	});
+
+	it("keeps local AI reviews enabled when the user declines the opt-out confirmation", async () => {
+		confirmResponses = [false, false];
+
+		const result = await promptLocalAIReviews(false);
+
+		expect(result).toBe(true);
+		expect(confirmCalls).toHaveLength(2);
 	});
 });
 
@@ -191,6 +249,11 @@ describe("selectReviewConfig", () => {
 });
 
 describe("promptHookOverwrite", () => {
+	beforeEach(() => {
+		confirmResponses = [];
+		confirmCalls = [];
+	});
+
 	it("should return true when skipPrompts is true", async () => {
 		const result = await promptHookOverwrite("settings.local.json", true);
 		expect(result).toBe(true);

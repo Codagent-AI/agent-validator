@@ -58,7 +58,8 @@ The `init` command SHALL preview the `agent-plugin` plan before applying it. It 
 - **GIVEN** the dry-run has completed
 - **WHEN** the user declines installation
 - **THEN** init SHALL NOT invoke the real install
-- **AND** SHALL continue remaining init steps
+- **AND** if local AI reviews are enabled, init SHALL return to reviewer CLI selection
+- **AND** `.validator/config.yml` SHALL only be written after a later plugin installation confirmation succeeds
 
 #### Scenario: --yes auto-confirms
 - **GIVEN** the user runs `agent-validate init --yes`

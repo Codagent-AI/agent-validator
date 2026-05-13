@@ -37,10 +37,13 @@ Parse `$ARGUMENTS` for a validation intent. Do not prompt the user if a clear in
 
 | ARGUMENTS pattern | Action |
 |-------------------|--------|
-| Contains "run", "full", or "all gates" | Invoke `/validator-run` (Step 3a) |
 | Contains "check" or "checks" | Invoke `/validator-check` (Step 3b) |
+| Contains "run", "full", or "all gates" | Invoke `/validator-run` (Step 3a) |
 | Contains "skip" | Run `agent-validate skip 2>&1` (Step 3c), then go to Step 4 |
 | Empty or no clear intent | Present the three choices below to the user, wait for selection |
+
+Evaluate the "check" or "checks" pattern before the generic "run" pattern, so
+phrases like "run checks before commit" select `/validator-check`.
 
 **When prompting the user**, present these choices:
 

@@ -18,7 +18,7 @@ Read `.validator/config.yml`. If the file does not exist, tell the user to run `
 
 Read the `entry_points` field from `.validator/config.yml`.
 
-**If `entry_points` is empty (`[]`):** This is a fresh setup. Proceed to Step 3 (detect project structure).
+**If `entry_points` is empty (`[]`) OR contains only the generated root entry point (`path: "."`) with no `checks`:** This is a fresh setup. Proceed to Step 3 (detect project structure). Preserve any existing `reviews` on that generated root entry point unless the user explicitly reconfigures reviews.
 
 **If `entry_points` is populated:** Show the user a summary of the current configuration:
 - List each entry point with its `path`, `checks`, and `reviews`

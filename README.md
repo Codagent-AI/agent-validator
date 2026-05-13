@@ -56,7 +56,7 @@ npm install -g agent-validator
 agent-validator init
 ```
 
-`init` detects your installed AI CLIs, creates `.validator/config.yml` with an empty config skeleton, and installs agent plugins and skills through agent-plugin. Use `--agents claude codex` to preselect development agents, or `--yes` to skip prompts.
+`init` detects your installed AI CLIs, creates `.validator/config.yml` with a generated root entry point and recommended local AI reviews, and installs agent plugins and skills through agent-plugin. Use `--agents claude codex` to preselect development agents, or `--yes` to skip prompts and use defaults, including global/user install scope.
 
 After init, run the `validator-setup` skill in your AI agent session to auto-discover your project's tooling and populate the config. See the [Skills Guide](docs/skills-guide.md) for details.
 

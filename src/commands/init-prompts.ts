@@ -62,9 +62,32 @@ export async function promptReviewCLIs(
   return selected;
 }
 
+export async function promptLocalAIReviews(
+  skipPrompts: boolean,
+): Promise<boolean> {
+  if (skipPrompts) return true;
+
+  console.log();
+  const enabled = await confirm({
+    message: 'Enable local AI reviews? (strongly recommended)',
+    default: true,
+  });
+  if (enabled) return true;
+
+  console.log();
+  const skipReviews = await confirm({
+    message:
+      'Are you sure you want to skip local AI reviews? They catch bugs, security issues, and error-handling gaps before code leaves your machine, and are the strongest part of Agent Validator.',
+    default: false,
+  });
+  return !skipReviews;
+}
+
 export async function promptInstallScope(
   skipPrompts: boolean,
 ): Promise<'user' | 'project'> {
+  // Non-interactive init uses the same global/user default as the interactive
+  // prompt so automation does not create project-local agent assets by default.
   if (skipPrompts) return 'user';
 
   console.log();

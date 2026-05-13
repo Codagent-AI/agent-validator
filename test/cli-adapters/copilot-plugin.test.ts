@@ -384,6 +384,32 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 				expect(args).not.toContain("--effort");
 			});
 
+		it("parses session telemetry from stdout and verifies requested model", async () => {
+			spawnSpy.mockRestore();
+			mockSpawnSuccess(
+				[
+					"review output",
+					"Total usage est:        1 Premium request",
+					"Breakdown by AI model:",
+					" gpt-5.3-codex           17.7k in, 45 out, 1.5k cached (Est. 1 Premium request)",
+				].join("\n"),
+				"",
+			);
+			const chunks: string[] = [];
+
+			const result = await adapter.execute({
+				prompt: "Review this",
+				diff: "some diff",
+				model: "gpt-5.3-codex",
+				onOutput: (chunk: string) => chunks.push(chunk),
+			});
+
+			expect(result).toContain("review output");
+			expect(chunks.some((chunk) => chunk.includes("[copilot-telemetry]"))).toBe(
+				true,
+			);
+		});
+
 		it("keeps prompt+diff out of argv while using --prompt non-interactive mode", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing

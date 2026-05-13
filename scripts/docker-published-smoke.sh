@@ -47,13 +47,16 @@ done
 
 docker_args=(
   --rm
-  -it
   -w "$WORKDIR"
   -e "REPO=$REPO"
   -e "INSTALL_FROM=$INSTALL_FROM"
   -e "WORKDIR=$WORKDIR"
   -e "USER=root"
 )
+
+if [[ -t 0 && -t 1 ]]; then
+  docker_args+=(-it)
+fi
 
 if [[ "$INSTALL_FROM" == "local" ]]; then
   docker_args+=(-v "$VALIDATOR_ROOT:/agent-validator-source:ro")
@@ -65,7 +68,8 @@ docker run "${docker_args[@]}" \
     set -euo pipefail
 
     git clone "$REPO"
-    cd node-js-getting-started
+    repo_dir="$(basename "$REPO" .git)"
+    cd "$repo_dir"
 
     npm ci
 
@@ -83,7 +87,7 @@ docker run "${docker_args[@]}" \
       bun install --frozen-lockfile
       bun run build:npm
       npm install -g /tmp/agent-validator-local
-      cd "$WORKDIR/node-js-getting-started"
+      cd "$WORKDIR/$repo_dir"
     else
       npm install -g agent-validator
     fi

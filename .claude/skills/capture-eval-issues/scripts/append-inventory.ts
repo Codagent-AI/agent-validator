@@ -1,6 +1,6 @@
 // .claude/skills/capture-eval-issues/scripts/append-inventory.ts
 import { readFileSync, writeFileSync, existsSync } from "fs";
-import { resolve } from "path";
+import { parse as parsePath, resolve } from "path";
 import { parse, stringify } from "yaml";
 
 interface InventoryIssue {
@@ -29,7 +29,7 @@ export function appendToInventory(
     : parsed && Array.isArray(parsed.issues)
       ? parsed.issues
       : [];
-  const newIssues: InventoryIssue[] = candidate;
+  const newIssues = candidate.map(validateInventoryIssue);
 
   if (newIssues.length === 0) {
     return { added: 0 };
@@ -52,6 +52,48 @@ export function appendToInventory(
   return { added: newIssues.length };
 }
 
+function validateInventoryIssue(value: unknown): InventoryIssue {
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid inventory issue: expected object");
+  }
+  const issue = value as Partial<InventoryIssue>;
+  const requiredStrings = [
+    "id",
+    "file",
+    "description",
+    "code_snippet",
+    "source",
+  ] as const;
+  for (const key of requiredStrings) {
+    if (typeof issue[key] !== "string") {
+      throw new Error(`Invalid inventory issue: ${key} must be a string`);
+    }
+  }
+  const lineRange = issue.line_range;
+  if (
+    !Array.isArray(lineRange) ||
+    lineRange.length !== 2 ||
+    !Number.isInteger(lineRange[0]) ||
+    !Number.isInteger(lineRange[1]) ||
+    lineRange[0] < 1 ||
+    lineRange[1] < lineRange[0]
+  ) {
+    throw new Error(
+      "Invalid inventory issue: line_range must be [start >= 1, end >= start]",
+    );
+  }
+  if (!["bug", "security", "performance"].includes(String(issue.category))) {
+    throw new Error("Invalid inventory issue: category is not supported");
+  }
+  if (!["easy", "medium", "hard"].includes(String(issue.difficulty))) {
+    throw new Error("Invalid inventory issue: difficulty is not supported");
+  }
+  if (!["critical", "high", "medium", "low"].includes(String(issue.priority))) {
+    throw new Error("Invalid inventory issue: priority is not supported");
+  }
+  return issue as InventoryIssue;
+}
+
 async function main() {
   const chunks: Buffer[] = [];
   for await (const chunk of Bun.stdin.stream()) {
@@ -65,7 +107,8 @@ async function main() {
   }
 
   let dir = resolve(import.meta.dir);
-  while (dir !== "/" && !existsSync(resolve(dir, "package.json"))) {
+  const rootDir = parsePath(dir).root;
+  while (dir !== rootDir && !existsSync(resolve(dir, "package.json"))) {
     dir = resolve(dir, "..");
   }
   if (!existsSync(resolve(dir, "package.json"))) {

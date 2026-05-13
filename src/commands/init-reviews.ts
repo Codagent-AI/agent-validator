@@ -13,7 +13,7 @@ export type ReviewEntry = {
 };
 
 export type ReviewConfig = {
-  type: 'primary' | 'secondary' | 'fallback';
+  type: 'primary' | 'secondary' | 'fallback' | 'none';
   reviews: ReviewEntry[];
 };
 
@@ -74,6 +74,8 @@ export function printReviewConfigExplanation(config: ReviewConfig): void {
       console.log(
         chalk.bold('Configured combined all-reviewers review prompt.'),
       );
+      break;
+    case 'none':
       break;
   }
 }

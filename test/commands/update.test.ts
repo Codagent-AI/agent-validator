@@ -44,17 +44,14 @@ mock.module("../../src/plugin/claude-cli.js", () => ({
 	updatePlugin: (name: string) => updatePluginMock(name),
 }));
 
-mock.module("../../src/plugin/agent-plugin-cli.js", () => ({
-	installAgentPluginForAgents: () => {},
-	updateAgentPluginForAgents: (opts: {
-		agents: string[];
-		scope?: "project" | "user";
-		yes?: boolean;
-	}) => updateAgentPluginForAgentsMock(opts),
-}));
-
 const { registerUpdateCommand } = await import("../../src/commands/update.js");
 const { runPluginUpdate } = await import("../../src/commands/plugin-update.js");
+
+function runUpdateWithMocks() {
+	return runPluginUpdate(undefined, {
+		updateAgentPluginForAgents: updateAgentPluginForAgentsMock,
+	});
+}
 
 describe("update command", () => {
 	let testDir: string;
@@ -116,7 +113,9 @@ describe("update command", () => {
 
 	it("registers the update command", () => {
 		const program = new Command();
-		registerUpdateCommand(program);
+		registerUpdateCommand(program, {
+			updateAgentPluginForAgents: updateAgentPluginForAgentsMock,
+		});
 		const cmd = program.commands.find((c) => c.name() === "update");
 		expect(cmd).toBeDefined();
 	});
@@ -124,7 +123,7 @@ describe("update command", () => {
 	it("fails when plugin is not installed anywhere", async () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 
-		await expect(runPluginUpdate()).rejects.toThrow(
+		await expect(runUpdateWithMocks()).rejects.toThrow(
 			"run `agent-validate init` first",
 		);
 	});
@@ -145,7 +144,9 @@ describe("update command", () => {
 		);
 
 		const program = new Command();
-		registerUpdateCommand(program);
+		registerUpdateCommand(program, {
+			updateAgentPluginForAgents: updateAgentPluginForAgentsMock,
+		});
 		await program.parseAsync(["node", "test", "update"]);
 
 		expect(updateMarketplaceMock).toHaveBeenCalledTimes(1);
@@ -178,7 +179,7 @@ describe("update command", () => {
 			"outdated",
 		);
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -215,7 +216,7 @@ describe("update command", () => {
 			"global old",
 		);
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(updateAgentPluginForAgentsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -239,7 +240,7 @@ describe("update command", () => {
 			stderr: "add failed",
 		}));
 
-		await expect(runPluginUpdate()).rejects.toThrow("marketplace unavailable");
+		await expect(runUpdateWithMocks()).rejects.toThrow("marketplace unavailable");
 		expect(updatePluginMock).not.toHaveBeenCalled();
 		const output = errors.join("\n");
 		expect(output).toContain("Plugin update failed");
@@ -264,7 +265,7 @@ describe("update command", () => {
 			}))
 			.mockImplementationOnce(async () => ({ success: true }));
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(addMarketplaceMock).toHaveBeenCalledTimes(1);
 		expect(updateMarketplaceMock).toHaveBeenCalledTimes(2);
@@ -282,7 +283,7 @@ describe("update command", () => {
 			stderr: 'Plugin "agent-validator" not found',
 		}));
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(installPluginMock).toHaveBeenCalledWith("user");
 		const output = logs.join("\n");
@@ -293,7 +294,7 @@ describe("update command", () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 		// cursorDetectPluginSpy already returns null by default
 
-		await expect(runPluginUpdate()).rejects.toThrow(
+		await expect(runUpdateWithMocks()).rejects.toThrow(
 			"run `agent-validate init` first",
 		);
 		expect(updateMarketplaceMock).not.toHaveBeenCalled();
@@ -306,7 +307,7 @@ describe("update command", () => {
 			recursive: true,
 		});
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(updateMarketplaceMock).not.toHaveBeenCalled();
 		expect(updatePluginMock).not.toHaveBeenCalled();
@@ -326,7 +327,7 @@ describe("update command", () => {
 			recursive: true,
 		});
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(updateMarketplaceMock).not.toHaveBeenCalled();
 		expect(updatePluginMock).not.toHaveBeenCalled();
@@ -344,7 +345,7 @@ describe("update command", () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 		cursorDetectPluginSpy.mockResolvedValueOnce("user");
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(updateMarketplaceMock).not.toHaveBeenCalled();
 		expect(updatePluginMock).not.toHaveBeenCalled();
@@ -366,7 +367,7 @@ describe("update command", () => {
 		]);
 		cursorDetectPluginSpy.mockResolvedValueOnce("project");
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(updateMarketplaceMock).toHaveBeenCalledTimes(1);
 		expect(updatePluginMock).toHaveBeenCalledTimes(1);
@@ -393,7 +394,7 @@ describe("update command", () => {
 		});
 
 		// Should NOT throw
-		await expect(runPluginUpdate()).resolves.toBeUndefined();
+		await expect(runUpdateWithMocks()).resolves.toBeUndefined();
 
 		const output = errors.join("\n");
 		expect(output).toContain("copy failed");
@@ -403,7 +404,7 @@ describe("update command", () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 		cursorDetectPluginSpy.mockResolvedValueOnce("user");
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		const output = logs.join("\n");
 		expect(output).toMatch(/[Cc]ursor/);
@@ -414,7 +415,7 @@ describe("update command", () => {
 		listPluginsMock.mockImplementationOnce(async () => []);
 		cursorDetectPluginSpy.mockResolvedValueOnce("user");
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		const output = logs.join("\n");
 		expect(output).toMatch(/restart/i);
@@ -426,7 +427,7 @@ describe("update command", () => {
 		]);
 		// cursorDetectPluginSpy already returns null by default
 
-		await runPluginUpdate();
+		await runUpdateWithMocks();
 
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 	});
@@ -445,7 +446,7 @@ describe("update command", () => {
 			stderr: "add failed",
 		}));
 
-		await expect(runPluginUpdate()).rejects.toThrow("marketplace down");
+		await expect(runUpdateWithMocks()).rejects.toThrow("marketplace down");
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 
 		// Restore default
@@ -466,7 +467,7 @@ describe("update command", () => {
 			stderr: "install failed",
 		}));
 
-		await expect(runPluginUpdate()).rejects.toThrow("install failed");
+		await expect(runUpdateWithMocks()).rejects.toThrow("install failed");
 		expect(cursorUpdatePluginSpy).not.toHaveBeenCalled();
 	});
 });

@@ -3,12 +3,13 @@ import path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
-import { installAgentPluginForAgents } from '../plugin/agent-plugin-cli.js';
+import { installAgentPluginForAgents as realInstallAgentPluginForAgents } from '../plugin/agent-plugin-cli.js';
 import { writeConfigYml } from './init-config-helpers.js';
 import {
   promptAgentPluginInstallConfirmation,
   promptDevCLIs,
   promptInstallScope,
+  promptLocalAIReviews,
   promptNumReviews,
   promptReviewCLIs,
 } from './init-prompts.js';
@@ -17,7 +18,10 @@ import {
   type ReviewConfig,
   selectReviewConfig,
 } from './init-reviews.js';
-import { runPluginUpdate } from './plugin-update.js';
+import {
+  type PluginUpdateDependencies,
+  runPluginUpdate,
+} from './plugin-update.js';
 import { addToGitignore, exists } from './shared.js';
 
 interface InitOptions {
@@ -25,13 +29,21 @@ interface InitOptions {
   agents?: string[];
 }
 
+interface InitDependencies extends PluginUpdateDependencies {
+  installAgentPluginForAgents?: typeof realInstallAgentPluginForAgents;
+}
+
 interface InitReviewSelection {
+  cliDefaultNames: string[];
   reviewCLINames: string[];
   numReviews: number;
   reviewConfig: ReviewConfig;
 }
 
-export function registerInitCommand(program: Command): void {
+export function registerInitCommand(
+  program: Command,
+  dependencies: InitDependencies = {},
+): void {
   program
     .command('init')
     .description('Initialize .validator configuration')
@@ -41,7 +53,7 @@ export function registerInitCommand(program: Command): void {
       'Development/coding agent names to install for (comma or space separated); skips the development agent prompt',
     )
     .action(async (options: InitOptions) => {
-      await runInit(options);
+      await runInit(options, dependencies);
     });
 }
 
@@ -82,9 +94,13 @@ async function handleRerun(
   projectRoot: string,
   availableAdapters: CLIAdapter[],
   skipPrompts: boolean,
+  dependencies: InitDependencies,
 ): Promise<void> {
   try {
-    await runPluginUpdate({ skipPrompts });
+    await runPluginUpdate(
+      { skipPrompts },
+      { updateAgentPluginForAgents: dependencies.updateAgentPluginForAgents },
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     if (
@@ -97,11 +113,19 @@ async function handleRerun(
     console.log(
       chalk.yellow('Plugin not installed yet, running fresh install...'),
     );
-    await installExternalFiles(projectRoot, availableAdapters, skipPrompts);
+    await installExternalFiles(
+      projectRoot,
+      availableAdapters,
+      skipPrompts,
+      dependencies,
+    );
   }
 }
 
-async function runInit(options: InitOptions): Promise<void> {
+async function runInit(
+  options: InitOptions,
+  dependencies: InitDependencies = {},
+): Promise<void> {
   const projectRoot = process.cwd();
   const targetDir = path.join(projectRoot, '.validator');
   const legacyDir = path.join(projectRoot, '.gauntlet');
@@ -134,7 +158,12 @@ async function runInit(options: InitOptions): Promise<void> {
     const dirName = path.basename(existingConfigDir);
     console.log(chalk.dim(`.${dirName}/ already exists, skipping scaffolding`));
     instructionCLINames = detectedNames;
-    await handleRerun(projectRoot, availableAdapters, skipPrompts);
+    await handleRerun(
+      projectRoot,
+      availableAdapters,
+      skipPrompts,
+      dependencies,
+    );
   } else {
     const devCLINames =
       explicitDevCLINames ?? (await promptDevCLIs(detectedNames, skipPrompts));
@@ -145,12 +174,13 @@ async function runInit(options: InitOptions): Promise<void> {
       projectRoot,
       devAdapters,
       skipPrompts,
+      dependencies,
     );
     instructionCLINames = devCLINames;
     await scaffoldValidatorDir(
       projectRoot,
       targetDir,
-      reviewSelection.reviewCLINames,
+      reviewSelection.cliDefaultNames,
       reviewSelection.numReviews,
       reviewSelection.reviewConfig,
     );
@@ -171,7 +201,7 @@ function printNoCLIsMessage(): void {
 async function scaffoldValidatorDir(
   _projectRoot: string,
   targetDir: string,
-  reviewCLINames: string[],
+  cliDefaultNames: string[],
   numReviews: number,
   reviewConfig: ReviewConfig,
 ): Promise<void> {
@@ -182,7 +212,7 @@ async function scaffoldValidatorDir(
 
   await fs.mkdir(targetDir);
 
-  await writeConfigYml(targetDir, reviewCLINames, numReviews, reviewConfig);
+  await writeConfigYml(targetDir, cliDefaultNames, numReviews, reviewConfig);
 }
 
 async function selectReviewsAndConfirmInstall(
@@ -190,8 +220,30 @@ async function selectReviewsAndConfirmInstall(
   projectRoot: string,
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
+  dependencies: InitDependencies,
 ): Promise<InitReviewSelection> {
   while (true) {
+    const localAIReviewsEnabled = await promptLocalAIReviews(skipPrompts);
+    if (!localAIReviewsEnabled) {
+      const confirmed = await installExternalFiles(
+        projectRoot,
+        devAdapters,
+        skipPrompts,
+        dependencies,
+      );
+      if (confirmed) {
+        return {
+          cliDefaultNames: devAdapters.map((adapter) => adapter.name),
+          reviewCLINames: [],
+          numReviews: 1,
+          reviewConfig: { type: 'none', reviews: [] },
+        };
+      }
+
+      console.log(chalk.yellow('Returning to local AI review selection.'));
+      continue;
+    }
+
     const reviewCLINames = await promptReviewCLIs(detectedNames, skipPrompts);
     const numReviews = await promptNumReviews(
       reviewCLINames.length,
@@ -204,9 +256,15 @@ async function selectReviewsAndConfirmInstall(
       projectRoot,
       devAdapters,
       skipPrompts,
+      dependencies,
     );
     if (confirmed) {
-      return { reviewCLINames, numReviews, reviewConfig };
+      return {
+        cliDefaultNames: reviewCLINames,
+        reviewCLINames,
+        numReviews,
+        reviewConfig,
+      };
     }
 
     console.log(chalk.yellow('Returning to reviewer CLI selection.'));
@@ -217,7 +275,10 @@ async function installExternalFiles(
   _projectRoot: string,
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
+  dependencies: InitDependencies,
 ): Promise<boolean> {
+  const installAgentPluginForAgents =
+    dependencies.installAgentPluginForAgents ?? realInstallAgentPluginForAgents;
   const targetNames = devAdapters.map((adapter) => adapter.name);
   if (targetNames.length === 0) {
     return true;

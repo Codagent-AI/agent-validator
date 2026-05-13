@@ -5,6 +5,7 @@ import {
   parseDiff,
 } from '../utils/diff-parser.js';
 import { markAdapterUnhealthy } from '../utils/execution-state.js';
+import { findJsonObjectEnd } from './json-scan.js';
 import type { PreviousViolation } from './result.js';
 import { writeJsonResult } from './review-agg.js';
 
@@ -95,20 +96,42 @@ export function evaluateOutput(
   }
 }
 
-const MAX_STATUS_JSON_PROBE_CHARS = 500_000;
+const DEFAULT_STATUS_JSON_PROBE_CHARS = 150_000;
+const FALLBACK_STATUS_JSON_PROBE_CHARS = 500_000;
+const STATUS_JSON_PROBE_ENV = 'AGENT_VALIDATOR_STATUS_JSON_PROBE_CHARS';
+
+function getMaxStatusJsonProbeChars(): number {
+  const raw = process.env[STATUS_JSON_PROBE_ENV];
+  if (!raw) return DEFAULT_STATUS_JSON_PROBE_CHARS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : DEFAULT_STATUS_JSON_PROBE_CHARS;
+}
 
 function tryParseReviewJsonByStatus(output: string): ReviewJsonOutput | null {
-  const probe =
-    output.length > MAX_STATUS_JSON_PROBE_CHARS
-      ? output.slice(-MAX_STATUS_JSON_PROBE_CHARS)
-      : output;
-  const end = probe.lastIndexOf('}');
-  if (end === -1) return null;
+  // Scan a bounded tail window to avoid heavy work on large CLI transcripts.
+  // Set AGENT_VALIDATOR_STATUS_JSON_PROBE_CHARS to widen this for unusual outputs.
+  const maxProbeChars = getMaxStatusJsonProbeChars();
+  const fromPrimaryProbe = tryParseStatusJsonInTail(output, maxProbeChars);
+  if (fromPrimaryProbe) return fromPrimaryProbe;
 
+  if (maxProbeChars >= FALLBACK_STATUS_JSON_PROBE_CHARS) return null;
+  return tryParseStatusJsonInTail(output, FALLBACK_STATUS_JSON_PROBE_CHARS);
+}
+
+function tryParseStatusJsonInTail(
+  output: string,
+  maxProbeChars: number,
+): ReviewJsonOutput | null {
+  const probe =
+    output.length > maxProbeChars ? output.slice(-maxProbeChars) : output;
   const starts = [...probe.matchAll(/{\s*"status"\s*:/g)].map((m) => m.index);
   for (let i = starts.length - 1; i >= 0; i--) {
     const start = starts[i];
     if (start === undefined) continue;
+    const end = findJsonObjectEnd(probe, start);
+    if (end === -1) continue;
     try {
       const json = JSON.parse(probe.substring(start, end + 1));
       if (json.status) return json;

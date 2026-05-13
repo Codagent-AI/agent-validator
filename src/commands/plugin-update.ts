@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import chalk from 'chalk';
 import { CursorAdapter } from '../cli-adapters/cursor.js';
-import { updateAgentPluginForAgents } from '../plugin/agent-plugin-cli.js';
+import { updateAgentPluginForAgents as realUpdateAgentPluginForAgents } from '../plugin/agent-plugin-cli.js';
 import {
   addMarketplace,
   installPlugin,
@@ -22,6 +22,10 @@ interface PluginEntry {
 
 export interface PluginUpdateOptions {
   skipPrompts?: boolean;
+}
+
+export interface PluginUpdateDependencies {
+  updateAgentPluginForAgents?: typeof realUpdateAgentPluginForAgents;
 }
 
 function isInProjectScope(cwd: string, projectPath: string): boolean {
@@ -233,8 +237,11 @@ async function updateCursorPlugin(
 
 export async function runPluginUpdate(
   options?: PluginUpdateOptions,
+  dependencies: PluginUpdateDependencies = {},
 ): Promise<void> {
   void options?.skipPrompts;
+  const updateAgentPluginForAgents =
+    dependencies.updateAgentPluginForAgents ?? realUpdateAgentPluginForAgents;
 
   const cwd = process.cwd();
   const claudeDetected = await detectClaudePlugin(cwd);

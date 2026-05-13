@@ -295,7 +295,7 @@ The `validator-setup` skill SHALL be distributed alongside existing skills (run,
 
 ### Requirement: Setup Skill Fresh Configuration
 
-The `/validator-setup` skill SHALL guide the agent through scanning a project, discovering available tooling, and configuring `entry_points` in `.validator/config.yml`. On fresh setup (empty `entry_points`), the skill performs a full project scan.
+The `/validator-setup` skill SHALL guide the agent through scanning a project, discovering available tooling, and configuring checks in `.validator/config.yml`. On fresh setup (the generated root entry point exists but has no checks), the skill performs a full project scan.
 
 #### Scenario: Config file missing
 - **GIVEN** `.validator/config.yml` does not exist
@@ -304,17 +304,17 @@ The `/validator-setup` skill SHALL guide the agent through scanning a project, d
 - **AND** SHALL NOT proceed with scanning
 
 #### Scenario: Fresh setup with discovered checks
-- **GIVEN** `.validator/config.yml` exists with `entry_points: []`
+- **GIVEN** `.validator/config.yml` exists with a generated root entry point and no checks
 - **WHEN** the agent invokes `/validator-setup`
 - **THEN** the agent SHALL scan the project for tooling signals across 6 categories (build, lint, typecheck, test, security-deps, security-code)
 - **AND** present a table of discovered checks with tool names, commands, and confidence levels
 - **AND** ask the user to confirm which checks to enable
 
-#### Scenario: Check YAML files created
+#### Scenario: Inline checks created
 - **GIVEN** the user confirms discovered checks
 - **WHEN** the agent creates check configurations
-- **THEN** individual `.validator/checks/<name>.yml` files SHALL be created for each confirmed check
-- **AND** each file SHALL follow the check gate schema (command, parallel, run_in_ci, run_locally, etc.)
+- **THEN** each confirmed check SHALL be added inline under the relevant entry point's `checks` array
+- **AND** each inline check SHALL follow the check gate schema (command, parallel, run_in_ci, run_locally, etc.)
 
 #### Scenario: Source directory determination
 - **GIVEN** the user has confirmed which checks to enable
@@ -334,7 +334,7 @@ The `/validator-setup` skill SHALL guide the agent through scanning a project, d
 - **THEN** the agent SHALL inform the user they can run `/validator-run`
 
 #### Scenario: Validation fails after setup
-- **GIVEN** the agent has created check files and updated config.yml
+- **GIVEN** the agent has created inline checks and updated config.yml
 - **WHEN** `agent-validate validate` reports errors
 - **THEN** the agent SHALL display the validation errors to the user
 - **AND** apply one corrective update attempt based on the error messages
@@ -348,7 +348,7 @@ The `/validator-setup` skill SHALL guide the agent through scanning a project, d
 - **AND** the agent SHALL still include the `code-quality` review in `entry_points`
 
 #### Scenario: No tools discovered during scan
-- **GIVEN** `.validator/config.yml` exists with `entry_points: []`
+- **GIVEN** `.validator/config.yml` exists with a generated root entry point and no checks
 - **WHEN** the agent scans the project and finds no recognizable tooling signals
 - **THEN** the agent SHALL inform the user that no tools were automatically detected
 - **AND** offer the custom addition flow to manually specify checks

@@ -18,6 +18,8 @@ let selectedBuiltInReviews: string[] = ["code-quality", "security", "error-handl
 let selectedInstallScope: "project" | "user" = "project";
 let selectedNumReviews = 1;
 let checkboxMessages: string[] = [];
+let enableLocalAIReviews = true;
+let localAIReviewOptOutConfirmed = true;
 
 const addMarketplaceMock = mock(async () => ({ success: true }));
 const installPluginMock = mock(async (_scope: "project" | "user") => ({
@@ -38,6 +40,9 @@ const installAgentPluginForAgentsMock = mock(
 		yes?: boolean;
 		dryRun?: boolean;
 	}) => {},
+);
+const updateAgentPluginForAgentsMock = mock(
+	(_opts: { agents: string[]; scope?: "project" | "user"; yes?: boolean }) => {},
 );
 let confirmAgentPluginInstall = true;
 let confirmAgentPluginInstallResponses: boolean[] = [];
@@ -146,6 +151,12 @@ mock.module("@inquirer/prompts", () => ({
 		return "yes";
 	},
 	confirm: async (opts: { message?: string }) => {
+		if (opts.message?.includes("Enable local AI reviews")) {
+			return enableLocalAIReviews;
+		}
+		if (opts.message?.includes("Are you sure you want to skip local AI reviews")) {
+			return localAIReviewOptOutConfirmed;
+		}
 		if (opts.message?.includes("Proceed with plugin installation")) {
 			if (confirmAgentPluginInstallResponses.length > 0) {
 				return confirmAgentPluginInstallResponses.shift() ?? confirmAgentPluginInstall;
@@ -164,16 +175,6 @@ mock.module("../../src/plugin/claude-cli.js", () => ({
 	updatePlugin: () => updatePluginMock(),
 }));
 
-mock.module("../../src/plugin/agent-plugin-cli.js", () => ({
-	installAgentPluginForAgents: (opts: {
-		agents: string[];
-		scope: "project" | "user";
-		yes?: boolean;
-		dryRun?: boolean;
-	}) => installAgentPluginForAgentsMock(opts),
-	updateAgentPluginForAgents: () => {},
-}));
-
 const { registerInitCommand } = await import("../../src/commands/init.js");
 
 describe("init command plugin installation", () => {
@@ -188,7 +189,10 @@ describe("init command plugin installation", () => {
 	beforeEach(async () => {
 		testDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-init-test-"));
 		program = new Command();
-		registerInitCommand(program);
+		registerInitCommand(program, {
+			installAgentPluginForAgents: installAgentPluginForAgentsMock,
+			updateAgentPluginForAgents: updateAgentPluginForAgentsMock,
+		});
 		logs = [];
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));
@@ -206,6 +210,8 @@ describe("init command plugin installation", () => {
 		selectedInstallScope = "user";
 		selectedNumReviews = 1;
 		checkboxMessages = [];
+		enableLocalAIReviews = true;
+		localAIReviewOptOutConfirmed = true;
 		confirmAgentPluginInstall = true;
 		confirmAgentPluginInstallResponses = [];
 		addMarketplaceMock.mockClear();
@@ -215,6 +221,7 @@ describe("init command plugin installation", () => {
 		updateMarketplaceMock.mockClear();
 		updatePluginMock.mockClear();
 		installAgentPluginForAgentsMock.mockClear();
+		updateAgentPluginForAgentsMock.mockClear();
 	});
 
 	afterEach(async () => {
@@ -297,6 +304,82 @@ describe("init command plugin installation", () => {
 		);
 		expect(configContent).toContain("    - cursor");
 		expect(configContent).not.toContain("    - claude");
+	});
+
+	it("does not prompt for review CLIs or write review gates after confirmed local AI review opt-out", async () => {
+		selectedDevCliNames = ["claude"];
+		selectedReviewCliNames = ["codex"];
+		enableLocalAIReviews = false;
+		localAIReviewOptOutConfirmed = true;
+
+		await program.parseAsync(["node", "test", "init"]);
+
+		expect(checkboxMessages).toContain("Development CLIs:");
+		expect(checkboxMessages).not.toContain("Review CLIs:");
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("entry_points:");
+		expect(configContent).toContain("- path: .");
+		expect(configContent).not.toContain("reviews:");
+		expect(configContent).toContain("    - claude");
+		expect(configContent).not.toContain("    - codex");
+	});
+
+	it("continues to reviewer CLI selection when local AI review opt-out is not confirmed", async () => {
+		selectedDevCliNames = ["claude"];
+		selectedReviewCliNames = ["codex"];
+		enableLocalAIReviews = false;
+		localAIReviewOptOutConfirmed = false;
+
+		await program.parseAsync(["node", "test", "init"]);
+
+		expect(checkboxMessages).toContain("Review CLIs:");
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("reviews:");
+		expect(configContent).toContain("all-reviewers:");
+		expect(configContent).toContain("    - codex");
+	});
+
+	it("writes the README-recommended Codex review adapter settings", async () => {
+		selectedDevCliNames = ["codex"];
+		selectedReviewCliNames = ["codex"];
+
+		await program.parseAsync(["node", "test", "init"]);
+
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("    codex:");
+		expect(configContent).toContain("      allow_tool_use: false");
+		expect(configContent).toContain("      thinking_budget: medium");
+		expect(configContent).toContain("all-reviewers:");
+		expect(configContent).toContain("model: gpt-5.3-codex");
+	});
+
+	it("writes the README-recommended Copilot hybrid review config", async () => {
+		selectedDevCliNames = ["github-copilot", "codex"];
+		selectedReviewCliNames = ["github-copilot", "codex"];
+
+		await program.parseAsync(["node", "test", "init"]);
+
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("    github-copilot:");
+		expect(configContent).toContain("      thinking_budget: low");
+		expect(configContent).toContain("    codex:");
+		expect(configContent).toContain("      thinking_budget: medium");
+		expect(configContent).toContain("code-quality:");
+		expect(configContent).toContain("model: claude-sonnet-4.6");
+		expect(configContent).toContain("security-and-errors:");
+		expect(configContent).toContain("model: gpt-5.3-codex");
 	});
 
 	it("accepts space-separated --agents values", async () => {

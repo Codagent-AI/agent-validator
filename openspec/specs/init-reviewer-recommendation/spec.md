@@ -4,13 +4,33 @@
 Defines automatic review configuration selection based on detected reviewer CLIs during the init flow.
 ## Requirements
 ### Requirement: Init recommends review config based on detected reviewer CLIs
-The init command SHALL select a review configuration automatically based on which reviewer CLIs the user selected in `promptReviewCLIs()`, following this priority:
+Before asking for reviewer CLIs, the init command SHALL ask whether to enable local AI reviews. Local AI reviews SHALL be enabled by default and by `--yes`. If the user declines, init SHALL ask a second confirmation explaining that local reviews are strongly recommended because they catch bugs, security issues, and error-handling gaps before code leaves the user's machine.
+
+If local AI reviews are enabled, the init command SHALL select a review configuration automatically based on which reviewer CLIs the user selected in `promptReviewCLIs()`, following this priority:
 
 1. If `github-copilot` is among the selected review CLIs → **primary config**: two-pass hybrid with `code-quality` (Sonnet) and `security-and-errors` (GPT)
 2. Else if `codex` is among the selected review CLIs → **secondary config**: single `all-reviewers` pass (GPT)
 3. Else → **fallback config**: single `all-reviewers` pass (no model or cli_preference overrides)
 
 When multiple CLIs are selected, `github-copilot` SHALL take priority for determining the review config.
+
+#### Scenario: User accepts local AI reviews
+- **WHEN** init asks whether to enable local AI reviews
+- **AND** the user accepts the default
+- **THEN** init SHALL continue to reviewer CLI selection
+
+#### Scenario: User declines local AI reviews but does not confirm
+- **WHEN** init asks whether to enable local AI reviews
+- **AND** the user declines
+- **THEN** init SHALL ask for opt-out confirmation with a short explanation of why local reviews are recommended
+- **AND** if the user does not confirm the opt-out, init SHALL continue to reviewer CLI selection
+
+#### Scenario: User confirms local AI review opt-out
+- **WHEN** init asks whether to enable local AI reviews
+- **AND** the user declines and confirms the opt-out
+- **THEN** init SHALL NOT prompt for reviewer CLIs
+- **AND** init SHALL NOT prompt for `num_reviews`
+- **AND** init SHALL generate no review gates
 
 #### Scenario: Copilot selected as review CLI
 - **WHEN** user selects `github-copilot` as a review CLI
@@ -33,7 +53,8 @@ When multiple CLIs are selected, `github-copilot` SHALL take priority for determ
 
 #### Scenario: --yes flag follows same recommendation logic
 - **WHEN** `--yes` flag is passed
-- **THEN** the same recommendation logic SHALL apply based on detected CLIs
+- **THEN** local AI reviews SHALL be enabled
+- **AND** the same recommendation logic SHALL apply based on detected CLIs
 - **AND** no additional prompts SHALL be shown for review configuration
 
 ### Requirement: Init prints explanation of selected review config
@@ -61,4 +82,3 @@ The `promptBuiltInReviews()` interactive prompt SHALL be removed from the init f
 #### Scenario: --yes init skips built-in review selection
 - **WHEN** init runs with `--yes`
 - **THEN** no built-in review selection SHALL occur
-

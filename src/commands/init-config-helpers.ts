@@ -13,7 +13,7 @@ type AdapterCfg = {
 
 const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
   claude: { allow_tool_use: false, thinking_budget: 'high' },
-  codex: { allow_tool_use: false, thinking_budget: 'low' },
+  codex: { allow_tool_use: false, thinking_budget: 'medium' },
   gemini: { allow_tool_use: false, thinking_budget: 'low' },
   cursor: { allow_tool_use: false, thinking_budget: 'low', model: 'codex' },
   'github-copilot': {
@@ -80,13 +80,13 @@ function buildAdapterSettingsBlock(adapterNames: string[]): string {
 
 export async function writeConfigYml(
   targetDir: string,
-  reviewCLINames: string[],
+  cliDefaultNames: string[],
   numReviews: number,
   reviewConfig: ReviewConfig,
 ): Promise<void> {
   const baseBranch = await detectBaseBranch();
-  const cliList = reviewCLINames.map((name) => `    - ${name}`).join('\n');
-  const adapterSettings = buildAdapterSettingsBlock(reviewCLINames);
+  const cliList = cliDefaultNames.map((name) => `    - ${name}`).join('\n');
+  const adapterSettings = buildAdapterSettingsBlock(cliDefaultNames);
 
   // Build inline review entries for the root entry point
   const inlineReviews = reviewConfig.reviews.map((r) => {

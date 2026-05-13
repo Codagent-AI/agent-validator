@@ -321,7 +321,9 @@ export class GitHubCopilotAdapter implements CLIAdapter {
         timeoutMs: opts.timeoutMs,
         onOutput: opts.onOutput,
       });
-      const summary = parseCopilotSessionSummary(stderr);
+      const summary =
+        parseCopilotSessionSummary(stdout) ??
+        parseCopilotSessionSummary(stderr);
       if (summary) {
         opts.onOutput?.(summary.telemetryLine);
         log.debug(`copilot session: ${summary.telemetryLine}`);

@@ -76,15 +76,6 @@ mock.module("../../src/plugin/claude-cli.js", () => ({
 	updatePlugin: async () => ({ success: true }),
 }));
 
-mock.module("../../src/plugin/agent-plugin-cli.js", () => ({
-	installAgentPluginForAgents: (opts: {
-		agents: string[];
-		scope: "project" | "user";
-		yes?: boolean;
-	}) => installAgentPluginForAgentsMock(opts),
-	updateAgentPluginForAgents: () => {},
-}));
-
 const { registerInitCommand } = await import("../../src/commands/init.js");
 
 describe("init command with github-copilot", () => {
@@ -100,7 +91,9 @@ describe("init command with github-copilot", () => {
 			path.join(os.tmpdir(), "validator-init-copilot-test-"),
 		);
 		program = new Command();
-		registerInitCommand(program);
+		registerInitCommand(program, {
+			installAgentPluginForAgents: installAgentPluginForAgentsMock,
+		});
 		logs = [];
 		console.log = (...args: unknown[]) => {
 			logs.push(args.join(" "));

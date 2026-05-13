@@ -31,5 +31,8 @@ describe("validator skill invocation policy", () => {
 		expect(skill).toContain("disable-model-invocation: false");
 		expect(skill).toContain("Excludes plain commit requests");
 		expect(skill).toContain("Do not choose this skill for a plain \"commit\"");
+		expect(skill.indexOf('Contains "check" or "checks"')).toBeLessThan(
+			skill.indexOf('Contains "run", "full", or "all gates"'),
+		);
 	});
 });
