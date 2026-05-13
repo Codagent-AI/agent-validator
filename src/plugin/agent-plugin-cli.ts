@@ -45,7 +45,7 @@ export function updateAgentPluginForAgents(opts: {
   scope?: 'user' | 'project';
   yes?: boolean;
 }): void {
-  const args = ['update', 'agent-validator'];
+  const args = ['update', AGENT_PLUGIN_SOURCE];
   for (const agent of opts.agents) {
     args.push('--agent', toAgentPluginName(agent));
   }

@@ -53,12 +53,46 @@ describe("agent-plugin-cli", () => {
 		const { runAgentPlugin } = await import(
 			"../../src/plugin/agent-plugin-cli.js"
 		);
-		runAgentPlugin(["update", "agent-validator"]);
+		runAgentPlugin(["update", "Codagent-AI/agent-validator"]);
 
 		expect(spy.mock.calls[0][1]).toEqual([
 			overrideBin,
 			"update",
-			"agent-validator",
+			"Codagent-AI/agent-validator",
+		]);
+
+		spy.mockRestore();
+	});
+
+	it("updates by canonical repository source", async () => {
+		const spy = spyOn(childProcess, "execFileSync").mockReturnValue(
+			"" as string & Buffer,
+		);
+
+		const { updateAgentPluginForAgents } = await import(
+			"../../src/plugin/agent-plugin-cli.js"
+		);
+		updateAgentPluginForAgents({
+			agents: ["claude", "github-copilot", "codex"],
+			scope: "project",
+			yes: true,
+		});
+
+		const firstCall = spy.mock.calls[0];
+		if (!firstCall) throw new Error("Expected agent-plugin to be executed");
+		const args = firstCall[1];
+		if (!args) throw new Error("Expected agent-plugin args");
+		expect(args.slice(1)).toEqual([
+			"update",
+			"Codagent-AI/agent-validator",
+			"--agent",
+			"claude",
+			"--agent",
+			"copilot",
+			"--agent",
+			"codex",
+			"--project",
+			"--yes",
 		]);
 
 		spy.mockRestore();

@@ -10,7 +10,7 @@
 
 - [#133](https://github.com/Codagent-AI/agent-validator/pull/133) Add Cursor adapter coverage to the eval harness, Composer-2 evaluation configs, and the April 2026 evaluation report.
 
-- [#136](https://github.com/Codagent-AI/agent-validator/pull/136) Update the init flow to delegate skill and plugin installation to `agent-plugin`, support explicit development agent selection, and improve local AI review setup.
+- [#136](https://github.com/Codagent-AI/agent-validator/pull/136) Update the init flow to delegate skill and plugin installation to `agent-plugin`, support explicit development agent selection, improve local AI review setup, and use the latest bundled `agent-plugin` update behavior.
 
 ## 1.10.0
 
