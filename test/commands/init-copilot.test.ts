@@ -139,26 +139,33 @@ describe("init command with github-copilot", () => {
 		);
 	});
 
-	it("installs plugin via installPlugin when not already installed", async () => {
+	it("installs plugin via agent-plugin when not already installed", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				agents: ["github-copilot"],
-				scope: "project",
+				scope: "user",
 				yes: true,
 			}),
 		);
 	});
 
-	it("skips install when plugin already detected", async () => {
+	it("passes github-copilot through to agent-plugin even when adapter detection would find an existing install", async () => {
 		mockCopilotDetectPlugin.mockImplementation(async () => "user" as const);
 
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("already installed");
+		expect(output).not.toContain("already installed");
 		expect(mockCopilotInstallPlugin).not.toHaveBeenCalled();
+		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: ["github-copilot"],
+				scope: "user",
+				yes: true,
+			}),
+		);
 	});
 
 	it("does NOT copy skills to .github/skills via file copy", async () => {

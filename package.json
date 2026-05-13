@@ -41,7 +41,7 @@
     "build:npm": "bun build.ts",
     "prepublishOnly": "bun run build:npm",
     "test": "bun test",
-    "test:e2e": "bun run build:npm && bun test test/integration/",
+    "test:e2e": "bun run build:npm && bun test test/integration/ && ./scripts/docker-init-e2e.sh",
     "lint": "biome check src",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "changeset": "changeset",
@@ -69,7 +69,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.2.1",
-    "agent-plugin": "https://github.com/Codagent-AI/agent-plugin/archive/3df4212892a9608e980616445382f80fd732f7ce.tar.gz",
+    "agent-plugin": "npm:@codagent-ai/agent-plugin@^0.1.1",
     "@logtape/logtape": "^2.0.2",
     "chalk": "^5.6.2",
     "commander": "^14.0.2",

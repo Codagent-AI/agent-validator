@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const AGENT_PLUGIN_SOURCE = 'Codagent-AI/agent-validator';
 
 function resolveAgentPluginBin(): string {
+  if (process.env.AGENT_PLUGIN_BIN) return process.env.AGENT_PLUGIN_BIN;
   const packageJson = require.resolve('agent-plugin/package.json');
   return path.join(path.dirname(packageJson), 'dist', 'index.js');
 }
@@ -27,6 +28,7 @@ export function installAgentPluginForAgents(opts: {
   agents: string[];
   scope: 'user' | 'project';
   yes?: boolean;
+  dryRun?: boolean;
 }): void {
   const args = ['add', AGENT_PLUGIN_SOURCE];
   for (const agent of opts.agents) {
@@ -34,6 +36,7 @@ export function installAgentPluginForAgents(opts: {
   }
   if (opts.scope === 'project') args.push('--project');
   if (opts.yes) args.push('--yes');
+  if (opts.dryRun) args.push('--dry-run');
   runAgentPlugin(args);
 }
 

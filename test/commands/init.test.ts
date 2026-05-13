@@ -30,8 +30,14 @@ const listPluginsMock = mock(async () => [] as PluginListEntry[]);
 const updateMarketplaceMock = mock(async () => ({ success: true }));
 const updatePluginMock = mock(async () => ({ success: true }));
 const installAgentPluginForAgentsMock = mock(
-	(_opts: { agents: string[]; scope: "project" | "user"; yes?: boolean }) => {},
+	(_opts: {
+		agents: string[];
+		scope: "project" | "user";
+		yes?: boolean;
+		dryRun?: boolean;
+	}) => {},
 );
+let confirmAgentPluginInstall = true;
 
 const mockAdapters = [
 	{
@@ -130,7 +136,12 @@ mock.module("@inquirer/prompts", () => ({
 		if (opts.message?.includes("Install scope")) return selectedInstallScope;
 		return "yes";
 	},
-	confirm: async () => true,
+	confirm: async (opts: { message?: string }) => {
+		if (opts.message?.includes("Proceed with plugin installation")) {
+			return confirmAgentPluginInstall;
+		}
+		return true;
+	},
 }));
 
 mock.module("../../src/plugin/claude-cli.js", () => ({
@@ -146,6 +157,7 @@ mock.module("../../src/plugin/agent-plugin-cli.js", () => ({
 		agents: string[];
 		scope: "project" | "user";
 		yes?: boolean;
+		dryRun?: boolean;
 	}) => installAgentPluginForAgentsMock(opts),
 	updateAgentPluginForAgents: () => {},
 }));
@@ -178,8 +190,9 @@ describe("init command plugin installation", () => {
 		selectedDevCliNames = ["claude", "codex", "gemini", "cursor"];
 		selectedReviewCliNames = ["claude", "codex", "gemini", "cursor"];
 		selectedBuiltInReviews = ["code-quality", "security", "error-handling"];
-		selectedInstallScope = "project";
+		selectedInstallScope = "user";
 		selectedNumReviews = 1;
+		confirmAgentPluginInstall = true;
 		addMarketplaceMock.mockClear();
 		installPluginMock.mockClear();
 		listPluginsMock.mockClear();
@@ -201,14 +214,23 @@ describe("init command plugin installation", () => {
 		await fs.rm(testDir, { recursive: true, force: true });
 	});
 
-	it("uses project scope with --yes and installs Claude plugin when not already installed", async () => {
+	it("uses user scope with --yes and installs Claude plugin when not already installed", async () => {
 		listPluginsMock.mockImplementation(async () => []);
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
-		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+		expect(installAgentPluginForAgentsMock).toHaveBeenNthCalledWith(
+			1,
 			expect.objectContaining({
 				agents: expect.arrayContaining(["claude", "codex", "cursor", "gemini"]),
-				scope: "project",
+				scope: "user",
+				dryRun: true,
+			}),
+		);
+		expect(installAgentPluginForAgentsMock).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				agents: expect.arrayContaining(["claude", "codex", "cursor", "gemini"]),
+				scope: "user",
 				yes: true,
 			}),
 		);
@@ -224,7 +246,7 @@ describe("init command plugin installation", () => {
 
 		await program.parseAsync(["node", "test", "init"]);
 
-		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+		expect(installAgentPluginForAgentsMock).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				agents: ["claude"],
 				scope: "user",
@@ -244,7 +266,7 @@ describe("init command plugin installation", () => {
 		selectedInstallScope = "project";
 		await program.parseAsync(["node", "test", "init"]);
 
-		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+		expect(installAgentPluginForAgentsMock).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				agents: expect.arrayContaining(["codex"]),
 				scope: "project",
@@ -259,7 +281,7 @@ describe("init command plugin installation", () => {
 
 		await program.parseAsync(["node", "test", "init"]);
 
-		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+		expect(installAgentPluginForAgentsMock).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				agents: expect.arrayContaining(["codex"]),
 				scope: "user",
@@ -275,14 +297,14 @@ describe("init command plugin installation", () => {
 
 		expect(addMarketplaceMock).not.toHaveBeenCalled();
 		expect(installPluginMock).not.toHaveBeenCalled();
-		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+		expect(installAgentPluginForAgentsMock).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				agents: expect.arrayContaining(["gemini", "cursor"]),
 			}),
 		);
 	});
 
-	it("skips scope prompt and install when plugin already installed at user scope", async () => {
+	it("passes selected agents to agent-plugin even when adapter detection would find an existing install", async () => {
 		listPluginsMock.mockImplementation(async () => [
 			{ name: "agent-validator", scope: "user" },
 		]);
@@ -293,9 +315,32 @@ describe("init command plugin installation", () => {
 		await program.parseAsync(["node", "test", "init"]);
 
 		const output = logs.join("\n");
-		expect(output).toContain("already installed at user scope");
 		expect(addMarketplaceMock).not.toHaveBeenCalled();
 		expect(installPluginMock).not.toHaveBeenCalled();
+		expect(output).not.toContain("already installed at user scope");
+		expect(installAgentPluginForAgentsMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				agents: ["claude"],
+				scope: "user",
+			}),
+		);
+	});
+
+	it("runs agent-plugin dry-run and skips install when confirmation is declined", async () => {
+		selectedDevCliNames = ["claude"];
+		selectedReviewCliNames = ["claude"];
+		confirmAgentPluginInstall = false;
+
+		await program.parseAsync(["node", "test", "init"]);
+
+		expect(installAgentPluginForAgentsMock).toHaveBeenCalledTimes(1);
+		expect(installAgentPluginForAgentsMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agents: ["claude"],
+				scope: "user",
+				dryRun: true,
+			}),
+		);
 	});
 
 	it("on re-run with existing .validator, delegates to plugin update logic", async () => {

@@ -8,6 +8,7 @@ import { type CLIAdapter, getAllAdapters } from '../cli-adapters/index.js';
 import { installAgentPluginForAgents } from '../plugin/agent-plugin-cli.js';
 import { writeConfigYml } from './init-config-helpers.js';
 import {
+  promptAgentPluginInstallConfirmation,
   promptDevCLIs,
   promptInstallScope,
   promptNumReviews,
@@ -187,61 +188,31 @@ async function scaffoldValidatorDir(
   await writeConfigYml(targetDir, reviewCLINames, numReviews, reviewConfig);
 }
 
-/** Detect which adapters need plugin installation, logging already-installed adapters. */
-async function detectAdaptersNeedingInstall(
-  devAdapters: CLIAdapter[],
-  projectRoot: string,
-): Promise<CLIAdapter[]> {
-  const result: CLIAdapter[] = [];
-  for (const adapter of devAdapters) {
-    if (!adapter.installPlugin) continue;
-
-    if (adapter.detectPlugin) {
-      const existingScope = await adapter.detectPlugin(projectRoot);
-      if (existingScope) {
-        console.log(
-          chalk.dim(
-            `${adapter.name} plugin already installed at ${existingScope} scope, skipping install`,
-          ),
-        );
-        continue;
-      }
-    }
-
-    result.push(adapter);
-  }
-  return result;
-}
-
 async function installExternalFiles(
-  projectRoot: string,
+  _projectRoot: string,
   devAdapters: CLIAdapter[],
   skipPrompts: boolean,
 ): Promise<void> {
-  const devAdapterNames = new Set(devAdapters.map((adapter) => adapter.name));
-
-  const adaptersNeedingInstall = await detectAdaptersNeedingInstall(
-    devAdapters,
-    projectRoot,
-  );
-
-  // Prompt for scope only when at least one adapter needs installation
-  const needsScope =
-    adaptersNeedingInstall.length > 0 || devAdapterNames.has('codex');
-  const installScope: 'user' | 'project' = needsScope
-    ? await promptInstallScope(skipPrompts)
-    : 'project';
-
-  const targetNames = new Set(
-    devAdapters
-      .filter((adapter) => !adapter.installPlugin)
-      .map((adapter) => adapter.name),
-  );
-  for (const adapter of adaptersNeedingInstall) {
-    targetNames.add(adapter.name);
+  const targetNames = devAdapters.map((adapter) => adapter.name);
+  if (targetNames.length === 0) {
+    return;
   }
+
+  const installScope = await promptInstallScope(skipPrompts);
   installAgentPluginForAgents({
-    agents: [...targetNames],
+    agents: targetNames,
+    scope: installScope,
+    dryRun: true,
+  });
+
+  const confirmed = await promptAgentPluginInstallConfirmation(skipPrompts);
+  if (!confirmed) {
+    console.log(chalk.yellow('Plugin installation cancelled.'));
+    return;
+  }
+
+  installAgentPluginForAgents({
+    agents: targetNames,
     scope: installScope,
     yes: skipPrompts,
   });
