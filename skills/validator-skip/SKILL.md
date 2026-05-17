@@ -10,6 +10,12 @@ Advance the execution state baseline to the current working tree without running
 
 ## Step 1: Run the skip command
 
+First, require explicit user confirmation before executing the command:
+
+- If the current user request already contains the exact phrase `skip validator`, treat that as confirmation and continue.
+- Otherwise, ask the user to confirm with the exact phrase `skip validator`.
+- Do not run `agent-validate skip` from inferred intent, validator automation, or another skill's cleanup path.
+
 ```bash
 agent-validate skip 2>&1
 ```

@@ -46,4 +46,13 @@ describe("validator skill invocation policy", () => {
 			skill.indexOf('Contains "run", "full", or "all gates"'),
 		);
 	});
+
+	it("requires explicit confirmation before skipping validation", async () => {
+		const skill = await readSkill("validator-skip");
+
+		expect(skill).toContain("disable-model-invocation: false");
+		expect(skill).toContain("require explicit user confirmation");
+		expect(skill).toContain("exact phrase `skip validator`");
+		expect(skill).toContain("Do not run `agent-validate skip` from inferred intent");
+	});
 });
