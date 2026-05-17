@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -68,7 +69,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Resolve npm tarball metadata
-        if: steps.check.outputs.published == 'false'
         id: npm-tarball
         run: |
           VERSION="${{ steps.check.outputs.version }}"
@@ -94,7 +94,6 @@ jobs:
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Checkout Homebrew tap
-        if: steps.check.outputs.published == 'false'
         uses: actions/checkout@v4
         with:
           repository: Codagent-AI/homebrew-tap
@@ -102,7 +101,6 @@ jobs:
           path: homebrew-tap
 
       - name: Update Homebrew formula
-        if: steps.check.outputs.published == 'false'
         run: bun .github/scripts/homebrew-formula.ts
         env:
           AGENT_VALIDATOR_VERSION: ${{ steps.check.outputs.version }}
@@ -111,7 +109,6 @@ jobs:
           HOMEBREW_FORMULA_PATH: homebrew-tap/agent-validator.rb
 
       - name: Push Homebrew tap update
-        if: steps.check.outputs.published == 'false'
         working-directory: homebrew-tap
         run: |
           if git diff --quiet -- agent-validator.rb; then
