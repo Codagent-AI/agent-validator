@@ -137,6 +137,11 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **THEN** init SHALL NOT show the review CLI multi-select prompt
 - **AND** init SHALL NOT ask how many review CLIs should run on every review
 
+#### Scenario: Claude review CLI shows programmatic billing disclosure
+- **WHEN** the review CLI multi-select prompt is rendered
+- **AND** `claude` is an available option
+- **THEN** the `claude` option SHALL include a visible disclosure that programmatic use may be billed at API rates
+
 #### Scenario: Review CLIs set default_preference
 - **GIVEN** the user selects `claude` and `codex` as review CLIs
 - **WHEN** the config is generated

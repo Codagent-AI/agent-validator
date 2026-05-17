@@ -7,6 +7,13 @@ function toSortedChoices(names: string[]): { name: string; value: string }[] {
     .map((name) => ({ name, value: name }));
 }
 
+function reviewLabel(name: string, recommended: Set<string>): string {
+  if (recommended.has(name)) return `${name} (recommended)`;
+  if (name === 'claude')
+    return `${name} (programmatic use may be billed at API rates)`;
+  return name;
+}
+
 function toReviewChoices(names: string[]): { name: string; value: string }[] {
   const recommended = new Set(['codex', 'github-copilot']);
   return [...names]
@@ -17,7 +24,7 @@ function toReviewChoices(names: string[]): { name: string; value: string }[] {
       return a.localeCompare(b);
     })
     .map((name) => ({
-      name: recommended.has(name) ? `${name} (recommended)` : name,
+      name: reviewLabel(name, recommended),
       value: name,
     }));
 }

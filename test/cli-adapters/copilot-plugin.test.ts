@@ -12,46 +12,41 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-
-// Mock copilot-cli module before importing the adapter
-const mockInstallPlugin = mock(() =>
-	Promise.resolve({ success: true } as { success: boolean; stderr?: string }),
-);
-const mockDetectPlugin = mock(
-	() => Promise.resolve(null) as Promise<"user" | null>,
-);
-
-mock.module("../../src/plugin/copilot-cli.js", () => ({
-	installPlugin: mockInstallPlugin,
-	detectPlugin: mockDetectPlugin,
-}));
+import * as copilotCli from "../../src/plugin/copilot-cli.js";
 
 describe("GitHubCopilotAdapter plugin lifecycle", () => {
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic import typing
 	let adapter: any;
+	let installPluginSpy: ReturnType<typeof spyOn>;
+	let detectPluginSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(async () => {
+		installPluginSpy = spyOn(copilotCli, "installPlugin").mockImplementation(() =>
+			Promise.resolve({ success: true }),
+		);
+		detectPluginSpy = spyOn(copilotCli, "detectPlugin").mockImplementation(() =>
+			Promise.resolve(null),
+		);
 		const { GitHubCopilotAdapter } = await import(
 			"../../src/cli-adapters/github-copilot.js"
 		);
 		adapter = new GitHubCopilotAdapter();
-		mockInstallPlugin.mockReset();
-		mockDetectPlugin.mockReset();
-		mockInstallPlugin.mockImplementation(() =>
-			Promise.resolve({ success: true }),
-		);
-		mockDetectPlugin.mockImplementation(() => Promise.resolve(null));
+	});
+
+	afterEach(() => {
+		installPluginSpy.mockRestore();
+		detectPluginSpy.mockRestore();
 	});
 
 	describe("detectPlugin", () => {
 		it("returns null when plugin is not installed", async () => {
-			mockDetectPlugin.mockImplementation(() => Promise.resolve(null));
+			detectPluginSpy.mockImplementation(() => Promise.resolve(null));
 			const result = await adapter.detectPlugin("/some/project");
 			expect(result).toBeNull();
 		});
 
 		it("returns 'user' when plugin is detected", async () => {
-			mockDetectPlugin.mockImplementation(() => Promise.resolve("user" as const));
+			detectPluginSpy.mockImplementation(() => Promise.resolve("user" as const));
 			const result = await adapter.detectPlugin("/some/project");
 			expect(result).toBe("user");
 		});
@@ -61,17 +56,17 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 		it("returns success when install succeeds", async () => {
 			const result = await adapter.installPlugin("user");
 			expect(result).toEqual({ success: true });
-			expect(mockInstallPlugin).toHaveBeenCalledTimes(1);
+			expect(installPluginSpy).toHaveBeenCalledTimes(1);
 		});
 
 		it("accepts scope parameter for interface compatibility but delegates to copilot-cli", async () => {
 			await adapter.installPlugin("project");
 			// Copilot always installs to user scope, but the adapter accepts scope for compatibility
-			expect(mockInstallPlugin).toHaveBeenCalledTimes(1);
+			expect(installPluginSpy).toHaveBeenCalledTimes(1);
 		});
 
 		it("returns failure with error when install fails", async () => {
-			mockInstallPlugin.mockImplementation(() =>
+			installPluginSpy.mockImplementation(() =>
 				Promise.resolve({
 					success: false,
 					stderr: "install error",
@@ -89,7 +84,7 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 		it("delegates to installPlugin (re-install overwrites)", async () => {
 			const result = await adapter.updatePlugin!("user");
 			expect(result).toEqual({ success: true });
-			expect(mockInstallPlugin).toHaveBeenCalledTimes(1);
+			expect(installPluginSpy).toHaveBeenCalledTimes(1);
 		});
 	});
 

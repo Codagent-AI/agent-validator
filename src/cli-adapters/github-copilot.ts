@@ -3,10 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getCategoryLogger } from '../output/app-logger.js';
-import {
-  detectPlugin as detectCopilotPlugin,
-  installPlugin as installCopilotPlugin,
-} from '../plugin/copilot-cli.js';
+import * as copilotCli from '../plugin/copilot-cli.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import type { CLIAdapter } from './shared.js';
 
@@ -216,14 +213,14 @@ export class GitHubCopilotAdapter implements CLIAdapter {
   }
 
   async detectPlugin(_projectRoot: string): Promise<'user' | 'project' | null> {
-    return detectCopilotPlugin();
+    return copilotCli.detectPlugin();
   }
 
   async installPlugin(
     _scope: 'user' | 'project',
     _projectRoot?: string,
   ): Promise<{ success: boolean; error?: string }> {
-    const result = await installCopilotPlugin();
+    const result = await copilotCli.installPlugin();
     if (!result.success) {
       return { success: false, error: result.stderr };
     }
