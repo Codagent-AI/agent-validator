@@ -7,6 +7,17 @@ async function readSkill(name: string): Promise<string> {
 }
 
 describe("validator skill invocation policy", () => {
+	it("does not disable model invocation for any shipped skill", async () => {
+		const skillsDir = path.join(process.cwd(), "skills");
+		const skillNames = await fs.readdir(skillsDir);
+
+		for (const skillName of skillNames) {
+			const skill = await readSkill(skillName);
+
+			expect(skill).not.toContain("disable-model-invocation: true");
+		}
+	});
+
 	it("allows model invocation for explicit full validator requests only", async () => {
 		const skill = await readSkill("validator-run");
 

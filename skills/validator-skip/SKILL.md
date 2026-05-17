@@ -1,7 +1,7 @@
 ---
 name: validator-skip
 description: Advances the validator execution state baseline without running checks for requests such as "skip validator", "advance validator baseline", or "mark current tree as validated without running checks".
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: Bash
 ---
 

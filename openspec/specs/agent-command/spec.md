@@ -180,8 +180,8 @@ The system SHALL store canonical distributable skill files under `skills/validat
 #### Scenario: Skill frontmatter format
 - **WHEN** a skill `SKILL.md` file is created
 - **THEN** it SHALL contain YAML frontmatter with `name`, `description`, and `allowed-tools` fields
-- **AND** non-model-invoked validator skills (`validator-status`) SHALL set `disable-model-invocation: true`
-- **AND** `validator-run` and `validator-check` SHALL set `disable-model-invocation: false` so explicit validation requests can invoke them through model skill selection
+- **AND** no shipped validator skill SHALL set `disable-model-invocation: true`
+- **AND** validator skills that declare `disable-model-invocation` SHALL set it to `false` so explicit validation requests can invoke them through model skill selection
 
 #### Scenario: Hyphenated skill invocation
 - **GIVEN** a target agent has installed the `validator-run` skill from the agent-validator plugin
