@@ -161,7 +161,7 @@ describe("promptReviewCLIs", () => {
 		expect(checkboxCalls[0]?.choices?.map((choice) => choice.name)).toEqual([
 			"codex (recommended)",
 			"github-copilot (recommended)",
-			"claude",
+			"claude (programmatic use may be billed at API rates)",
 			"opencode",
 		]);
 		expect(checkboxCalls[0]?.choices?.map((choice) => choice.value)).toEqual([
