@@ -7,6 +7,17 @@ async function readSkill(name: string): Promise<string> {
 }
 
 describe("validator skill invocation policy", () => {
+	it("does not disable model invocation for any shipped skill", async () => {
+		const skillsDir = path.join(process.cwd(), "skills");
+		const skillNames = await fs.readdir(skillsDir);
+
+		for (const skillName of skillNames) {
+			const skill = await readSkill(skillName);
+
+			expect(skill).not.toContain("disable-model-invocation: true");
+		}
+	});
+
 	it("allows model invocation for explicit full validator requests only", async () => {
 		const skill = await readSkill("validator-run");
 
@@ -34,5 +45,14 @@ describe("validator skill invocation policy", () => {
 		expect(skill.indexOf('Contains "check" or "checks"')).toBeLessThan(
 			skill.indexOf('Contains "run", "full", or "all gates"'),
 		);
+	});
+
+	it("requires explicit confirmation before skipping validation", async () => {
+		const skill = await readSkill("validator-skip");
+
+		expect(skill).toContain("disable-model-invocation: false");
+		expect(skill).toContain("require explicit user confirmation");
+		expect(skill).toContain("exact phrase `skip validator`");
+		expect(skill).toContain("Do not run `agent-validate skip` from inferred intent");
 	});
 });

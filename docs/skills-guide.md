@@ -153,8 +153,8 @@ allowed-tools: Bash
 ---
 ```
 
-- `disable-model-invocation: true` prevents Claude from automatically loading and invoking the skill. The user can still invoke it via `/name`. Use this for workflows that should never be selected by model invocation.
-- `disable-model-invocation: false` allows model invocation. Keep the `description` and invocation policy narrow for side-effecting workflows so agents select them only when the user explicitly asks.
+- `disable-model-invocation: false` allows model invocation. Agent Validator skills use this setting so explicit user requests can invoke them through model skill selection; keep the `description` and invocation policy narrow for side-effecting workflows.
+- Do not set `disable-model-invocation: true` on shipped Agent Validator skills.
 - `user-invocable: false` hides the skill from the `/` autocomplete menu entirely.
 - `allowed-tools` restricts which tools the agent can use during execution
 
