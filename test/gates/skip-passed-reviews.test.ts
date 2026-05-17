@@ -7,26 +7,24 @@ import {
 	type PreviousFailuresResult,
 } from "../../src/utils/log-parser.js";
 
-const TEST_DIR = path.join(
-	os.tmpdir(),
-	`agent-validator-test-skip-passed-${process.pid}`,
-);
-
 describe("Skip Passed Reviews", () => {
+	let testDir: string;
+
 	beforeEach(async () => {
-		await fs.rm(TEST_DIR, { recursive: true, force: true });
-		await fs.mkdir(TEST_DIR, { recursive: true });
+		testDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "agent-validator-test-skip-passed-"),
+		);
 	});
 
 	afterEach(async () => {
-		await fs.rm(TEST_DIR, { recursive: true, force: true });
+		await fs.rm(testDir, { recursive: true, force: true });
 	});
 
 	describe("findPreviousFailures with passedSlots", () => {
 		it("returns correct passed slots with iteration numbers and adapter", async () => {
 			// Create a passed review log with @1 pattern
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_code-quality_claude@1.2.json"),
+				path.join(testDir, "review_src_code-quality_claude@1.2.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -37,7 +35,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -55,7 +53,7 @@ describe("Skip Passed Reviews", () => {
 		it("Scenario 1: num_reviews=2 with 1 pass + 1 fail returns only failed slot", async () => {
 			// Slot 1 passed in iteration 1
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.1.json"),
+				path.join(testDir, "review_src_quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -67,7 +65,7 @@ describe("Skip Passed Reviews", () => {
 
 			// Slot 2 failed in iteration 1
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_gemini@2.1.json"),
+				path.join(testDir, "review_src_quality_gemini@2.1.json"),
 				JSON.stringify({
 					adapter: "gemini",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -86,7 +84,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -106,7 +104,7 @@ describe("Skip Passed Reviews", () => {
 		it("Scenario 2: slot skipped across multiple iterations", async () => {
 			// Slot 1 passed in iteration 1
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.1.json"),
+				path.join(testDir, "review_src_quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -118,7 +116,7 @@ describe("Skip Passed Reviews", () => {
 
 			// Slot 2 still failing in iteration 3 (latest)
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_gemini@2.3.json"),
+				path.join(testDir, "review_src_quality_gemini@2.3.json"),
 				JSON.stringify({
 					adapter: "gemini",
 					timestamp: "2026-01-24T14:00:00Z",
@@ -137,7 +135,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -155,7 +153,7 @@ describe("Skip Passed Reviews", () => {
 		it("Scenario 3: all slots passed (safety latch scenario)", async () => {
 			// Slot 1 passed in iteration 1
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.1.json"),
+				path.join(testDir, "review_src_quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -167,7 +165,7 @@ describe("Skip Passed Reviews", () => {
 
 			// Slot 2 passed in iteration 2
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_gemini@2.2.json"),
+				path.join(testDir, "review_src_quality_gemini@2.2.json"),
 				JSON.stringify({
 					adapter: "gemini",
 					timestamp: "2026-01-24T13:00:00Z",
@@ -178,7 +176,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -198,7 +196,7 @@ describe("Skip Passed Reviews", () => {
 		it("Scenario 4: num_reviews=1 still runs (invariant check)", async () => {
 			// Single slot passed
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.1.json"),
+				path.join(testDir, "review_src_quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -209,7 +207,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -223,7 +221,7 @@ describe("Skip Passed Reviews", () => {
 		it("Scenario 5: different review gates are independent", async () => {
 			// code-quality gate passed
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_code-quality_claude@1.1.json"),
+				path.join(testDir, "review_src_code-quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -235,7 +233,7 @@ describe("Skip Passed Reviews", () => {
 
 			// security gate failed
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_security_claude@1.1.json"),
+				path.join(testDir, "review_src_security_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -254,7 +252,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -274,7 +272,7 @@ describe("Skip Passed Reviews", () => {
 		it("Scenario 6: adapter changes but slot still tracked by review index", async () => {
 			// Slot 1 passed with claude
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.1.json"),
+				path.join(testDir, "review_src_quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -286,7 +284,7 @@ describe("Skip Passed Reviews", () => {
 
 			// Slot 2 failed with gemini (but could be any adapter)
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_gemini@2.1.json"),
+				path.join(testDir, "review_src_quality_gemini@2.1.json"),
 				JSON.stringify({
 					adapter: "gemini",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -305,7 +303,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -322,7 +320,7 @@ describe("Skip Passed Reviews", () => {
 		it("Scenario 11: slot with no prior log files must run", async () => {
 			// Only slot 1 has logs, slot 2 has no logs yet
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.1.json"),
+				path.join(testDir, "review_src_quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -341,7 +339,7 @@ describe("Skip Passed Reviews", () => {
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -367,12 +365,12 @@ describe("Skip Passed Reviews", () => {
 			};
 
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.2.json"),
+				path.join(testDir, "review_src_quality_claude@1.2.json"),
 				JSON.stringify(skippedJson),
 			);
 
 			const result = (await findPreviousFailures(
-				TEST_DIR,
+				testDir,
 				undefined,
 				true,
 			)) as PreviousFailuresResult;
@@ -385,7 +383,7 @@ describe("Skip Passed Reviews", () => {
 	describe("backwards compatibility", () => {
 		it("findPreviousFailures without includePassedSlots returns array", async () => {
 			await fs.writeFile(
-				path.join(TEST_DIR, "review_src_quality_claude@1.1.json"),
+				path.join(testDir, "review_src_quality_claude@1.1.json"),
 				JSON.stringify({
 					adapter: "claude",
 					timestamp: "2026-01-24T12:00:00Z",
@@ -403,7 +401,7 @@ describe("Skip Passed Reviews", () => {
 				}),
 			);
 
-			const result = await findPreviousFailures(TEST_DIR);
+			const result = await findPreviousFailures(testDir);
 
 			// Should return array (not object with failures/passedSlots)
 			expect(Array.isArray(result)).toBe(true);
