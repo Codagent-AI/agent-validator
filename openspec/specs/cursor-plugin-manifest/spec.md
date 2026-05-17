@@ -30,10 +30,8 @@ The `.cursor-plugin/` directory SHALL NOT include a separate `marketplace.json` 
 
 ### Requirement: Bundled asset discovery by convention
 
-The plugin manifest SHALL NOT explicitly declare bundled assets. Cursor auto-discovers skills and hooks by convention from the plugin directory structure.
+The plugin manifest SHALL NOT explicitly declare bundled assets. Cursor auto-discovers skills by convention from the plugin directory structure.
 
 #### Scenario: Plugin directory follows convention structure
 - **WHEN** the plugin is installed
 - **THEN** the plugin directory SHALL contain a `skills/` subdirectory with skill files
-- **AND** SHALL contain a `hooks/` subdirectory with the hooks configuration file
-

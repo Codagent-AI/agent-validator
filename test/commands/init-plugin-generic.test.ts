@@ -17,7 +17,6 @@ function createMockAdapter(
     getCommandExtension: () => '.md',
     canUseSymlink: () => false,
     transformCommand: (c: string) => c,
-    supportsHooks: () => false,
     ...overrides,
   };
 }

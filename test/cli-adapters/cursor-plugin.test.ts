@@ -110,17 +110,6 @@ describe("CursorAdapter plugin lifecycle", () => {
 			const skillsStat = await fs.stat(skillsDir);
 			expect(skillsStat.isDirectory()).toBe(true);
 
-			// Verify hooks were copied
-			const hooksFile = path.join(
-				tmpDir,
-				".cursor",
-				"plugins",
-				"agent-validator",
-				"hooks",
-				"hooks.json",
-			);
-			const hooksStat = await fs.stat(hooksFile);
-			expect(hooksStat.isFile()).toBe(true);
 		});
 
 		// Note: user-scope installPlugin cannot be isolated in tests because
@@ -169,17 +158,6 @@ describe("CursorAdapter plugin lifecycle", () => {
 			const stat = await fs.stat(pluginJson);
 			expect(stat.isFile()).toBe(true);
 
-			// Verify hooks were copied
-			const hooksFile = path.join(
-				tmpDir,
-				".cursor",
-				"plugins",
-				"agent-validator",
-				"hooks",
-				"hooks.json",
-			);
-			const hooksStat = await fs.stat(hooksFile);
-			expect(hooksStat.isFile()).toBe(true);
 		});
 
 		it("overwrites existing files on update", async () => {

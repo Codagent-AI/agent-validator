@@ -208,10 +208,6 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     return markdownContent;
   }
 
-  supportsHooks(): boolean {
-    return true;
-  }
-
   async detectPlugin(_projectRoot: string): Promise<'user' | 'project' | null> {
     return copilotCli.detectPlugin();
   }

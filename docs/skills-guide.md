@@ -19,20 +19,20 @@ Agent Validator installs **skills** that let you invoke Agent Validator workflow
 
 ### Claude Code (Plugin Delivery)
 
-For Claude Code, skills and hooks are delivered as part of the **agent-validator Claude Code plugin**. When you run `agent-validator init` with Claude selected, it registers the marketplace and installs the plugin via:
+For Claude Code, skills are delivered as part of the **agent-validator Claude Code plugin**. When you run `agent-validator init` with Claude selected, it registers the marketplace and installs the plugin via:
 
 ```bash
 claude plugin marketplace add Codagent-AI/agent-validator
 claude plugin install agent-validator --scope <project|user>
 ```
 
-The plugin bundles skills in `.claude/skills/` and hooks in `hooks/hooks.json`. No manual file management is needed — updates are delivered via `agent-validator update`, or manually with `claude plugin marketplace update agent-validator` followed by `claude plugin update agent-validator@Codagent-AI/agent-validator`.
+The plugin bundles skills in `.claude/skills/`. No manual file management is needed — updates are delivered via `agent-validator update`, or manually with `claude plugin marketplace update agent-validator` followed by `claude plugin update agent-validator@Codagent-AI/agent-validator`.
 
 ### Cursor (Plugin Delivery)
 
-For Cursor, skills and hooks are delivered as part of the **agent-validator Cursor plugin**. When you run `agent-validator init` with Cursor selected, it copies plugin files to `.cursor/plugins/agent-validator/` (project scope) or `~/.cursor/plugins/agent-validator/` (user scope).
+For Cursor, skills are delivered as part of the **agent-validator Cursor plugin**. When you run `agent-validator init` with Cursor selected, it copies plugin files to `.cursor/plugins/agent-validator/` (project scope) or `~/.cursor/plugins/agent-validator/` (user scope).
 
-The plugin bundles skills in `skills/` and hooks in `hooks/hooks.json`.
+The plugin bundles skills in `skills/`.
 
 ### Agent Plugin Installation
 

@@ -154,15 +154,3 @@ export async function promptFileOverwrite(
     ],
   });
 }
-
-export async function promptHookOverwrite(
-  hookFile: string,
-  skipPrompts: boolean,
-): Promise<boolean> {
-  if (skipPrompts) return true;
-
-  return confirm({
-    message: `Hook configuration in ${hookFile} has changed, update it?`,
-    default: true,
-  });
-}

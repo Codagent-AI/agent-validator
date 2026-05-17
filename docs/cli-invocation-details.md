@@ -102,7 +102,6 @@ cat "<tmpFile>" | copilot -s \
 - **Detection**: Reads `~/.copilot/config.json` to check the `installed_plugins` array
 - **Installation**: `copilot plugin install Codagent-AI/agent-validator`
 - **Skill directories**: `.github/skills/` (project), `~/.copilot/skills/` (user)
-- **Hooks**: Supported via the Copilot CLI plugin system
 
 ---
 

@@ -220,10 +220,6 @@ export class CodexAdapter implements CLIAdapter {
     return markdownContent;
   }
 
-  supportsHooks(): boolean {
-    return false;
-  }
-
   private buildArgs(
     allowToolUse?: boolean,
     thinkingBudget?: string,

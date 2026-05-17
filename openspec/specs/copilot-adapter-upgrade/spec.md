@@ -1,7 +1,7 @@
 # copilot-adapter-upgrade Specification
 
 ## Purpose
-Update the GitHub Copilot adapter to use the standalone `copilot` CLI invocation (replacing the deprecated `gh copilot` extension), declare skill directories, support hooks, and implement the plugin lifecycle.
+Update the GitHub Copilot adapter to use the standalone `copilot` CLI invocation (replacing the deprecated `gh copilot` extension), declare skill directories, and implement the plugin lifecycle.
 
 ## Requirements
 
@@ -32,14 +32,6 @@ The adapter SHALL report Copilot CLI's native skill directories for compatibilit
 #### Scenario: User skill directory
 - **WHEN** `getUserSkillDir()` is called
 - **THEN** it SHALL return the absolute path `~/.copilot/skills` (expanded)
-
-### Requirement: Adapter supports hooks
-
-The adapter SHALL declare hook support since the Copilot CLI plugin system supports hooks.
-
-#### Scenario: Hook support declared
-- **WHEN** `supportsHooks()` is called
-- **THEN** it SHALL return `true`
 
 ### Requirement: Adapter execution flags align with current CLI
 

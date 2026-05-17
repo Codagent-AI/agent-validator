@@ -1,6 +1,6 @@
 # Plugin & Update Guide
 
-Agent Validator delivers skills and hooks to AI coding agents via **plugins**. Both Claude Code and Cursor are supported, each with their own plugin format and installation mechanism.
+Agent Validator delivers skills to AI coding agents via **plugins**. Both Claude Code and Cursor are supported, each with their own plugin format and installation mechanism.
 
 ## How It Works
 
@@ -8,8 +8,6 @@ The agent-validator npm package includes plugin assets for Claude Code, Cursor, 
 
 - `.claude-plugin/plugin.json` — Plugin manifest for Claude Code and GitHub Copilot (Copilot discovers this same manifest)
 - `.cursor-plugin/plugin.json` — Plugin manifest for Cursor
-- `hooks/hooks.json` — Claude Code hook definitions (installed destination)
-- `hooks/cursor-hooks.json` — Cursor hook definitions (source; installed as `hooks/hooks.json`)
 - `.claude/skills/` — Skill files bundled in the Claude plugin
 - `skills/` — Skill files bundled in the Cursor plugin
 
@@ -20,7 +18,7 @@ When you run `agent-validator init` with Claude Code selected, it:
 1. Registers the marketplace: `claude plugin marketplace add Codagent-AI/agent-validator`
 2. Installs the plugin: `claude plugin install agent-validator --scope <project|user>`
 
-Claude Code then discovers and loads the plugin's skills and hooks automatically.
+Claude Code then discovers and loads the plugin's skills automatically.
 
 ### GitHub Copilot
 
@@ -39,7 +37,7 @@ When you run `agent-validator init` with Cursor selected, it copies plugin files
 - **Project scope**: `.cursor/plugins/agent-validator/`
 - **User scope**: `~/.cursor/plugins/agent-validator/`
 
-The copied files include `.cursor-plugin/plugin.json`, `skills/`, and `hooks/hooks.json`. Cursor auto-discovers the plugin by convention.
+The copied files include `.cursor-plugin/plugin.json` and `skills/`. Cursor auto-discovers the plugin by convention.
 
 ## Install Scope
 
@@ -114,10 +112,6 @@ claude plugin list --json
 
 Look for an entry with `name: "agent-validator"`.
 
-### Hooks not firing
-
-Ensure the plugin is installed at the correct scope for your project. Project-scope plugins only apply to the project where they were installed.
-
 ### Update fails
 
 If `agent-validator update` fails, try manual update:
@@ -135,11 +129,10 @@ The Cursor plugin is delivered via file copy during `agent-validator init`. Unli
 
 - `.cursor-plugin/plugin.json` — Plugin manifest (name, version, description, license)
 - `skills/` — All Agent Validator skill files
-- `hooks/hooks.json` — Hook definitions (installed from source file `hooks/cursor-hooks.json`)
 
 ### Updating
 
-Run `agent-validator update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/`, `skills/`, and `hooks/cursor-hooks.json` (installed as `hooks/hooks.json`) from the npm package to the installed location, overwriting existing files.
+Run `agent-validator update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/` and `skills/` from the npm package to the installed location, overwriting existing files.
 
 ### Manual Installation
 
@@ -152,8 +145,6 @@ npm ls -g agent-validator --parseable
 # Copy plugin files to your project
 cp -r <package-path>/.cursor-plugin .cursor/plugins/agent-validator/.cursor-plugin
 cp -r <package-path>/skills .cursor/plugins/agent-validator/skills
-mkdir -p .cursor/plugins/agent-validator/hooks
-cp <package-path>/hooks/cursor-hooks.json .cursor/plugins/agent-validator/hooks/hooks.json
 ```
 
 Or install via `/add-plugin` in Cursor or from the Cursor marketplace.

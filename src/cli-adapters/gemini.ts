@@ -317,10 +317,6 @@ export class GeminiAdapter implements CLIAdapter {
     return false;
   }
 
-  supportsHooks(): boolean {
-    return false;
-  }
-
   transformCommand(markdownContent: string): string {
     const fmMatch = markdownContent.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     let description = 'Run the validator verification suite';

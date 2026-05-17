@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.11.4
+
+### Patch Changes
+
+- [#140](https://github.com/Codagent-AI/agent-validator/pull/140) Remove stale hook-support surfaces from init, adapter metadata, plugin packaging, docs, and current specs.
+
 ## 1.11.3
 
 ### Patch Changes

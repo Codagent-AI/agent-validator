@@ -36,20 +36,6 @@ describe("Cursor plugin assets", () => {
 		});
 	});
 
-	describe("hooks/cursor-hooks.json", () => {
-		const hooksPath = join(ROOT, "hooks/cursor-hooks.json");
-
-		test("exists", () => {
-			expect(existsSync(hooksPath)).toBe(true);
-		});
-
-		test("has empty hooks object", () => {
-			const hooks = JSON.parse(readFileSync(hooksPath, "utf-8"));
-			expect(hooks.hooks).toBeDefined();
-			expect(Object.keys(hooks.hooks)).toHaveLength(0);
-		});
-	});
-
 	describe("package.json files array", () => {
 		test("includes .cursor-plugin", () => {
 			const pkg = JSON.parse(

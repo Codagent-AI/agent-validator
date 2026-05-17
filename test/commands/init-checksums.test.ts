@@ -1,11 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  computeHookChecksum,
-  computeSkillChecksum,
-  isGauntletHookEntry,
-} from "../../src/commands/init-checksums.js";
+import { computeSkillChecksum } from "../../src/commands/init-checksums.js";
 
 const TEST_DIR = path.join(process.cwd(), `test-checksums-${Date.now()}`);
 
@@ -41,56 +37,6 @@ describe("computeSkillChecksum", () => {
     await fs.writeFile(path.join(dir, "SKILL.md"), "# Modified");
     const c2 = await computeSkillChecksum(dir);
     expect(c1).not.toBe(c2);
-  });
-});
-
-describe("computeHookChecksum", () => {
-  it("should compute checksum over validator entries only", () => {
-    const entries = [
-      { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
-      { type: "command", command: "echo hello" },
-    ];
-    const c1 = computeHookChecksum(entries);
-
-    const entries2 = [
-      { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
-      { type: "command", command: "echo world" },
-    ];
-    const c2 = computeHookChecksum(entries2);
-    expect(c1).toBe(c2);
-  });
-
-  it("should detect changes in validator entries", () => {
-    const entries1 = [
-      { hooks: [{ type: "command", command: "agent-validate run", timeout: 300 }] },
-    ];
-    const entries2 = [
-      { hooks: [{ type: "command", command: "agent-validate run", timeout: 600 }] },
-    ];
-    expect(computeHookChecksum(entries1)).not.toBe(computeHookChecksum(entries2));
-  });
-
-  it("should handle flat entries (Cursor format)", () => {
-    const entries = [
-      { command: "agent-validate run", loop_limit: 10 },
-    ];
-    const checksum = computeHookChecksum(entries);
-    expect(typeof checksum).toBe("string");
-    expect(checksum.length).toBe(64);
-  });
-});
-
-describe("isGauntletHookEntry", () => {
-  it("should identify wrapped validator entries", () => {
-    expect(isGauntletHookEntry({ hooks: [{ command: "agent-validate run" }] })).toBe(true);
-  });
-
-  it("should identify flat validator entries", () => {
-    expect(isGauntletHookEntry({ command: "agent-validate check" })).toBe(true);
-  });
-
-  it("should reject non-validator entries", () => {
-    expect(isGauntletHookEntry({ command: "echo hello" })).toBe(false);
   });
 });
 

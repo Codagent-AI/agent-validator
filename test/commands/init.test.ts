@@ -58,7 +58,6 @@ const mockAdapters = [
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => true,
 		transformCommand: (content: string) => content,
-		supportsHooks: () => true,
 		checkHealth: async () => ({ status: "healthy" as const }),
 		detectPlugin: async (_projectRoot: string) => {
 			const entries = await listPluginsMock();
@@ -93,7 +92,6 @@ const mockAdapters = [
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => true,
 		transformCommand: (content: string) => content,
-		supportsHooks: () => true,
 		checkHealth: async () => ({ status: "healthy" as const }),
 	},
 	{
@@ -106,7 +104,6 @@ const mockAdapters = [
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => true,
 		transformCommand: (content: string) => content,
-		supportsHooks: () => false,
 		checkHealth: async () => ({ status: "healthy" as const }),
 	},
 	{
@@ -119,7 +116,6 @@ const mockAdapters = [
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => true,
 		transformCommand: (content: string) => content,
-		supportsHooks: () => false,
 		checkHealth: async () => ({ status: "healthy" as const }),
 	},
 ];
@@ -409,7 +405,7 @@ describe("init command plugin installation", () => {
 		expect(installAgentPluginForAgentsMock).not.toHaveBeenCalled();
 	});
 
-	it("does not write Claude hooks to settings.local.json", async () => {
+	it("does not write Claude local settings", async () => {
 		await program.parseAsync(["node", "test", "init", "--yes"]);
 
 		const settingsPath = path.join(testDir, ".claude", "settings.local.json");
