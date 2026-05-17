@@ -87,10 +87,6 @@ export class ClaudeAdapter implements CLIAdapter {
     return markdownContent;
   }
 
-  supportsHooks(): boolean {
-    return true;
-  }
-
   async detectPlugin(projectRoot: string): Promise<'user' | 'project' | null> {
     try {
       const entries = await listPlugins();

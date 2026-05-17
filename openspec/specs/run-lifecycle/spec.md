@@ -686,7 +686,7 @@ All ConsoleReporter output (gate start/complete messages, results summary, statu
 - **GIVEN** the app-logger (console-sink) writes diagnostic messages
 - **WHEN** log messages are emitted
 - **THEN** they SHALL continue to use `console.error` (stderr)
-- **NOTE** The console-sink must remain on stderr to keep stdout clean for the stop-hook JSON protocol.
+- **NOTE** The console-sink must remain on stderr to keep stdout clean for machine-readable output.
 
 ### Requirement: Report flag on run command
 The `run` command SHALL accept a `--report` flag to enable structured stdout output for external orchestrators. Exit code semantics MUST remain unchanged: exit 0 for success statuses (`passed`, `passed_with_warnings`, `no_applicable_gates`, `no_changes`), exit 1 for all others.
@@ -701,4 +701,3 @@ The `run` command SHALL accept a `--report` flag to enable structured stdout out
 #### Scenario: Run with --report and --enable-review
 - **WHEN** `agent-validate run --report --enable-review task-compliance` is invoked
 - **THEN** both flags SHALL be honored: the enabled review runs AND the report is written to stdout
-

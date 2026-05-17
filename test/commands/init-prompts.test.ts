@@ -30,7 +30,6 @@ const {
 	promptReviewCLIs,
 	promptNumReviews,
 	promptFileOverwrite,
-	promptHookOverwrite,
 } = await import("../../src/commands/init-prompts.js");
 
 const { selectReviewConfig } = await import("../../src/commands/init-reviews.js");
@@ -245,22 +244,5 @@ describe("selectReviewConfig", () => {
 		expect(config.reviews[0].builtin).toBe("all-reviewers");
 		expect(config.reviews[0].model).toBeUndefined();
 		expect(config.reviews[0].cli_preference).toBeUndefined();
-	});
-});
-
-describe("promptHookOverwrite", () => {
-	beforeEach(() => {
-		confirmResponses = [];
-		confirmCalls = [];
-	});
-
-	it("should return true when skipPrompts is true", async () => {
-		const result = await promptHookOverwrite("settings.local.json", true);
-		expect(result).toBe(true);
-	});
-
-	it("should call confirm when skipPrompts is false", async () => {
-		const result = await promptHookOverwrite("settings.local.json", false);
-		expect(result).toBe(true); // mocked to return true
 	});
 });

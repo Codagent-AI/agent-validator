@@ -28,7 +28,7 @@ The `update` command SHALL refresh Cursor plugin files by re-copying assets from
 
 #### Scenario: Assets refreshed on update
 - **WHEN** the Cursor plugin is detected at a scope
-- **THEN** update SHALL copy `.cursor-plugin/`, `skills/`, and `hooks/cursor-hooks.json` from the package to the target directory
+- **THEN** update SHALL copy `.cursor-plugin/` and `skills/` from the package to the target directory
 - **AND** existing files SHALL be overwritten
 
 #### Scenario: Update reports success

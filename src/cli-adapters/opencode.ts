@@ -243,10 +243,6 @@ export class OpenCodeAdapter implements CLIAdapter {
     return markdownContent;
   }
 
-  supportsHooks(): boolean {
-    return false;
-  }
-
   private buildArgs(
     opts: {
       model?: string;

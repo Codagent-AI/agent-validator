@@ -114,11 +114,6 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 		});
 	});
 
-	describe("supportsHooks", () => {
-		it("returns true", () => {
-			expect(adapter.supportsHooks()).toBe(true);
-		});
-	});
 });
 
 	describe("GitHubCopilotAdapter execution", () => {

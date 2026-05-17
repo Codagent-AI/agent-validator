@@ -33,7 +33,6 @@ const mockAdapters = [
 		getCommandExtension: () => ".md",
 		canUseSymlink: () => false,
 		transformCommand: (content: string) => content,
-		supportsHooks: () => true,
 		checkHealth: async () => ({ status: "healthy" as const }),
 		detectPlugin: async (_projectRoot: string) => mockCopilotDetectPlugin(),
 		installPlugin: async (_scope: "user" | "project") =>

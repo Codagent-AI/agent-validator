@@ -79,7 +79,7 @@ describe("agent-validator init (E2E)", () => {
 		expect(initResult.exitCode).toBe(0);
 	});
 
-	it("should not write Claude hooks to settings.local.json during init", async () => {
+	it("should not write Claude local settings during init", async () => {
 		if (!canRun) return;
 		const settingsPath = path.join(tempDir, ".claude", "settings.local.json");
 		const stat = await fs.stat(settingsPath).catch(() => null);

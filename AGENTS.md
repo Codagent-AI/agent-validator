@@ -1,5 +1,8 @@
 # General
 
+## Workspace Context
+For broader Codagent workspace context, see [../AGENTS.md](../AGENTS.md). Read it when the user mentions another Codagent repo or project.
+
 ## Project Overview
 This project is “Agent Validator” (formerly Agent Gauntlet), a configurable “feedback loop” runner for AI-assisted development workflows.
 

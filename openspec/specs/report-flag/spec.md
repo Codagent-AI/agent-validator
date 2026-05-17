@@ -46,7 +46,7 @@ When `agent-validate run` is invoked with `--report`, the command SHALL write a 
 - **THEN** stdout behavior SHALL be unchanged from current behavior
 
 ### Requirement: Report output is plain text
-The stdout report MUST NOT contain ANSI escape codes or color formatting. Stdout is reserved for machine-readable output (consistent with the stop-hook JSON protocol convention). Human-readable colored output remains on stderr.
+The stdout report MUST NOT contain ANSI escape codes or color formatting. Stdout is reserved for machine-readable output. Human-readable colored output remains on stderr.
 
 #### Scenario: No ANSI codes in stdout
 - **WHEN** `agent-validate run --report` writes to stdout

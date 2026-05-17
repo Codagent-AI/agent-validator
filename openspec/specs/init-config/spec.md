@@ -117,10 +117,10 @@ The `init` command SHALL present interactive prompts for development CLI selecti
 - **WHEN** the user has selected development CLIs in Phase 2
 - **THEN** the user SHALL be prompted to choose installation scope: local (project) or global (user)
 
-#### Scenario: Development CLI with hook support
+#### Scenario: Development CLI selected for plugin installation
 - **GIVEN** the user selects `claude` as a development CLI
 - **WHEN** Phase 2 completes
-- **THEN** `claude` SHALL be marked for plugin installation (hooks are now part of the plugin)
+- **THEN** `claude` SHALL be marked for plugin installation
 
 #### Scenario: Review CLI multi-select prompt
 - **GIVEN** the user runs `agent-validate init`
@@ -328,7 +328,7 @@ The `init` command SHALL include a `model` field in the adapter configuration de
 
 ### Requirement: Non-native CLIs are delegated to agent-plugin
 
-CLIs that do not have local hook support SHALL still use the centralized agent-plugin installation path during init.
+Development CLIs SHALL use the centralized agent-plugin installation path during init.
 
 #### Scenario: Gemini selected uses agent-plugin
 - **GIVEN** the user selects `gemini` as a development CLI

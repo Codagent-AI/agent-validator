@@ -109,7 +109,7 @@ agent-validator init
 This walks you through a guided setup:
 
 1. **Detects available CLIs** on your system
-2. **Prompts for development CLIs** — the tools you work in (hooks are installed for CLIs that support them)
+2. **Prompts for development CLIs** — the tools you work in
 3. **Prompts for review CLIs** — the tools used for AI code reviews (populates `cli.default_preference`)
 4. **Creates `.validator/`** (skipped if it already exists):
 
@@ -119,7 +119,7 @@ This walks you through a guided setup:
                           # reviews: { code-quality: { builtin: code-quality, num_reviews: 1 } }
 ```
 
-5. **Installs skills and hooks** — always runs, even on re-init. Uses checksums to skip unchanged files and prompt before overwriting changed ones.
+5. **Installs skills and agent plugins** — always runs, even on re-init.
 6. **Prints next steps** — context-aware instructions based on your selected CLIs
 
 ### 2) Configure checks and reviews
@@ -339,7 +339,7 @@ Checks availability of supported review CLIs (`gemini`, `codex`, `claude`, `gith
 
 ### `agent-validator init`
 
-Guided interactive setup that creates `.validator/`, installs skills, and configures hooks.
+Guided interactive setup that creates `.validator/`, installs skills, and configures agent plugins.
 
 ```text
 .validator/

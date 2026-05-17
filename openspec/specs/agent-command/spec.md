@@ -119,7 +119,7 @@ The command template SHALL NOT include a hardcoded retry limit. Instead, the tem
 The system SHALL provide a `/validator-help` skill for evidence-based diagnosis of validator behavior. The skill SHALL be diagnosis-only (no auto-fix behavior) and SHALL operate without requiring source code access. After completing a diagnosis, the skill SHALL route to bug filing based on confidence level: automatically invoking `validator-issue` on high-confidence bug diagnoses, prompting the user on medium confidence, and taking no action on low confidence.
 
 #### Scenario: Diagnose a "no changes" question from runtime evidence
-- **GIVEN** a user asks "/validator-help: the hook reported no changes, why?"
+- **GIVEN** a user asks "/validator-help: the validator reported no changes, why?"
 - **WHEN** the skill investigates
 - **THEN** it SHALL resolve `log_dir` from `.validator/config.yml`
 - **AND** inspect runtime evidence from `<log_dir>/.debug.log`, `<log_dir>/.execution_state`, and relevant gate/review logs

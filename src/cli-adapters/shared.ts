@@ -216,10 +216,6 @@ export interface CLIAdapter {
    */
   transformCommand(markdownContent: string): string;
   /**
-   * Returns true if this CLI supports hooks.
-   */
-  supportsHooks(): boolean;
-  /**
    * Detect if the plugin is already installed.
    * Returns 'user' or 'project' scope if found, null otherwise.
    */

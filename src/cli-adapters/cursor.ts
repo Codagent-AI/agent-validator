@@ -98,10 +98,6 @@ export class CursorAdapter implements CLIAdapter {
     return markdownContent;
   }
 
-  supportsHooks(): boolean {
-    return true;
-  }
-
   /**
    * Resolve a base model name to a specific model ID using `agent --list-models`.
    * Returns undefined if resolution fails or no matching model is found.
@@ -270,7 +266,7 @@ export class CursorAdapter implements CLIAdapter {
       // Find package root (where .cursor-plugin/ lives)
       const packageRoot = this.findPackageRoot();
 
-      // Copy plugin assets: .cursor-plugin/, skills/, hooks/cursor-hooks.json
+      // Copy plugin assets: .cursor-plugin/ and skills/
       await this.copyPluginAssets(packageRoot, baseDir);
       return { success: true };
     } catch (err) {
@@ -329,12 +325,6 @@ export class CursorAdapter implements CLIAdapter {
     const skillsSrc = path.join(packageRoot, 'skills');
     const skillsDest = path.join(targetDir, 'skills');
     await this.copyDirRecursive(skillsSrc, skillsDest);
-
-    // Copy hooks/cursor-hooks.json
-    const hooksSrc = path.join(packageRoot, 'hooks', 'cursor-hooks.json');
-    const hooksDest = path.join(targetDir, 'hooks');
-    await fs.mkdir(hooksDest, { recursive: true });
-    await fs.copyFile(hooksSrc, path.join(hooksDest, 'hooks.json'));
   }
 
   private async copyDirRecursive(src: string, dest: string): Promise<void> {
