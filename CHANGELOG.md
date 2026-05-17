@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.11.3
+
+### Patch Changes
+
+- [#139](https://github.com/Codagent-AI/agent-validator/pull/139) Allow model invocation for all shipped validator skills and add regression coverage so future skill frontmatter cannot disable model invocation.
+
 ## 1.11.2
 
 ### Patch Changes
