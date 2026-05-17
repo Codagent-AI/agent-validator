@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
 	findPreviousFailures,
 	type PreviousFailuresResult,
 } from "../../src/utils/log-parser.js";
 
-const TEST_DIR = path.join(import.meta.dir, "../../.test-skip-passed");
+const TEST_DIR = path.join(
+	os.tmpdir(),
+	`agent-validator-test-skip-passed-${process.pid}`,
+);
 
 describe("Skip Passed Reviews", () => {
 	beforeEach(async () => {

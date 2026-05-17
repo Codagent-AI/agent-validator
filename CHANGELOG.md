@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- [#138](https://github.com/Codagent-AI/agent-validator/pull/138) Disclose that Claude reviewer usage is billed to the user during init, and expose the release command to Codex agents for release preparation.
+- [#138](https://github.com/Codagent-AI/agent-validator/pull/138) Disclose that Claude reviewer usage is billed to the user during init, expose the release command to Codex agents for release preparation, and harden Copilot plugin tests against cross-file mock leakage.
 
 ## 1.11.1
 

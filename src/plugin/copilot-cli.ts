@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import * as childProcess from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +10,7 @@ export interface CopilotCliResult {
 
 export async function installPlugin(): Promise<CopilotCliResult> {
   try {
-    execFileSync(
+    childProcess.execFileSync(
       'copilot',
       ['plugin', 'install', 'Codagent-AI/agent-validator'],
       {
