@@ -670,13 +670,46 @@ describe("init command plugin installation", () => {
 		expect(output).toContain(
 			"Warning: --enable-builtin was passed but .validator/ already exists.",
 		);
-		expect(output).toContain("task-compliance");
-		expect(output).toContain("test-integrity");
-		expect(output).toContain("builtin: task-compliance");
-		expect(output).toContain("builtin: test-integrity");
 		expect(output).toContain(
-			"enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+			"The following entries were NOT added to .validator/config.yml: task-compliance, test-integrity.",
 		);
-		expect(output).toContain("      num_reviews: 1");
+		expect(output).toContain("      - task-compliance:");
+		expect(output).toContain("      - test-integrity:");
+		expect(output).toContain("          builtin: task-compliance");
+		expect(output).toContain("          builtin: test-integrity");
+		expect(output).toContain(
+			"          enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+		);
+		expect(output).toContain("          num_reviews: 1");
+	});
+
+	it("on re-run with --enable-builtin and legacy .gauntlet/, warns using the actual dir name", async () => {
+		await fs.mkdir(path.join(testDir, ".gauntlet"), { recursive: true });
+		const configPath = path.join(testDir, ".gauntlet", "config.yml");
+		await fs.writeFile(configPath, "existing: true\n");
+		listPluginsMock.mockImplementation(async () => [
+			{ name: "agent-validator", scope: "project", projectPath: testDir },
+		]);
+
+		await program.parseAsync([
+			"node",
+			"test",
+			"init",
+			"--yes",
+			"--enable-builtin",
+			"task-compliance",
+		]);
+
+		expect(await fs.readFile(configPath, "utf-8")).toBe("existing: true\n");
+		const output = logs.join("\n");
+		expect(output).toContain(
+			"Warning: --enable-builtin was passed but .gauntlet/ already exists.",
+		);
+		expect(output).toContain(
+			"The following entries were NOT added to .gauntlet/config.yml: task-compliance.",
+		);
+		expect(output).not.toContain(
+			"Warning: --enable-builtin was passed but .validator/ already exists.",
+		);
 	});
 });

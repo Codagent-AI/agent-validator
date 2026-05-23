@@ -128,23 +128,26 @@ function buildOptInBuiltinPasteBlock(names: string[]): string {
   return names
     .map(
       (name) =>
-        `  - ${name}:\n      builtin: ${name}\n      enabled: false # ${buildOptInActivationComment(name)}\n      num_reviews: 1`,
+        `      - ${name}:\n          builtin: ${name}\n          enabled: false # ${buildOptInActivationComment(name)}\n          num_reviews: 1`,
     )
     .join('\n');
 }
 
-function printExistingConfigOptInWarning(names: string[]): void {
+function printExistingConfigOptInWarning(
+  names: string[],
+  dirName: string,
+): void {
   if (names.length === 0) return;
 
   console.log();
   console.log(
     chalk.yellow(
-      'Warning: --enable-builtin was passed but .validator/ already exists.',
+      `Warning: --enable-builtin was passed but .${dirName}/ already exists.`,
     ),
   );
   console.log(
     chalk.yellow(
-      `The following entries were NOT added to .validator/config.yml: ${names.join(', ')}.`,
+      `The following entries were NOT added to .${dirName}/config.yml: ${names.join(', ')}.`,
     ),
   );
   console.log(
@@ -223,9 +226,9 @@ async function runInit(
   let instructionCLINames: string[];
 
   if (existingConfigDir) {
-    const dirName = path.basename(existingConfigDir);
+    const dirName = path.basename(existingConfigDir).replace(/^\./, '');
     console.log(chalk.dim(`.${dirName}/ already exists, skipping scaffolding`));
-    printExistingConfigOptInWarning(optInBuiltinNames);
+    printExistingConfigOptInWarning(optInBuiltinNames, dirName);
     instructionCLINames = detectedNames;
     await handleRerun(
       projectRoot,
