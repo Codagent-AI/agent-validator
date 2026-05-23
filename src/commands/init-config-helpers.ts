@@ -24,6 +24,36 @@ const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
   opencode: { allow_tool_use: false, thinking_budget: 'low' },
 };
 
+export function buildOptInActivationComment(name: string): string {
+  return `Opt-in: activate with \`agent-validator run --enable-review ${name} --context-file <task>\``;
+}
+
+function addOptInReviewComments(
+  yamlText: string,
+  reviewConfig: ReviewConfig,
+): string {
+  let currentReviewName: string | null = null;
+  return yamlText
+    .split('\n')
+    .map((line) => {
+      const reviewNameMatch = line.match(/^\s*-\s+([^:]+):$/);
+      if (reviewNameMatch) {
+        currentReviewName = reviewNameMatch[1] ?? null;
+      }
+
+      if (!line.match(/^(\s*)enabled: false$/)) return line;
+
+      const reviewName = reviewConfig.reviews.find(
+        (review) =>
+          review.name === currentReviewName && review.enabled === false,
+      )?.name;
+      if (!reviewName) return line;
+
+      return `${line} # ${buildOptInActivationComment(reviewName)}`;
+    })
+    .join('\n');
+}
+
 function gitSilent(args: string[], opts?: { timeout?: number }): string | null {
   try {
     return (
@@ -92,8 +122,9 @@ export async function writeConfigYml(
   const inlineReviews = reviewConfig.reviews.map((r) => {
     const obj: Record<string, unknown> = {
       builtin: r.builtin,
-      num_reviews: numReviews,
     };
+    if (r.enabled !== undefined) obj.enabled = r.enabled;
+    obj.num_reviews = numReviews;
     if (r.cli_preference) obj.cli_preference = r.cli_preference;
     if (r.model) obj.model = r.model;
     return { [r.name]: obj };
@@ -104,11 +135,12 @@ export async function writeConfigYml(
     rootEntryPoint.reviews = inlineReviews;
   }
 
-  const entryPointsBlock = YAML.stringify([rootEntryPoint], {
+  const entryPointsYaml = YAML.stringify([rootEntryPoint], {
     indent: 2,
     flowCollectionPadding: false,
-  })
-    .trimEnd()
+  }).trimEnd();
+
+  const entryPointsBlock = addOptInReviewComments(entryPointsYaml, reviewConfig)
     .split('\n')
     .map((line) => `  ${line}`)
     .join('\n');

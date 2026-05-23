@@ -1,4 +1,4 @@
-- [ ] Implement the change described by these files:
+- [x] Implement the change described by these files:
   - [proposal.md](proposal.md)
   - [specs/init-config/spec.md](specs/init-config/spec.md)
   - [design.md](design.md)

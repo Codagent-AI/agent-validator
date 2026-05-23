@@ -143,6 +143,29 @@ describe("init command with github-copilot", () => {
 		);
 	});
 
+	it("writes opt-in built-ins alongside the Copilot hybrid review config", async () => {
+		await program.parseAsync([
+			"node",
+			"test",
+			"init",
+			"--yes",
+			"--enable-builtin",
+			"task-compliance",
+		]);
+
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("code-quality:");
+		expect(configContent).toContain("security-and-errors:");
+		expect(configContent).toContain("task-compliance:");
+		expect(configContent).toContain("builtin: task-compliance");
+		expect(configContent).toContain(
+			"enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+		);
+	});
+
 	it("passes github-copilot through to agent-plugin even when adapter detection would find an existing install", async () => {
 		mockCopilotDetectPlugin.mockImplementation(async () => "user" as const);
 

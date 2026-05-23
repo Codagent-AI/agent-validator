@@ -323,6 +323,94 @@ describe("init command plugin installation", () => {
 		expect(configContent).not.toContain("    - codex");
 	});
 
+	it("writes only requested opt-in built-ins after confirmed local AI review opt-out", async () => {
+		selectedDevCliNames = ["claude"];
+		selectedReviewCliNames = ["codex"];
+		enableLocalAIReviews = false;
+		localAIReviewOptOutConfirmed = true;
+
+		await program.parseAsync([
+			"node",
+			"test",
+			"init",
+			"--enable-builtin",
+			"task-compliance",
+		]);
+
+		expect(checkboxMessages).not.toContain("Review CLIs:");
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent).toContain("reviews:");
+		expect(configContent).toContain("task-compliance:");
+		expect(configContent).toContain("builtin: task-compliance");
+		expect(configContent).toContain(
+			"enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+		);
+		expect(configContent).not.toContain("all-reviewers:");
+		expect(configContent).not.toContain("code-quality:");
+	});
+
+	it("writes comma-separated opt-in built-ins once each", async () => {
+		selectedDevCliNames = ["codex"];
+		selectedReviewCliNames = ["codex"];
+
+		await program.parseAsync([
+			"node",
+			"test",
+			"init",
+			"--enable-builtin",
+			"task-compliance,test-integrity,task-compliance",
+		]);
+
+		const configContent = await fs.readFile(
+			path.join(testDir, ".validator", "config.yml"),
+			"utf-8",
+		);
+		expect(configContent.match(/task-compliance:/g)).toHaveLength(1);
+		expect(configContent.match(/test-integrity:/g)).toHaveLength(1);
+		expect(configContent).toContain("builtin: task-compliance");
+		expect(configContent).toContain("builtin: test-integrity");
+		expect(configContent).toContain(
+			"--enable-review task-compliance --context-file <task>",
+		);
+		expect(configContent).toContain(
+			"--enable-review test-integrity --context-file <task>",
+		);
+	});
+
+	it("rejects unknown --enable-builtin names before scaffolding or plugin installation", async () => {
+		await expect(
+			program.parseAsync([
+				"node",
+				"test",
+				"init",
+				"--enable-builtin",
+				"gibberish",
+			]),
+		).rejects.toThrow(
+			"gibberish is not an opt-in built-in review. Accepted opt-in built-ins: task-compliance, test-integrity",
+		);
+
+		expect(await fs.stat(path.join(testDir, ".validator")).catch(() => null)).toBeNull();
+		expect(installAgentPluginForAgentsMock).not.toHaveBeenCalled();
+	});
+
+	it("rejects primary built-in names for --enable-builtin", async () => {
+		await expect(
+			program.parseAsync([
+				"node",
+				"test",
+				"init",
+				"--enable-builtin",
+				"code-quality",
+			]),
+		).rejects.toThrow(
+			"code-quality is not an opt-in built-in review. Accepted opt-in built-ins: task-compliance, test-integrity",
+		);
+	});
+
 	it("continues to reviewer CLI selection when local AI review opt-out is not confirmed", async () => {
 		selectedDevCliNames = ["claude"];
 		selectedReviewCliNames = ["codex"];
@@ -556,5 +644,38 @@ describe("init command plugin installation", () => {
 		expect(updatePluginMock).toHaveBeenCalledTimes(1);
 		expect(addMarketplaceMock).not.toHaveBeenCalled();
 		expect(installPluginMock).not.toHaveBeenCalled();
+	});
+
+	it("on re-run with --enable-builtin, warns with paste-ready YAML and leaves config unchanged", async () => {
+		await fs.mkdir(path.join(testDir, ".validator"), { recursive: true });
+		const configPath = path.join(testDir, ".validator", "config.yml");
+		await fs.writeFile(configPath, "existing: true\n");
+		listPluginsMock.mockImplementation(async () => [
+			{ name: "agent-validator", scope: "project", projectPath: testDir },
+		]);
+
+		await program.parseAsync([
+			"node",
+			"test",
+			"init",
+			"--yes",
+			"--enable-builtin",
+			"task-compliance",
+			"--enable-builtin",
+			"test-integrity",
+		]);
+
+		expect(await fs.readFile(configPath, "utf-8")).toBe("existing: true\n");
+		const output = logs.join("\n");
+		expect(output).toContain(
+			"Warning: --enable-builtin was passed but .validator/ already exists.",
+		);
+		expect(output).toContain("task-compliance");
+		expect(output).toContain("test-integrity");
+		expect(output).toContain("builtin: task-compliance");
+		expect(output).toContain("builtin: test-integrity");
+		expect(output).toContain(
+			"enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+		);
 	});
 });
