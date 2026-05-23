@@ -128,7 +128,7 @@ function buildOptInBuiltinPasteBlock(names: string[]): string {
   return names
     .map(
       (name) =>
-        `  - ${name}:\n      builtin: ${name}\n      enabled: false # ${buildOptInActivationComment(name)}`,
+        `  - ${name}:\n      builtin: ${name}\n      enabled: false # ${buildOptInActivationComment(name)}\n      num_reviews: 1`,
     )
     .join('\n');
 }

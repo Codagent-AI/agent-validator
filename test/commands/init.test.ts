@@ -677,5 +677,6 @@ describe("init command plugin installation", () => {
 		expect(output).toContain(
 			"enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
 		);
+		expect(output).toContain("      num_reviews: 1");
 	});
 });
