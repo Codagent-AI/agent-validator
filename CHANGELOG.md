@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.12.0
+
+### Minor Changes
+
+- [#141](https://github.com/Codagent-AI/agent-validator/pull/141) Add `--enable-builtin <name>` flag to `agent-validator init` that scaffolds opt-in built-in reviews (`task-compliance`, `test-integrity`) into `.validator/config.yml` with `enabled: false`, alongside the recommended review config and even when local AI reviews are opted out; when `.validator/` already exists, init prints a paste-ready YAML warning instead of editing the config.
+
 ## 1.11.4
 
 ### Patch Changes
