@@ -52,6 +52,13 @@ export function getBuiltInReviewNames(): string[] {
 }
 
 /**
+ * Return the names of opt-in built-in reviews (for init scaffolding flags).
+ */
+export function getOptInBuiltInReviewNames(): string[] {
+  return Object.keys(optInBuiltIns);
+}
+
+/**
  * Check if a review name uses the built-in prefix.
  */
 export function isBuiltInReview(name: string): boolean {

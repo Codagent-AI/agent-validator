@@ -8,6 +8,7 @@ const MODELS = {
 export type ReviewEntry = {
   name: string;
   builtin: string;
+  enabled?: boolean;
   cli_preference?: string[];
   model?: string;
 };
@@ -53,6 +54,14 @@ export function selectReviewConfig(reviewCLINames: string[]): ReviewConfig {
     type: 'fallback',
     reviews: [{ name: 'all-reviewers', builtin: 'all-reviewers' }],
   };
+}
+
+export function buildOptInBuiltinEntries(names: string[]): ReviewEntry[] {
+  return names.map((name) => ({
+    name,
+    builtin: name,
+    enabled: false,
+  }));
 }
 
 export function printReviewConfigExplanation(config: ReviewConfig): void {

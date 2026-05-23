@@ -215,6 +215,14 @@ entry_points:
 
 If `--enable-review task-compliance` appears to do nothing, the most common cause is a missing config entry like the one above.
 
+For new projects that need an opt-in built-in review scaffolded during setup, run init with `--enable-builtin <name>`:
+
+```bash
+agent-validator init --enable-builtin task-compliance
+```
+
+This creates the required config entry with `enabled: false` so a later `--enable-review task-compliance --context-file <task>` run can activate it.
+
 #### `--context-file <path>`
 
 Reads the file at `<path>` and injects its contents into review prompts that contain the `{{CONTEXT}}` placeholder. The path is resolved relative to the current working directory. If the file does not exist, the command exits with an error.
@@ -365,7 +373,10 @@ After `init`, run the `validator-setup` skill in your AI agent session to scan t
 #### Options
 
 - `--agents <names...>`: Development/coding agents to install for, space- or comma-separated. Skips only the development agent prompt; review agents are still prompted unless `--yes` is also passed.
+- `--enable-builtin <names...>`: Scaffold opt-in built-in reviews with `enabled: false`, space- or comma-separated. Accepted names are `task-compliance` and `test-integrity`. The entries are added alongside the recommended review config, even if you opt out of default local AI reviews.
 - `-y, --yes`: Skip all interactive prompts. Selects all detected CLIs as both development and review CLIs, defaults install scope to global/user, sets `num_reviews` to the detected count, and auto-confirms agent-plugin installation.
+
+When `.validator/` already exists, `init` never rewrites the existing config. If you pass `--enable-builtin` in that case, init prints a warning with the exact YAML block to paste under an entry point's `reviews:` list.
 
 ### `agent-validator ci`
 

@@ -244,6 +244,20 @@ Review the diff against the task requirements in the provided context.
 
 To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-validator-run)). The flag only unlocks reviews that are already configured and referenced by an entry point — it does not inject new reviews. A built-in like `task-compliance` still needs a config entry (inline or in `.validator/reviews/`) before `--enable-review` has any effect.
 
+For fresh projects, `agent-validator init --enable-builtin task-compliance` scaffolds the inline entry for you:
+
+```yaml
+entry_points:
+  - path: "."
+    reviews:
+      - task-compliance:
+          builtin: task-compliance
+          enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`
+          num_reviews: 1
+```
+
+The `--enable-builtin` flag is repeatable and accepts comma-separated values. Current accepted opt-in built-ins are `task-compliance` and `test-integrity`. When `.validator/` already exists, init does not edit `config.yml`; it prints paste-ready YAML for the requested entries instead.
+
 **Markdown review with external prompt file:**
 
 ```markdown
