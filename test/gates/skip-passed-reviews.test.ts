@@ -378,6 +378,41 @@ describe("Skip Passed Reviews", () => {
 			// Skipped slots should not appear as failures
 			expect(result.failures.length).toBe(0);
 		});
+
+		it("treats preserved_one_shot JSON as a passed slot", async () => {
+			await fs.writeFile(
+				path.join(testDir, "review_src_task-compliance_claude@1.2.json"),
+				JSON.stringify({
+					adapter: "claude",
+					timestamp: "2026-01-24T12:00:00Z",
+					status: "preserved_one_shot",
+					rawOutput: "",
+					violations: [
+						{
+							file: "src/app.ts",
+							line: 10,
+							issue: "Accepted skipped risk",
+							priority: "medium",
+							status: "skipped",
+						},
+					],
+					preservedFromIteration: 1,
+				}),
+			);
+
+			const result = (await findPreviousFailures(
+				testDir,
+				undefined,
+				true,
+			)) as PreviousFailuresResult;
+
+			expect(result.failures.length).toBe(0);
+			const passedSlot = result.passedSlots
+				.get("review_src_task-compliance")
+				?.get(1);
+			expect(passedSlot?.passIteration).toBe(2);
+			expect(passedSlot?.adapter).toBe("claude");
+		});
 	});
 
 	describe("backwards compatibility", () => {

@@ -26,6 +26,19 @@ describe("Review schemas - enabled field", () => {
 			});
 			expect(result.enabled).toBe(true);
 		});
+
+		it("defaults one_shot to false when not specified", () => {
+			const result = reviewYamlSchema.parse({ builtin: "code-quality" });
+			expect(result.one_shot).toBe(false);
+		});
+
+		it("accepts one_shot explicitly", () => {
+			const result = reviewYamlSchema.parse({
+				builtin: "code-quality",
+				one_shot: true,
+			});
+			expect(result.one_shot).toBe(true);
+		});
 	});
 
 	describe("reviewPromptFrontmatterSchema", () => {
@@ -42,6 +55,16 @@ describe("Review schemas - enabled field", () => {
 		it("accepts enabled: true explicitly", () => {
 			const result = reviewPromptFrontmatterSchema.parse({ enabled: true });
 			expect(result.enabled).toBe(true);
+		});
+
+		it("defaults one_shot to false when not specified", () => {
+			const result = reviewPromptFrontmatterSchema.parse({});
+			expect(result.one_shot).toBe(false);
+		});
+
+		it("accepts one_shot explicitly", () => {
+			const result = reviewPromptFrontmatterSchema.parse({ one_shot: true });
+			expect(result.one_shot).toBe(true);
 		});
 	});
 });

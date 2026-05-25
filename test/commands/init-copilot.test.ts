@@ -162,7 +162,7 @@ describe("init command with github-copilot", () => {
 		expect(configContent).toContain("task-compliance:");
 		expect(configContent).toContain("builtin: task-compliance");
 		expect(configContent).toContain(
-			"enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+			"enabled: false # Opt-in, one-shot by default: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
 		);
 	});
 

@@ -32,6 +32,7 @@ function makeReviewConfig(
 		run_in_ci: true,
 		run_locally: true,
 		enabled: true,
+		one_shot: false,
 		...overrides,
 	};
 }

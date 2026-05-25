@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.13.0
+
+### Minor Changes
+
+- [#142](https://github.com/Codagent-AI/agent-validator/pull/142) Add one-shot review suppression so AI reviews configured with `one_shot: true` (the default for the built-in `task-compliance` review) dispatch only on the first iteration; on reruns the gate preserves prior findings, synthesises pass/fail from stored violation state (`new` → fail, all `fixed` → pass, any `skipped` → passed_with_warnings), and records a new `preserved_one_shot` iteration log status that the log parser recognises as a pass-equivalent.
+
 ## 1.12.0
 
 ### Minor Changes

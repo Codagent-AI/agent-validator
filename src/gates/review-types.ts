@@ -1,4 +1,5 @@
 import type { LoadedReviewGateConfig } from '../config/types.js';
+import type { PreviousViolation } from './result.js';
 
 export { MAX_BUFFER_BYTES } from '../constants.js';
 export const MAX_LOG_BUFFER_SIZE = 10000;
@@ -53,15 +54,7 @@ export type ReviewConfig = LoadedReviewGateConfig;
 export interface ReviewJsonOutput {
   status: 'pass' | 'fail';
   message?: string;
-  violations?: Array<{
-    file: string;
-    line: number | string;
-    issue: string;
-    fix?: string;
-    priority: 'critical' | 'high' | 'medium' | 'low';
-    status: 'new' | 'fixed' | 'skipped';
-    result?: string | null;
-  }>;
+  violations?: PreviousViolation[];
 }
 
 export interface ReviewOutputEntry {

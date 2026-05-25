@@ -106,13 +106,17 @@ function addCheckFile(
 }
 
 /**
- * Checks if a JSON review file has status "pass" or "skipped_prior_pass".
+ * Checks if a JSON review file has a non-failing terminal status.
  */
 export async function isJsonReviewPassing(jsonPath: string): Promise<boolean> {
   try {
     const content = await fs.readFile(jsonPath, 'utf-8');
     const data: ReviewFullJsonOutput = JSON.parse(content);
-    return data.status === 'pass' || data.status === 'skipped_prior_pass';
+    return (
+      data.status === 'pass' ||
+      data.status === 'skipped_prior_pass' ||
+      data.status === 'preserved_one_shot'
+    );
   } catch {
     return false;
   }
@@ -125,6 +129,7 @@ export async function isLogReviewPassing(logPath: string): Promise<boolean> {
   try {
     const content = await fs.readFile(logPath, 'utf-8');
     if (content.includes('Status: skipped_prior_pass')) return true;
+    if (content.includes('Status: preserved_one_shot')) return true;
     if (content.includes('--- Review Output')) {
       return content.includes('Status: PASS');
     }

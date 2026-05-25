@@ -63,6 +63,7 @@ export const reviewGateSchema = z.object({
   run_locally: z.boolean().default(true),
   timeout: z.number().optional(),
   enabled: z.boolean().default(true),
+  one_shot: z.boolean().default(false),
 });
 
 export const reviewPromptFrontmatterSchema = z
@@ -77,11 +78,17 @@ export const reviewPromptFrontmatterSchema = z
     prompt_file: z.string().optional(),
     skill_name: z.string().optional(),
     enabled: z.boolean().default(true),
+    one_shot: z.boolean().optional(),
   })
   .refine((data) => !(data.prompt_file && data.skill_name), {
     message:
       "'prompt_file' and 'skill_name' are mutually exclusive. Specify only one.",
-  });
+  })
+  .transform((data) => ({
+    ...data,
+    one_shot: data.one_shot ?? false,
+    oneShotExplicit: data.one_shot !== undefined,
+  }));
 
 export const reviewYamlSchema = z
   .object({
@@ -96,6 +103,7 @@ export const reviewYamlSchema = z
     skill_name: z.string().optional(),
     builtin: z.string().optional(),
     enabled: z.boolean().default(true),
+    one_shot: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     const sources = [data.prompt_file, data.skill_name, data.builtin].filter(
@@ -115,7 +123,12 @@ export const reviewYamlSchema = z
           "YAML review files must specify exactly one of 'prompt_file', 'skill_name', or 'builtin'.",
       });
     }
-  });
+  })
+  .transform((data) => ({
+    ...data,
+    one_shot: data.one_shot ?? false,
+    oneShotExplicit: data.one_shot !== undefined,
+  }));
 
 /** A single item in an entry point's checks array: either a name string or an inline definition. */
 export const entryPointCheckItemSchema = z.union([

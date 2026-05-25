@@ -213,6 +213,8 @@ entry_points:
           enabled: false
 ```
 
+The built-in `task-compliance` review defaults to one-shot behavior. After its first review in a log session, reruns preserve the stored violation state instead of dispatching another AI review.
+
 If `--enable-review task-compliance` appears to do nothing, the most common cause is a missing config entry like the one above.
 
 For new projects that need an opt-in built-in review scaffolded during setup, run init with `--enable-builtin <name>`:

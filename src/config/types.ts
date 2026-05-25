@@ -56,6 +56,7 @@ export interface LoadedReviewGateConfig {
   run_locally: boolean;
   timeout?: number;
   enabled: boolean;
+  one_shot: boolean;
 }
 
 /** Entry point after inline gates have been extracted (string-only arrays). */

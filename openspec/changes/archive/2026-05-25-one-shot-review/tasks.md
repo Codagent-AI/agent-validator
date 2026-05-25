@@ -1,0 +1,6 @@
+- [x] Implement the change described by these files:
+  - [proposal.md](proposal.md)
+  - [specs/review-config/spec.md](specs/review-config/spec.md)
+  - [specs/run-lifecycle/spec.md](specs/run-lifecycle/spec.md)
+  - [specs/dynamic-review-control/spec.md](specs/dynamic-review-control/spec.md)
+  - [design.md](design.md)
