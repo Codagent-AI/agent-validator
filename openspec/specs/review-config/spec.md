@@ -10,6 +10,8 @@ YAML review files MUST specify exactly one of `prompt_file`, `skill_name`, or `b
 
 All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `enabled` boolean attribute that defaults to `true`. When `enabled` is `false`, the review is opt-in and SHALL only run when explicitly activated via the `--enable-review` CLI option.
 
+All review file formats MUST support an optional `one_shot` boolean attribute. When omitted, the default value SHALL be `false`, except when the resolved `builtin` is `task-compliance`, in which case the default SHALL be `true`. An explicit `one_shot: false` on a `builtin: task-compliance` review SHALL override the default and disable one-shot behaviour for that review. When `one_shot` is `true`, the review's rerun behaviour follows the rules in the run-lifecycle capability ("One-shot review suppression on rerun"). The `one_shot` attribute SHALL be exposed on the loaded review config so downstream code (job generation, review dispatch) can read it.
+
 #### Scenario: YAML review with prompt_file
 - **GIVEN** a file `.validator/reviews/security.yml` with content:
   ```yaml
@@ -52,6 +54,7 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **AND** `run_in_ci` defaults to true
 - **AND** `run_locally` defaults to true
 - **AND** `enabled` defaults to true
+- **AND** `one_shot` defaults to `false`
 
 #### Scenario: YAML review must specify exactly one prompt source
 - **GIVEN** a file `.validator/reviews/invalid.yml` with both `prompt_file` and `skill_name`
@@ -105,6 +108,60 @@ All review file formats (`.md` frontmatter and `.yml`/`.yaml`) MUST support an `
 - **AND** `.validator/reviews/code-quality.yml` also exists
 - **WHEN** the configuration is loaded
 - **THEN** the system MUST reject with a validation error naming the conflicting review
+
+#### Scenario: YAML review with builtin task-compliance defaults one_shot to true
+- **GIVEN** a file `.validator/reviews/task-compliance.yml` with content:
+  ```yaml
+  builtin: task-compliance
+  enabled: false
+  ```
+- **WHEN** the configuration is loaded
+- **THEN** the loaded review SHALL have `one_shot` set to `true`
+- **AND** the loaded review SHALL have `enabled` set to `false`
+
+#### Scenario: YAML review with builtin task-compliance honours explicit one_shot false
+- **GIVEN** a file `.validator/reviews/task-compliance.yml` with content:
+  ```yaml
+  builtin: task-compliance
+  enabled: false
+  one_shot: false
+  ```
+- **WHEN** the configuration is loaded
+- **THEN** the loaded review SHALL have `one_shot` set to `false`
+
+#### Scenario: YAML review with non-task-compliance builtin defaults one_shot to false
+- **GIVEN** a file `.validator/reviews/code-quality.yml` with content:
+  ```yaml
+  builtin: code-quality
+  ```
+- **WHEN** the configuration is loaded
+- **THEN** the loaded review SHALL have `one_shot` set to `false`
+
+#### Scenario: YAML review with explicit one_shot true on user-defined prompt
+- **GIVEN** a file `.validator/reviews/acceptance.yml` with content:
+  ```yaml
+  prompt_file: prompts/acceptance.md
+  one_shot: true
+  ```
+- **AND** `.validator/prompts/acceptance.md` exists
+- **WHEN** the configuration is loaded
+- **THEN** the loaded review SHALL have `one_shot` set to `true`
+
+#### Scenario: Markdown review with one_shot true in frontmatter
+- **GIVEN** a file `.validator/reviews/acceptance.md` with frontmatter containing `one_shot: true`
+- **WHEN** the configuration is loaded
+- **THEN** the loaded review SHALL have `one_shot` set to `true`
+
+#### Scenario: Inline review with one_shot true
+- **GIVEN** `config.yml` defines an inline review:
+  ```yaml
+  reviews:
+    acceptance:
+      prompt_file: prompts/acceptance.md
+      one_shot: true
+  ```
+- **WHEN** the configuration is loaded
+- **THEN** the loaded review "acceptance" SHALL have `one_shot` set to `true`
 
 ### Requirement: Markdown reviews support prompt_file and skill_name in frontmatter
 Existing `.md` review files MUST support optional `prompt_file` or `skill_name` fields in their YAML frontmatter. These fields are mutually exclusive. When `prompt_file` is specified, the file content MUST override the markdown body. When `skill_name` is specified, the markdown body MUST be ignored and the skill MUST be used instead.
