@@ -14,6 +14,7 @@ import {
   noAdaptersResult,
 } from './review-agg.js';
 import { getDiff } from './review-diff.js';
+import type { DispatchForDiffArgs } from './review-dispatch-types.js';
 import {
   applyRerunFiltering,
   buildReviewPrompt,
@@ -35,12 +36,14 @@ import {
   type LoggerFactory,
   logSkipMessages,
 } from './review-helpers.js';
+import { prepareOneShotPreservation } from './review-one-shot.js';
+import { invokeAdapter, omitFixBase } from './review-runtime-helpers.js';
 import type {
   EvaluationResult,
   ReviewConfig,
+  ReviewOutputEntry,
   SingleReviewResult,
 } from './review-types.js';
-import { REVIEW_ADAPTER_TIMEOUT_MS } from './review-types.js';
 
 export { JSON_SYSTEM_INSTRUCTION } from './review-types.js';
 
@@ -121,47 +124,132 @@ export class ReviewGateExecutor {
     await mainLogger(`Entry point: ${entryPointPath}\n`);
     await mainLogger(`Base branch: ${baseBranch}\n`);
 
-    const diff = await this.getDiff(entryPointPath, baseBranch, changeOptions);
+    const required = config.num_reviews ?? 1;
+    const oneShotState = await prepareOneShotPreservation({
+      jobId,
+      config,
+      required,
+      loggerFactory,
+      logPathsSet,
+      logPaths,
+      logDir,
+    });
+    if (oneShotState.outputs.length === required) {
+      return buildFinalResult(
+        jobId,
+        startTime,
+        logPaths,
+        oneShotState.outputs,
+        [],
+        mainLogger,
+      );
+    }
+
+    const effectiveChangeOptions = oneShotState.forceFirstRun
+      ? omitFixBase(changeOptions)
+      : changeOptions;
+    const effectivePreviousFailures = oneShotState.forceFirstRun
+      ? undefined
+      : previousFailures;
+
+    const diff = await this.getDiff(
+      entryPointPath,
+      baseBranch,
+      effectiveChangeOptions,
+    );
     logDiffStats(diff, mainLogger);
     if (!diff.trim()) {
+      if (oneShotState.outputs.length > 0) {
+        return buildFinalResult(
+          jobId,
+          startTime,
+          logPaths,
+          oneShotState.outputs,
+          [],
+          mainLogger,
+        );
+      }
       return emptyDiffResult(jobId, startTime, logPaths, mainLogger);
     }
 
-    const preferences = config.cli_preference || [];
-    const required = config.num_reviews ?? 1;
-    const parallel = config.parallel ?? false;
-    const healthyAdapters = await collectHealthyAdapters(
-      preferences,
-      mainLogger,
-      logDir,
-    );
-    if (healthyAdapters.length === 0) {
-      return noAdaptersResult(jobId, startTime, logPaths, mainLogger);
-    }
-    log.debug(`Healthy adapters: ${healthyAdapters.join(', ')}`);
-
-    const assignments = generateReviewAssignments(required, healthyAdapters);
-    await applyPassedSlotSkips(assignments, required, passedSlots, mainLogger);
-    await logSkipMessages(assignments, mainLogger);
-
-    return this.dispatchAndCollect(
+    return this.dispatchForDiff({
       jobId,
       config,
       diff,
-      assignments,
       required,
-      parallel,
+      parallel: config.parallel ?? false,
       mainLogger,
       getAdapterLogger,
       loggerFactory,
       logPaths,
       logPathsSet,
       startTime,
-      previousFailures,
+      previousFailures: effectivePreviousFailures,
       rerunThreshold,
+      passedSlots,
       logDir,
       adapterConfigs,
       contextContent,
+      oneShotOutputs: oneShotState.outputs,
+      runningSlotIndexes: oneShotState.runningSlotIndexes,
+    });
+  }
+
+  private async dispatchForDiff(
+    args: DispatchForDiffArgs,
+  ): Promise<GateResult> {
+    const healthyAdapters = await collectHealthyAdapters(
+      args.config.cli_preference || [],
+      args.mainLogger,
+      args.logDir,
+    );
+    if (healthyAdapters.length === 0) {
+      return noAdaptersResult(
+        args.jobId,
+        args.startTime,
+        args.logPaths,
+        args.mainLogger,
+      );
+    }
+    log.debug(`Healthy adapters: ${healthyAdapters.join(', ')}`);
+
+    const assignments = generateReviewAssignments(
+      args.required,
+      healthyAdapters,
+    );
+    const effectiveAssignments =
+      args.runningSlotIndexes.size > 0
+        ? assignments.filter((assignment) =>
+            args.runningSlotIndexes.has(assignment.reviewIndex),
+          )
+        : assignments;
+    await applyPassedSlotSkips(
+      assignments,
+      args.required,
+      args.passedSlots,
+      args.mainLogger,
+    );
+    await logSkipMessages(effectiveAssignments, args.mainLogger);
+
+    return this.dispatchAndCollect(
+      args.jobId,
+      args.config,
+      args.diff,
+      effectiveAssignments,
+      args.required,
+      args.parallel,
+      args.mainLogger,
+      args.getAdapterLogger,
+      args.loggerFactory,
+      args.logPaths,
+      args.logPathsSet,
+      args.startTime,
+      args.previousFailures,
+      args.rerunThreshold,
+      args.logDir,
+      args.adapterConfigs,
+      args.contextContent,
+      args.oneShotOutputs,
     );
   }
 
@@ -188,6 +276,7 @@ export class ReviewGateExecutor {
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
     contextContent?: string,
+    preservedOutputs: ReviewOutputEntry[] = [],
   ): Promise<GateResult> {
     const dispatchMsg = `Dispatching ${required} review(s) via round-robin: ${assignments.map((a) => `${a.adapter}@${a.reviewIndex}`).join(', ')}`;
     log.debug(dispatchMsg);
@@ -241,7 +330,7 @@ export class ReviewGateExecutor {
       jobId,
       startTime,
       logPaths,
-      outputs,
+      [...preservedOutputs, ...outputs],
       skippedSlotOutputs,
       mainLogger,
     );
@@ -398,27 +487,4 @@ export class ReviewGateExecutor {
   ): Promise<string> {
     return getDiff(entryPointPath, baseBranch, options);
   }
-}
-
-async function invokeAdapter(
-  adapter: CLIAdapter,
-  prompt: string,
-  diff: string,
-  config: ReviewConfig,
-  adapterCfg: AdapterConfig | undefined,
-  adapterLogger: (msg: string) => Promise<void>,
-): Promise<string> {
-  return adapter.execute({
-    prompt,
-    diff,
-    model: adapterCfg?.model ?? config.model,
-    timeoutMs: config.timeout
-      ? config.timeout * 1000
-      : REVIEW_ADAPTER_TIMEOUT_MS,
-    onOutput: (chunk: string) => {
-      adapterLogger(chunk);
-    },
-    allowToolUse: adapterCfg?.allow_tool_use,
-    thinkingBudget: adapterCfg?.thinking_budget,
-  });
 }

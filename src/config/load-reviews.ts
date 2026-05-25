@@ -18,6 +18,10 @@ async function buildReviewFromYaml(
   configDir: string,
   source: string,
 ): Promise<LoadedReviewGateConfig> {
+  const oneShot =
+    parsed.builtin === 'task-compliance' && !parsed.oneShotExplicit
+      ? true
+      : parsed.one_shot;
   const review: LoadedReviewGateConfig = {
     name,
     prompt: source,
@@ -29,6 +33,7 @@ async function buildReviewFromYaml(
     run_locally: parsed.run_locally,
     timeout: parsed.timeout,
     enabled: parsed.enabled,
+    one_shot: oneShot,
   };
   if (parsed.skill_name) {
     review.skillName = parsed.skill_name;
@@ -68,6 +73,7 @@ async function loadMarkdownReview(
     run_locally: parsedFrontmatter.run_locally,
     timeout: parsedFrontmatter.timeout,
     enabled: parsedFrontmatter.enabled,
+    one_shot: parsedFrontmatter.one_shot,
   };
 
   // If prompt_file is specified, override the markdown body

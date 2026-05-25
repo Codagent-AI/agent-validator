@@ -658,4 +658,284 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 		expect(subResult?.errorCount).toBe(0);
 		expect(subResult?.status).toBe("pass");
 	});
+
+	it("suppresses one-shot rerun dispatch and carries forward new violations", async () => {
+		await fs.writeFile(
+			path.join(RERUN_DIR, "review_src_task-compliance_mock-adapter@1.1.json"),
+			JSON.stringify({
+				adapter: "mock-adapter",
+				timestamp: "2026-01-24T12:00:00Z",
+				status: "fail",
+				rawOutput: "",
+				violations: [
+					{
+						file: "src/task.ts",
+						line: 12,
+						issue: "Missing required behavior",
+						fix: "Implement the behavior",
+						priority: "high",
+						status: "new",
+					},
+				],
+			}),
+		);
+		logger = new Logger(RERUN_DIR);
+		await logger.init();
+		let executeCalls = 0;
+		currentExecute = async () => {
+			executeCalls += 1;
+			return JSON.stringify({ status: "pass", message: "should not run" });
+		};
+
+		const executor = new ReviewGateExecutor();
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async () => {
+			throw new Error("diff should not be computed for preserved one-shot");
+		};
+
+		const result = await executor.execute(
+			"review:src:task-compliance",
+			{
+				name: "task-compliance",
+				cli_preference: ["mock-adapter"],
+				num_reviews: 1,
+				prompt: "task-compliance",
+				promptContent: "Task compliance",
+				parallel: true,
+				run_in_ci: true,
+				run_locally: true,
+				enabled: true,
+				one_shot: true,
+			},
+			"src/",
+			logger.createLoggerFactory("review:src:task-compliance"),
+			"main",
+			undefined,
+			{ uncommitted: true, fixBase: "narrow-base" },
+			"high",
+			undefined,
+			RERUN_DIR,
+		);
+
+		expect(executeCalls).toBe(0);
+		expect(result.status).toBe("fail");
+		expect(result.subResults?.[0]?.errorCount).toBe(1);
+
+		const preservedPath = path.join(
+			RERUN_DIR,
+			"review_src_task-compliance_mock-adapter@1.2.json",
+		);
+		const preserved = JSON.parse(await fs.readFile(preservedPath, "utf-8"));
+		expect(preserved.status).toBe("fail");
+		expect(preserved.rawOutput).toBe("");
+		expect(preserved.preservedFromIteration).toBe(1);
+		expect(preserved.violations[0].status).toBe("new");
+	});
+
+	it("writes preserved_one_shot for one-shot rerun when all violations are fixed or skipped", async () => {
+		await fs.writeFile(
+			path.join(RERUN_DIR, "review_src_task-compliance_mock-adapter@1.1.json"),
+			JSON.stringify({
+				adapter: "mock-adapter",
+				timestamp: "2026-01-24T12:00:00Z",
+				status: "fail",
+				rawOutput: "",
+				violations: [
+					{
+						file: "src/task.ts",
+						line: 12,
+						issue: "Fixed behavior",
+						priority: "high",
+						status: "fixed",
+					},
+					{
+						file: "src/task.ts",
+						line: 18,
+						issue: "Accepted risk",
+						priority: "medium",
+						status: "skipped",
+						result: "False positive",
+					},
+				],
+			}),
+		);
+		logger = new Logger(RERUN_DIR);
+		await logger.init();
+		let executeCalls = 0;
+		currentExecute = async () => {
+			executeCalls += 1;
+			return JSON.stringify({ status: "fail", violations: [] });
+		};
+
+		const executor = new ReviewGateExecutor();
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async () => {
+			throw new Error("diff should not be computed for preserved one-shot");
+		};
+
+		const result = await executor.execute(
+			"review:src:task-compliance",
+			{
+				name: "task-compliance",
+				cli_preference: ["mock-adapter"],
+				num_reviews: 1,
+				prompt: "task-compliance",
+				promptContent: "Task compliance",
+				parallel: true,
+				run_in_ci: true,
+				run_locally: true,
+				enabled: true,
+				one_shot: true,
+			},
+			"src/",
+			logger.createLoggerFactory("review:src:task-compliance"),
+			"main",
+			undefined,
+			{ uncommitted: true, fixBase: "narrow-base" },
+			"high",
+			undefined,
+			RERUN_DIR,
+		);
+
+		expect(executeCalls).toBe(0);
+		expect(result.status).toBe("pass");
+		expect(result.subResults?.[0]?.errorCount).toBe(0);
+
+		const preservedPath = path.join(
+			RERUN_DIR,
+			"review_src_task-compliance_mock-adapter@1.2.json",
+		);
+		const preserved = JSON.parse(await fs.readFile(preservedPath, "utf-8"));
+		expect(preserved.status).toBe("preserved_one_shot");
+		expect(preserved.preservedFromIteration).toBe(1);
+		expect(preserved.violations.map((v: { status: string }) => v.status)).toEqual([
+			"fixed",
+			"skipped",
+		]);
+	});
+
+	it("redispatches a one-shot review with first-run prompt when prior JSON errored", async () => {
+		await fs.writeFile(
+			path.join(RERUN_DIR, "review_src_task-compliance_mock-adapter@1.1.json"),
+			JSON.stringify({
+				adapter: "mock-adapter",
+				timestamp: "2026-01-24T12:00:00Z",
+				status: "error",
+				rawOutput: "adapter failed",
+				violations: [],
+			}),
+		);
+		logger = new Logger(RERUN_DIR);
+		await logger.init();
+
+		let capturedPrompt = "";
+		let capturedOptions: { fixBase?: string } | undefined;
+		currentExecute = async (request) => {
+			capturedPrompt = (request as { prompt: string }).prompt;
+			return JSON.stringify({ status: "pass", message: "OK" });
+		};
+
+		const executor = new ReviewGateExecutor();
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async (
+			_entry: string,
+			_base: string,
+			options?: { fixBase?: string },
+		) => {
+			capturedOptions = options;
+			return "mock diff content";
+		};
+
+		const previousFailures = new Map();
+		previousFailures.set("1", [
+			{ file: "file.ts", line: 1, issue: "old issue", status: "fixed" },
+		]);
+
+		const result = await executor.execute(
+			"review:src:task-compliance",
+			{
+				name: "task-compliance",
+				cli_preference: ["mock-adapter"],
+				num_reviews: 1,
+				prompt: "task-compliance",
+				promptContent: "Task compliance",
+				parallel: true,
+				run_in_ci: true,
+				run_locally: true,
+				enabled: true,
+				one_shot: true,
+			},
+			"src/",
+			logger.createLoggerFactory("review:src:task-compliance"),
+			"main",
+			previousFailures,
+			{ uncommitted: true, fixBase: "narrow-base" },
+			"high",
+			undefined,
+			RERUN_DIR,
+		);
+
+		expect(result.status).toBe("pass");
+		expect(capturedPrompt).not.toContain("RERUN MODE");
+		expect(capturedOptions?.fixBase).toBeUndefined();
+	});
+
+	it("does not suppress non-one-shot reviews on rerun", async () => {
+		await fs.writeFile(
+			path.join(RERUN_DIR, "review_src_code-quality_mock-adapter@1.1.json"),
+			JSON.stringify({
+				adapter: "mock-adapter",
+				timestamp: "2026-01-24T12:00:00Z",
+				status: "fail",
+				rawOutput: "",
+				violations: [
+					{
+						file: "src/task.ts",
+						line: 12,
+						issue: "Needs review",
+						priority: "high",
+						status: "new",
+					},
+				],
+			}),
+		);
+		logger = new Logger(RERUN_DIR);
+		await logger.init();
+		let executeCalls = 0;
+		currentExecute = async () => {
+			executeCalls += 1;
+			return JSON.stringify({ status: "pass", message: "OK" });
+		};
+
+		const executor = new ReviewGateExecutor();
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async () => "mock diff content";
+
+		const result = await executor.execute(
+			"review:src:code-quality",
+			{
+				name: "code-quality",
+				cli_preference: ["mock-adapter"],
+				num_reviews: 1,
+				prompt: "code-quality",
+				promptContent: "Code quality",
+				parallel: true,
+				run_in_ci: true,
+				run_locally: true,
+				enabled: true,
+				one_shot: false,
+			},
+			"src/",
+			logger.createLoggerFactory("review:src:code-quality"),
+			"main",
+			undefined,
+			{ uncommitted: true, fixBase: "narrow-base" },
+			"high",
+			undefined,
+			RERUN_DIR,
+		);
+
+		expect(result.status).toBe("pass");
+		expect(executeCalls).toBe(1);
+	});
 });

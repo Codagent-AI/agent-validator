@@ -133,4 +133,4 @@ When `num_reviews > 1` in rerun mode:
 
 ### Gate Result Status Values
 - Check gates: `pass`, `fail`, `error`
-- Review gates: `pass`, `fail`, `error`, `skipped_prior_pass`
+- Review gates: `pass`, `fail`, `error`, `skipped_prior_pass`, `preserved_one_shot`

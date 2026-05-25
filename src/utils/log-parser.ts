@@ -54,7 +54,11 @@ export async function parseJsonReviewFile(
     const parsed = parseReviewFilename(filename);
     const jobId = parsed ? parsed.jobId : filename.replace(/\.\d+\.json$/, '');
 
-    if (data.status === 'pass' || data.status === 'skipped_prior_pass') {
+    if (
+      data.status === 'pass' ||
+      data.status === 'skipped_prior_pass' ||
+      data.status === 'preserved_one_shot'
+    ) {
       return null;
     }
 

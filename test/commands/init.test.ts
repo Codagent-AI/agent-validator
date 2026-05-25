@@ -346,7 +346,7 @@ describe("init command plugin installation", () => {
 		expect(configContent).toContain("task-compliance:");
 		expect(configContent).toContain("builtin: task-compliance");
 		expect(configContent).toContain(
-			"enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+			"enabled: false # Opt-in, one-shot by default: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
 		);
 		expect(configContent).not.toContain("all-reviewers:");
 		expect(configContent).not.toContain("code-quality:");
@@ -678,7 +678,7 @@ describe("init command plugin installation", () => {
 		expect(output).toContain("          builtin: task-compliance");
 		expect(output).toContain("          builtin: test-integrity");
 		expect(output).toContain(
-			"          enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
+			"          enabled: false # Opt-in, one-shot by default: activate with `agent-validator run --enable-review task-compliance --context-file <task>`",
 		);
 		expect(output).toContain("          num_reviews: 1");
 	});

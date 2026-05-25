@@ -25,6 +25,9 @@ const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
 };
 
 export function buildOptInActivationComment(name: string): string {
+  if (name === 'task-compliance') {
+    return `Opt-in, one-shot by default: activate with \`agent-validator run --enable-review ${name} --context-file <task>\``;
+  }
   return `Opt-in: activate with \`agent-validator run --enable-review ${name} --context-file <task>\``;
 }
 

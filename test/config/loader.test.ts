@@ -260,6 +260,7 @@ entry_points:
 		expect(review!.parallel).toBe(true);
 		expect(review!.run_in_ci).toBe(true);
 		expect(review!.run_locally).toBe(true);
+		expect(review!.one_shot).toBe(false);
 	});
 
 	it("should allow user-defined .md review and YAML builtin review to coexist", async () => {
@@ -498,5 +499,70 @@ entry_points:
 		);
 		const config = await loadConfig(tmpDir);
 		expect(config.reviews["task-compliance"]!.enabled).toBe(false);
+	});
+
+	it("should default builtin task-compliance to one_shot true", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - task-compliance
+`,
+			{
+				"task-compliance.yml": `builtin: task-compliance\nenabled: false\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+		expect(config.reviews["task-compliance"]!.one_shot).toBe(true);
+		expect(config.reviews["task-compliance"]!.enabled).toBe(false);
+	});
+
+	it("should honor explicit one_shot false for builtin task-compliance", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - task-compliance
+`,
+			{
+				"task-compliance.yml": `builtin: task-compliance\nenabled: false\none_shot: false\n`,
+			},
+		);
+		const config = await loadConfig(tmpDir);
+		expect(config.reviews["task-compliance"]!.one_shot).toBe(false);
+	});
+
+	it("should load one_shot from inline reviews", async () => {
+		await setupTestEnv(
+			`
+base_branch: origin/main
+cli:
+  default_preference:
+    - claude
+entry_points:
+  - path: "."
+    reviews:
+      - acceptance:
+          prompt_file: prompts/acceptance.md
+          one_shot: true
+`,
+		);
+		await fs.mkdir(path.join(tmpDir, ".validator", "prompts"));
+		await fs.writeFile(
+			path.join(tmpDir, ".validator", "prompts", "acceptance.md"),
+			"# Acceptance\n",
+		);
+		const config = await loadConfig(tmpDir);
+		expect(config.reviews.acceptance!.one_shot).toBe(true);
 	});
 });

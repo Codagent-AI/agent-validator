@@ -175,6 +175,8 @@ YAML review files must specify exactly one of `prompt_file`, `skill_name`, or `b
 
 - **enabled**: boolean (default: `true`)
   Whether this review runs by default. Set to `false` to make the review opt-in — it will be skipped unless explicitly activated at runtime via `--enable-review <name>`. Useful for reviews that are only meaningful in specific contexts (e.g. task-compliance reviews that require an active task context).
+- **one_shot**: boolean (default: `false`, or `true` for `builtin: task-compliance`)
+  When `true`, the review runs once per active log session. On reruns, Agent Validator preserves the latest review JSON and derives the gate result from stored violation statuses instead of dispatching another AI review. Set `one_shot: false` on `builtin: task-compliance` to opt out.
 - **cli_preference**: string[] (optional)
   Ordered list of review CLI tools to try (e.g. `gemini`, `codex`, `claude`, `github-copilot`). If omitted, the project-level `cli.default_preference` is used.
 - **num_reviews**: number (default: `1`)
@@ -252,7 +254,7 @@ entry_points:
     reviews:
       - task-compliance:
           builtin: task-compliance
-          enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`
+          enabled: false # Opt-in, one-shot by default: activate with `agent-validator run --enable-review task-compliance --context-file <task>`
           num_reviews: 1
 ```
 
