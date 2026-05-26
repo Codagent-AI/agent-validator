@@ -63,8 +63,11 @@ jobs:
       - name: Create GitHub Release
         run: |
           TAG="v${{ steps.check.outputs.version }}"
+          RELEASE_API_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            "$RELEASE_API_URL" >/dev/null; then
             echo "GitHub release $TAG already exists."
             exit 0
           fi
