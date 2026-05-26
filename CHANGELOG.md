@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- [#143](https://github.com/Codagent-AI/agent-validator/pull/143) Update the bundled `agent-plugin` dependency to 0.1.4 and harden Homebrew formula version validation so generated formula URLs must match the release version.
+- [#143](https://github.com/Codagent-AI/agent-validator/pull/143) Update the bundled `agent-plugin` dependency to 0.1.4, harden Homebrew formula version validation so generated formula URLs must match the release version, and tighten `/validator-setup` so init-created `.validator/` scaffolds are treated as fresh installs instead of completed prior setups.
 
 ## 1.13.0
 
