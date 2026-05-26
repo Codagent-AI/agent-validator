@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
       - name: Setup Node.js (for npm publish)
         uses: actions/setup-node@v4
@@ -73,7 +75,7 @@ jobs:
             --title "$TAG" \
             --notes "See [CHANGELOG.md](https://github.com/Codagent-AI/agent-validator/blob/main/CHANGELOG.md) for details."
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
       - name: Resolve npm tarball metadata
         id: npm-tarball
