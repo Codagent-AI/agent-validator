@@ -60,15 +60,20 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.check.outputs.published == 'false'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.check.outputs.version }}
-          name: v${{ steps.check.outputs.version }}
-          body: |
-            See [CHANGELOG.md](https://github.com/Codagent-AI/agent-validator/blob/main/CHANGELOG.md) for details.
-          generate_release_notes: false
+        run: |
+          TAG="v${{ steps.check.outputs.version }}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists."
+            exit 0
+          fi
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes "See [CHANGELOG.md](https://github.com/Codagent-AI/agent-validator/blob/main/CHANGELOG.md) for details."
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Resolve npm tarball metadata
         id: npm-tarball
