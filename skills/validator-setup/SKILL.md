@@ -18,6 +18,14 @@ Read `.validator/config.yml`. If the file does not exist, tell the user to run `
 
 Read the `entry_points` field from `.validator/config.yml`.
 
+Before deciding whether this project is already configured, inspect the git state of `.validator/`:
+
+- If this is a git repo, run `git status --porcelain -- .validator`.
+- If `.validator/` or `.validator/config.yml` is untracked or newly added, treat this as a fresh install even though the directory exists. `agent-validate init` creates the scaffold first; `/validator-setup` still needs to configure checks and entry points.
+- If git is unavailable, the project is not a git repo, or the status is ambiguous, do not claim Agent Validator was previously set up. Ask the user whether this is a new install or an existing configuration they want to modify.
+
+Do not conclude "nothing to do" or "already set up" merely because `.validator/` exists. Only treat the project as an existing setup when the committed config already contains meaningful entry points/checks, or the user confirms it is existing.
+
 **If `entry_points` is empty (`[]`) OR contains only the generated root entry point (`path: "."`) with no `checks`:** This is a fresh setup. Proceed to Step 3 (detect project structure). Preserve any existing `reviews` on that generated root entry point unless the user explicitly reconfigures reviews.
 
 **If `entry_points` is populated:** Show the user a summary of the current configuration:

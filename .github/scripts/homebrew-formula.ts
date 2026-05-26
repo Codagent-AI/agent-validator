@@ -43,6 +43,9 @@ function validateFormulaInput(input: FormulaInput): void {
 	if (!input.tarballUrl.startsWith("https://registry.npmjs.org/agent-validator/-/")) {
 		throw new Error("tarballUrl must be the npm registry tarball URL for agent-validator");
 	}
+	if (input.tarballUrl !== `https://registry.npmjs.org/agent-validator/-/agent-validator-${input.version}.tgz`) {
+		throw new Error("tarballUrl must match version");
+	}
 	if (!/^[a-f0-9]{64}$/.test(input.sha256)) {
 		throw new Error("sha256 must be a lowercase 64-character hex digest");
 	}

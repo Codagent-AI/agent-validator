@@ -19,4 +19,14 @@ describe("homebrew formula generation", () => {
 		expect(formula).toContain('shell_output("#{bin}/agent-validate --version")');
 		expect(formula).toContain('shell_output("#{bin}/agent-validator --version")');
 	});
+
+	it("rejects a tarball URL that does not match the formula version", () => {
+		expect(() =>
+			buildHomebrewFormula({
+				version: "1.10.0",
+				tarballUrl: "https://registry.npmjs.org/agent-validator/-/agent-validator-1.9.0.tgz",
+				sha256: "a".repeat(64),
+			}),
+		).toThrow("tarballUrl must match version");
+	});
 });
