@@ -61,7 +61,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
-        if: steps.check.outputs.published == 'false'
         run: |
           TAG="v${{ steps.check.outputs.version }}"
 
@@ -75,7 +74,7 @@ jobs:
             --title "$TAG" \
             --notes "See [CHANGELOG.md](https://github.com/Codagent-AI/agent-validator/blob/main/CHANGELOG.md) for details."
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Resolve npm tarball metadata
         id: npm-tarball
