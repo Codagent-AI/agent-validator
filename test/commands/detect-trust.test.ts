@@ -188,6 +188,32 @@ async function writeCurrentExecutionState(dir: string): Promise<void> {
 	);
 }
 
+async function writeDirtyExecutionState(dir: string): Promise<void> {
+	const [branch, commit] = await Promise.all([
+		git(["branch", "--show-current"], dir),
+		git(["rev-parse", "HEAD"], dir),
+	]);
+	await git(["stash", "push", "--include-untracked", "-m", "validator-snapshot"], dir);
+	const workingTreeRef = await git(["rev-parse", "stash@{0}"], dir);
+	await git(["stash", "pop"], dir);
+	const logDir = path.join(dir, "validator_logs");
+	await fs.mkdir(logDir, { recursive: true });
+	await fs.writeFile(
+		path.join(logDir, ".execution_state"),
+		JSON.stringify(
+			{
+				last_run_completed_at: "2026-01-01T00:00:00.000Z",
+				branch,
+				commit,
+				working_tree_ref: workingTreeRef,
+			},
+			null,
+			2,
+		),
+		"utf-8",
+	);
+}
+
 describe("detect trusted snapshots", () => {
 	afterEach(async () => {
 		for (const dir of tempDirs) {
@@ -240,6 +266,19 @@ describe("detect trusted snapshots", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("scratch.ts");
+		expect(result.stdout).not.toContain("app.ts");
+	});
+
+	it("preserves dirty execution-state snapshot over trusted HEAD reconciliation", async () => {
+		const repo = await createRepo();
+		await trustHead(repo);
+		await fs.writeFile(path.join(repo, "app.ts"), "export const value = 3;\n");
+		await writeDirtyExecutionState(repo);
+
+		const result = await runDetect(repo);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stdout).toContain("No changes detected.");
 		expect(result.stdout).not.toContain("app.ts");
 	});
 

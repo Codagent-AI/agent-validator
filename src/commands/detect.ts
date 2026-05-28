@@ -82,7 +82,7 @@ async function resolveChangeOptions(
   if (isRerun) return opts;
   return {
     ...opts,
-    ...(trustedChangeOptions.fixBase
+    ...(!opts.fixBase && trustedChangeOptions.fixBase
       ? { fixBase: trustedChangeOptions.fixBase }
       : {}),
   };
