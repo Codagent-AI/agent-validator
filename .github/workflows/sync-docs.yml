@@ -9,11 +9,8 @@ name: Sync docs to dot-dev
 
 on:
   push:
-    # Interim: the current docs live on `dev` (main's docs are stale). Repoint
-    # to main once dev is merged.
-    branches: [dev]
+    branches: [main]
     paths: ['docs/**']
-  workflow_dispatch: {}
 
 jobs:
   sync:
