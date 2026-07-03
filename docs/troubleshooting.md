@@ -69,7 +69,7 @@ Run:
 agent-validate health
 ```
 
-Install or authenticate the reported CLI. If an adapter hit a usage limit, Agent Validator records cooldown state in the global adapter health file and skips that adapter until recovery.
+Install or authenticate the reported CLI. If an adapter hit a usage limit, Agent Validator records cooldown state in `.execution_state` under `unhealthy_adapters` and skips that adapter until recovery.
 
 ## Rerun Does Not Review What You Expected
 

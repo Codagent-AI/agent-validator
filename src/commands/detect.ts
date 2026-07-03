@@ -6,6 +6,7 @@ import { EntryPointExpander } from '../core/entry-point.js';
 import { type Job, JobGenerator } from '../core/job.js';
 import { reconcileDetect } from '../core/reconciliation.js';
 import {
+  hasWorkingTreeChanges,
   readExecutionState,
   resolveFixBase,
 } from '../utils/execution-state.js';
@@ -80,9 +81,12 @@ async function resolveChangeOptions(
     };
   }
   if (isRerun) return opts;
+
+  const preserveStateFixBase =
+    !!opts.fixBase && (await hasWorkingTreeChanges());
   return {
     ...opts,
-    ...(!opts.fixBase && trustedChangeOptions.fixBase
+    ...(trustedChangeOptions.fixBase && !preserveStateFixBase
       ? { fixBase: trustedChangeOptions.fixBase }
       : {}),
   };

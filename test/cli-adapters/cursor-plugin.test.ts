@@ -5,9 +5,11 @@ import path from "node:path";
 import { CursorAdapter } from "../../src/cli-adapters/cursor.js";
 
 describe("CursorAdapter plugin lifecycle", () => {
-	const adapter = new CursorAdapter(
-		path.join(os.tmpdir(), `cursor-plugin-test-home-${process.pid}`),
+	const fakeHomeDir = path.join(
+		os.tmpdir(),
+		`cursor-plugin-test-home-${process.pid}`,
 	);
+	const adapter = new CursorAdapter(fakeHomeDir);
 	const tmpDirs: string[] = [];
 
 	async function makeTmpDir(): Promise<string> {
@@ -20,6 +22,7 @@ describe("CursorAdapter plugin lifecycle", () => {
 		for (const dir of tmpDirs) {
 			await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
 		}
+		await fs.rm(fakeHomeDir, { recursive: true, force: true }).catch(() => {});
 		tmpDirs.length = 0;
 	});
 

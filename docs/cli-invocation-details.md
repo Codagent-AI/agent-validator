@@ -21,7 +21,7 @@ Review adapters run local AI CLIs as subprocesses. Agent Validator prepares a pr
 Adapter: `src/cli-adapters/gemini.ts`
 
 ```bash
-gemini --sandbox --allowed-tools read_file,list_directory,glob,search_file_content --output-format text
+gemini --sandbox --allowed-tools read_file,list_directory,glob,search_file_content --output-format text < "$PROMPT_FILE"
 ```
 
 When `allow_tool_use: false`, the `--allowed-tools` argument is omitted.
@@ -46,7 +46,7 @@ Additional behavior:
 Adapter: `src/cli-adapters/claude.ts`
 
 ```bash
-claude -p --allowedTools Read,Glob,Grep,Task --max-turns 25
+cat "$PROMPT_FILE" | claude -p --allowedTools Read,Glob,Grep,Task --max-turns 25
 ```
 
 Additional behavior:
@@ -78,7 +78,7 @@ Additional behavior:
 Adapter: `src/cli-adapters/cursor.ts`
 
 ```bash
-agent --trust
+cat "$PROMPT_FILE" | agent --trust
 ```
 
 Additional behavior:
@@ -92,7 +92,7 @@ Additional behavior:
 Adapter: `src/cli-adapters/opencode.ts`
 
 ```bash
-opencode run --format json
+cat "$PROMPT_FILE" | opencode run --format json
 ```
 
 Additional behavior:
