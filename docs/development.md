@@ -1,3 +1,10 @@
+---
+title: Development
+group: Development
+order: 1
+description: Local development and release workflow.
+---
+
 # Development
 
 ## Feature Implementation Workflow
@@ -16,14 +23,14 @@ wt switch -c feat-name -b main -x claude
 ### 1. Research
 
 Use Paul Caplan's research skill to determine feasibility, viability, and high-level approach. Evaluate whether the idea is worth building and identify key risks or unknowns before investing in detailed design.
-```
+```text
 /research
 ```
 
 ### 2. Brainstorm
 
 Flesh out the details of the feature with a structured design session. The superpowers brainstorming skill explores requirements, edge cases, and implementation approach, producing a design doc that feeds into the spec process.
-```
+```text
 /brainstorm
 ```
 
@@ -32,7 +39,7 @@ Produces `docs/plans/YYYY-MM-DD-<topic>-design.md`
 ### 3. Spec + Review
 
 Write up a "change proposal" and review it. The design doc from step 2 is moved into the openspec change directory and used as input for proposal and spec deltas. After validation, the Agent Validator spec reviewer runs automatically.
-```
+```text
 /clear
 /openspec:proposal write proposal for docs/plans/<file>.md and then invoke `validator-run` skill
 ```
@@ -43,7 +50,7 @@ Produces `openspec/changes/<change-name>/` containing `design.md` (moved from do
 
 The worktree agent writes a detailed implementation plan and immediately executes it without pausing. Each task is dispatched to a fresh subagent with automated spec compliance and code quality reviews. 
 
-```
+```text
 /clear
 /superpowers:write-plan Read all files in openspec/changes/<change>, then make a plan, then immediately execute it using the subagent-driven-development skill. No parallel subagents.
 ```

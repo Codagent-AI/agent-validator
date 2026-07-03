@@ -1,3 +1,10 @@
+---
+title: Review Eval Report 2026-04-25
+group: Evaluation
+order: 11
+description: Historical Cursor and Composer review benchmark report from 2026-04-25.
+---
+
 # Review Eval Report — Cursor + Composer 2 — 2026-04-25
 
 ## Summary

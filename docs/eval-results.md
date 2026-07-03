@@ -1,3 +1,10 @@
+---
+title: Eval Results
+group: Evaluation
+order: 2
+description: Historical adapter benchmark results.
+---
+
 # Eval Results: Adapter Configuration
 
 **Date:** 2026-02-07 (Codex), 2026-02-08 (Claude, Gemini)

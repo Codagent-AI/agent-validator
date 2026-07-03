@@ -1,3 +1,10 @@
+---
+title: Trusted Snapshots
+group: Operations
+order: 2
+description: How trusted validation snapshots propagate across worktrees.
+---
+
 # Trusted Snapshots
 
 Agent Validator can recognize validation work that already happened in another
@@ -16,19 +23,19 @@ Agent Validator keeps two separate pieces of state:
 
 Linked worktrees share the same git common directory, so the trust ledger is
 visible from every worktree for the repository. The ledger is append-only during
-normal operation and is pruned periodically when it grows past the configured
-line threshold.
+normal operation and is pruned periodically when it grows past the default line
+threshold.
 
 ## How Snapshots Become Trusted
 
 A snapshot is trusted when Agent Validator records that the current code state
 was accepted. Records are written after:
 
-- `agent-validator run` passes, passes with warnings, or has no applicable gates.
-- `agent-validator check` passes, passes with warnings, or has no applicable gates.
-- `agent-validator skip` is run as an explicit human override.
+- `agent-validate run` passes, passes with warnings, or has no applicable gates.
+- `agent-validate check` passes, passes with warnings, or has no applicable gates.
+- `agent-validate skip` is run as an explicit human override.
 
-Partial invocations such as `agent-validator run --gate lint` still write audit
+Partial invocations such as `agent-validate run --gate lint` still write audit
 records, but those records are not trusted for propagation. Failures and retry
 limit exits do not write trusted records.
 
@@ -39,7 +46,7 @@ tracked changes from the stash main tree and untracked files from the stash
 `^3` parent. This supports the common flow:
 
 1. Make changes in a dirty worktree.
-2. Run `agent-validator run` and pass.
+2. Run `agent-validate run` and pass.
 3. Commit the same content.
 4. Run Agent Validator again in any linked worktree.
 
@@ -60,7 +67,7 @@ clean `HEAD` is trusted by commit or tree, Agent Validator:
 Dirty worktrees skip reconciliation and use the normal execution-state and
 auto-clean flow.
 
-`agent-validator detect` uses the same trust lookup in read-only mode. If the
+`agent-validate detect` uses the same trust lookup in read-only mode. If the
 current clean `HEAD` is trusted, `detect` reports no changes without rewriting
 `.execution_state` or appending ledger records.
 

@@ -1,169 +1,113 @@
+---
+title: Skills Guide
+group: Reference
+order: 6
+description: Agent-facing validator skill behavior.
+---
+
 # Skills Guide
 
-Agent Validator installs **skills** that let you invoke Agent Validator workflows directly from your AI agent session.
+Agent Validator ships skills that let coding agents run validation, diagnose failures, update review decisions, and commit with explicit validator involvement.
 
 ## Available Skills
 
-| Skill | Invocation | Description |
-|-------|-----------|-------------|
-| Setup | `/validator-setup` | Scan project and configure checks and reviews |
-| Run | `/validator-run` | Run the full verification suite (checks + reviews) |
-| Check | `/validator-check` | Run checks only (no AI reviews) |
-| Skip | `/validator-skip` | Advance execution state baseline without running gates |
-| Status | `/validator-status` | Show a summary of the most recent Agent Validator session |
-| Help | `/validator-help` | Diagnose and explain Agent Validator behavior (diagnosis-only) |
-| Commit | `/validator-commit` | Gate a commit behind optional validation (detect → validate → commit) |
-| Issue | `/validator-issue` | Collect diagnostic evidence and file a GitHub bug report |
+| Skill | Use when |
+| --- | --- |
+| `/validator-setup` | Setting up or reconfiguring project gates |
+| `/validator-run` | Running full validation: checks and reviews |
+| `/validator-check` | Running checks only, without AI reviews |
+| `/validator-status` | Summarizing the latest validator session |
+| `/validator-help` | Explaining validator behavior from logs and state |
+| `/validator-commit` | Committing with explicit validator validation intent |
+| `/validator-issue` | Filing a structured agent-validator bug report |
+| `/validator-skip` | Advancing the baseline without gates after explicit confirmation |
 
 ## Installation
 
-### Claude Code (Plugin Delivery)
-
-For Claude Code, skills are delivered as part of the **agent-validator Claude Code plugin**. When you run `agent-validator init` with Claude selected, it registers the marketplace and installs the plugin via:
+Run:
 
 ```bash
-claude plugin marketplace add Codagent-AI/agent-validator
-claude plugin install agent-validator --scope <project|user>
+agent-validate init
 ```
 
-The plugin bundles skills in `.claude/skills/`. No manual file management is needed — updates are delivered via `agent-validator update`, or manually with `claude plugin marketplace update agent-validator` followed by `claude plugin update agent-validator@Codagent-AI/agent-validator`.
+Init delegates integration installation to `agent-plugin`. Depending on the selected agents and scope, skills are delivered through plugins or copied to agent skill directories.
 
-### Cursor (Plugin Delivery)
+To preselect development agents:
 
-For Cursor, skills are delivered as part of the **agent-validator Cursor plugin**. When you run `agent-validator init` with Cursor selected, it copies plugin files to `.cursor/plugins/agent-validator/` (project scope) or `~/.cursor/plugins/agent-validator/` (user scope).
-
-The plugin bundles skills in `skills/`.
-
-### Agent Plugin Installation
-
-During init, Agent Validator delegates skill and plugin installation to agent-plugin for the selected development agents. The init command previews the install with `--dry-run`, asks for confirmation, then applies the install.
-
-Use `agent-validator init --agents claude codex` to preselect development agents while still choosing review agents interactively.
-
-### Skill File Structure
-
-Skills are directory-based `SKILL.md` files:
-
-```text
-.claude/skills/
-  validator-setup/SKILL.md
-  validator-setup/references/
-    check-catalog.md
-    project-structure.md
-  validator-run/SKILL.md
-  validator-check/SKILL.md
-  validator-status/SKILL.md
-  validator-help/SKILL.md
-  validator-help/references/
-    config-troubleshooting.md
-    gate-troubleshooting.md
-    lock-troubleshooting.md
-    adapter-troubleshooting.md
+```bash
+agent-validate init --agents claude codex
 ```
 
-For **non-native CLI agents** (Gemini, etc.), `init` prints `@file_path` references so you can point your agent at the skill files directly (e.g., `@.claude/skills/validator-run/SKILL.md`).
+To refresh installed skills and plugins:
 
-## Usage
+```bash
+agent-validate update
+```
 
-### /validator-setup
+## `/validator-setup`
 
-Scans the project and configures checks and reviews. This is a multi-file skill (`SKILL.md` + `references/check-catalog.md`).
+Scans the project and edits `.validator/config.yml`.
 
-**Workflow:**
-1. Reads `.validator/config.yml` to check current state
-2. If `entry_points` is empty (fresh setup): scans the project for tooling signals across 6 categories (build, lint, typecheck, test, security-deps, security-code)
-3. If `entry_points` is populated (existing setup): offers options to add checks, add custom gates, or reconfigure
-4. Presents discovered checks and asks for confirmation
-5. Creates check YAML files and updates `entry_points` in `config.yml`
-6. Validates the configuration with `agent-validator validate`
+It:
 
-Run this skill after `agent-validator init` to complete your setup.
+- confirms `.validator/config.yml` exists
+- distinguishes fresh setup from existing configuration
+- detects project structure
+- discovers build, lint, typecheck, test, and static analysis commands
+- writes inline checks under `entry_points`
+- preserves existing review entries unless reconfiguration is requested
+- runs `agent-validate validate`
 
-### /validator-run
+## `/validator-run`
 
-The primary skill. Runs the full Agent Validator (checks + reviews) and iterates on failures.
+Runs `agent-validate run`, extracts failures from logs, fixes issues, updates review decisions, and reruns until the validator reaches a terminal status.
 
-**Workflow:**
-1. Archives previous logs (`agent-validator clean` with configurable rotation depth)
-2. Runs `agent-validator run`
-3. If failures: reads log/JSON output, fixes issues, re-runs
-4. Repeats until all gates pass, warnings only remain, or retry limit is reached (logs auto-archived)
-5. Provides a session summary
+Use it for full validation requests such as "run the validator" or "validate before PR".
 
-### /validator-check
+## `/validator-check`
 
-Same iterative workflow as `/validator-run` but skips AI reviews. Useful for quickly validating that linting, tests, and other deterministic checks pass.
+Runs `agent-validate check` and follows the same failure extraction and rerun protocol, but excludes AI reviews.
 
-### /validator-status
+Use it only when the user explicitly asks for checks-only validation.
 
-Runs a bundled script that parses `validator_logs/` to show a structured summary of the most recent session: which gates ran, what passed/failed, and any outstanding violations.
+## `/validator-status`
 
-### /validator-help
+Runs `agent-validate status`, then reads relevant log files for failed gates and summarizes the most recent validator session.
 
-Diagnose and explain Agent Validator behavior from runtime evidence. This is a **diagnosis-only** skill — it investigates what happened and why, but does not auto-fix issues. It works without source code access, using only config files, logs, and CLI commands.
+## `/validator-help`
 
-The skill follows a structured diagnostic workflow:
-1. Resolves `log_dir` from `.validator/config.yml`
-2. Reads passive evidence (logs, execution state, config)
-3. Runs CLI commands only when needed (`agent-validator list`, `health`, `detect`)
-4. Returns a structured response with **Diagnosis**, **Evidence**, **Confidence**, and **Next Steps**
+Diagnoses validator behavior from runtime evidence:
 
-Reference files under `references/` provide detailed troubleshooting guidance organized by domain: config, gates, locks, and adapters.
+- `.validator/config.yml`
+- `<log_dir>/.debug.log`
+- `<log_dir>/.execution_state`
+- console logs
+- check logs
+- review JSON files
 
-After diagnosis, the skill applies confidence-based bug-filing routing:
-- **High confidence + bug**: automatically invokes `/validator-issue`
-- **Medium confidence + possible bug**: asks "Want me to file a GitHub issue?"
-- **Low confidence**: no action
+It can run diagnostic commands such as `agent-validate list`, `agent-validate health`, and `agent-validate detect` when passive evidence is insufficient.
 
-### /validator-commit
+## `/validator-commit`
 
-Gate a commit behind optional Agent Validator validation.
+Runs `agent-validate detect` first, then chooses validation based on explicit user intent:
 
-**Workflow:**
-1. Runs `agent-validator detect` — if no changes found, commits immediately (no validation)
-2. Parses inline validator intent from arguments: "run"/"full" → `/validator-run`; "check"/"checks" → `/validator-check`; "skip" → `agent-validator skip`; unclear → prompts user to choose. Do not use for plain commit requests that do not mention validator, gauntlet, checks, validation, or skip.
-3. Runs the chosen validation skill; if it fails, asks "Ready to commit?" before proceeding
-4. Commits using an available commit skill if found, otherwise stages and commits directly
+| User intent | Action |
+| --- | --- |
+| run, full, all gates | Invoke `/validator-run` |
+| check, checks | Invoke `/validator-check` |
+| skip | Run `agent-validate skip` |
+| unclear | Ask the user to choose |
 
-**Usage:** `/validator-commit` or `/validator-commit run` / `/validator-commit checks` / `/validator-commit skip`
+Plain commit requests do not select this skill unless they mention validator, gauntlet, checks, validation, or skip behavior.
 
-### /validator-issue
+## `/validator-issue`
 
-Collect runtime diagnostic evidence and file a structured GitHub issue on `Codagent-AI/agent-validator`. Requires the `gh` CLI.
+Collects runtime evidence, drafts a GitHub issue, previews it, and files it only after confirmation unless invoked in auto-file mode.
 
-**Workflow:**
-1. Reads bug description from arguments (or prompts if empty)
-2. Collects evidence: last 50 lines of `.debug.log`, full `.execution_state`, `.validator/config.yml` — notes absent files
-3. Drafts a structured issue (Problem, Steps to Reproduce, Expected vs Actual, Evidence) with redaction guidance for sensitive values
-4. Shows full preview and asks for confirmation (unless invoked with `--auto-file`)
-5. Files via `gh issue create --repo Codagent-AI/agent-validator`
+## `/validator-skip`
 
-**Usage:** `/validator-issue` or `/validator-issue <description of the bug>`
+Runs `agent-validate skip` only after explicit confirmation. The exact phrase `skip validator` in the user request counts as confirmation.
 
 ## Customization
 
-Skills are plain Markdown files with YAML frontmatter. You can edit them directly:
-
-```yaml
----
-name: validator-run
-description: Run the full Agent Validator only when explicitly requested
-disable-model-invocation: false
-allowed-tools: Bash
----
-```
-
-- `disable-model-invocation: false` allows model invocation. Agent Validator skills use this setting so explicit user requests can invoke them through model skill selection; keep the `description` and invocation policy narrow for side-effecting workflows.
-- Do not set `disable-model-invocation: true` on shipped Agent Validator skills.
-- `user-invocable: false` hides the skill from the `/` autocomplete menu entirely.
-- `allowed-tools` restricts which tools the agent can use during execution
-
-## Updating Skills
-
-To update skills after upgrading Agent Validator:
-
-```bash
-agent-validator update
-```
-
-For Claude Code, this updates the plugin via marketplace. For Cursor, it re-copies plugin assets from the npm package. For Codex, it refreshes skill files using checksum comparison. You can also re-run `agent-validator init` which delegates to the update flow when `.validator/` already exists.
+Installed skills may be adapted after installation, but the packaged source of truth is the repository `skills/` directory.

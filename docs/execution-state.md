@@ -1,3 +1,10 @@
+---
+title: Execution State
+group: Operations
+order: 1
+description: How validator baselines, reruns, skip, and adapter cooldowns work.
+---
+
 # Execution State Tracking
 
 ## Why execution state exists
@@ -12,11 +19,11 @@ This is especially important in iterative workflows where an AI coding agent run
 
 Execution state lives in a single JSON file:
 
-```
+```text
 <log_dir>/.execution_state
 ```
 
-The default log directory is `.logs/` at the project root. The file is marked as **persistent** — it is never moved or archived during log cleanup operations, unlike regular log files which rotate into `previous/` directories.
+The default log directory is `validator_logs/` at the project root. The file is marked as **persistent** — it is never moved or archived during log cleanup operations, unlike regular log files which rotate into `previous/` directories.
 
 ## Data structure
 
@@ -50,7 +57,7 @@ The `working_tree_ref` is the key to precise diff scoping. It's created by runni
 This means the validator can later diff against the exact state of your files at the time of the last run, not just the last commit. This matters because most development happens in uncommitted changes.
 
 **Safety guardrails for stash creation:**
-- Before pushing a stash, the validator records the current stash top (`stash@{0}`)ghh
+- Before pushing a stash, the validator records the current stash top (`stash@{0}`)
 - After pushing, it checks whether a new stash was actually created by comparing refs
 - It only pops the stash if it confirms a new one was created — this prevents accidentally popping a pre-existing user stash
 - If the working tree is clean, it skips stashing entirely and uses HEAD
@@ -134,7 +141,7 @@ When a commit is detected as merged but a `working_tree_ref` still exists and is
 ## The skip command
 
 ```bash
-npx agent-validator skip
+agent-validate skip
 ```
 
 The `skip` command advances the execution state baseline without running any gates. It:

@@ -188,6 +188,36 @@ async function writeCurrentExecutionState(dir: string): Promise<void> {
 	);
 }
 
+async function writeDirtyExecutionState(dir: string): Promise<void> {
+	const [branch, commit] = await Promise.all([
+		git(["branch", "--show-current"], dir),
+		git(["rev-parse", "HEAD"], dir),
+	]);
+	await git(["add", "app.ts"], dir);
+	const tree = await git(["write-tree"], dir);
+	const workingTreeRef = await git(
+		["commit-tree", tree, "-p", commit, "-m", "validator snapshot"],
+		dir,
+	);
+	await git(["reset"], dir);
+	const logDir = path.join(dir, "validator_logs");
+	await fs.mkdir(logDir, { recursive: true });
+	await fs.writeFile(
+		path.join(logDir, ".execution_state"),
+		JSON.stringify(
+			{
+				last_run_completed_at: "2026-01-01T00:00:00.000Z",
+				branch,
+				commit,
+				working_tree_ref: workingTreeRef,
+			},
+			null,
+			2,
+		),
+		"utf-8",
+	);
+}
+
 describe("detect trusted snapshots", () => {
 	afterEach(async () => {
 		for (const dir of tempDirs) {
@@ -243,6 +273,19 @@ describe("detect trusted snapshots", () => {
 		expect(result.stdout).not.toContain("app.ts");
 	});
 
+	it("preserves dirty execution-state snapshot over trusted HEAD reconciliation", async () => {
+		const repo = await createRepo();
+		await trustHead(repo);
+		await fs.writeFile(path.join(repo, "app.ts"), "export const value = 3;\n");
+		await writeDirtyExecutionState(repo);
+
+		const result = await runDetect(repo);
+
+		expect(result.exitCode).toBe(2);
+		expect(result.stdout).toContain("No changes detected.");
+		expect(result.stdout).not.toContain("app.ts");
+	});
+
 	it("preserves execution-state fixBase in rerun mode when one merge parent is trusted", async () => {
 		const repo = await createRepo();
 		const base = await git(["rev-parse", "base"], repo);
@@ -286,5 +329,45 @@ describe("detect trusted snapshots", () => {
 		expect(result.exitCode).toBe(2);
 		expect(result.stdout).toContain("No changes detected.");
 		expect(result.stdout).not.toContain("untrusted.ts");
+	});
+
+	it("uses trusted merge-parent reconciliation over stale execution-state fixBase in clean detect", async () => {
+		const repo = await createRepo();
+		const base = await git(["rev-parse", "base"], repo);
+		await git(["checkout", "-b", "trusted-parent", base], repo);
+		await fs.writeFile(path.join(repo, "trusted.ts"), "export const a = 1;\n");
+		await git(["add", "trusted.ts"], repo);
+		await git(["commit", "-m", "trusted parent"], repo);
+		const trustedParent = await git(["rev-parse", "HEAD"], repo);
+		await appendTrustedRecord(repo, trustedParent);
+
+		await git(["checkout", "-b", "untrusted-parent", base], repo);
+		await fs.writeFile(
+			path.join(repo, "untrusted.ts"),
+			"export const b = 1;\n",
+		);
+		await git(["add", "untrusted.ts"], repo);
+		await git(["commit", "-m", "untrusted parent"], repo);
+
+		await git(["checkout", "trusted-parent"], repo);
+		await git(["merge", "--no-ff", "untrusted-parent", "-m", "merge"], repo);
+		const mergeHead = await git(["rev-parse", "HEAD"], repo);
+		await fs.mkdir(path.join(repo, "validator_logs"), { recursive: true });
+		await fs.writeFile(
+			path.join(repo, "validator_logs", ".execution_state"),
+			JSON.stringify({
+				last_run_completed_at: "2026-01-01T00:00:00.000Z",
+				branch: "trusted-parent",
+				commit: mergeHead,
+				working_tree_ref: mergeHead,
+			}),
+			"utf-8",
+		);
+
+		const result = await runDetect(repo);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("untrusted.ts");
+		expect(result.stdout).not.toContain("  - trusted.ts\n");
 	});
 });

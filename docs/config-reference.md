@@ -1,293 +1,291 @@
-# Config Reference
+---
+title: Configuration Reference
+group: Reference
+order: 2
+description: Complete Agent Validator project, check, review, and CI configuration schema.
+---
 
-This document lists the configuration files Agent Validator loads and all supported fields **as implemented**.
+# Configuration Reference
 
-## Files and where they live
+Agent Validator reads project config from `.validator/config.yml`. If `.validator/` does not exist, legacy `.gauntlet/config.yml` is still detected.
 
-```text
-.validator/
-  config.yml              # project config (required)
-  checks/
-    *.yml                 # check gate definitions (file-per-gate; also supported)
-  reviews/
-    *.md                  # review gate prompts as markdown (filename is gate name)
-    *.yml                 # review gate configs as YAML (filename is gate name)
-```
-
-## Project config: `.validator/config.yml`
-
-### Schema
-
-- **base_branch**: string (default: `origin/main`)  
-  The git ref used as the “base” when detecting changes locally (via `git diff base...HEAD`). In CI, the runner prefers GitHub-provided refs (e.g. `GITHUB_BASE_REF`) when available.
-- **log_dir**: string (default: `validator_logs`)  
-  Directory where per-job logs are written. Each gate run writes a log file named from the job id (sanitized).
-- **cli**: object (required)
-  - **default_preference**: string[] (required)
-    Default ordered list of review CLI tools to try when a review gate doesn't specify its own `cli_preference`.
-  - **adapters**: object (optional)
-    Per-adapter configuration overrides. Keys are adapter names (e.g., `claude`, `codex`, `gemini`, `github-copilot`, `cursor`).
-    - **model**: string (optional)
-      Model name to pass to the adapter. Behavior varies by adapter — Claude uses `--model`, Codex uses `--model`, Copilot uses `--model` (free-form, no resolution). Adapters that don't support model selection ignore this.
-    - **allow_tool_use**: boolean (default: `true`)
-      Whether to grant the adapter read-only tool access during reviews. When `false`, no tool-use flags are passed.
-    - **thinking_budget**: string (optional)
-      Reasoning effort level. Valid values: `off`, `low`, `medium`, `high`. For Copilot, maps to the `--effort` flag. For Claude, maps to `--thinking-budget`.
-- **allow_parallel**: boolean (default: `true`)
-  If `true`, gates with `parallel: true` run concurrently, while `parallel: false` gates run sequentially. If `false`, all gates run sequentially regardless of per-gate settings.
-- **max_retries**: number (default: `3`)
-  Maximum number of retry attempts before declaring "Retry limit exceeded". After the initial run, the system allows up to this many additional runs to fix issues.
-- **max_previous_logs**: number (default: `3`)
-  Maximum number of archived session directories to keep during log rotation. When logs are cleaned (manually or automatically), the current session is archived into `previous/`, and existing archives shift: `previous/` becomes `previous.1/`, `previous.1/` becomes `previous.2/`, etc. The oldest archive beyond this count is deleted. Set to `0` to disable archiving entirely (logs are deleted on clean). Set to `1` for single-generation archiving (pre-existing behavior).
-- **rerun_new_issue_threshold**: enum (default: `"medium"`)
-  Priority threshold for filtering new violations during reruns. Valid values: `"critical"`, `"high"`, `"medium"`, `"low"`. During verification mode (when logs exist), new violations with priority below this threshold are filtered out, allowing you to focus on fixing original issues first. For example, with the default `"medium"` threshold, new `"low"` priority issues won't block the rerun.
-- **debug_log**: object (optional)
-  Configuration for persistent debug logging. When enabled, writes detailed execution logs to `.debug.log` in the log directory. This file survives `clean` operations.
-  - **enabled**: boolean (default: `false`)
-    Whether to enable debug logging.
-  - **max_size_mb**: number (default: `10`)
-    Maximum size of the debug log file in megabytes. When exceeded, the current log is rotated to `.debug.log.1` and a new log is started.
-- **logging**: object (optional)
-  Configuration for structured logging via LogTape.
-  - **level**: `"debug"` | `"info"` | `"warning"` | `"error"` (default: `"debug"`)
-    Minimum log level to capture.
-  - **console**: object (optional)
-    Console logging output settings.
-    - **enabled**: boolean (default: `true`)
-    - **format**: `"pretty"` | `"json"` (default: `"pretty"`)
-  - **file**: object (optional)
-    File logging output settings.
-    - **enabled**: boolean (default: `true`)
-    - **format**: `"text"` | `"json"` (default: `"text"`)
-- **entry_points**: array (required)
-  Declares which parts of the repo are "scopes" for change detection and which gates run for each scope. Only entry points with detected changes will produce jobs. After `agent-validator init`, this starts as `[]` (empty) and is populated by the `/validator-setup` skill.
-  - **path**: string (required)  
-    The scope path for the entry point. Supports fixed paths like `apps/api` and a trailing wildcard form like `packages/*` which expands to one job per changed subdirectory.
-  - **checks**: array (optional)  
-    Which check gates to run when this entry point is active. Each item is either a **string** (name referencing a file-based gate in `.validator/checks/`) or an **inline definition** (a single-key object where the key is the gate name and the value is a check config object — same schema as `.validator/checks/*.yml` files, see [Check gates](#check-gates)). Inline checks and file-based checks are merged at load time; if the same name appears in both sources, the system rejects with a validation error. A check name may only be defined inline in one entry point; other entry points reference it by name.
-  - **reviews**: array (optional)  
-    Which review gates to run when this entry point is active. Each item is either a **string** (name referencing a file-based gate in `.validator/reviews/`) or an **inline definition** (a single-key object where the key is the gate name and the value is a review config object — same schema as `.validator/reviews/*.yml` files, see [Review gates](#review-gates)). Inline reviews and file-based reviews are merged at load time; if the same name appears in both sources, the system rejects with a validation error. A review name may only be defined inline in one entry point; other entry points reference it by name.
-
-### Example
+## Project Config
 
 ```yaml
-base_branch: origin/main
-log_dir: validator_logs
-allow_parallel: true
-max_previous_logs: 3
 cli:
   default_preference:
-    - gemini
     - codex
-    - claude
-    - github-copilot
   adapters:
-    claude:
+    codex:
       allow_tool_use: false
-      thinking_budget: high
-    github-copilot:
-      model: gpt-4o
       thinking_budget: medium
-debug_log:
-  enabled: true
-  max_size_mb: 10
 
+entry_points:
+  - path: "."
+    exclude:
+      - validator_logs
+    checks:
+      - test:
+          command: npm test
+    reviews:
+      - all-reviewers:
+          builtin: all-reviewers
+```
+
+## Top-Level Fields
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `base_branch` | string | `origin/main` | Ref used for local change detection when no execution-state baseline applies |
+| `log_dir` | string | `validator_logs` | Directory for console logs, gate logs, review JSON, reports, and state |
+| `allow_parallel` | boolean | `true` | Allows independent gates to run in parallel |
+| `max_retries` | number | `3` | Retry attempts before `Retry limit exceeded` |
+| `max_previous_logs` | integer | `3` | Number of archived log sessions kept by `clean`; `0` disables archiving |
+| `rerun_new_issue_threshold` | enum | `medium` | Minimum priority for accepting new rerun violations: `critical`, `high`, `medium`, or `low` |
+| `cli` | object | required | Review CLI preference and adapter settings |
+| `entry_points` | array | required | Paths and gates to activate for changed files |
+| `debug_log` | object | optional | Persistent `.debug.log` settings |
+| `logging` | object | optional | Structured logging settings |
+
+> [!IMPORTANT]
+> The current schema does not allow top-level `checks:` or `reviews:` maps. Define inline gates inside an entry point, or use file-based gates under `.validator/checks/` and `.validator/reviews/`.
+
+## CLI Config
+
+```yaml
+cli:
+  default_preference:
+    - github-copilot
+    - codex
+  adapters:
+    github-copilot:
+      allow_tool_use: false
+      thinking_budget: low
+      model: claude-sonnet-4.6
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `default_preference` | string array | adapter keys when omitted | Ordered adapter list for reviews without `cli_preference` |
+| `adapters` | map | optional | Per-adapter settings |
+
+Adapter fields:
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `allow_tool_use` | boolean | `true` | Whether supported adapters may enable tool use |
+| `thinking_budget` | enum | unset | `off`, `low`, `medium`, or `high` |
+| `model` | string | unset | Adapter model override |
+
+Supported adapter keys are `claude`, `codex`, `gemini`, `github-copilot`, `cursor`, and `opencode`.
+
+## Entry Points
+
+```yaml
+entry_points:
+  - path: "src"
+    exclude:
+      - "**/*.snap"
+    checks:
+      - lint
+      - test:
+          command: npm test
+    reviews:
+      - code-quality:
+          builtin: code-quality
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | string | Repository path that activates this entry point |
+| `exclude` | string array | Glob patterns excluded from this entry point |
+| `checks` | array | Check names or inline single-key check definitions |
+| `reviews` | array | Review names or inline single-key review definitions |
+
+Inline gate names must be unique across entry points. Define a gate inline once, then reference it by name from other entry points.
+
+## Check Gates
+
+Inline check:
+
+```yaml
+entry_points:
+  - path: "."
+    checks:
+      - lint:
+          command: npm run lint
+          timeout: 300
+```
+
+File-based check at `.validator/checks/lint.yml`:
+
+```yaml
+command: npm run lint
+timeout: 300
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `command` | string | required | Shell command to execute |
+| `rerun_command` | string | unset | Alternate command used in rerun mode when no explicit `--commit` is supplied |
+| `working_directory` | string | current repo | Directory where the command runs |
+| `parallel` | boolean | `true` | Whether this check can run in parallel |
+| `run_in_ci` | boolean | `true` | Whether this check can run in CI |
+| `run_locally` | boolean | `true` | Whether this check can run locally |
+| `timeout` | number | `300` | Timeout in seconds |
+| `fail_fast` | boolean | unset | Only valid when `parallel: false` |
+| `fix_instructions_file` | string | unset | File with fix instructions, resolved from `.validator/` unless absolute |
+| `fix_instructions` | string | unset | Deprecated alias for `fix_instructions_file` |
+| `fix_with_skill` | string | unset | Agent skill to invoke for failed checks |
+
+`fix_instructions_file` and `fix_with_skill` are mutually exclusive.
+
+## Review Gates
+
+Inline built-in review:
+
+```yaml
 entry_points:
   - path: "."
     reviews:
       - code-quality:
           builtin: code-quality
-          num_reviews: 1
-
-  - path: apps/api
-    checks:
-      - test:
-          command: npm run test
-      - lint:
-          command: npx eslint .
-    reviews:
-      - code-quality
-      - architecture
-
-  - path: packages/*
-    checks:
-      - lint
+          cli_preference:
+            - github-copilot
+          model: claude-sonnet-4.6
 ```
 
-## Check gates
-
-Check gates can be defined **inline** within an entry point's `checks` array (preferred) or as separate files in `.validator/checks/*.yml` (also supported). Both styles use the same schema. For file-based checks, the gate name is derived from the filename (e.g. `lint.yml` → `lint`). For inline checks, the gate name is the object key.
-
-### Schema
-
-- **command**: string (required)
-  Shell command to execute for the check (e.g. tests, lint, typecheck). The gate passes if the command exits with code `0`. Supports variable substitution: `${BASE_BRANCH}` is replaced with the effective base branch.
-- **rerun_command**: string (optional)
-  Alternate shell command to use when the system is in rerun mode (log files exist from a previous run and no explicit `--commit` target is specified). Supports the same variable substitution as `command` (e.g. `${BASE_BRANCH}`). When not defined, `command` is used for both first runs and reruns.
-- **working_directory**: string (optional; default: entry point path)
-  Directory to run the command in (`cwd`). If omitted, the command runs in the entry point directory for the job.
-- **parallel**: boolean (default: `true`)
-  If `true` (and project-level `allow_parallel` is enabled), this gate may run concurrently with other parallel gates. If `false`, it runs in the sequential lane.
-- **run_in_ci**: boolean (default: `true`)
-  Whether this check gate runs when CI mode is detected (e.g. GitHub Actions). If `false`, the gate is skipped in CI.
-- **run_locally**: boolean (default: `true`)
-  Whether this check gate runs in local (non-CI) execution. If `false`, the gate is skipped locally.
-- **timeout**: number seconds (default: `300`)
-  Maximum time allowed for the command; if exceeded, the check is marked as failed due to timeout. Timeouts are enforced per job.
-- **fail_fast**: boolean (optional; can only be used when `parallel` is `false`)
-  If `true`, a failure/error in this gate stops scheduling subsequent work. Note: the current implementation enforces fail-fast at scheduling time; parallel jobs may already be running.
-- **fix_instructions_file**: string (optional)
-  Path to a file containing instructions for fixing failures. Relative paths resolve from `.validator/`. Absolute paths are allowed but log a security warning. Mutually exclusive with `fix_with_skill`.
-- **fix_with_skill**: string (optional)
-  Name of a CLI skill to use for fixing failures. When the check fails, the skill name is included in the gate result for consumers. Mutually exclusive with `fix_instructions_file`.
-- **fix_instructions**: string (optional; **deprecated**)
-  Deprecated alias for `fix_instructions_file`. Cannot be specified alongside `fix_instructions_file`.
-
-### Example
+YAML review file at `.validator/reviews/security.yml`:
 
 ```yaml
-command: bun test
-working_directory: .
-run_in_ci: true
-run_locally: true
-fix_instructions_file: fix-guides/test-failures.md
+builtin: security
+num_reviews: 1
 ```
 
-## Review gates
+Markdown review file at `.validator/reviews/architecture.md`:
 
-Review gates can be defined **inline** within an entry point's `reviews` array (preferred for simple configs like built-in references), or as separate files in `.validator/reviews/`:
+```markdown
+---
+cli_preference:
+  - codex
+num_reviews: 1
+---
 
-- **Inline** (in entry point): Same schema as `.validator/reviews/*.yml` files. Gate name is the object key.
-- **Markdown files** (`.md`): Gate name is the filename without extension. Best for reviews with custom prompts.
-- **YAML files** (`.yml`/`.yaml`): Gate name is the filename without extension.
+# Architecture Review
 
-If both a `.md` and `.yml`/`.yaml` file share the same base name, the system rejects the configuration with an error. If the same name appears inline and as a file, the system also rejects with an error.
+Review the diff for architecture issues.
+```
 
-### Markdown reviews (`.md`)
+Review fields:
 
-The review prompt is the Markdown content after the YAML frontmatter. Optionally, `prompt_file` or `skill_name` can be specified in frontmatter to override the body.
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `prompt_file` | string | unset | Prompt file path resolved from `.validator/` unless absolute |
+| `skill_name` | string | unset | Skill name used instead of prompt content |
+| `builtin` | string | unset | Built-in prompt name for YAML or inline reviews |
+| `model` | string | unset | Per-review model override |
+| `cli_preference` | string array | `cli.default_preference` | Ordered adapters for this review |
+| `num_reviews` | number | `1` | Number of review attempts/adapters |
+| `parallel` | boolean | `true` | Whether review jobs can run in parallel |
+| `run_in_ci` | boolean | `true` | Whether the review can run in CI |
+| `run_locally` | boolean | `true` | Whether the review can run locally |
+| `timeout` | number | unset | Review timeout in seconds |
+| `enabled` | boolean | `true` | Disabled reviews require `--enable-review` |
+| `one_shot` | boolean | `false` | Preserve prior result on reruns instead of dispatching again |
 
-### YAML reviews (`.yml`/`.yaml`)
+YAML and inline reviews must specify exactly one of `prompt_file`, `skill_name`, or `builtin`. Markdown reviews use the markdown body unless `prompt_file` or `skill_name` appears in frontmatter.
 
-YAML review files must specify exactly one of `prompt_file`, `skill_name`, or `builtin`.
+## Built-In Reviews
 
-### Schema (frontmatter for `.md`, top-level for `.yml`)
+| Built-in | Behavior |
+| --- | --- |
+| `code-quality` | Primary code quality prompt |
+| `security` | Primary security prompt |
+| `error-handling` | Primary error handling prompt |
+| `security-and-errors` | Combined security and error-handling prompt |
+| `all-reviewers` | Combined code-quality, security, and error-handling prompt |
+| `task-compliance` | Opt-in built-in; defaults `one_shot` to `true` unless explicitly set |
+| `test-integrity` | Opt-in built-in |
 
-- **enabled**: boolean (default: `true`)
-  Whether this review runs by default. Set to `false` to make the review opt-in — it will be skipped unless explicitly activated at runtime via `--enable-review <name>`. Useful for reviews that are only meaningful in specific contexts (e.g. task-compliance reviews that require an active task context).
-- **one_shot**: boolean (default: `false`, or `true` for `builtin: task-compliance`)
-  When `true`, the review runs once per active log session. On reruns, Agent Validator preserves the latest review JSON and derives the gate result from stored violation statuses instead of dispatching another AI review. Set `one_shot: false` on `builtin: task-compliance` to opt out.
-- **cli_preference**: string[] (optional)
-  Ordered list of review CLI tools to try (e.g. `gemini`, `codex`, `claude`, `github-copilot`). If omitted, the project-level `cli.default_preference` is used.
-- **num_reviews**: number (default: `1`)
-  How many tools to run for this review gate. If greater than 1, multiple CLIs are executed and the gate fails if any of them fail pass/fail evaluation.
-- **parallel**: boolean (default: `true`)
-  If `true` (and project `allow_parallel` is enabled), this review gate may run concurrently with other parallel gates. If `false`, it runs in the sequential lane.
-- **run_in_ci**: boolean (default: `true`)
-  Whether this review gate runs when CI mode is detected. If `false`, the review gate is skipped in CI.
-- **run_locally**: boolean (default: `true`)
-  Whether this review gate runs in local (non-CI) execution. If `false`, the review gate is skipped locally.
-- **timeout**: number seconds (optional)
-  Maximum time allowed for each CLI execution for this review gate. If exceeded, the job is marked as an error.
-- **model**: string (optional)
-  Optional model hint passed to adapters that support it. Adapters that don't support model selection will ignore this value.
-- **prompt_file**: string (optional)
-  Path to an external file containing the review prompt. Relative paths resolve from `.validator/`. Absolute paths are allowed but log a security warning. For `.md` files, this overrides the markdown body. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `skill_name` and `builtin`.
-- **skill_name**: string (optional)
-  Name of a CLI skill to delegate the review to. When set, no prompt content is loaded. For `.yml` files, this is one of three required prompt sources. Mutually exclusive with `prompt_file` and `builtin`.
-- **builtin**: string (optional, `.yml` only)
-  Name of a built-in review prompt bundled with the package. Available built-ins: `code-quality`, `security`, `error-handling`, `task-compliance`, `test-integrity`. Combined reviews `security-and-errors` and `all-reviewers` are also available. Mutually exclusive with `prompt_file` and `skill_name`.
+## Context Injection
 
-### Context injection
-
-Review prompts (built-in or user-authored) can include a `{{CONTEXT}}` placeholder. At runtime, the `--context-file <path>` CLI option reads a file and replaces `{{CONTEXT}}` with its contents. If no `--context-file` is provided, the placeholder is replaced with an empty string.
-
-The built-in `task-compliance` review uses this mechanism to receive a task specification:
+Review prompts can include `{{CONTEXT}}`. At runtime, pass:
 
 ```bash
-agent-validator run --enable-review task-compliance --context-file tasks/implement-feature.md
+agent-validate run --enable-review task-compliance --context-file tasks/feature.md
 ```
 
-**JSON Output format**
+If the context file is missing, the command fails. If a prompt has no `{{CONTEXT}}` placeholder, the context file is ignored for that prompt.
 
-All reviews are automatically instructed to output strict JSON. You do not need to prompt the model for formatting.
-
-### Examples
-
-**Markdown review with inline prompt:**
-
-```markdown
----
-cli_preference:
-  - gemini
-  - codex
-  - claude
-  - github-copilot
-num_reviews: 1
----
-
-# Code quality review
-
-Review the diff for code quality issues. Focus on readability and maintainability.
-```
-
-**Markdown review disabled by default (opt-in):**
-
-```markdown
----
-num_reviews: 1
-enabled: false
----
-
-# Task compliance review
-
-Review the diff against the task requirements in the provided context.
-```
-
-To activate an opt-in review at runtime, use `--enable-review <name>` on the `run` or `review` commands (see [User Guide](user-guide.md#agent-validator-run)). The flag only unlocks reviews that are already configured and referenced by an entry point — it does not inject new reviews. A built-in like `task-compliance` still needs a config entry (inline or in `.validator/reviews/`) before `--enable-review` has any effect.
-
-For fresh projects, `agent-validator init --enable-builtin task-compliance` scaffolds the inline entry for you:
+## Debug Log
 
 ```yaml
-entry_points:
-  - path: "."
-    reviews:
-      - task-compliance:
-          builtin: task-compliance
-          enabled: false # Opt-in, one-shot by default: activate with `agent-validator run --enable-review task-compliance --context-file <task>`
-          num_reviews: 1
+debug_log:
+  enabled: true
+  max_size_mb: 10
 ```
 
-The `--enable-builtin` flag is repeatable and accepts comma-separated values. Current accepted opt-in built-ins are `task-compliance` and `test-integrity`. When `.validator/` already exists, init does not edit `config.yml`; it prints paste-ready YAML for the requested entries instead.
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `true` when `debug_log` is present | Enables persistent debug log writing |
+| `max_size_mb` | number | `10` | Rotates `.debug.log` to `.debug.log.1` after this size |
 
-**Markdown review with external prompt file:**
+If neither project nor global config enables debug logging, no `.debug.log` is written.
 
-```markdown
----
-prompt_file: prompts/security-review.md
-cli_preference:
-  - claude
----
-```
-
-**YAML review with external prompt file:**
+## Logging
 
 ```yaml
-prompt_file: prompts/security-review.md
-cli_preference:
-  - claude
+logging:
+  level: debug
+  console:
+    enabled: true
+    format: pretty
+  file:
+    enabled: true
+    format: text
 ```
 
-**YAML review with skill:**
+| Field | Values | Default |
+| --- | --- | --- |
+| `level` | `debug`, `info`, `warning`, `error` | `debug` |
+| `console.enabled` | boolean | `true` |
+| `console.format` | `pretty`, `json` | `pretty` |
+| `file.enabled` | boolean | `true` |
+| `file.format` | `text`, `json` | `text` |
+
+## CI Config
+
+`.validator/ci.yml` is optional and used by `agent-validate ci`.
 
 ```yaml
-skill_name: code-review
-num_reviews: 2
+runtimes:
+  node:
+    version: "22"
+
+services:
+  postgres:
+    image: postgres:16
+
+setup:
+  - name: Install dependencies
+    run: npm ci
+
+checks:
+  - name: test
+    requires_runtimes:
+      - node
+    requires_services:
+      - postgres
+    setup:
+      - name: Prepare database
+        run: npm run db:prepare
 ```
 
-**YAML review with built-in prompt:**
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `runtimes` | map or null | Provider-specific runtime config |
+| `services` | map or null | Provider-specific service config |
+| `setup` | array or null | Global setup steps |
+| `checks` | array or null | Per-check CI metadata |
 
-```yaml
-builtin: code-quality
-num_reviews: 2
-```
+Setup steps support `name`, `run`, optional `working_directory`, and optional `if`.
