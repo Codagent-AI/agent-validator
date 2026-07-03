@@ -21,7 +21,7 @@ Agent Validator has three main configuration concepts:
 
 Entry points decide when gates run. Checks and reviews decide what feedback the agent receives.
 
-![Agent Validator Core Concepts](images/core_concepts.png)
+![Agent Validator Core Concepts](images/core_concepts_v2.png)
 
 ## Validation Flow
 

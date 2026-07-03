@@ -41,8 +41,10 @@ jobs:
           mkdir -p "$DEST"
 
           # Markdown, minus internal-only pages that shouldn't be published.
+          # (README.md is also skipped by the dot-dev generator, but drop it here
+          # too so the synced content dir stays clean.)
           cp "$SRC"/*.md "$DEST"/
-          rm -f "$DEST"/development.md "$DEST"/eval-results.md "$DEST"/eval-report-*.md
+          rm -f "$DEST"/README.md "$DEST"/development.md "$DEST"/eval-results.md "$DEST"/eval-report-*.md
 
           # Images: copy only the ones the published pages actually reference,
           # so unreferenced assets (repo logo, demo GIF) never bloat the site.
