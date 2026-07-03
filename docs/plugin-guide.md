@@ -43,7 +43,7 @@ Project scope passes `--project` to `agent-plugin`. User scope omits it.
 | Claude Code | Plugin |
 | GitHub Copilot | Standalone Copilot plugin |
 | Cursor | Cursor plugin assets |
-| Codex | Skill files in `.agents/skills` or user skill directory |
+| Codex | Codex plugin installed through `agent-plugin` |
 | Gemini | Command or skill directory when supported by the adapter |
 
 The distributable source of truth for skills is the repository `skills/` directory.

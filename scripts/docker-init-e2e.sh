@@ -121,11 +121,9 @@ docker run "${docker_args[@]}" \
     echo "Verifying Claude plugin install..."
     require_output_contains "claude plugin list" "agent-validator"
 
-    echo "Verifying Codex skills install..."
-    require_dir /root/.agents/skills
-    require_file /root/.agents/skills/validator-setup/SKILL.md
-    require_file /root/.agents/skills/validator-run/SKILL.md
-    require_file /root/.agents/skills/validator-status/SKILL.md
+    echo "Verifying Codex plugin install..."
+    codex plugin list | tee /tmp/codex-plugins.txt
+    grep -Eq "agent-validator@agent-validator[[:space:]]+installed" /tmp/codex-plugins.txt
 
     echo
     echo "Docker init E2E passed."

@@ -33,7 +33,7 @@ Agent Validator delegates plugin and skill installation to `agent-plugin`.
 | Claude Code | Claude plugin |
 | GitHub Copilot | Copilot plugin |
 | Cursor | Cursor plugin assets |
-| Codex | Skills under `.agents/skills` or user skill directory |
+| Codex | Codex plugin installed through `agent-plugin` |
 | Gemini | Command/skill directory through the adapter when supported |
 
 Project scope installs into the current repository. User scope installs into the user's agent configuration directories.
