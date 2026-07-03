@@ -15,6 +15,7 @@ Agent Validator runs quality gates for changed code and gives coding agents a re
 | --- | --- |
 | [Introduction](introduction.md) | Concepts, architecture, and when to use Agent Validator |
 | [Quickstart](quickstart.md) | Installation and first project setup |
+| [Setup](setup.md) | Full project setup flow from Git preflight through the first validation run |
 | [Configuring Gates](configuring-gates.md) | Entry points, checks, reviews, and examples |
 | [Running Validation](running-validation.md) | Run/check/review/detect workflows and rerun behavior |
 | [CLI Reference](cli-reference.md) | Live command help generated from the CLI |

@@ -74,6 +74,7 @@ Inline checks and reviews are defined inside `entry_points`. File-based gates ar
 - [Documentation Index](docs/README.md)
 - [Introduction](docs/introduction.md)
 - [Quickstart](docs/quickstart.md)
+- [Setup](docs/setup.md)
 - [Configuring Gates](docs/configuring-gates.md)
 - [CLI Reference](docs/cli-reference.md)
 - [Running Validation](docs/running-validation.md)
