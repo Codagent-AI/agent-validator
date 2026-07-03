@@ -1,3 +1,10 @@
+---
+title: Feature Comparison
+group: Reference
+order: 4
+description: How Agent Validator compares with related tools.
+---
+
 # Feature Comparison
 
 This document compares Agent Validator's features with other popular AI-powered code review tools.

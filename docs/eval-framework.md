@@ -1,3 +1,10 @@
+---
+title: Review Eval Framework
+group: Evaluation
+order: 1
+description: Review benchmark harness and scoring approach.
+---
+
 # Review Eval Framework
 
 ## Problem
@@ -46,7 +53,7 @@ This lets you compare the same adapter across different models without duplicati
 
 Rather than a single monolithic fixture, the eval uses per-reviewer fixtures. Each built-in reviewer type (code-quality, security, error-handling) has its own fixture directory under `evals/fixtures/<reviewer>/`:
 
-```
+```text
 evals/fixtures/
   code-quality/
     codebase/       # source files with ONLY code-quality bugs (other bug types are fixed)
@@ -183,7 +190,7 @@ Cross-session results are accumulated in `evals/results/candidates-comparison.js
 
 The main output is a table sorted by Recall:
 
-```
+```text
 Configuration Comparison (sorted by Recall):
 Config                             Prec    Rec    Time       In      Out    Think    Total  Tools
 ----------------------------------------------------------------------------------------------------
@@ -200,7 +207,7 @@ Columns: Prec (precision), Rec (recall), Time (mean wall-clock duration), In/Out
 
 Below the table, each ground truth issue is listed with its detection rate per adapter, grouped by difficulty:
 
-```
+```text
 EASY (9 issues):
     hardcoded-secret:           copilot-sonnet:100%  codex-gpt5.3:100%
     sql-injection:              copilot-sonnet:100%  codex-gpt5.3:100%

@@ -39,6 +39,8 @@ function parseModelList(output: string): string[] {
 export class CursorAdapter implements CLIAdapter {
   name = 'cursor';
 
+  constructor(private readonly homeDir: string = os.homedir()) {}
+
   async isAvailable(): Promise<boolean> {
     try {
       // Note: Cursor's CLI binary is named "agent", not "cursor"
@@ -81,7 +83,7 @@ export class CursorAdapter implements CLIAdapter {
   }
 
   getUserSkillDir(): string | null {
-    return path.join(os.homedir(), '.cursor', 'skills');
+    return path.join(this.homeDir, '.cursor', 'skills');
   }
 
   getCommandExtension(): string {
@@ -232,7 +234,7 @@ export class CursorAdapter implements CLIAdapter {
     // Check user scope — new and legacy plugin directory names
     for (const pluginName of ['agent-validator', 'agent-gauntlet']) {
       const userPluginPath = path.join(
-        os.homedir(),
+        this.homeDir,
         '.cursor',
         'plugins',
         pluginName,
@@ -255,7 +257,7 @@ export class CursorAdapter implements CLIAdapter {
     try {
       const baseDir =
         scope === 'user'
-          ? path.join(os.homedir(), '.cursor', 'plugins', 'agent-validator')
+          ? path.join(this.homeDir, '.cursor', 'plugins', 'agent-validator')
           : path.join(
               projectRoot ?? '.',
               '.cursor',

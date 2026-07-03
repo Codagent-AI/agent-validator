@@ -1,159 +1,87 @@
-# Plugin & Update Guide
+---
+title: Plugin Guide
+group: Reference
+order: 5
+description: Plugin install and update details.
+---
 
-Agent Validator delivers skills to AI coding agents via **plugins**. Both Claude Code and Cursor are supported, each with their own plugin format and installation mechanism.
+# Plugin Guide
 
-## How It Works
+Agent Validator installs agent integrations during `agent-validate init`. The current install path delegates deterministic plugin and skill operations to `agent-plugin`.
 
-The agent-validator npm package includes plugin assets for Claude Code, Cursor, and GitHub Copilot:
+## Install Flow
 
-- `.claude-plugin/plugin.json` — Plugin manifest for Claude Code and GitHub Copilot (Copilot discovers this same manifest)
-- `.cursor-plugin/plugin.json` — Plugin manifest for Cursor
-- `.claude/skills/` — Skill files bundled in the Claude plugin
-- `skills/` — Skill files bundled in the Cursor plugin
+During init, Agent Validator:
 
-### Claude Code
+1. detects available agent CLIs
+2. asks which development agents should receive integrations
+3. asks for project or user install scope
+4. runs an `agent-plugin` dry run
+5. asks for confirmation unless `--yes` was passed
+6. installs the Agent Validator plugin and skills for selected agents
 
-When you run `agent-validator init` with Claude Code selected, it:
+Non-interactive examples:
 
-1. Registers the marketplace: `claude plugin marketplace add Codagent-AI/agent-validator`
-2. Installs the plugin: `claude plugin install agent-validator --scope <project|user>`
-
-Claude Code then discovers and loads the plugin's skills automatically.
-
-### GitHub Copilot
-
-When you run `agent-validator init` with GitHub Copilot selected, it:
-
-1. Installs the plugin: `copilot plugin install Codagent-AI/agent-validator`
-
-Copilot discovers the plugin via the existing `.claude-plugin/plugin.json` manifest — no separate manifest is needed. Plugins always install to user scope (`~/.copilot/installed-plugins/`).
-
-Plugin detection reads `~/.copilot/config.json` to check the `installed_plugins` array.
-
-### Cursor
-
-When you run `agent-validator init` with Cursor selected, it copies plugin files to the appropriate directory:
-
-- **Project scope**: `.cursor/plugins/agent-validator/`
-- **User scope**: `~/.cursor/plugins/agent-validator/`
-
-The copied files include `.cursor-plugin/plugin.json` and `skills/`. Cursor auto-discovers the plugin by convention.
+```bash
+agent-validate init --yes
+agent-validate init --agents claude codex
+```
 
 ## Install Scope
 
-During init, you choose an install scope:
+| Scope | Meaning |
+| --- | --- |
+| Project | Installs into the current repository's agent configuration directories |
+| User | Installs into user-level agent configuration directories |
 
-| Scope | Flag | Where | Use When |
-|-------|------|-------|----------|
-| Project (local) | `--scope project` | Current project only | Want Agent Validator only in this repo |
-| User (global) | `--scope user` | All projects for your user | Want Agent Validator everywhere |
+Project scope passes `--project` to `agent-plugin`. User scope omits it.
 
-Both scopes can coexist — if installed at both, the project-scope installation takes precedence.
+## Supported Integrations
 
-## Plugin Contents
+| Agent | Integration |
+| --- | --- |
+| Claude Code | Plugin |
+| GitHub Copilot | Standalone Copilot plugin |
+| Cursor | Cursor plugin assets |
+| Codex | Skill files in `.agents/skills` or user skill directory |
+| Gemini | Command or skill directory when supported by the adapter |
 
-### Skills
-
-All Agent Validator skills (`/validator-run`, `/validator-setup`, etc.) are bundled in the plugin's `.claude/skills/` directory. See the [Skills Guide](skills-guide.md) for the full list.
+The distributable source of truth for skills is the repository `skills/` directory.
 
 ## Updating
 
-After upgrading the `agent-validator` npm package, update the plugin:
+After upgrading the npm package, refresh installed integrations:
 
 ```bash
-agent-validator update
+agent-validate update
 ```
 
-This command:
+The update command:
 
-1. Detects where the Claude plugin is installed (`claude plugin list --json`)
-2. If Claude plugin found → updates the marketplace registry and plugin
-3. Detects where the GitHub Copilot plugin is installed (reads `~/.copilot/config.json`)
-4. If Copilot plugin found → re-runs `copilot plugin install` to update
-5. Detects where the Cursor plugin is installed (file-system check)
-6. If Cursor plugin found → re-copies plugin assets from the npm package
-7. Delegates installed agent plugin and skill refreshes to `agent-plugin update Codagent-AI/agent-validator`
+- detects installed Claude, Copilot, Cursor, Codex, and other supported integrations
+- delegates plugin refreshes to the adapter or `agent-plugin update Codagent-AI/agent-validator`
+- updates project scope when both project and user scope are installed and the project integration is closest
+- reports an error if no Agent Validator integration is installed
 
-### Scope Detection
+Re-running `agent-validate init` when `.validator/` already exists delegates to the same update flow. If no plugin is installed yet, init falls back to a fresh install path.
 
-The update command auto-detects the installed scope:
+## Manual Recovery
 
-- If installed at project scope → updates project installation
-- If installed at user scope only → updates user installation
-- If installed at both → updates project scope (closest wins)
-- If not installed → error with instructions to run `agent-validator init`
-
-### Re-running Init
-
-Running `agent-validator init` on a project that already has `.validator/` delegates to the update flow. If the plugin isn't installed yet, it falls back to a fresh install.
-
-## Manual Installation
-
-If you prefer not to use `agent-validator init`:
+If plugin installation fails, rerun with validation first:
 
 ```bash
-# Install the npm package
-npm install -g agent-validator
-
-# Register marketplace and install plugin
-claude plugin marketplace add Codagent-AI/agent-validator
-claude plugin install agent-validator --scope project
+agent-validate validate
+agent-validate init
 ```
 
-## Troubleshooting
-
-### Plugin not found after install
-
-Verify the plugin is installed:
+If update fails because no integration is installed:
 
 ```bash
-claude plugin list --json
+agent-validate init
 ```
 
-Look for an entry with `name: "agent-validator"`.
-
-### Update fails
-
-If `agent-validator update` fails, try manual update:
+If a specific adapter reports missing or unhealthy, inspect:
 
 ```bash
-claude plugin marketplace update agent-validator
-claude plugin update agent-validator@Codagent-AI/agent-validator
+agent-validate health
 ```
-
-## Cursor Plugin
-
-The Cursor plugin is delivered via file copy during `agent-validator init`. Unlike Claude Code's marketplace-based delivery, the Cursor plugin files are copied directly from the npm package to the target directory.
-
-### Plugin Contents
-
-- `.cursor-plugin/plugin.json` — Plugin manifest (name, version, description, license)
-- `skills/` — All Agent Validator skill files
-
-### Updating
-
-Run `agent-validator update` to refresh the Cursor plugin files. This re-copies `.cursor-plugin/` and `skills/` from the npm package to the installed location, overwriting existing files.
-
-### Manual Installation
-
-Copy the plugin files from the installed npm package:
-
-```bash
-# Find the package location
-npm ls -g agent-validator --parseable
-
-# Copy plugin files to your project
-cp -r <package-path>/.cursor-plugin .cursor/plugins/agent-validator/.cursor-plugin
-cp -r <package-path>/skills .cursor/plugins/agent-validator/skills
-```
-
-Or install via `/add-plugin` in Cursor or from the Cursor marketplace.
-
-## Codex Skills (Non-Plugin)
-
-For Codex, skills are delivered via file copy (not a plugin). During init, skill files are copied to:
-
-- **Local scope**: `.agents/skills/` in the project
-- **Global scope**: `$HOME/.agents/skills/`
-
-Updates use SHA-256 checksum comparison to detect changed files.

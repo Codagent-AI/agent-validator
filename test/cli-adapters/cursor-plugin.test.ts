@@ -5,7 +5,9 @@ import path from "node:path";
 import { CursorAdapter } from "../../src/cli-adapters/cursor.js";
 
 describe("CursorAdapter plugin lifecycle", () => {
-	const adapter = new CursorAdapter();
+	const adapter = new CursorAdapter(
+		path.join(os.tmpdir(), `cursor-plugin-test-home-${process.pid}`),
+	);
 	const tmpDirs: string[] = [];
 
 	async function makeTmpDir(): Promise<string> {
@@ -39,9 +41,6 @@ describe("CursorAdapter plugin lifecycle", () => {
 		it("returns null when no plugin files exist", async () => {
 			const tmpDir = await makeTmpDir();
 			const result = await adapter.detectPlugin(tmpDir);
-			// User-scope check uses os.homedir() which is immutable in Bun,
-			// so this test relies on no user-scope plugin being installed.
-			// Project-scope is tested via the isolated temp dir.
 			expect(result).toBeNull();
 		});
 

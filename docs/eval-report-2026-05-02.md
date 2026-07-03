@@ -1,3 +1,10 @@
+---
+title: Review Eval Report 2026-05-02
+group: Evaluation
+order: 12
+description: Historical review benchmark report from 2026-05-02.
+---
+
 # Review Eval Report — 2026-05-02
 
 ## Summary

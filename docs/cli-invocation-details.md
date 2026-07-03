@@ -1,159 +1,118 @@
+---
+title: CLI Invocation Details
+group: Reference
+order: 3
+description: Exact adapter subprocess invocation behavior.
+---
+
 # CLI Invocation Details
 
-This document details how Agent Validator invokes supported AI CLI tools to ensure:
-- **Non-interactive execution** (no hanging on prompts)
-- **Read-only access** (no file modifications)
-- **Repo-scoped visibility** (limited to the project root)
-
-All adapters write the prompt (including diff) to a temporary file and pipe it to the CLI.
+Review adapters run local AI CLIs as subprocesses. Agent Validator prepares a prompt plus diff, writes it to a temporary file when needed, invokes the adapter command, and parses strict JSON from the response.
 
 ## Common Behavior
 
-- **Dynamic Context**: Agents are invoked in a non-interactive, read-only mode where they can use their own file-reading and search tools to pull additional context from your repository as needed.
-- **Security**: By using standard CLI tools with strict flags (like `--sandbox` or `--allowed-tools`), Agent Validator ensures that agents can read your code to review it without being able to modify your files or escape the repository scope.
-- **Output Parsing**: All agents are instructed to output strict JSON. The `ReviewGateExecutor` parses this JSON to determine pass/fail status.
-
----
+- Adapter commands run from the repository root.
+- Model IDs are passed only when they match the adapter's safe model-id pattern.
+- `allow_tool_use: false` disables tools only when the underlying CLI exposes a reliable flag for that behavior.
+- Usage-limit output marks an adapter unhealthy for cooldown and recovery.
 
 ## Gemini
 
-**Adapter**: `src/cli-adapters/gemini.ts`
+Adapter: `src/cli-adapters/gemini.ts`
 
 ```bash
-cat "<tmpFile>" | gemini \
-  --sandbox \
-  --allowed-tools read_file list_directory glob search_file_content \
-  --output-format text
+gemini --sandbox --allowed-tools read_file,list_directory,glob,search_file_content --output-format text
 ```
 
-### Flags Explanation
-- **`--sandbox`**: Enables the execution sandbox for safety.
-- **`--allowed-tools ...`**: Explicitly whitelists read-only tools. Any attempt to use other tools (like `write_file`) will fail or prompt (which fails in non-interactive mode), ensuring read-only safety.
-- **`--output-format text`**: Ensures the output is plain text suitable for parsing.
-- **Repo Scoping**: Implicitly scoped to the Current Working Directory (CWD) because no `--include-directories` are provided.
-
----
+When `allow_tool_use: false`, the `--allowed-tools` argument is omitted.
 
 ## Codex
 
-**Adapter**: `src/cli-adapters/codex.ts`
+Adapter: `src/cli-adapters/codex.ts`
 
 ```bash
-cat "<tmpFile>" | codex exec \
-  --cd "<repoRoot>" \
-  --sandbox read-only \
-  -c 'ask_for_approval="never"' \
-  -
+codex exec --cd "$REPO_ROOT" --sandbox read-only -c 'ask_for_approval="never"' --json -
 ```
 
-### Flags Explanation
-- **`exec`**: Subcommand for non-interactive execution.
-- **`--cd "<repoRoot>"`**: Sets the working directory to the repository root.
-- **`--sandbox read-only`**: Enforces a strict read-only sandbox policy for any shell commands the agent generates.
-- **`-c 'ask_for_approval="never"'`**: Config override to prevent the CLI from asking for user confirmation before running commands. This is critical for preventing hangs in CI/automated environments.
-- **`-`**: Tells Codex to read the prompt from stdin.
+Additional behavior:
 
----
+- `allow_tool_use: false` adds `--disable shell_tool --ignore-user-config`.
+- `thinking_budget` maps to `-c model_reasoning_effort="..."`.
+- `model` maps to `-m <model>`.
+- The prompt is read from stdin with `-`.
 
 ## Claude Code
 
-**Adapter**: `src/cli-adapters/claude.ts`
+Adapter: `src/cli-adapters/claude.ts`
 
 ```bash
-cat "<tmpFile>" | claude -p \
-  --cwd "<repoRoot>" \
-  --allowedTools "Read,Glob,Grep" \
-  --max-turns 10
+claude -p --allowedTools Read,Glob,Grep,Task --max-turns 25
 ```
 
-### Flags Explanation
-- **`-p` (or `--print`)**: Runs Claude in non-interactive print mode. Output is printed to stdout.
-- **`--cwd "<repoRoot>"`**: Sets the working directory to the repository root.
-- **`--allowedTools "Read,Glob,Grep"`**: Restricts the agent to a specific set of read-only tools.
-  - `Read`: Read file contents.
-  - `Glob`: List files matching a pattern.
-  - `Grep`: Search file contents.
-- **`--max-turns 10`**: Limits the number of agentic turns (tool use loops) to prevent infinite loops or excessive costs.
+Additional behavior:
 
----
+- `allow_tool_use: false` uses `--allowedTools Task`.
+- `Task` is always allowed so Claude can dispatch review subagents when configured.
+- `model` maps to `--model <model>`.
+- OpenTelemetry environment variables are set so token and request metrics can be extracted from CLI output.
 
-## GitHub Copilot CLI
+## GitHub Copilot
 
-**Adapter**: `src/cli-adapters/github-copilot.ts`
+Adapter: `src/cli-adapters/github-copilot.ts`
 
 ```bash
-cat "<tmpFile>" | copilot -s \
-  --allow-tool 'shell(cat)' --allow-tool 'shell(grep)' \
-  --allow-tool 'shell(ls)' --allow-tool 'shell(find)' \
-  --allow-tool 'shell(head)' --allow-tool 'shell(tail)' \
-  --model "<model>" --effort <level>
+copilot --allow-tool shell(cat) --add-dir "$PROMPT_DIR" --prompt "$PROMPT_FILE_INSTRUCTION"
 ```
 
-### Flags Explanation
-- **`copilot`**: Invokes the standalone Copilot CLI directly.
-- **`-s` (silent)**: Suppresses UI output and stats, returning only the agent response for clean output parsing.
-- **`--allow-tool 'shell(cat)' ...`**: Explicitly whitelists read-only shell tools. Tool names must use the `shell(command)` format. Any attempt to use other tools will fail, ensuring read-only safety. When `allow_tool_use` is `false` in the adapter config, no `--allow-tool` flags are passed.
-- **`--model "<model>"`**: Passes the configured model name directly (free-form, no resolution). If omitted, Copilot uses its default model. Invalid model names produce a clear error.
-- **`--effort <level>`**: Maps from the `thinking_budget` adapter config (`low`→`low`, `medium`→`medium`, `high`→`high`). Omitted when `thinking_budget` is `off`.
-- **Repo Scoping**: Implicitly scoped to the Current Working Directory (CWD) where the command is executed (repository root).
-- **Availability**: Checked via `copilot --help` with a 10-second timeout.
+Additional behavior:
 
-### Plugin Support
-- **Detection**: Reads `~/.copilot/config.json` to check the `installed_plugins` array
-- **Installation**: `copilot plugin install Codagent-AI/agent-validator`
-- **Skill directories**: `.github/skills/` (project), `~/.copilot/skills/` (user)
-
----
+- `shell(cat)` is always allowed because Copilot uses prompt-file handoff instead of stdin.
+- When `allow_tool_use` is not `false`, read-only tools are added: `shell(grep)`, `shell(ls)`, `shell(find)`, `shell(head)`, and `shell(tail)`.
+- `model` maps to `--model <model>`.
+- `thinking_budget` maps to `--effort <level>`.
+- Availability is checked with `copilot --help`.
+- Plugin install instructions use `copilot plugin install Codagent-AI/agent-validator`.
 
 ## Cursor
 
-**Adapter**: `src/cli-adapters/cursor.ts`
+Adapter: `src/cli-adapters/cursor.ts`
 
 ```bash
-cat "<tmpFile>" | agent
+agent --trust
 ```
 
-### Flags Explanation
-- **No flags**: The `agent` command reads the prompt from stdin and processes it using Cursor's AI capabilities.
-- **Repo Scoping**: Implicitly scoped to the Current Working Directory (CWD) where the command is executed (repository root).
-- **Model**: Uses the default model configured by the user in Cursor.
+Additional behavior:
 
-### Notes
-- Cursor does not support custom commands
-- The `agent` command is the CLI interface provided by Cursor for AI-assisted development
+- The prompt is piped on stdin.
+- `model` resolves through Cursor model discovery when possible and maps to `--model <model>`.
+- Cursor's CLI currently does not expose adapter flags for read-only sandboxing or tool denial, so `allow_tool_use` cannot enforce those restrictions.
 
----
+## OpenCode
 
-## Adapter Health and Cooldown
+Adapter: `src/cli-adapters/opencode.ts`
 
-Review gates dispatch work to CLI adapters via round-robin. If an adapter hits a usage limit or quota error during a review, it is marked **unhealthy** for a 1-hour cooldown period. This prevents wasting time retrying adapters that are temporarily unavailable.
+```bash
+opencode run --format json
+```
 
-### How It Works
+Additional behavior:
 
-1. **Detection**: When an adapter process exits with an error, the system checks the error output for usage-limit phrases (e.g., "usage limit", "quota exceeded", "credit balance is too low").
-2. **Marking**: If a usage limit is detected, the adapter is written to the `unhealthy_adapters` map in `validator_logs/.execution_state` with a `marked_at` timestamp and `reason`.
-3. **Skipping**: On each subsequent run, before dispatching reviews, the system checks the unhealthy map. Adapters within the 1-hour cooldown are skipped.
-4. **Recovery**: After the cooldown expires, the adapter's binary is probed via `checkHealth()`. If healthy, the flag is cleared and the adapter rejoins the pool.
-5. **Round-robin fallback**: The `num_reviews` round-robin assignment uses only healthy adapters. If `num_reviews: 2` but only one adapter is healthy, both review slots are assigned to that adapter.
-6. **No mid-execution failover**: If an adapter fails during a run, that review slot is lost for the current iteration. The adapter is marked unhealthy and skipped on the next rerun.
-7. **No healthy adapters**: If all configured adapters are unhealthy or unavailable, the review gate returns an error immediately.
+- `model` maps to `--model <model>`.
+- `thinking_budget` maps to an OpenCode `--variant` when configured.
+- `allow_tool_use: false` emits a warning because OpenCode does not expose a tool-disable flag.
+- The adapter parses JSONL output and extracts review text from the stream.
 
-### Example
+## Adapter Health And Cooldown
 
-With `cli_preference: [codex, gemini]` and `num_reviews: 2`, if codex hits a rate limit:
-- **Current run**: codex@1 errors, gemini@2 passes → gate fails (incomplete reviews)
-- **Next run**: codex is cooling down and skipped → gemini@1 and gemini@2 both assigned → gate can pass
+If an adapter hits a usage limit or quota error during a review, Agent Validator records it as unhealthy and skips it during cooldown.
 
-### Usage Limit Detection
+The usage-limit detector checks for phrases such as:
 
-The `isUsageLimit()` function checks error output for these phrases (case-insensitive):
-- "usage limit"
-- "quota exceeded"
-- "quota will reset"
-- "credit balance is too low"
-- "out of extra usage"
-- "out of usage"
+- `usage limit`
+- `quota exceeded`
+- `quota will reset`
+- `credit balance is too low`
+- `out of extra usage`
+- `out of usage`
 
-Detection happens at two points:
-1. When review output fails to parse as valid JSON (the output itself contains the limit message)
-2. When the adapter process exits with a non-zero code (the stderr is included in the error message)
+Cooldown state is stored with execution state and checked before review dispatch. After cooldown expires, Agent Validator probes adapter health and returns the adapter to the pool when it is available again.

@@ -1,3 +1,10 @@
+---
+title: Execution State
+group: Operations
+order: 1
+description: How validator baselines, reruns, skip, and adapter cooldowns work.
+---
+
 # Execution State Tracking
 
 ## Why execution state exists
@@ -12,11 +19,11 @@ This is especially important in iterative workflows where an AI coding agent run
 
 Execution state lives in a single JSON file:
 
-```
+```text
 <log_dir>/.execution_state
 ```
 
-The default log directory is `.logs/` at the project root. The file is marked as **persistent** — it is never moved or archived during log cleanup operations, unlike regular log files which rotate into `previous/` directories.
+The default log directory is `validator_logs/` at the project root. The file is marked as **persistent** — it is never moved or archived during log cleanup operations, unlike regular log files which rotate into `previous/` directories.
 
 ## Data structure
 
@@ -134,7 +141,7 @@ When a commit is detected as merged but a `working_tree_ref` still exists and is
 ## The skip command
 
 ```bash
-npx agent-validator skip
+agent-validate skip
 ```
 
 The `skip` command advances the execution state baseline without running any gates. It:
