@@ -1,0 +1,98 @@
+name: Sync docs to dot-dev
+
+# Mirrors agent-validator's docs/ into the codagent.dev docs site
+# (pacaplan/codagent-dot-dev, under src/docs/content/agent-validator). Opens a
+# docs-sync/* PR there, which dot-dev's CI build-gates and auto-merges.
+#
+# Prereqs: a DOCS_SYNC_PAT secret (fine-grained PAT with Contents:RW +
+# Pull requests:RW on pacaplan/codagent-dot-dev).
+
+on:
+  push:
+    # Interim: the current docs live on `dev` (main's docs are stale). Repoint
+    # to main once dev is merged.
+    branches: [dev]
+    paths: ['docs/**']
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout agent-validator
+        uses: actions/checkout@v4
+        with:
+          path: agent-validator
+
+      - name: Checkout dot-dev
+        uses: actions/checkout@v4
+        with:
+          repository: pacaplan/codagent-dot-dev
+          ref: main
+          token: ${{ secrets.DOCS_SYNC_PAT }}
+          path: dot-dev
+
+      - name: Copy docs into dot-dev content dir
+        run: |
+          set -euo pipefail
+          SRC=agent-validator/docs
+          DEST="dot-dev/src/docs/content/agent-validator"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+
+          # Markdown, minus internal-only pages that shouldn't be published.
+          cp "$SRC"/*.md "$DEST"/
+          rm -f "$DEST"/development.md "$DEST"/eval-results.md "$DEST"/eval-report-*.md
+
+          # Images: copy only the ones the published pages actually reference,
+          # so unreferenced assets (repo logo, demo GIF) never bloat the site.
+          if [ -d "$SRC/images" ]; then
+            mkdir -p "$DEST/images"
+            for img in "$SRC"/images/*; do
+              [ -f "$img" ] || continue
+              base="$(basename "$img")"
+              if grep -qlF "images/$base" "$DEST"/*.md 2>/dev/null; then
+                cp "$img" "$DEST/images/$base"
+              fi
+            done
+            # Downscale oversized raster images (ImageMagick ships on the runner)
+            # so a large source diagram doesn't ship multi-MB to the browser.
+            if command -v convert >/dev/null 2>&1; then
+              for img in "$DEST"/images/*.png "$DEST"/images/*.jpg "$DEST"/images/*.jpeg; do
+                [ -f "$img" ] || continue
+                convert "$img" -resize '1280x1280>' "$img" || true
+              done
+            fi
+            # Drop the images dir entirely if nothing was referenced.
+            rmdir "$DEST/images" 2>/dev/null || true
+          fi
+
+      - name: Check for changes
+        id: diff
+        working-directory: dot-dev
+        run: |
+          git add -A src/docs/content/agent-validator
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open sync PR
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: dot-dev
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          git config user.name "docs-sync-bot"
+          git config user.email "actions@users.noreply.github.com"
+          SHORT_SHA="$(cd ../agent-validator && git rev-parse --short HEAD)"
+          BRANCH="docs-sync/agent-validator-${SHORT_SHA}"
+          git checkout -b "$BRANCH"
+          git commit -m "docs: sync agent-validator docs from ${SHORT_SHA}"
+          git push origin "$BRANCH"
+          gh pr create --repo pacaplan/codagent-dot-dev \
+            --title "docs: sync agent-validator docs (${SHORT_SHA})" \
+            --body "Automated sync of \`docs/\` from Codagent-AI/agent-validator@${SHORT_SHA}. Merges automatically once the build check passes." \
+            --base main --head "$BRANCH"
