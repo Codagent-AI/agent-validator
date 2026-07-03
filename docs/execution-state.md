@@ -57,7 +57,7 @@ The `working_tree_ref` is the key to precise diff scoping. It's created by runni
 This means the validator can later diff against the exact state of your files at the time of the last run, not just the last commit. This matters because most development happens in uncommitted changes.
 
 **Safety guardrails for stash creation:**
-- Before pushing a stash, the validator records the current stash top (`stash@{0}`)ghh
+- Before pushing a stash, the validator records the current stash top (`stash@{0}`)
 - After pushing, it checks whether a new stash was actually created by comparing refs
 - It only pops the stash if it confirms a new one was created — this prevents accidentally popping a pre-existing user stash
 - If the working tree is clean, it skips stashing entirely and uses HEAD

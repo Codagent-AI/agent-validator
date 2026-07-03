@@ -71,7 +71,7 @@ The current init recommendation logic is:
 | `codex` available, Copilot unavailable | Single `all-reviewers` pass with GPT Codex |
 | Neither available | Single `all-reviewers` pass without adapter-specific model overrides |
 
-Historical eval details are in [Eval Results](eval-results.md) and the dated eval reports.
+The review evaluation harness is documented in [Review Eval Framework](eval-framework.md). Dated eval reports live in this repository for historical detail.
 
 > [!NOTE]
 > `task-compliance` requires useful context. Activate it with `--context-file` so `{{CONTEXT}}` in the prompt receives the task or spec text.
