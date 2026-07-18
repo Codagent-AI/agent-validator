@@ -120,3 +120,106 @@ issues:
     priority: high
     reviewer: error-handling
     source: 2026-03-15 agent-validator
+  - id: pty-drain-timeout-misses-sigkill
+    file: internal/pty/relay.go
+    line_range:
+      - 91
+      - 91
+    description: A PTY drain timeout sends SIGTERM and immediately continues cleanup without checking
+      whether descendants in the command process group exited. A descendant that ignores SIGTERM can
+      remain alive after the runner reports the command outcome, violating the required
+      process-group termination guarantee.
+    code_snippet: >
+      case <-timer.C:
+          drainTimedOut = true
+          outcome.warning = fmt.Sprintf("WARNING: PTY output drain timeout after %s; possible output truncation", config.drainTimeout)
+          _ = config.process.signalGroup(syscall.SIGTERM)
+      }
+
+      if !timer.Stop() {
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-07-17 agent-runner
+  - id: pgid-reuse-kills-unrelated-process-group
+    file: internal/pty/relay.go
+    line_range:
+      - 149
+      - 149
+    description: After the original process group can exit during the grace delay, the relay checks only
+      whether the numeric PGID exists and then sends SIGKILL. If the kernel has reused that PGID,
+      this can kill an unrelated process group because the numeric lookup does not prove process
+      identity.
+    code_snippet: |
+      <-timer.C
+      if config.process.isGroupAlive() {
+          _ = config.process.signalGroup(syscall.SIGKILL)
+      }
+    category: security
+    difficulty: hard
+    priority: high
+    source: 2026-07-17 agent-runner
+  - id: metrics-rehydrate-missing-run-identity-check
+    file: internal/metrics/collector.go
+    line_range:
+      - 312
+      - 312
+    description: Rehydration accepts any schema-v1 metrics artifact without verifying that its run ID
+      and workflow match the collector being initialized. Reusing a session directory for a
+      different run therefore silently merges unrelated metrics and preserves the stale artifact
+      identity while recording the new execution.
+    code_snippet: |
+      if artifact.Steps == nil {
+          artifact.Steps = []StepRecord{}
+      }
+      c.artifact = artifact
+      for i := range artifact.Steps {
+          record := &artifact.Steps[i]
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-07-17 agent-runner
+  - id: claude-filter-silently-drops-oversized-result
+    file: internal/cli/claude.go
+    line_range:
+      - 159
+      - 159
+    description: Claude output filtering uses a bufio.Scanner capped at 1 MiB and never checks
+      scanner.Err(). A valid result event containing more than 1 MiB of response text therefore
+      terminates scanning before the result is yielded and silently returns an empty captured value,
+      causing downstream workflow steps to consume missing or incorrect output.
+    code_snippet: |
+      func (a *ClaudeAdapter) FilterOutput(stdout string) string {
+          var result string
+          scanner := bufio.NewScanner(strings.NewReader(stdout))
+          scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+          for scanner.Scan() {
+              var event struct {
+                  Type   string `json:"type"`
+                  Result string `json:"result"`
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-07-17 agent-runner
+  - id: aggregate-token-field-double-counted
+    file: internal/cli/usage.go
+    line_range:
+      - 47
+      - 47
+    description: The generic token mapper classifies every unknown numeric field as a disjoint other
+      token category. Vendor aggregate fields such as OpenCode total are consequently retained
+      alongside their input, output, reasoning, and cache components, so consumers that sum
+      categories double-count usage and inflate cost estimates.
+    code_snippet: |
+      }
+      canonical, ok := known[vendorKey]
+      if !ok {
+          canonical = "other:" + vendorKey
+      } else {
+          present[vendorKey] = true
+      }
+      tokens[canonical] += count
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-07-17 agent-runner
