@@ -223,3 +223,85 @@ issues:
     difficulty: medium
     priority: high
     source: 2026-07-17 agent-runner
+  - id: invocation-cwd-used-as-worktree-boundary
+    file: internal/exec/agent.go
+    line_range:
+      - 262
+      - 262
+    description: The agent-call containment boundary is derived from the process invocation directory
+      via os.Getwd() instead of the canonical Git worktree root. When agent-runner starts in an
+      ancestor directory, an agent-controlled workdir can therefore reach sibling repositories or
+      other sensitive descendants; starting in a repository subdirectory also rejects valid paths
+      elsewhere in the same worktree.
+    code_snippet: |
+      if !eligible {
+          return nil, spawnEnv, nil, nil
+      }
+      worktree, worktreeErr := os.Getwd()
+      if worktreeErr != nil {
+          return nil, spawnEnv, nil, fmt.Errorf("resolve parent worktree: %w", worktreeErr)
+      }
+    category: security
+    difficulty: medium
+    priority: high
+    source: 2026-07-20 agent-runner
+  - id: opencode-env-wrapper-windows-startup-failure
+    file: internal/cli/opencode.go
+    line_range:
+      - 84
+      - 84
+    description: The OpenCode agent-call integration always prepends the process invocation with the
+      external Unix `env` executable. Standard Windows installations do not provide that executable,
+      so enabling agent-call integration prevents OpenCode from starting at all on a supported
+      platform.
+    code_snippet: |
+      if !completionEnabled && agentCall == nil {
+          return args, nil
+      }
+      config := make(map[string]any)
+      envArgs := []string{"env"}
+      if completionEnabled {
+          command := input.CompletionCommand.ShellCommand()
+          permission, _ := json.Marshal(map[string]map[string]string{"bash": {command: "allow"}})
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-07-20 agent-runner
+  - id: agent-call-resume-requires-success
+    file: internal/runview/model.go
+    line_range:
+      - 872
+      - 872
+    description: The resume predicate permits agent-call sessions only when their status is success, so
+      inactive failed or aborted calls with a valid CLI session ID cannot be resumed even though
+      they are completed and resumable.
+    code_snippet: |
+      func (m *Model) canResumeAgentSession(n *StepNode) bool {
+          if n == nil || n.SessionID == "" || m.running || m.active {
+              return false
+          }
+          return n.Type != NodeAgentCall || n.Status == StatusSuccess
+      }
+    category: bug
+    difficulty: medium
+    priority: high
+    source: 2026-07-20 agent-runner
+  - id: drilled-call-summary-double-counts-duration
+    file: internal/runview/tree.go
+    line_range:
+      - 379
+      - 379
+    description: The drilled agent-call summary returns the synthetic parent turn and each child call as
+      ordinary sibling rows, causing total aggregation to add child-call durations to the parent's
+      wall-clock duration and overstate elapsed time.
+    code_snippet: |
+      turn.Aborted = n.Aborted
+      turn.Attempts = n.Attempts
+      children := make([]*StepNode, 0, len(n.Children)+1)
+      children = append(children, turn)
+      children = append(children, n.Children...)
+      return children
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-07-20 agent-runner
