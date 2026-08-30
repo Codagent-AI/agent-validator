@@ -215,6 +215,10 @@ export class Runner {
       } else {
         // Use sanitized Job ID for lookup because that's what log-parser uses (based on filenames)
         const safeJobId = sanitizeJobId(job.id);
+        const reviewChangeOptions =
+          job.reviewChangeOptions === undefined
+            ? this.changeOptions
+            : (job.reviewChangeOptions ?? undefined);
         result = await this.reviewExecutor.execute(
           job.id,
           job.gateConfig as LoadedReviewGateConfig,
@@ -222,7 +226,7 @@ export class Runner {
           this.logger.createLoggerFactory(job.id),
           effectiveBaseBranch,
           this.previousFailuresMap?.get(safeJobId),
-          this.changeOptions,
+          reviewChangeOptions,
           this.config.project.rerun_new_issue_threshold,
           this.passedSlotsMap?.get(safeJobId),
           this.config.project.log_dir,

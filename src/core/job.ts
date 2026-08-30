@@ -3,6 +3,7 @@ import type {
   LoadedConfig,
   LoadedReviewGateConfig,
 } from '../config/types.js';
+import type { ReviewChangeOptions } from '../gates/result.js';
 import type { ExpandedEntryPoint } from './entry-point.js';
 
 export type JobType = 'check' | 'review';
@@ -14,6 +15,7 @@ export interface Job {
   entryPoint: string;
   gateConfig: CheckGateConfig | LoadedReviewGateConfig;
   workingDirectory: string;
+  reviewChangeOptions?: ReviewChangeOptions | null;
 }
 
 /** Check if a gate should run in the current environment. */

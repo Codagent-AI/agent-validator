@@ -5,7 +5,11 @@ import {
 } from '../cli-adapters/index.js';
 import type { AdapterConfig } from '../config/types.js';
 import { getCategoryLogger } from '../output/app-logger.js';
-import type { GateResult, PreviousViolation } from './result.js';
+import type {
+  GateResult,
+  PreviousViolation,
+  ReviewChangeOptions,
+} from './result.js';
 import {
   buildFinalResult,
   emptyDiffResult,
@@ -36,8 +40,11 @@ import {
   type LoggerFactory,
   logSkipMessages,
 } from './review-helpers.js';
-import { prepareOneShotPreservation } from './review-one-shot.js';
-import { invokeAdapter, omitFixBase } from './review-runtime-helpers.js';
+import {
+  persistOneShotReviewScope,
+  prepareOneShotPreservation,
+} from './review-one-shot.js';
+import { invokeAdapter } from './review-runtime-helpers.js';
 import type {
   EvaluationResult,
   ReviewConfig,
@@ -57,11 +64,7 @@ export class ReviewGateExecutor {
     loggerFactory: LoggerFactory,
     baseBranch: string,
     previousFailures?: Map<string, PreviousViolation[]>,
-    changeOptions?: {
-      commit?: string;
-      uncommitted?: boolean;
-      fixBase?: string;
-    },
+    changeOptions?: ReviewChangeOptions,
     rerunThreshold: 'critical' | 'high' | 'medium' | 'low' = 'high',
     passedSlots?: Map<number, { adapter: string; passIteration: number }>,
     logDir?: string,
@@ -108,11 +111,7 @@ export class ReviewGateExecutor {
     logPathsSet: Set<string>,
     startTime: number,
     previousFailures?: Map<string, PreviousViolation[]>,
-    changeOptions?: {
-      commit?: string;
-      uncommitted?: boolean;
-      fixBase?: string;
-    },
+    changeOptions?: ReviewChangeOptions,
     rerunThreshold: 'critical' | 'high' | 'medium' | 'low' = 'high',
     passedSlots?: Map<number, { adapter: string; passIteration: number }>,
     logDir?: string,
@@ -145,10 +144,11 @@ export class ReviewGateExecutor {
       );
     }
 
-    const effectiveChangeOptions = oneShotState.forceFirstRun
-      ? omitFixBase(changeOptions)
-      : changeOptions;
-    const effectivePreviousFailures = oneShotState.forceFirstRun
+    const effectiveChangeOptions =
+      oneShotState.retryChangeOptions === undefined
+        ? changeOptions
+        : (oneShotState.retryChangeOptions ?? undefined);
+    const effectivePreviousFailures = oneShotState.resetPromptContext
       ? undefined
       : previousFailures;
 
@@ -190,6 +190,7 @@ export class ReviewGateExecutor {
       logDir,
       adapterConfigs,
       contextContent,
+      changeOptions: effectiveChangeOptions,
       oneShotOutputs: oneShotState.outputs,
       runningSlotIndexes: oneShotState.runningSlotIndexes,
     });
@@ -249,6 +250,7 @@ export class ReviewGateExecutor {
       args.logDir,
       args.adapterConfigs,
       args.contextContent,
+      args.changeOptions,
       args.oneShotOutputs,
     );
   }
@@ -276,6 +278,7 @@ export class ReviewGateExecutor {
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
     contextContent?: string,
+    changeOptions?: ReviewChangeOptions,
     preservedOutputs: ReviewOutputEntry[] = [],
   ): Promise<GateResult> {
     const dispatchMsg = `Dispatching ${required} review(s) via round-robin: ${assignments.map((a) => `${a.adapter}@${a.reviewIndex}`).join(', ')}`;
@@ -309,6 +312,7 @@ export class ReviewGateExecutor {
         logDir,
         adapterConfigs,
         contextContent,
+        changeOptions,
       );
 
     const outputs = await dispatchReviews(
@@ -349,6 +353,7 @@ export class ReviewGateExecutor {
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
     contextContent?: string,
+    changeOptions?: ReviewChangeOptions,
   ): Promise<SingleReviewResult | null> {
     const reviewStartTime = Date.now();
     const adapter = getAdapter(toolName);
@@ -377,6 +382,7 @@ export class ReviewGateExecutor {
         toolName,
         reviewStartTime,
         contextContent,
+        changeOptions,
       );
     } catch (error: unknown) {
       return handleReviewError(
@@ -406,10 +412,17 @@ export class ReviewGateExecutor {
     toolName: string,
     reviewStartTime: number,
     contextContent?: string,
+    changeOptions?: ReviewChangeOptions,
   ): Promise<SingleReviewResult | null> {
     await adapterLogger(
       `[START] review:.:${config.name} (${adapter.name}@${reviewIndex})\n`,
     );
+    const reviewScope = config.one_shot
+      ? { changeOptions: changeOptions ?? null }
+      : undefined;
+    if (config.one_shot) {
+      await persistOneShotReviewScope(logPath, adapter.name, changeOptions);
+    }
 
     const indexKey = String(reviewIndex);
     const adapterPreviousViolations =
@@ -462,6 +475,7 @@ export class ReviewGateExecutor {
       adapterLogger,
       mainLogger,
       logDir,
+      reviewScope,
     );
     return {
       adapter: adapter.name,
@@ -480,11 +494,5 @@ export class ReviewGateExecutor {
     return evaluateOutput(output, diff);
   }
 
-  private async getDiff(
-    entryPointPath: string,
-    baseBranch: string,
-    options?: { commit?: string; uncommitted?: boolean; fixBase?: string },
-  ): Promise<string> {
-    return getDiff(entryPointPath, baseBranch, options);
-  }
+  private getDiff = getDiff;
 }

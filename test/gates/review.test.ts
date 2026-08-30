@@ -814,7 +814,129 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 		]);
 	});
 
-	it("redispatches a one-shot review with first-run prompt when prior JSON errored", async () => {
+	it("keeps the incremental baseline on the first one-shot dispatch", async () => {
+		logger = new Logger(RERUN_DIR);
+		await logger.init();
+
+		let capturedOptions: { fixBase?: string } | undefined;
+		const executor = new ReviewGateExecutor();
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async (
+			_entry: string,
+			_base: string,
+			options?: { fixBase?: string },
+		) => {
+			capturedOptions = options;
+			return "mock diff content";
+		};
+
+		const result = await executor.execute(
+			"review:src:task-compliance",
+			{
+				name: "task-compliance",
+				cli_preference: ["mock-adapter"],
+				num_reviews: 1,
+				prompt: "task-compliance",
+				promptContent: "Task compliance",
+				parallel: true,
+				run_in_ci: true,
+				run_locally: true,
+				enabled: true,
+				one_shot: true,
+			},
+			"src/",
+			logger.createLoggerFactory("review:src:task-compliance"),
+			"main",
+			undefined,
+			{ uncommitted: true, fixBase: "narrow-base" },
+			"high",
+			undefined,
+			RERUN_DIR,
+		);
+
+		expect(result.status).toBe("pass");
+		expect(capturedOptions?.fixBase).toBe("narrow-base");
+	});
+
+	it("reuses the original one-shot scope after an adapter error", async () => {
+		logger = new Logger(RERUN_DIR);
+		await logger.init();
+
+		const capturedOptions: Array<{ fixBase?: string } | undefined> = [];
+		let capturedRetryPrompt = "";
+		currentExecute = async () => {
+			throw new Error("adapter failed");
+		};
+
+		const executor = new ReviewGateExecutor();
+		// biome-ignore lint/suspicious/noExplicitAny: Patching private method for testing
+		(executor as any).getDiff = async (
+			_entry: string,
+			_base: string,
+			options?: { fixBase?: string },
+		) => {
+			capturedOptions.push(options);
+			return "mock diff content";
+		};
+
+		const config = {
+			name: "task-compliance",
+			cli_preference: ["mock-adapter"],
+			num_reviews: 1,
+			prompt: "task-compliance",
+			promptContent: "Task compliance",
+			parallel: true,
+			run_in_ci: true,
+			run_locally: true,
+			enabled: true,
+			one_shot: true,
+		};
+
+		const firstResult = await executor.execute(
+			"review:src:task-compliance",
+			config,
+			"src/",
+			logger.createLoggerFactory("review:src:task-compliance"),
+			"main",
+			undefined,
+			{ uncommitted: true, fixBase: "original-base" },
+			"high",
+			undefined,
+			RERUN_DIR,
+		);
+		expect(firstResult.status).toBe("error");
+
+		logger = new Logger(RERUN_DIR);
+		await logger.init();
+		currentExecute = async (request) => {
+			capturedRetryPrompt = (request as { prompt: string }).prompt;
+			return JSON.stringify({ status: "pass", message: "OK" });
+		};
+
+		const retryResult = await executor.execute(
+			"review:src:task-compliance",
+			config,
+			"src/",
+			logger.createLoggerFactory("review:src:task-compliance"),
+			"main",
+			new Map([
+				["1", [{ file: "file.ts", line: 1, issue: "old issue", status: "fixed" as const }]],
+			]),
+			{ uncommitted: true, fixBase: "later-base" },
+			"high",
+			undefined,
+			RERUN_DIR,
+		);
+
+		expect(retryResult.status).toBe("pass");
+		expect(capturedRetryPrompt).not.toContain("RERUN MODE");
+		expect(capturedOptions.map((options) => options?.fixBase)).toEqual([
+			"original-base",
+			"original-base",
+		]);
+	});
+
+	it("redispatches a legacy one-shot error with first-run prompt and current baseline", async () => {
 		await fs.writeFile(
 			path.join(RERUN_DIR, "review_src_task-compliance_mock-adapter@1.1.json"),
 			JSON.stringify({
@@ -877,7 +999,7 @@ describe("ReviewGateExecutor Rerun Logic", () => {
 
 		expect(result.status).toBe("pass");
 		expect(capturedPrompt).not.toContain("RERUN MODE");
-		expect(capturedOptions?.fixBase).toBeUndefined();
+		expect(capturedOptions?.fixBase).toBe("narrow-base");
 	});
 
 	it("does not suppress non-one-shot reviews on rerun", async () => {

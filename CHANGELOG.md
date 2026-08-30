@@ -1,5 +1,13 @@
 # agent-validator
 
+## 1.13.2
+
+### Patch Changes
+
+- [#145](https://github.com/Codagent-AI/agent-validator/pull/145) Restructure the documentation into focused quickstart, configuration, validation, integration, and reference guides while correcting behavior descriptions against the current implementation.
+
+- [#147](https://github.com/Codagent-AI/agent-validator/pull/147) Preserve the original incremental diff scope when retrying errored one-shot reviews, keep that scope local to the matching review job, and add process-level E2E regression coverage.
+
 ## 1.13.1
 
 ### Patch Changes

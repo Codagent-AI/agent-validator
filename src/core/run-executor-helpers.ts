@@ -29,6 +29,7 @@ import { computeDiffStats } from './diff-stats.js';
 import { EntryPointExpander } from './entry-point.js';
 import { JobGenerator } from './job.js';
 import { findPreviousFailedCheckJobs } from './rerun-check-recovery.js';
+import { findPreviousErroredReviewJobs } from './rerun-review-recovery.js';
 import { findLatestConsoleLog, tryAcquireLock } from './run-executor-lock.js';
 import { Runner } from './runner.js';
 import { TRUSTED_SNAPSHOT_MESSAGE } from './trusted-message.js';
@@ -308,18 +309,25 @@ export async function detectAndPrepareChanges(
 
   log.debug('Detecting changes...');
   const changes = await changeDetector.getChangedFiles();
+  const previousErroredReviewJobs = isRerun
+    ? await findPreviousErroredReviewJobs(ctx)
+    : [];
 
   if (changes.length === 0 && isRerun) {
     const previousFailedCheckJobs = await findPreviousFailedCheckJobs(
       ctx,
       failuresMap,
     );
-    if (previousFailedCheckJobs.length > 0) {
+    const previousFailedJobs = [
+      ...previousFailedCheckJobs,
+      ...previousErroredReviewJobs,
+    ];
+    if (previousFailedJobs.length > 0) {
       log.warn(
-        `No changes detected, but ${previousFailedCheckJobs.length} previous check failure(s) will be re-run.`,
+        `No changes detected, but ${previousFailedJobs.length} previous failed gate(s) will be re-run.`,
       );
       return {
-        jobs: previousFailedCheckJobs,
+        jobs: previousFailedJobs,
         changeOpts: effectiveChangeOptions,
       };
     }
@@ -336,6 +344,10 @@ export async function detectAndPrepareChanges(
     changes,
   );
   let jobs = jobGen.generateJobs(entryPoints);
+  const currentJobIds = new Set(jobs.map((job) => job.id));
+  jobs.push(
+    ...previousErroredReviewJobs.filter((job) => !currentJobIds.has(job.id)),
+  );
 
   if (ctx.options.gate) {
     jobs = jobs.filter((j) => j.name === ctx.options.gate);
