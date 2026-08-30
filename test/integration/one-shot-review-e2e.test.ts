@@ -205,6 +205,9 @@ describe("one-shot review E2E", () => {
 			const captures = await stub.readCaptures();
 
 			expect(retried.exitCode).toBe(0);
+			expect(retried.stderr).toContain(
+				"No changes detected, but 1 previous failed gate(s) will be re-run.",
+			);
 			expect(captures).toHaveLength(3);
 			expect(captures[2]).toContain("new task-local change");
 			expect(captures[2]).not.toContain("diff --git a/legacy.ts b/legacy.ts");

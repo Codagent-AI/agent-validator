@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
 	extractPrefix,
+	findErroredReviewScopes,
 	findPreviousFailures,
 	parseLogFile,
 } from "../../src/utils/log-parser.js";
@@ -218,5 +219,44 @@ Status: FAIL
 		const result = await findPreviousFailures(TEST_DIR, "review");
 		expect(result.length).toBe(1);
 		expect(result[0]!.jobId).toBe("review_src_claude");
+	});
+});
+
+describe("findErroredReviewScopes", () => {
+	beforeEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+		await fs.mkdir(TEST_DIR, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	it("recovers a review job without scope when its latest result is malformed", async () => {
+		await fs.writeFile(
+			path.join(
+				TEST_DIR,
+				"review_._task-compliance_codex@1.1.json",
+			),
+			JSON.stringify({
+				adapter: "codex",
+				timestamp: new Date().toISOString(),
+				status: "error",
+				rawOutput: "",
+				violations: [],
+				reviewScope: { changeOptions: { fixBase: "older-scope" } },
+			}),
+		);
+		await fs.writeFile(
+			path.join(
+				TEST_DIR,
+				"review_._task-compliance_codex@1.2.json",
+			),
+			"{malformed",
+		);
+
+		expect(await findErroredReviewScopes(TEST_DIR)).toEqual(
+			new Map([["review_._task-compliance", null]]),
+		);
 	});
 });

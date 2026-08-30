@@ -271,7 +271,11 @@ export async function findErroredReviewScopes(
         }
       }
     } catch {
-      // The latest malformed slot cannot safely fall back to an older scope.
+      // The latest malformed slot cannot safely fall back to an older scope,
+      // but its job must still rerun rather than silently passing.
+      if (!scopes.has(candidate.parsed.jobId)) {
+        scopes.set(candidate.parsed.jobId, null);
+      }
     }
   }
 
