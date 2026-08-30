@@ -10,6 +10,16 @@ export interface PreviousViolation {
   result?: string | null;
 }
 
+export interface ReviewChangeOptions {
+  commit?: string;
+  uncommitted?: boolean;
+  fixBase?: string;
+}
+
+export interface ReviewScope {
+  changeOptions: ReviewChangeOptions | null;
+}
+
 export interface ReviewFullJsonOutput {
   adapter: string;
   timestamp: string;
@@ -23,6 +33,7 @@ export interface ReviewFullJsonOutput {
   violations: PreviousViolation[];
   passIteration?: number; // Only present when status is "skipped_prior_pass"
   preservedFromIteration?: number; // Only present when status is "preserved_one_shot" or preserved fail
+  reviewScope?: ReviewScope; // Present for dispatched one-shot reviews so adapter errors can retry the same diff
 }
 
 export interface GateResult {

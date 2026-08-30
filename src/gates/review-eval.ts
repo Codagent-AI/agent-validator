@@ -6,7 +6,7 @@ import {
 } from '../utils/diff-parser.js';
 import { markAdapterUnhealthy } from '../utils/execution-state.js';
 import { findJsonObjectEnd } from './json-scan.js';
-import type { PreviousViolation } from './result.js';
+import type { PreviousViolation, ReviewScope } from './result.js';
 import { writeJsonResult } from './review-agg.js';
 
 export {
@@ -327,14 +327,8 @@ export async function handleReviewOutput(
   adapterLogger: (msg: string) => Promise<void>,
   mainLogger: (msg: string) => Promise<void>,
   _logDir: string | undefined,
-): Promise<
-  Array<{
-    file: string;
-    line: number | string;
-    issue: string;
-    result?: string | null;
-  }>
-> {
+  reviewScope?: ReviewScope,
+): Promise<PreviousViolation[]> {
   await logErrorAndFilterInfo(evaluation, adapter, adapterLogger, mainLogger);
 
   let skipped: Array<{
@@ -351,6 +345,7 @@ export async function handleReviewOutput(
       output,
       logPath,
       adapterLogger,
+      reviewScope,
     );
   }
 
@@ -386,14 +381,8 @@ async function logParsedResult(
   output: string,
   logPath: string,
   adapterLogger: (msg: string) => Promise<void>,
-): Promise<
-  Array<{
-    file: string;
-    line: number | string;
-    issue: string;
-    result?: string | null;
-  }>
-> {
+  reviewScope?: ReviewScope,
+): Promise<PreviousViolation[]> {
   if (!evaluation.json) return [];
 
   await logViolationWarnings(evaluation.json, adapterLogger);
@@ -404,6 +393,7 @@ async function logParsedResult(
     evaluation.status,
     output,
     evaluation.json,
+    reviewScope,
   );
 
   const skipped = (evaluation.json.violations || [])

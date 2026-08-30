@@ -1,14 +1,15 @@
 import fs from 'node:fs/promises';
 import { parseReviewFilename } from '../utils/log-parser-helpers.js';
 import { sanitizeJobId } from '../utils/sanitizer.js';
-import type { ReviewFullJsonOutput } from './result.js';
+import type { ReviewChangeOptions, ReviewFullJsonOutput } from './result.js';
 import type { LoggerFactory } from './review-helpers.js';
 import type { ReviewConfig, ReviewOutputEntry } from './review-types.js';
 
 export interface OneShotState {
   outputs: ReviewOutputEntry[];
   runningSlotIndexes: Set<number>;
-  forceFirstRun: boolean;
+  resetPromptContext: boolean;
+  retryChangeOptions: ReviewChangeOptions | null | undefined;
 }
 
 interface PriorReviewJson {
@@ -30,10 +31,17 @@ export async function prepareOneShotPreservation(opts: {
   const runningSlotIndexes = new Set<number>();
   const { config, logDir } = opts;
   if (!(config.one_shot && logDir)) {
-    return { outputs, runningSlotIndexes, forceFirstRun: false };
+    return {
+      outputs,
+      runningSlotIndexes,
+      resetPromptContext: false,
+      retryChangeOptions: undefined,
+    };
   }
 
-  let forceFirstRun = false;
+  let resetPromptContext = false;
+  let retryChangeOptions: ReviewChangeOptions | null | undefined;
+  let retryScopeRunNumber = -1;
   for (let reviewIndex = 1; reviewIndex <= opts.required; reviewIndex++) {
     const prior = await readLatestReviewJsonForSlot(
       logDir,
@@ -42,14 +50,47 @@ export async function prepareOneShotPreservation(opts: {
     );
     if (!prior || prior.data.status === 'error') {
       runningSlotIndexes.add(reviewIndex);
-      forceFirstRun = true;
+      resetPromptContext = true;
+      if (prior?.data.reviewScope && prior.runNumber > retryScopeRunNumber) {
+        retryChangeOptions = prior.data.reviewScope.changeOptions;
+        retryScopeRunNumber = prior.runNumber;
+      }
       continue;
     }
 
     outputs.push(await writePreservedOneShotLog(prior, reviewIndex, opts));
   }
 
-  return { outputs, runningSlotIndexes, forceFirstRun };
+  return {
+    outputs,
+    runningSlotIndexes,
+    resetPromptContext,
+    retryChangeOptions,
+  };
+}
+
+export async function persistOneShotReviewScope(
+  logPath: string,
+  adapter: string,
+  changeOptions: ReviewChangeOptions | undefined,
+): Promise<void> {
+  const jsonPath = logPath.replace(/\.log$/, '.json');
+  const output: ReviewFullJsonOutput = {
+    adapter,
+    timestamp: new Date().toISOString(),
+    status: 'error',
+    rawOutput: '',
+    violations: [],
+    reviewScope: { changeOptions: changeOptions ?? null },
+  };
+
+  try {
+    await fs.writeFile(jsonPath, JSON.stringify(output, null, 2), {
+      flag: 'wx',
+    });
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
 }
 
 async function readLatestReviewJsonForSlot(
@@ -134,6 +175,7 @@ async function writePreservedOneShotLog(
     rawOutput: '',
     violations,
     preservedFromIteration: prior.runNumber,
+    reviewScope: prior.data.reviewScope,
   };
   await fs.writeFile(jsonPath, JSON.stringify(preservedOutput, null, 2));
 

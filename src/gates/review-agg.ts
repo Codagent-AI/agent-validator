@@ -1,6 +1,10 @@
 import fs from 'node:fs/promises';
 import { getCategoryLogger } from '../output/app-logger.js';
-import type { GateResult, ReviewFullJsonOutput } from './result.js';
+import type {
+  GateResult,
+  ReviewFullJsonOutput,
+  ReviewScope,
+} from './result.js';
 import type {
   ReviewJsonOutput,
   ReviewOutputEntry,
@@ -171,6 +175,7 @@ export async function writeJsonResult(
   status: 'pass' | 'fail' | 'error',
   rawOutput: string,
   json: ReviewJsonOutput,
+  reviewScope?: ReviewScope,
 ): Promise<string> {
   const jsonPath = logPath.replace(/\.log$/, '.json');
   const fullOutput: ReviewFullJsonOutput = {
@@ -179,6 +184,7 @@ export async function writeJsonResult(
     status,
     rawOutput,
     violations: json.violations || [],
+    reviewScope,
   };
 
   await fs.writeFile(jsonPath, JSON.stringify(fullOutput, null, 2));

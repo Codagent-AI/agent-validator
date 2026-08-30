@@ -25,13 +25,3 @@ export async function invokeAdapter(
     thinkingBudget: adapterCfg?.thinking_budget,
   });
 }
-
-export function omitFixBase(options?: {
-  commit?: string;
-  uncommitted?: boolean;
-  fixBase?: string;
-}): { commit?: string; uncommitted?: boolean; fixBase?: string } | undefined {
-  if (!options?.fixBase) return options;
-  const { fixBase: _fixBase, ...rest } = options;
-  return rest;
-}

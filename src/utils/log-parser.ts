@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type {
   PreviousViolation,
+  ReviewChangeOptions,
   ReviewFullJsonOutput,
 } from '../gates/result.js';
 import { getCategoryLogger } from '../output/app-logger.js';
@@ -225,6 +226,56 @@ export async function findPreviousFailures(
     }
     return includePassedSlots ? { failures: [], passedSlots: new Map() } : [];
   }
+}
+
+/**
+ * Recover the original change scope for each review job whose latest slot
+ * result is an errored one-shot dispatch.
+ */
+export async function findErroredReviewScopes(
+  logDir: string,
+): Promise<Map<string, ReviewChangeOptions | null>> {
+  let files: string[];
+  try {
+    files = await fs.readdir(logDir);
+  } catch {
+    return new Map();
+  }
+
+  const candidates = files
+    .map((filename) => ({ filename, parsed: parseReviewFilename(filename) }))
+    .filter(
+      (
+        entry,
+      ): entry is {
+        filename: string;
+        parsed: NonNullable<ReturnType<typeof parseReviewFilename>>;
+      } => entry.parsed?.ext === 'json',
+    )
+    .sort((a, b) => b.parsed.runNumber - a.parsed.runNumber);
+  const seenSlots = new Set<string>();
+  const scopes = new Map<string, ReviewChangeOptions | null>();
+
+  for (const candidate of candidates) {
+    const slot = `${candidate.parsed.jobId}@${candidate.parsed.reviewIndex}`;
+    if (seenSlots.has(slot)) continue;
+    seenSlots.add(slot);
+
+    try {
+      const data = JSON.parse(
+        await fs.readFile(path.join(logDir, candidate.filename), 'utf-8'),
+      ) as ReviewFullJsonOutput;
+      if (data.status === 'error' && data.reviewScope) {
+        if (!scopes.has(candidate.parsed.jobId)) {
+          scopes.set(candidate.parsed.jobId, data.reviewScope.changeOptions);
+        }
+      }
+    } catch {
+      // The latest malformed slot cannot safely fall back to an older scope.
+    }
+  }
+
+  return scopes;
 }
 
 /**

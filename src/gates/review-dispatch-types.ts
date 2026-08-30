@@ -1,5 +1,5 @@
 import type { AdapterConfig } from '../config/types.js';
-import type { PreviousViolation } from './result.js';
+import type { PreviousViolation, ReviewChangeOptions } from './result.js';
 import type { LoggerBundle, LoggerFactory } from './review-helpers.js';
 import type { ReviewConfig, ReviewOutputEntry } from './review-types.js';
 
@@ -21,6 +21,7 @@ export interface DispatchForDiffArgs {
   logDir?: string;
   adapterConfigs?: Record<string, AdapterConfig>;
   contextContent?: string;
+  changeOptions?: ReviewChangeOptions;
   oneShotOutputs: ReviewOutputEntry[];
   runningSlotIndexes: Set<number>;
 }

@@ -305,3 +305,23 @@ issues:
     difficulty: hard
     priority: high
     source: 2026-07-20 agent-runner
+  - id: one-shot-retry-scope-applied-globally
+    file: src/utils/log-parser.ts
+    line_range:
+      - 266
+      - 266
+    description: Recovering the first errored one-shot review scope without filtering by job allows
+      processRerunMode to apply one review's commit or fixBase to every gate in the run, so
+      unrelated checks and reviews can validate the wrong diff and falsely pass.
+    code_snippet: |
+      try {
+        const data = JSON.parse(
+          await fs.readFile(path.join(logDir, candidate.filename), 'utf-8'),
+        ) as ReviewFullJsonOutput;
+        if (data.status === 'error' && data.reviewScope) {
+          return data.reviewScope.changeOptions;
+        }
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-08-30 agent-validator
