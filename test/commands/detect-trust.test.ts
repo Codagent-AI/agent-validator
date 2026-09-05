@@ -226,6 +226,45 @@ describe("detect trusted snapshots", () => {
 		tempDirs.length = 0;
 	});
 
+	it("detects only the missing untracked file after committing a validated snapshot in another worktree", async () => {
+		const repo = await createRepo();
+		await fs.writeFile(path.join(repo, "app.ts"), "export const value = 3;\n");
+		await fs.writeFile(path.join(repo, "new.ts"), "export const added = true;\n");
+		await fs.writeFile(path.join(repo, "handoff.md"), "Validated notes\n");
+		const validation = await runValidator(repo, ["run"]);
+		expect(validation.exitCode).toBe(0);
+		await git(["add", "app.ts", "new.ts"], repo);
+		await git(["commit", "-m", "commit validated content"], repo);
+		const worktree = await fs.mkdtemp(path.join(os.tmpdir(), "validator-linked-"));
+		tempDirs.push(worktree);
+		await git(["worktree", "add", "-b", "linked", worktree, "HEAD"], repo);
+		const ledger = path.join(repo, ".git", "agent-validator", "trusted-snapshots.jsonl");
+		const before = await fs.readFile(ledger, "utf-8");
+
+		const original = await runDetect(repo);
+		expect(original.exitCode).toBe(2);
+		const result = await runDetect(worktree);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Found 1 changed files:");
+		expect(result.stdout).toContain("  - handoff.md");
+		expect(result.stdout).not.toContain("  - app.ts");
+		expect(result.stdout).not.toContain("  - new.ts");
+		expect(await fs.readFile(ledger, "utf-8")).toBe(before);
+		await expect(fs.stat(path.join(worktree, "validator_logs"))).rejects.toThrow();
+
+		await fs.writeFile(path.join(worktree, "scratch.ts"), "new work\n");
+		const dirty = await runDetect(worktree);
+		expect(dirty.stdout).toContain("Found 2 changed files:");
+		expect(dirty.stdout).toContain("  - scratch.ts");
+		expect(dirty.stdout).toContain("  - handoff.md");
+		await fs.rm(path.join(worktree, "scratch.ts"));
+
+		const run = await runValidator(worktree, ["run"]);
+		expect(run.exitCode).toBe(0);
+		expect(run.stdout).not.toContain("Trusted snapshot; baseline advanced.");
+		expect((await runDetect(worktree)).exitCode).toBe(2);
+	}, 30000);
+
 	it("reports no changes when a new branch points at a trusted commit", async () => {
 		const repo = await createRepo();
 		await trustHead(repo);

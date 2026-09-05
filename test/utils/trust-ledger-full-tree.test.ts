@@ -7,6 +7,10 @@ import { promisify } from "node:util";
 import type { LoadedConfig } from "../../src/config/types.js";
 import {
 	appendCurrentTrustRecord,
+	appendRecord,
+	buildTrustRecord,
+	computeSnapshotTreeSha,
+	findCommittedSnapshotBase,
 	readRecords,
 } from "../../src/utils/trust-ledger.js";
 
@@ -65,6 +69,30 @@ describe.serial("trust ledger full dirty-tree snapshots", () => {
 		process.chdir(originalCwd);
 		await fs.rm(repoDir, { recursive: true, force: true });
 	});
+
+	for (const scenario of ["subset", "modified", "deleted", "mode", "untrusted", "missing-ref"]) {
+		it(`only reuses applicable committed subsets: ${scenario}`, async () => {
+			await fs.writeFile(path.join(repoDir, "tracked.ts"), "export const a = 2;\n");
+			await fs.writeFile(path.join(repoDir, "new.ts"), "new content\n");
+			await fs.writeFile(path.join(repoDir, "notes\nwith spaces.md"), "notes\n");
+			await git(["stash", "push", "--include-untracked", "-m", "snapshot"]);
+			const ref = await git(["rev-parse", "stash@{0}"]);
+			await git(["stash", "pop"]);
+			await appendRecord(buildTrustRecord({
+				config: testConfig("validator_logs"), command: "run", source: "validated",
+				status: "passed", trusted: scenario !== "untrusted", commit: null,
+				tree: await computeSnapshotTreeSha(ref),
+				workingTreeRef: scenario === "missing-ref" ? "f".repeat(40) : ref,
+			}));
+			if (scenario === "modified") await fs.writeFile(path.join(repoDir, "new.ts"), "unvalidated\n");
+			if (scenario === "deleted") await fs.rm(path.join(repoDir, "tracked.ts"));
+			await git(["add", "tracked.ts", "new.ts"]);
+			if (scenario === "mode") await git(["update-index", "--chmod=+x", "new.ts"]);
+			await git(["commit", "-m", "commit subset"]);
+			const tree = await git(["rev-parse", "HEAD^{tree}"]);
+			expect(await findCommittedSnapshotBase(tree)).toBe(scenario === "subset" ? ref : undefined);
+		});
+	}
 
 	it("records a tree that matches the later commit when dirty validation included untracked files", async () => {
 		await fs.writeFile(path.join(repoDir, "tracked.ts"), "export const a = 2;\n");
