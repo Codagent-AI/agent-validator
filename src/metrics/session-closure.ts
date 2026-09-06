@@ -107,10 +107,79 @@ async function readJournal(
   journalPath: string,
 ): Promise<ClosureJournal | null> {
   try {
-    return JSON.parse(await fs.readFile(journalPath, 'utf8')) as ClosureJournal;
+    const journal = JSON.parse(
+      await fs.readFile(journalPath, 'utf8'),
+    ) as ClosureJournal;
+    validateJournal(journal);
+    return journal;
   } catch (error) {
     if (isMissing(error)) return null;
     throw error;
+  }
+}
+
+function archiveName(value: unknown): value is string {
+  return (
+    typeof value === 'string' && /^previous(?:\.(?:0|[1-9]\d*))?$/.test(value)
+  );
+}
+
+function expectedArchiveDestination(source: string): string {
+  return source === 'previous'
+    ? 'previous.1'
+    : `previous.${Number(source.slice('previous.'.length)) + 1}`;
+}
+
+function invalidJournal(message: string): Error {
+  return new Error(`invalid closure journal: ${message}`);
+}
+
+function ordinaryEntry(value: unknown): value is InventoryEntry {
+  if (!value || typeof value !== 'object') return false;
+  const entry = value as InventoryEntry;
+  return (
+    typeof entry.name === 'string' &&
+    path.basename(entry.name) === entry.name &&
+    !entry.name.includes('\\') &&
+    !entry.name.includes('\0') &&
+    ordinaryName(entry.name) &&
+    Number.isFinite(entry.size) &&
+    entry.size >= 0 &&
+    Number.isFinite(entry.mtime_ms) &&
+    entry.mtime_ms >= 0
+  );
+}
+
+function validateJournal(journal: ClosureJournal): void {
+  const validOrdinary =
+    Array.isArray(journal.ordinary) && journal.ordinary.every(ordinaryEntry);
+  if (!validOrdinary) throw invalidJournal('invalid ordinary file inventory');
+  if (
+    journal.archive_directories !== undefined &&
+    !(
+      Array.isArray(journal.archive_directories) &&
+      journal.archive_directories.every(archiveName)
+    )
+  )
+    throw invalidJournal('invalid archive directory');
+  if (journal.archive_operations === undefined) return;
+  if (!Array.isArray(journal.archive_operations))
+    throw invalidJournal('invalid archive operations');
+  for (const operation of journal.archive_operations) {
+    if (
+      !operation ||
+      typeof operation !== 'object' ||
+      !archiveName(operation.source) ||
+      typeof operation.destination !== 'string' ||
+      !['pending', 'started', 'done'].includes(operation.state)
+    )
+      throw invalidJournal('invalid archive operation');
+    const expected = expectedArchiveDestination(operation.source);
+    if (
+      operation.destination !== expected &&
+      operation.destination !== `evicted/${operation.source}`
+    )
+      throw invalidJournal('invalid archive destination');
   }
 }
 
@@ -167,9 +236,12 @@ function archiveOperations(
 }
 
 function operationPath(logDir: string, staging: string, value: string): string {
-  return value.startsWith('evicted/')
-    ? path.join(staging, value)
-    : path.join(logDir, value);
+  const root = value.startsWith('evicted/') ? staging : logDir;
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(root, value);
+  if (!resolved.startsWith(`${resolvedRoot}${path.sep}`))
+    throw invalidJournal('archive path escapes its root');
+  return resolved;
 }
 
 async function rotateArchives(
