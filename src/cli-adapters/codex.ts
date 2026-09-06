@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
+import { createBoundedLineCollector } from './bounded-lines.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import {
   AdapterExecutionFailure,
@@ -175,12 +176,21 @@ export function parseCodexTelemetry(
   raw: string,
   opts: { requestedModel?: string; thinkingBudget?: string } = {},
 ): AdapterTelemetry {
+  return codexUsageTelemetry(
+    parseCodexJsonl(raw, undefined, false).usage,
+    opts,
+  );
+}
+
+function codexUsageTelemetry(
+  usage: CodexUsage,
+  opts: { requestedModel?: string; thinkingBudget?: string },
+): AdapterTelemetry {
   const telemetry = createUnavailableTelemetry('codex', {
     requestedModel: opts.requestedModel,
     requestedEffort: opts.thinkingBudget,
     reason: 'codex_usage_not_observed',
   });
-  const { usage } = parseCodexJsonl(raw, undefined, false);
   const source = 'provider_event' as const;
   const input = usage.inputTokens;
   const cacheRead = usage.cachedInputTokens;
@@ -245,6 +255,29 @@ export function parseCodexTelemetry(
     reason: null,
   };
   return telemetry;
+}
+
+function createCodexTelemetryCollector(
+  opts: { model?: string; thinkingBudget?: string },
+  onTelemetry: (telemetry: AdapterTelemetry) => void,
+) {
+  const usage: CodexUsage = {};
+  let previous = '';
+  return createBoundedLineCollector((line) => {
+    const event = parseJsonlLine(line);
+    if (event?.type !== 'turn.completed') return;
+    accumulateTurnUsage(event, usage);
+    const telemetry = codexUsageTelemetry(usage, {
+      requestedModel: opts.model,
+      thinkingBudget: opts.thinkingBudget,
+    });
+    if (telemetry.provider_native_usage.length === 0) return;
+    telemetry.completeness.collection = 'partial';
+    const serialized = JSON.stringify(telemetry);
+    if (serialized === previous) return;
+    previous = serialized;
+    onTelemetry(telemetry);
+  });
 }
 
 export class CodexAdapter implements CLIAdapter {
@@ -355,21 +388,10 @@ export class CodexAdapter implements CLIAdapter {
       requestedModel: opts.model,
       requestedEffort: opts.thinkingBudget,
     });
-    let evidenceStream = '';
-    const collect = (chunk: string) => {
-      evidenceStream += chunk;
-      const telemetry = parseCodexTelemetry(evidenceStream, {
-        requestedModel: opts.model,
-        thinkingBudget: opts.thinkingBudget,
-      });
-      if (telemetry.provider_native_usage.length === 0) return;
-      // Only complete parsed usage events change the replacement evidence.
-      telemetry.completeness.collection = 'partial';
-      if (JSON.stringify(telemetry) === JSON.stringify(fallbackTelemetry))
-        return;
+    const collect = createCodexTelemetryCollector(opts, (telemetry) => {
       fallbackTelemetry = telemetry;
       opts.onTelemetry?.(telemetry);
-    };
+    });
     try {
       const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 

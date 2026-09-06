@@ -7,6 +7,65 @@ import { CodexAdapter, parseCodexTelemetry } from '../../src/cli-adapters/codex.
 import type { AdapterTelemetry, runStreamingCommand } from '../../src/cli-adapters/shared.js';
 
 describe('structured adapter results', () => {
+  test('keeps final successful telemetry and review text when the last line has no newline', async () => {
+    const raw = [
+      '{"type":"item.completed","item":{"type":"agent_message","text":"review complete"}}',
+      '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}',
+    ].join('\n');
+    const updates: AdapterTelemetry[] = [];
+    const stream: typeof runStreamingCommand = async (opts) => {
+      try {
+        for (const char of raw) opts.onStdout?.(char);
+        return raw;
+      } finally {
+        await opts.cleanup();
+      }
+    };
+    const adapter = new CodexAdapter(stream);
+    expect((adapter as unknown as { streamCommand: typeof stream }).streamCommand).toBe(stream);
+    const result = await adapter.execute({ prompt: 'synthetic fixture', diff: '', onTelemetry: (value) => updates.push(value) });
+    expect(updates).toHaveLength(0);
+    expect(result.text).toBe('review complete');
+    expect(result.telemetry.tokens.output.value).toBe(3);
+    expect(result.telemetry.completeness.collection).toBe('complete');
+  });
+  test('collects complete Codex lines once across chunk boundaries and ignores oversized fragments', async () => {
+    const updates: AdapterTelemetry[] = [];
+    const event = '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}';
+    const stream: typeof runStreamingCommand = async (opts) => {
+      try {
+        opts.onStdout?.(event);
+        expect(updates).toHaveLength(0); // Wait for the line boundary, not just valid JSON.
+        opts.onStdout?.('\r\n');
+        expect(updates).toHaveLength(1);
+        for (const char of `${event}\n`) opts.onStdout?.(char);
+        opts.onStdout?.(`${event}\n${event}\n`);
+        expect(updates.map((update) => update.tokens.output.value)).toEqual([3, 6, 9, 12]);
+
+        // A huge event is discarded through its newline; subsequent events still work.
+        opts.onStdout?.('{"padding":"');
+        for (let i = 0; i < 1025; i++) opts.onStdout?.('x'.repeat(1024));
+        opts.onStdout?.(`",${event.slice(1)}\n${event}\n`);
+        expect(updates).toHaveLength(5);
+        expect(updates.at(-1)?.tokens.output.value).toBe(15);
+        throw new Error('Command timed out');
+      } finally {
+        await opts.cleanup();
+      }
+    };
+    const adapter = new CodexAdapter(stream);
+    expect((adapter as unknown as { streamCommand: typeof stream }).streamCommand).toBe(stream);
+    try {
+      await adapter.execute({ prompt: 'synthetic fixture', diff: '', onTelemetry: (value) => updates.push(value) });
+      throw new Error('expected failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AdapterExecutionFailure);
+      const failure = error as AdapterExecutionFailure;
+      expect(failure.message).toBe('Command timed out');
+      expect(failure.telemetry.tokens.output.value).toBe(15);
+      expect(failure.telemetry.completeness.collection).toBe('partial');
+    }
+  });
   test('publishes meaningful Codex evidence before a failed stream settles and retains it on failure', async () => {
     const updates: AdapterTelemetry[] = [];
     const stream: typeof runStreamingCommand = async (opts) => {
