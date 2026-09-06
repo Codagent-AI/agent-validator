@@ -38,8 +38,11 @@ export interface RunResult {
       nameSuffix: string;
       status: 'pass' | 'fail' | 'error';
       logPath?: string;
+      attempt_id?: string;
     }>;
   }>;
+  /** Additive machine-readable lifecycle metadata; never changes CLI output. */
+  telemetry?: import('../metrics/command-lifecycle.js').CommandTelemetry;
 }
 
 /**

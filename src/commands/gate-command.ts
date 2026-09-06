@@ -1,3 +1,5 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: the shared gate executor remains co-located with its existing rerun helpers.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: command orchestration keeps lock ownership and result finalization together.
 import chalk from 'chalk';
 import { loadGlobalConfig } from '../config/global.js';
 import { loadConfig } from '../config/loader.js';
@@ -6,9 +8,10 @@ import { EntryPointExpander } from '../core/entry-point.js';
 import { JobGenerator } from '../core/job.js';
 import { findPreviousFailedCheckJobs } from '../core/rerun-check-recovery.js';
 import { Runner } from '../core/runner.js';
+import { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { Logger } from '../output/logger.js';
-import type { ValidatorStatus } from '../types/validator-status.js';
+import type { RunResult, ValidatorStatus } from '../types/validator-status.js';
 import {
   type DebugLogger,
   getDebugLogger,
@@ -26,17 +29,14 @@ import {
   type PassedSlot,
   type PreviousViolation,
 } from '../utils/log-parser.js';
-import {
-  appendCurrentTrustRecord,
-  type TrustRecordSource,
-} from '../utils/trust-ledger.js';
+import { appendCurrentTrustRecord } from '../utils/trust-ledger.js';
 import {
   acquireAndReconcileGateStartup,
   type ChangeOptions,
   checkEarlyExit,
+  GateCommandLockConflictError,
   type GateCommandName,
   type GateCommandOptions,
-  handleGateError,
   initLoggerAfterLock,
   type LockContext,
 } from './gate-command-support.js';
@@ -44,6 +44,7 @@ import {
   cleanLogs,
   hasExistingLogs,
   performAutoClean,
+  readContextFile,
   releaseLock,
   shouldAutoClean,
 } from './shared.js';
@@ -284,10 +285,8 @@ async function executeAndFinalize(
   changes: string[],
   jobs: Awaited<ReturnType<JobGenerator['generateJobs']>>,
   contextContent?: string,
-  commandName?: GateCommandName,
-  options?: GateCommandOptions,
-  trustSourceOnPass?: TrustRecordSource,
-): Promise<boolean> {
+  metricsLifecycle?: CommandMetricsLifecycle,
+): Promise<import('../core/runner.js').RunnerOutcome> {
   const runMode = isRerun ? 'verification' : 'full';
   await debugLogger?.logRunStart(runMode, changes.length, jobs.length);
 
@@ -305,6 +304,7 @@ async function executeAndFinalize(
     undefined,
     undefined,
     contextContent,
+    metricsLifecycle,
   );
 
   const outcome = await runner.run(jobs);
@@ -317,29 +317,7 @@ async function executeAndFinalize(
     logger.getRunNumber(),
   );
 
-  if (outcome.allPassed) {
-    await debugLogger?.logClean('auto', 'all_passed');
-    await cleanLogs(config.project.log_dir);
-  }
-
-  // Write execution state AFTER clean so the file always survives.
-  await writeExecutionState(config.project.log_dir);
-  if (commandName && options) {
-    const status = statusFromOutcome(outcome);
-    await appendCurrentTrustRecord({
-      config,
-      logDir: config.project.log_dir,
-      command: commandName,
-      status,
-      source: trustSourceOnPass ?? 'validated',
-      options: {
-        gate: options.gate,
-        enableReviews: options.enableReviews,
-      },
-    });
-  }
-
-  return outcome.allPassed;
+  return outcome;
 }
 
 const NO_RERUN: RerunResult = {
@@ -403,15 +381,28 @@ async function prepareGateWork(args: {
  * Shared gate command executor for both "check" and "review" commands.
  * Contains all logic that was previously duplicated between the two commands.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every controlled exit returns through the same telemetry finalizer.
 export async function executeGateCommand(
   commandName: GateCommandName,
   options: GateCommandOptions,
-): Promise<void> {
+): Promise<RunResult> {
   let config: Awaited<ReturnType<typeof loadConfig>> | undefined;
   let lockAcquired = false;
   let restoreConsole: LockContext['restoreConsole'] | undefined;
+  const lifecycle = new CommandMetricsLifecycle(commandName);
+  let effectiveOptions = options;
   try {
-    const initResult = await initializeDebugLogger(commandName, options);
+    lifecycle.setContext(validateMetricsContext(effectiveOptions));
+    if (effectiveOptions.contextFile) {
+      effectiveOptions = {
+        ...effectiveOptions,
+        contextContent: await readContextFile(effectiveOptions.contextFile),
+      };
+    }
+    const initResult = await initializeDebugLogger(
+      commandName,
+      effectiveOptions,
+    );
     config = initResult.config;
     const { debugLogger, effectiveBaseBranch } = initResult;
     const logDir = config.project.log_dir;
@@ -420,9 +411,16 @@ export async function executeGateCommand(
       commandName,
       config,
       logDir,
-      options,
+      options: effectiveOptions,
     });
     lockAcquired = true;
+
+    if (reconciliation.kind === 'trusted') {
+      await lifecycle.associate(logDir);
+      return withTelemetry(reconciliation.result, lifecycle);
+    }
+
+    await lifecycle.associate(logDir);
 
     await handleAutoClean(
       logDir,
@@ -438,25 +436,35 @@ export async function executeGateCommand(
         config,
         logDir,
         effectiveBaseBranch,
-        options,
+        options: effectiveOptions,
         commandName,
         startupChangeOptions: reconciliation.changeOptions,
       },
     );
 
-    await checkEarlyExit(
+    const earlyStatus = await checkEarlyExit(
       changes,
       jobs,
       commandName,
       logDir,
       restoreConsole,
       rerunResult.failuresMap,
-      { config, options, source: reconciliation.trustSourceOnPass },
+      {
+        config,
+        options: effectiveOptions,
+        source: reconciliation.trustSourceOnPass,
+      },
     );
+    if (earlyStatus) {
+      return withTelemetry(
+        { status: earlyStatus, message: statusMessage(earlyStatus) },
+        lifecycle,
+      );
+    }
 
     console.log(chalk.dim(`Running ${jobs.length} ${commandName}(s)...`));
 
-    const allPassed = await executeAndFinalize(
+    const outcome = await executeAndFinalize(
       config,
       lockCtx.logger,
       debugLogger,
@@ -467,16 +475,111 @@ export async function executeGateCommand(
       rerunResult.passedSlotsMap,
       changes,
       jobs,
-      options.contextContent,
-      commandName,
-      options,
-      reconciliation.trustSourceOnPass,
+      effectiveOptions.contextContent,
+      lifecycle,
     );
 
-    await releaseLock(logDir);
-    restoreConsole?.restore();
-    process.exit(allPassed ? 0 : 1);
+    const status = outcome.retryLimitExceeded
+      ? 'retry_limit_exceeded'
+      : statusFromOutcome(outcome);
+    const result = await withTelemetry(
+      {
+        status,
+        message: statusMessage(status),
+        gatesRun: outcome.gateResults.length,
+        gatesFailed: outcome.stats.failed,
+        gateResults: outcome.gateResults,
+      },
+      lifecycle,
+    );
+    if (outcome.allPassed) {
+      await debugLogger?.logClean('auto', 'all_passed');
+      await cleanLogs(logDir, config.project.max_previous_logs);
+    }
+    await writeExecutionState(logDir);
+    await appendCurrentTrustRecord({
+      config,
+      logDir,
+      command: commandName,
+      status,
+      source: reconciliation.trustSourceOnPass ?? 'validated',
+      options: {
+        gate: effectiveOptions.gate,
+        enableReviews: effectiveOptions.enableReviews,
+      },
+    });
+    return result;
   } catch (error: unknown) {
-    await handleGateError(error, config, lockAcquired, restoreConsole);
+    const err = error as { message?: string };
+    const lockConflict = error instanceof GateCommandLockConflictError;
+    if (!lockConflict) console.error(chalk.red('Error:'), err.message);
+    return withTelemetry(
+      {
+        status: lockConflict ? 'lock_conflict' : 'error',
+        message: lockConflict
+          ? statusMessage('lock_conflict')
+          : 'Unexpected error occurred.',
+        errorMessage: err.message || 'unknown error',
+      },
+      lifecycle,
+    );
+  } finally {
+    if (config && lockAcquired) {
+      try {
+        await releaseLock(config.project.log_dir);
+      } catch (error) {
+        console.error(
+          chalk.yellow('Warning: failed to release lock:'),
+          (error as Error).message,
+        );
+      }
+    }
+    restoreConsole?.restore();
   }
+}
+
+const METRICS_IDENTIFIER_MAX_LENGTH = 256;
+
+function validateMetricsContext(
+  options: GateCommandOptions,
+): { consumer: string; context_id: string } | null {
+  if (!(options.metricsConsumer || options.metricsContext)) return null;
+  if (!(options.metricsConsumer && options.metricsContext))
+    throw new Error(
+      'metrics-consumer and metrics-context must be supplied together',
+    );
+  for (const value of [options.metricsConsumer, options.metricsContext]) {
+    if (!value.trim() || value.length > METRICS_IDENTIFIER_MAX_LENGTH)
+      throw new Error(
+        'metrics consumer and context must be bounded nonempty values',
+      );
+  }
+  return {
+    consumer: options.metricsConsumer,
+    context_id: options.metricsContext,
+  };
+}
+
+async function withTelemetry(
+  result: RunResult,
+  lifecycle: CommandMetricsLifecycle,
+): Promise<RunResult> {
+  return { ...result, telemetry: await lifecycle.finalize(result.status) };
+}
+
+function statusMessage(status: ValidatorStatus): string {
+  const messages: Record<ValidatorStatus, string> = {
+    passed: 'All gates passed.',
+    passed_with_warnings: 'Passed with warnings -- some issues were skipped.',
+    no_applicable_gates: 'No applicable gates for these changes.',
+    no_changes: 'No changes detected.',
+    trusted: 'Trusted validation snapshot.',
+    failed: 'Gates failed -- issues must be fixed.',
+    retry_limit_exceeded:
+      'Retry limit exceeded -- logs have been automatically archived.',
+    lock_conflict: 'Another validator run is already in progress.',
+    error: 'Unexpected error occurred.',
+    no_config: 'No validator config found.',
+  };
+  return messages[status];
 }

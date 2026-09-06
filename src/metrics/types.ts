@@ -137,6 +137,7 @@ export interface ModelAttempt {
   };
   diagnostics: string[];
   review_context?: { gate: string; slot: number };
+  consumer_context?: { consumer: string; context_id: string } | null;
 }
 
 export interface Invocation {
@@ -153,6 +154,10 @@ export interface Invocation {
   attempt_ids: string[];
   zero_dispatch: boolean;
   diagnostics: string[];
+  /** Optional v1 fields retain compatibility with already committed revisions. */
+  command?: 'run' | 'check' | 'review';
+  consumer_context?: { consumer: string; context_id: string } | null;
+  outcome?: string | null;
 }
 
 export interface Digest {

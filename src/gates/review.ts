@@ -4,7 +4,13 @@ import {
   getAdapter,
   isUsageLimit,
 } from '../cli-adapters/index.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterExecutionResult,
+  createUnavailableTelemetry,
+} from '../cli-adapters/shared.js';
 import type { AdapterConfig } from '../config/types.js';
+import type { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import type {
   GateResult,
@@ -71,6 +77,7 @@ export class ReviewGateExecutor {
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
     contextContent?: string,
+    metrics?: CommandMetricsLifecycle,
   ): Promise<GateResult> {
     const startTime = Date.now();
     const { mainLogger, getAdapterLogger, logPaths, logPathsSet } =
@@ -94,6 +101,7 @@ export class ReviewGateExecutor {
         logDir,
         adapterConfigs,
         contextContent,
+        metrics,
       );
     } catch (error: unknown) {
       return handleCriticalError(error, jobId, startTime, logPaths, mainLogger);
@@ -118,6 +126,7 @@ export class ReviewGateExecutor {
     logDir?: string,
     adapterConfigs?: Record<string, AdapterConfig>,
     contextContent?: string,
+    metrics?: CommandMetricsLifecycle,
   ): Promise<GateResult> {
     log.debug(`Starting review: ${config.name} | entry=${entryPointPath}`);
     await mainLogger(`Starting review: ${config.name}\n`);
@@ -194,6 +203,7 @@ export class ReviewGateExecutor {
       changeOptions: effectiveChangeOptions,
       oneShotOutputs: oneShotState.outputs,
       runningSlotIndexes: oneShotState.runningSlotIndexes,
+      metrics,
     });
   }
 
@@ -281,6 +291,7 @@ export class ReviewGateExecutor {
     contextContent?: string,
     changeOptions?: ReviewChangeOptions,
     preservedOutputs: ReviewOutputEntry[] = [],
+    metrics?: CommandMetricsLifecycle,
   ): Promise<GateResult> {
     const dispatchMsg = `Dispatching ${required} review(s) via round-robin: ${assignments.map((a) => `${a.adapter}@${a.reviewIndex}`).join(', ')}`;
     log.debug(dispatchMsg);
@@ -314,6 +325,7 @@ export class ReviewGateExecutor {
         adapterConfigs,
         contextContent,
         changeOptions,
+        metrics,
       );
 
     const outputs = await dispatchReviews(
@@ -355,6 +367,7 @@ export class ReviewGateExecutor {
     adapterConfigs?: Record<string, AdapterConfig>,
     contextContent?: string,
     changeOptions?: ReviewChangeOptions,
+    metrics?: CommandMetricsLifecycle,
   ): Promise<SingleReviewResult | null> {
     const reviewStartTime = Date.now();
     const adapter = getAdapter(toolName);
@@ -384,6 +397,7 @@ export class ReviewGateExecutor {
         reviewStartTime,
         contextContent,
         changeOptions,
+        metrics,
       );
     } catch (error: unknown) {
       return handleReviewError(
@@ -398,6 +412,7 @@ export class ReviewGateExecutor {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: this is the atomic dispatch-to-review-result boundary.
   private async executeReview(
     adapter: CLIAdapter,
     reviewIndex: number,
@@ -414,6 +429,7 @@ export class ReviewGateExecutor {
     reviewStartTime: number,
     contextContent?: string,
     changeOptions?: ReviewChangeOptions,
+    metrics?: CommandMetricsLifecycle,
   ): Promise<SingleReviewResult | null> {
     await adapterLogger(
       `[START] review:.:${config.name} (${adapter.name}@${reviewIndex})\n`,
@@ -438,14 +454,36 @@ export class ReviewGateExecutor {
     logInputStats(finalPrompt, diff, adapterLogger);
     await adapterLogger(`[diff]\n${diff}\n`);
 
-    const adapterResult = await invokeAdapter(
-      adapter,
-      finalPrompt,
-      diff,
-      config,
-      adapterConfigs?.[toolName],
-      adapterLogger,
-    );
+    const preparedAttempt = await metrics?.prepareAttempt({
+      adapter: adapter.name,
+      gate: config.name,
+      slot: reviewIndex,
+      telemetry: createUnavailableTelemetry(adapter.name, {
+        requestedModel: adapterConfigs?.[toolName]?.model ?? config.model,
+      }),
+    });
+    let adapterResult: AdapterExecutionResult;
+    try {
+      adapterResult = await invokeAdapter(
+        adapter,
+        finalPrompt,
+        diff,
+        config,
+        adapterConfigs?.[toolName],
+        adapterLogger,
+      );
+    } catch (error) {
+      await metrics?.finalizeAttempt(
+        preparedAttempt ?? { attempt_id: '', record: null },
+        error instanceof AdapterExecutionFailure
+          ? error.telemetry
+          : createUnavailableTelemetry(adapter.name, {
+              reason: 'adapter_execution_failed',
+            }),
+        'error',
+      );
+      throw error;
+    }
     // Review interpretation continues to consume text only. The structured
     // telemetry remains available to the dispatch lifecycle/recorder boundary.
     const output = adapterResult.text;
@@ -454,6 +492,12 @@ export class ReviewGateExecutor {
     );
 
     const evaluation = evaluateOutput(output, diff);
+    const attemptOutcome = reviewOutcome(evaluation.status);
+    await metrics?.finalizeAttempt(
+      preparedAttempt ?? { attempt_id: '', record: null },
+      adapterResult.telemetry,
+      attemptOutcome,
+    );
     if (evaluation.status === 'error' && isUsageLimit(output)) {
       await handleUsageLimit(adapter, logDir, mainLogger);
       return {
@@ -480,6 +524,7 @@ export class ReviewGateExecutor {
       mainLogger,
       logDir,
       reviewScope,
+      preparedAttempt?.attempt_id,
     );
     return {
       adapter: adapter.name,
@@ -491,6 +536,7 @@ export class ReviewGateExecutor {
         json: evaluation.json,
         skipped,
       },
+      attempt_id: preparedAttempt?.attempt_id,
     };
   }
 
@@ -499,4 +545,12 @@ export class ReviewGateExecutor {
   }
 
   private getDiff = getDiff;
+}
+
+function reviewOutcome(
+  status: EvaluationResult['status'],
+): 'passed' | 'failed' | 'error' {
+  if (status === 'pass') return 'passed';
+  if (status === 'fail') return 'failed';
+  return 'error';
 }

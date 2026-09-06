@@ -39,6 +39,12 @@ export class MetricsRecorder {
   async createSession(): Promise<StoredSession> {
     return this.store.createSession();
   }
+  async openOrCreateActiveSession(): Promise<StoredSession> {
+    const active = await this.store.findActiveSession();
+    return active
+      ? this.store.joinSession(active.session_id)
+      : this.store.createSession();
+  }
   async joinSession(sessionId: string): Promise<StoredSession> {
     return this.store.joinSession(sessionId);
   }

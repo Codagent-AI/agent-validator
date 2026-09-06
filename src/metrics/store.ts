@@ -176,6 +176,17 @@ export class MetricsStore {
     return (await this.readState()).sessions[sessionId] ?? null;
   }
 
+  /** Returns the newest active session without ever reopening a closing one. */
+  async findActiveSession(): Promise<StoredSession | null> {
+    return (
+      Object.values((await this.readState()).sessions)
+        .filter((session) => session.state === 'active')
+        .sort((left, right) =>
+          right.updated_at.localeCompare(left.updated_at),
+        )[0] ?? null
+    );
+  }
+
   async joinSession(sessionId: string): Promise<StoredSession> {
     const session = await this.readSession(sessionId);
     if (!session) throw new Error(`Unknown metrics session: ${sessionId}`);
@@ -299,7 +310,7 @@ export class MetricsStore {
             ? record.provenance.producer_version
             : 'unknown',
       },
-      original_consumer_context: null,
+      original_consumer_context: record.consumer_context ?? null,
       payload: record,
       digest: { algorithm: 'sha256', canonicalization: 'rfc8785', value: '' },
     };

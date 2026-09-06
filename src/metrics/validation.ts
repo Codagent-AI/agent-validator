@@ -196,6 +196,11 @@ export const modelAttemptSchema = z
       .object({ gate: nonEmpty, slot: z.number().int().nonnegative() })
       .strict()
       .optional(),
+    consumer_context: z
+      .object({ consumer: nonEmpty, context_id: nonEmpty })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict()
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Contract cross-field validation keeps all revision-local reference rules together.
@@ -275,6 +280,13 @@ const invocationSchema = z
     attempt_ids: z.array(nonEmpty),
     zero_dispatch: z.boolean(),
     diagnostics: z.array(nonEmpty),
+    command: z.enum(['run', 'check', 'review']).optional(),
+    consumer_context: z
+      .object({ consumer: nonEmpty, context_id: nonEmpty })
+      .strict()
+      .nullable()
+      .optional(),
+    outcome: z.string().nullable().optional(),
   })
   .strict();
 

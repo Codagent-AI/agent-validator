@@ -15,4 +15,8 @@ Model attempts carry requested, resolved, and observed identities separately. Al
 
 The export digest is SHA-256 over RFC 8785 canonical UTF-8 JSON for the complete replacement record except its top-level `digest` member. The pinned compatibility fixtures include original input, canonical bytes, expected hashes, and rejection cases. Consumers should pin a reviewed contract version and run those fixtures in their own implementation.
 
-This foundation does not itself publish snapshots, persist receipts, or implement the metrics CLI. Targeted Runner and Evals confirmation and their real shared-fixture executions remain outstanding integration prerequisites.
+Each `run`, `check`, and `review` execution has a distinct `invocation_id`. Programmatic results expose it in additive `telemetry` metadata with the associated `session_id`, resolved `artifact_path`, and publication ownership/state. A persistence failure is reported as `degraded` or `unavailable`; an existing snapshot is never represented as current-command evidence.
+
+For Runner correlation, validation commands accept paired opaque values: `--metrics-consumer <name>` and `--metrics-context <id>`. They are stored as data, not interpreted as paths. Actual review dispatches additionally receive an `attempt_id`, written into their review JSON artifacts and gate subresults. Preserved or skipped review results do not create a new attempt.
+
+Targeted Runner and Evals confirmation and their real shared-fixture executions remain outstanding integration prerequisites.

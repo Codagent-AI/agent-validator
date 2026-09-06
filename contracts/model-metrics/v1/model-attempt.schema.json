@@ -27,7 +27,8 @@
     "provider_reported_costs": { "type": "array", "items": { "$ref": "#/$defs/cost" } },
     "provenance": { "$ref": "#/$defs/provenance" },
     "diagnostics": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-    "review_context": { "type": "object", "additionalProperties": false, "required": ["gate", "slot"], "properties": { "gate": { "type": "string", "minLength": 1 }, "slot": { "type": "integer", "minimum": 0 } } }
+    "review_context": { "type": "object", "additionalProperties": false, "required": ["gate", "slot"], "properties": { "gate": { "type": "string", "minLength": 1 }, "slot": { "type": "integer", "minimum": 0 } } },
+    "consumer_context": { "type": ["object", "null"], "additionalProperties": false, "required": ["consumer", "context_id"], "properties": { "consumer": { "type": "string", "minLength": 1 }, "context_id": { "type": "string", "minLength": 1 } } }
   },
   "$defs": {
     "availability": { "type": "object", "additionalProperties": false, "required": ["availability", "reason"], "properties": { "availability": { "enum": ["available", "unavailable"] }, "reason": { "type": ["string", "null"] } } },
