@@ -27,6 +27,7 @@ type SharedOptions = {
   receipt?: string;
   measurementVersion?: string[];
   maxRecords?: string;
+  maxBytes?: string;
   confirm?: boolean;
 };
 
@@ -74,12 +75,14 @@ export function registerMetricsCommand(program: Command): void {
       [],
     )
     .option('--max-records <count>')
+    .option('--max-bytes <count>')
     .action((options: SharedOptions) =>
       operation('export', options, async (store, shared) => {
         const result = await store.exportPending({
           ...shared,
           measurementVersions: versions(options.measurementVersion),
           maxRecords: bounded(options.maxRecords, limits.maximum_export_count),
+          maxBytes: bounded(options.maxBytes, limits.maximum_export_bytes),
         });
         return {
           ...result,
@@ -315,16 +318,18 @@ function fail(operation: string, error: unknown): void {
 }
 
 function errorCode(message: string): string {
-  if (message.includes('Unsupported')) return 'unsupported_version';
+  const normalized = message.toLowerCase();
+  if (normalized.includes('scope')) return 'scope_mismatch';
+  if (normalized.includes('invalid metrics receipt')) return 'invalid_receipt';
+  if (normalized.includes('unsupported')) return 'unsupported_version';
   if (
-    message.includes('Invalid') ||
-    message.includes('required') ||
-    message.includes('--confirm')
+    normalized.includes('invalid') ||
+    normalized.includes('required') ||
+    normalized.includes('--confirm')
   )
     return 'invalid_arguments';
-  if (message.includes('receipt')) return 'invalid_receipt';
-  if (message.includes('scope')) return 'scope_mismatch';
-  if (message.includes('configuration')) return 'configuration_unavailable';
-  if (message.includes('lock')) return 'store_busy';
+  if (normalized.includes('receipt')) return 'invalid_receipt';
+  if (normalized.includes('configuration')) return 'configuration_unavailable';
+  if (normalized.includes('lock')) return 'store_busy';
   return 'storage_unavailable';
 }

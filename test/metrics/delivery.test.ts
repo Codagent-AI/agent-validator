@@ -81,4 +81,29 @@ describe('metrics delivery receipts', () => {
     expect(afterAcknowledgment.evidence_state).toBe('previously_acknowledged');
     expect(afterAcknowledgment.records).toEqual([]);
   });
+
+  test('keeps dispositions distinct for record types sharing an identifier', async () => {
+    const store = await MetricsStore.open(await temporaryLogDir());
+    const key = (store as unknown as {
+      revisionKey(record: { record_type: string; record_id: string; revision: number }): string;
+    }).revisionKey;
+
+    expect(key.call(store, { record_type: 'invocation', record_id: 'shared', revision: 1 }))
+      .not.toBe(key.call(store, { record_type: 'model_attempt', record_id: 'shared', revision: 1 }));
+  });
+
+  test('rejects a discard receipt that was already acknowledged', async () => {
+    const store = await MetricsStore.open(await temporaryLogDir());
+    await store.commit([invocation('invocation-1', 'context-a')]);
+    const exported = await store.exportPending({
+      consumer: 'agent-runner', context: 'context-a', protocolVersion: 1, measurementVersions: [1],
+    });
+    await store.acknowledgeReceipt({
+      consumer: 'agent-runner', context: 'context-a', protocolVersion: 1, receipt: exported.receipt!,
+    });
+
+    await expect(store.discardReceipt({
+      consumer: 'agent-runner', context: 'context-a', protocolVersion: 1, receipt: exported.receipt!,
+    })).rejects.toThrow('conflicting disposition');
+  });
 });

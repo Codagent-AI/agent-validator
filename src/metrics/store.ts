@@ -143,6 +143,7 @@ const realFilesystem: StoreFilesystem = {
 
 const LOCK_OWNER_FILENAME = 'owner.json';
 const INCOMPLETE_LOCK_STALE_MS = 30_000;
+const MAXIMUM_INDIVIDUAL_RECORD_BYTES = 3_000_000;
 
 function recordId(record: MetricRecord): string {
   return record.record_type === 'invocation'
@@ -590,6 +591,11 @@ export class MetricsStore {
       digest: { algorithm: 'sha256', canonicalization: 'rfc8785', value: '' },
     };
     envelope.digest = createDigest(envelope);
+    if (
+      Buffer.byteLength(JSON.stringify(envelope)) >
+      MAXIMUM_INDIVIDUAL_RECORD_BYTES
+    )
+      throw new Error('Metrics record exceeds individual record byte limit');
     const destination = path.join(
       this.recordsPath,
       id,
@@ -613,9 +619,9 @@ export class MetricsStore {
   }
 
   private revisionKey(
-    record: Pick<StoredMetricRecord, 'record_id' | 'revision'>,
+    record: Pick<ReceiptItem, 'record_type' | 'record_id' | 'revision'>,
   ): string {
-    return `${record.record_id}:${record.revision}`;
+    return `${record.record_type}:${record.record_id}:${record.revision}`;
   }
 
   private async readIdentity(): Promise<StoreIdentity> {
@@ -666,10 +672,10 @@ export class MetricsStore {
       )
         throw new Error('Metrics receipt does not match the requested scope');
       for (const item of receipt.records) {
-        const key = `${item.record_id}:${item.revision}`;
+        const key = this.revisionKey(item);
         const previous = state.dispositions[key];
-        if (previous === 'discarded' && disposition === 'acknowledged')
-          throw new Error('Delivery gap: receipt contains discarded evidence');
+        if (previous && previous !== disposition)
+          throw new Error('Receipt already has a conflicting disposition');
         if (!previous) state.dispositions[key] = disposition;
       }
       await this.commitState(state);
