@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MetricsStore } from '../../src/metrics/store.js';
@@ -43,6 +43,67 @@ function invocation(id: string, context: string): Invocation {
 }
 
 describe('metrics delivery receipts', () => {
+  test('fails closed without modifying populated pre-index development stores', async () => {
+    const logDir = await temporaryLogDir();
+    const store = await MetricsStore.open(logDir);
+    await store.commit([invocation('committed', 'context-a')]);
+    const statePath = path.join(logDir, '.metrics/state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf8'));
+    delete state.record_index;
+    const original = JSON.stringify(state);
+    await writeFile(statePath, original);
+    await expect(store.pendingInventory()).rejects.toThrow('Unsupported unindexed');
+    expect(await readFile(statePath, 'utf8')).toBe(original);
+  });
+
+  test('rejects unsafe indexed record paths before reading any payload', async () => {
+    const logDir = await temporaryLogDir();
+    const store = await MetricsStore.open(logDir);
+    await store.commit([invocation('committed', 'context-a')]);
+    const statePath = path.join(logDir, '.metrics/state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf8'));
+    const entry = state.record_index['invocation:committed:1'];
+    entry.record_id = '../outside';
+    state.record_index = { 'invocation:../outside:1': entry };
+    await writeFile(statePath, JSON.stringify(state));
+    await expect(store.pendingInventory()).rejects.toThrow('Corrupt metrics record index');
+  });
+
+  test('selects committed metadata before reading bounded payloads and inventories without payload reads', async () => {
+    const logDir = await temporaryLogDir();
+    const store = await MetricsStore.open(logDir);
+    await store.commit([invocation('z-first', 'context-a')]);
+    await store.commit([invocation('a-later', 'context-a'), invocation('other', 'context-b')]);
+    // Unselected payload corruption cannot force whole-backlog payload reads.
+    await writeFile(path.join(logDir, '.metrics/records/a-later/1.json'), '{broken');
+    await writeFile(path.join(logDir, '.metrics/records/other/1.json'), '{broken');
+    const inventory = await store.pendingInventory();
+    expect(inventory.contexts.map((entry) => entry.pending_revision_count)).toEqual([2, 1]);
+    const batch = await store.exportPending({ consumer: 'agent-runner', context: 'context-a', protocolVersion: 1, measurementVersions: [1], maxRecords: 1 });
+    expect(batch.records.map((record) => record.record_id)).toEqual(['z-first']);
+    expect(batch.batch.remaining_revision_count).toBe(1);
+  });
+
+  test('does not export an orphan payload outside the committed revision index', async () => {
+    const logDir = await temporaryLogDir();
+    const store = await MetricsStore.open(logDir);
+    await store.commit([invocation('committed', 'context-a')]);
+    const original = await readFile(path.join(logDir, '.metrics/records/committed/1.json'), 'utf8');
+    await mkdir(path.join(logDir, '.metrics/records/orphan'));
+    await writeFile(path.join(logDir, '.metrics/records/orphan/1.json'), original);
+    const result = await store.exportPending({ consumer: 'agent-runner', context: 'context-a', protocolVersion: 1, measurementVersions: [1] });
+    expect(result.records).toHaveLength(1);
+  });
+
+  test('rejects malformed disposition metadata rather than pretending compatible state', async () => {
+    const logDir = await temporaryLogDir();
+    const store = await MetricsStore.open(logDir);
+    const statePath = path.join(logDir, '.metrics/state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf8'));
+    state.dispositions = [];
+    await writeFile(statePath, JSON.stringify(state));
+    await expect(store.pendingInventory()).rejects.toThrow('Corrupt');
+  });
   test('exports a pending scoped record non-consumingly and acknowledges only its receipt', async () => {
     const store = await MetricsStore.open(await temporaryLogDir());
     await store.commit([invocation('invocation-1', 'context-a')]);

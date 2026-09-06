@@ -74,6 +74,21 @@ function attempt(overrides: Partial<ModelAttempt> = {}): ModelAttempt {
 }
 
 describe('RFC 8785 canonical record digests', () => {
+  test('replays numeric limits, escaping and UTF-16 key ordering from shared bytes', async () => {
+    const directory = path.resolve(import.meta.dir, '../../contracts/model-metrics/v1');
+    const manifest = JSON.parse(await readFile(path.join(directory, 'fixture-manifest.json'), 'utf8'));
+    const entry = manifest.cases.find((item: { name: string }) => item.name === 'numeric-limits-utf16-escaping');
+    expect(entry).toBeDefined();
+    const original = await readFile(path.join(directory, entry.original_json), 'utf8');
+    const canonical = await readFile(path.join(directory, entry.canonical_utf8), 'utf8');
+    const parsed = parseJsonStrict(original);
+    expect(canonicalizeJson(parsed)).toBe(canonical.trimEnd());
+    expect(createDigest(parsed as object).value).toBe(entry.expected_digest);
+  });
+  test('rejects trailing high surrogates in values and keys', () => {
+    expect(() => canonicalizeJson('\ud800')).toThrow('Invalid Unicode');
+    expect(() => canonicalizeJson({ ['key\ud800']: 1 })).toThrow('Invalid Unicode');
+  });
   test('canonicalizes nested keys, Unicode, signed zero, and exponents deterministically', () => {
     expect(canonicalizeJson({ z: -0, 'é': 1e-7, a: ['\u000f', 1.5] })).toBe('{"a":["\\u000f",1.5],"z":0,"é":1e-7}');
   });
@@ -114,6 +129,30 @@ describe('RFC 8785 canonical record digests', () => {
 });
 
 describe('closed measurement contracts', () => {
+  test('replays pinned semantic replacement, allocation-cost and unsupported-version fixtures', async () => {
+    const directory = path.resolve(import.meta.dir, '../../contracts/model-metrics/v1');
+    const manifest = JSON.parse(await readFile(path.join(directory, 'fixture-manifest.json'), 'utf8'));
+    expect(manifest.semantic_cases?.map((entry: { name: string }) => entry.name)).toEqual([
+      'two-model-allocation-cost', 'overlapping-cost-scopes', 'prepared-terminal-replacement', 'unsupported-current-head',
+    ]);
+    for (const entry of manifest.semantic_cases) {
+      const fixture = JSON.parse(await readFile(path.join(directory, entry.original_json), 'utf8'));
+      const canonical = await readFile(path.join(directory, entry.canonical_utf8), 'utf8');
+      expect(canonicalizeJson(fixture)).toBe(canonical.trimEnd());
+      expect(createDigest(fixture).value).toBe(entry.expected_digest);
+      expect(fixture.records.map((record: unknown) => validateAttempt(record).success)).toEqual(fixture.expected.valid_records);
+      const heads = selectLatestHeads(fixture.records);
+      expect(heads.records.map((record) => ({ attempt_id: record.attempt_id, revision: record.revision }))).toEqual(fixture.expected.heads);
+      const aggregate = reduceAttempts(fixture.records);
+      expect(aggregate.attempt_count).toBe(fixture.expected.attempt_count);
+      expect(aggregate.tokens.normalized_total).toMatchObject(fixture.expected.normalized_total);
+      for (const record of fixture.records.filter((record: ModelAttempt) => record.measurement_schema_version === 1)) {
+        const projected = projectExport([record], { consumer: 'runner', context_id: 'fixture-context' }).records[0]!;
+        expect(projected.payload).toEqual(record);
+        expect(validateExportRecord(projected).success).toBe(true);
+      }
+    }
+  });
   test('ships pinned v1 schema and compatibility fixture assets', async () => {
     const root = path.resolve(import.meta.dir, '../..');
     const manifest = JSON.parse(await readFile(path.join(root, 'contracts/model-metrics/v1/fixture-manifest.json'), 'utf8'));
@@ -160,6 +199,14 @@ describe('closed measurement contracts', () => {
 });
 
 describe('accounting and deterministic projections', () => {
+  test('uses caller-owned snapshot identity and time deterministically', () => {
+    const publication = { snapshot_id: 'snapshot-fixed', published_at: '2026-09-06T12:00:11.000Z' };
+    const first = projectSnapshot('session-1', 'invocation-1', [attempt()], [attempt()], publication);
+    const second = projectSnapshot('session-1', 'invocation-1', [attempt()], [attempt()], publication);
+    expect(first).toEqual(second);
+    expect(first.snapshot_id).toBe(publication.snapshot_id);
+    expect(first.published_at).toBe(publication.published_at);
+  });
   test('does not double count cached input or reasoning already included by containing fields', () => {
     const reduced = reduceAttempts([attempt()]);
     expect(reduced.tokens.normalized_total.value).toBe(130);
@@ -173,6 +220,13 @@ describe('accounting and deterministic projections', () => {
     expect(reduced.tokens.cache_read.value).toBe(40);
     expect(reduced.tokens.cache_read.coverage.complete).toBe(false);
     expect(reduced.tokens.normalized_total.availability).toBe('unavailable');
+  });
+
+  test('does not present partial dispatch collection as a complete aggregate', () => {
+    const reduced = reduceAttempts([attempt({ completeness: { ...attempt().completeness, collection: 'partial' } })]);
+    expect(reduced.tokens.normalized_total.value).toBe(130);
+    expect(reduced.tokens.normalized_total.availability).toBe('unavailable');
+    expect(reduced.tokens.normalized_total.coverage.complete).toBe(false);
   });
 
   test('does not derive uncached input when cache-write inclusion is unknown', () => {
@@ -208,7 +262,7 @@ describe('accounting and deterministic projections', () => {
     const exported = projectExport([model], { consumer: 'runner', context_id: 'opaque-1' });
     expect(exported.records[0]?.payload).toEqual(model);
     expect(exported.records[0]?.digest.value).toMatch(/^[a-f0-9]{64}$/);
-    expect(projectSnapshot('session-1', 'invocation-1', [model], [attempt()]).aggregates.current_invocation.attempt_count).toBe(1);
+    expect(projectSnapshot('session-1', 'invocation-1', [model], [attempt()], { snapshot_id: 'snapshot-1', published_at: '2026-09-06T12:00:11.000Z' }).aggregates.current_invocation.attempt_count).toBe(1);
   });
 
   test('rejects export records with invalid allocation or cost references', () => {

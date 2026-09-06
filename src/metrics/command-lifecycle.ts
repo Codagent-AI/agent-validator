@@ -7,6 +7,7 @@ import {
   MEASUREMENT_SCHEMA_VERSION,
   type ModelAttempt,
 } from './types.js';
+import { validateAttempt } from './validation.js';
 
 export interface CommandTelemetry {
   invocation_id: string;
@@ -38,6 +39,8 @@ export class CommandMetricsLifecycle {
   private record: Invocation | null = null;
   private unavailableReasons: string[] = [];
   private attemptPersistenceFailed = false;
+  private attemptWrites = new Map<string, Promise<void>>();
+  private terminalAttempts = new Set<string>();
 
   constructor(
     private readonly command: ValidationCommand,
@@ -214,20 +217,71 @@ export class CommandMetricsLifecycle {
     }
   }
 
-  async finalizeAttempt(
+  observeAttempt(
+    prepared: PreparedAttempt,
+    telemetry: AdapterTelemetry,
+  ): Promise<void> {
+    if (this.terminalAttempts.has(prepared.attempt_id))
+      return Promise.resolve();
+    return this.queueAttempt(prepared, telemetry, 'unknown', false);
+  }
+
+  finalizeAttempt(
     prepared: PreparedAttempt,
     telemetry: AdapterTelemetry,
     outcome: 'passed' | 'failed' | 'error',
   ): Promise<void> {
+    if (this.terminalAttempts.has(prepared.attempt_id))
+      return this.attemptWrites.get(prepared.attempt_id) ?? Promise.resolve();
+    this.terminalAttempts.add(prepared.attempt_id);
+    return this.queueAttempt(prepared, telemetry, outcome, true);
+  }
+
+  private queueAttempt(
+    prepared: PreparedAttempt,
+    telemetry: AdapterTelemetry,
+    outcome: ModelAttempt['outcome'],
+    terminal: boolean,
+  ): Promise<void> {
+    const evidence = structuredClone(telemetry);
+    const pending = (
+      this.attemptWrites.get(prepared.attempt_id) ?? Promise.resolve()
+    ).then(() => this.persistAttempt(prepared, evidence, outcome, terminal));
+    this.attemptWrites.set(prepared.attempt_id, pending);
+    return pending;
+  }
+
+  private async persistAttempt(
+    prepared: PreparedAttempt,
+    evidence: AdapterTelemetry,
+    outcome: ModelAttempt['outcome'],
+    terminal: boolean,
+  ): Promise<void> {
     if (!(prepared.record && this.recorder)) return;
     const current = prepared.record;
+    let telemetry = evidence;
+    // An operational failure without new evidence cannot erase a previously
+    // committed partial measurement. It still cannot establish a complete total.
+    if (
+      outcome === 'error' &&
+      telemetry.completeness.collection === 'unavailable' &&
+      current.completeness.collection !== 'unavailable'
+    ) {
+      telemetry = {
+        ...current,
+        completeness: { ...current.completeness, collection: 'partial' },
+        diagnostics: [
+          ...new Set([...current.diagnostics, ...telemetry.diagnostics]),
+        ],
+      };
+    }
     const record: ModelAttempt = {
       ...current,
       revision: current.revision + 1,
       lifecycle: {
-        state: outcome === 'error' ? 'failed' : 'completed',
+        state: attemptState(terminal, outcome),
         started_at: current.lifecycle.started_at,
-        ended_at: new Date().toISOString(),
+        ended_at: terminal ? new Date().toISOString() : null,
       },
       outcome,
       requested_identity: telemetry.requested_identity,
@@ -247,6 +301,8 @@ export class CommandMetricsLifecycle {
       diagnostics: telemetry.diagnostics,
     };
     try {
+      if (!validateAttempt(record).success)
+        throw new Error('invalid_adapter_telemetry');
       await this.recorder.updateAttempt(record);
       prepared.record = record;
     } catch (error) {
@@ -272,4 +328,12 @@ export class CommandMetricsLifecycle {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'metrics_storage_unavailable';
+}
+
+function attemptState(
+  terminal: boolean,
+  outcome: ModelAttempt['outcome'],
+): ModelAttempt['lifecycle']['state'] {
+  if (!terminal) return 'running';
+  return outcome === 'error' ? 'failed' : 'completed';
 }

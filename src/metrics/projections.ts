@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { canonicalizeJson, createDigest } from './jcs.js';
 import {
   type AggregateValue,
@@ -62,7 +61,11 @@ function aggregateValue(
   const complete =
     !incompatible &&
     values.length === eligible &&
-    records.every((item) => item.completeness.history === 'complete');
+    records.every(
+      (item) =>
+        item.completeness.history === 'complete' &&
+        item.completeness.collection === 'complete',
+    );
   let precision: AggregateValue['fidelity'] = null;
   if (values.some((item) => item.precision === 'approximate')) {
     precision = 'approximate';
@@ -185,6 +188,7 @@ export function projectSnapshot(
   currentInvocationId: string,
   currentAttempts: ModelAttempt[],
   sessionAttempts: ModelAttempt[],
+  publication: { snapshot_id: string; published_at: string },
 ): Snapshot {
   const sessionHeads = selectLatestHeads(sessionAttempts).records;
   return {
@@ -197,8 +201,8 @@ export function projectSnapshot(
       name: 'agent-validator',
       version: sessionHeads[0]?.provenance.producer_version ?? 'unknown',
     },
-    snapshot_id: randomUUID(),
-    published_at: new Date().toISOString(),
+    snapshot_id: publication.snapshot_id,
+    published_at: publication.published_at,
     session: { session_id: sessionId, state: 'open' },
     current_invocation_id: currentInvocationId,
     invocations: [],

@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { resolveMetricsLocation } from '../config/metrics-location.js';
+import { MetricsOperationError } from '../metrics/errors.js';
 import { MetricsStore } from '../metrics/store.js';
 import {
   ARTIFACT_SCHEMA_VERSION,
@@ -306,7 +307,8 @@ function write(value: object): void {
 function fail(operation: string, error: unknown): void {
   const message =
     error instanceof Error ? error.message : 'Metrics operation failed';
-  const code = errorCode(message);
+  const code =
+    error instanceof MetricsOperationError ? error.code : errorCode(message);
   write({
     ok: false,
     operation,

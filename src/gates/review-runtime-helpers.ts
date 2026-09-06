@@ -1,5 +1,6 @@
 import {
   type AdapterExecutionResult,
+  type AdapterTelemetry,
   type CLIAdapter,
   createUnavailableTelemetry,
 } from '../cli-adapters/shared.js';
@@ -14,6 +15,10 @@ export async function invokeAdapter(
   config: ReviewConfig,
   adapterCfg: AdapterConfig | undefined,
   adapterLogger: (msg: string) => Promise<void>,
+  collection?: {
+    attemptId: string;
+    onTelemetry: (telemetry: AdapterTelemetry) => void;
+  },
 ): Promise<AdapterExecutionResult> {
   const result = await adapter.execute({
     prompt,
@@ -27,6 +32,7 @@ export async function invokeAdapter(
     },
     allowToolUse: adapterCfg?.allow_tool_use,
     thinkingBudget: adapterCfg?.thinking_budget,
+    ...collection,
   });
   // Compatibility for existing injected test doubles. Production adapters use
   // the structured contract above; this fallback never manufactures usage.

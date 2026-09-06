@@ -194,7 +194,7 @@ async function moveFrozenFiles(
   entries: InventoryEntry[],
 ): Promise<void> {
   const files = path.join(staging, 'files');
-  await ensureSafeDirectory(staging, files);
+  await ensureSafeDirectory(logDir, files);
   for (const entry of entries) {
     const source = path.join(logDir, entry.name);
     const staged = path.join(files, entry.name);
@@ -260,7 +260,7 @@ async function rotateArchives(
     await moveArchiveDirectory(
       source,
       destination,
-      operation.destination.startsWith('evicted/') ? staging : logDir,
+      logDir,
       operation.source,
       operation.destination,
     );
@@ -324,6 +324,7 @@ export async function recoverPendingSessionClosures(
   let names: string[];
   try {
     names = await fs.readdir(closures);
+    await ensureSafeDirectory(logDir, closures);
   } catch (error) {
     if (isMissing(error))
       return { closed: false, close_id: null, warnings: [] };
@@ -350,6 +351,7 @@ async function recoverOneClosure(
   const staging = path.join(closures, name);
   const journalPath = path.join(staging, 'journal.json');
   try {
+    await ensureSafeDirectory(logDir, staging);
     const journal = await readJournal(journalPath);
     if (!journal || journal.phase === 'closed') return null;
     let recorder: MetricsRecorder | null = null;
@@ -380,7 +382,7 @@ async function installArchive(
   }
   const previous = path.join(logDir, 'previous');
   const files = path.join(staging, 'files');
-  await ensureSafeDirectory(staging, files);
+  await ensureSafeDirectory(logDir, files);
   await ensureSafeDirectory(logDir, previous);
   for (const entry of journal.ordinary) {
     const staged = path.join(files, entry.name);
@@ -442,6 +444,7 @@ export async function closeMeasuredSession(
   const staging = path.join(logDir, '.metrics', 'closures', closeId);
   const journalPath = path.join(staging, 'journal.json');
   const archives = await archiveInventory(logDir);
+  await ensureSafeDirectory(logDir, staging);
   const journal: ClosureJournal = {
     close_id: closeId,
     session_id: active?.session_id ?? null,

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { projectSnapshot } from './projections.js';
@@ -24,6 +25,7 @@ export class MetricsRecorder {
     readonly store: MetricsStore,
     readonly logDir: string,
     private readonly snapshotFilesystem: SnapshotFilesystem = fs,
+    private readonly durability?: StoreFilesystem,
   ) {}
 
   static async open(
@@ -33,6 +35,8 @@ export class MetricsRecorder {
     return new MetricsRecorder(
       await MetricsStore.open(logDir, filesystem),
       path.resolve(logDir),
+      fs,
+      filesystem,
     );
   }
 
@@ -43,6 +47,8 @@ export class MetricsRecorder {
     return new MetricsRecorder(
       await MetricsStore.openExisting(logDir, filesystem),
       path.resolve(logDir),
+      fs,
+      filesystem,
     );
   }
 
@@ -124,6 +130,7 @@ export class MetricsRecorder {
         invocationId,
         records.attempts.filter((item) => item.invocation_id === invocationId),
         records.attempts,
+        { snapshot_id: randomUUID(), published_at: new Date().toISOString() },
       );
       snapshot.invocations = records.invocations;
       snapshot.session.state = session.state;
@@ -172,6 +179,7 @@ export class MetricsRecorder {
           )
         : [],
       records.attempts,
+      { snapshot_id: randomUUID(), published_at: new Date().toISOString() },
     );
     snapshot.invocations = records.invocations;
     snapshot.session.state = 'closed';
@@ -196,6 +204,19 @@ export class MetricsRecorder {
       await handle.close();
       handle = undefined;
       await this.snapshotFilesystem.rename(temporary, destination);
+      if (this.durability) {
+        await this.durability.syncDirectory(path.dirname(destination));
+      } else {
+        const directory = await this.snapshotFilesystem.open(
+          path.dirname(destination),
+          'r',
+        );
+        try {
+          await directory.sync();
+        } finally {
+          await directory.close();
+        }
+      }
     } catch (error) {
       await handle?.close().catch(() => undefined);
       await this.snapshotFilesystem

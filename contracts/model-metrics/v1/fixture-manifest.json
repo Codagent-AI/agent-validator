@@ -4,8 +4,59 @@
   "digest_algorithm": "sha256",
   "provenance": "Synthetic contract-only inputs; they validate canonicalization and projections, not provider accounting semantics.",
   "cases": [
-    { "name": "fraction-unicode-signed-zero", "original_json": "fixtures/fraction-unicode-signed-zero.json", "canonical_utf8": "fixtures/fraction-unicode-signed-zero.canonical.json", "expected_digest": "be8bd2e33a794d5023c73042b0538905b807428de7045f72245514f05416b4b1", "accepted": true, "semantic_projection": "canonical record excluding top-level digest" },
-    { "name": "duplicate-key-rejected", "original_json": "fixtures/duplicate-key.json", "accepted": false, "reason": "duplicate_object_key" },
-    { "name": "invalid-token-integer-rejected", "original_json": "fixtures/invalid-token-integer.json", "accepted": false, "reason": "invalid_exact_token_integer" }
+    {
+      "name": "fraction-unicode-signed-zero",
+      "original_json": "fixtures/fraction-unicode-signed-zero.json",
+      "canonical_utf8": "fixtures/fraction-unicode-signed-zero.canonical.json",
+      "expected_digest": "be8bd2e33a794d5023c73042b0538905b807428de7045f72245514f05416b4b1",
+      "accepted": true,
+      "semantic_projection": "canonical record excluding top-level digest"
+    },
+    {
+      "name": "duplicate-key-rejected",
+      "original_json": "fixtures/duplicate-key.json",
+      "accepted": false,
+      "reason": "duplicate_object_key"
+    },
+    {
+      "name": "invalid-token-integer-rejected",
+      "original_json": "fixtures/invalid-token-integer.json",
+      "accepted": false,
+      "reason": "invalid_exact_token_integer"
+    },
+    {
+      "name": "numeric-limits-utf16-escaping",
+      "original_json": "fixtures/numeric-limits-utf16-escaping.json",
+      "canonical_utf8": "fixtures/numeric-limits-utf16-escaping.canonical.json",
+      "expected_digest": "a36a5c92568c26c0bc45f67a14299f6a3565a2156eda751954a0376a33e5257e",
+      "accepted": true,
+      "semantic_projection": "Finite scalar JSON canonicalization only; unsafe integers are not admissible token measurements."
+    }
+  ],
+  "semantic_cases": [
+    {
+      "name": "two-model-allocation-cost",
+      "original_json": "fixtures/two-model-allocation-cost.json",
+      "canonical_utf8": "fixtures/two-model-allocation-cost.canonical.json",
+      "expected_digest": "c9175c1362f55f50bd40f5657222df122f886fdd8542527f42c74db0215fbf74"
+    },
+    {
+      "name": "overlapping-cost-scopes",
+      "original_json": "fixtures/overlapping-cost-scopes.json",
+      "canonical_utf8": "fixtures/overlapping-cost-scopes.canonical.json",
+      "expected_digest": "48cbc6b1c388db74f4546758ea2c71bed94889bbfe962f6292a1ce9ff96b6f8a"
+    },
+    {
+      "name": "prepared-terminal-replacement",
+      "original_json": "fixtures/prepared-terminal-replacement.json",
+      "canonical_utf8": "fixtures/prepared-terminal-replacement.canonical.json",
+      "expected_digest": "8e6f4c5bdbf708f9e2c237b1ff68a0dc5c0950aaab9e0153ec8da2fb6ac4db1a"
+    },
+    {
+      "name": "unsupported-current-head",
+      "original_json": "fixtures/unsupported-current-head.json",
+      "canonical_utf8": "fixtures/unsupported-current-head.canonical.json",
+      "expected_digest": "911b6a1222c010edd4a595d09ebd32b0926f760b9e50b1d611d985a806652e80"
+    }
   ]
 }

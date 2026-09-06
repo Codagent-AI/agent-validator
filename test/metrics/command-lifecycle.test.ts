@@ -3,7 +3,11 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { CommandMetricsLifecycle } from '../../src/metrics/command-lifecycle.js';
-import { createUnavailableTelemetry } from '../../src/cli-adapters/shared.js';
+import { createUnavailableTelemetry, observedMeasurement } from '../../src/cli-adapters/shared.js';
+import { MetricsStore } from '../../src/metrics/store.js';
+import { CodexAdapter } from '../../src/cli-adapters/codex.js';
+import { AdapterExecutionFailure, type runStreamingCommand } from '../../src/cli-adapters/shared.js';
+import { invokeAdapter } from '../../src/gates/review-runtime-helpers.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -24,6 +28,69 @@ async function temporaryLogDir(): Promise<string> {
 }
 
 describe('command metrics lifecycle', () => {
+  test('threads collector replacements through the review runtime into the durable attempt', async () => {
+    const logDir = await temporaryLogDir();
+    const lifecycle = new CommandMetricsLifecycle('review');
+    await lifecycle.associate(logDir);
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'codex', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('codex') });
+    const stream: typeof runStreamingCommand = async (opts) => {
+      try {
+        opts.onStdout?.('{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}\n');
+        throw new Error('controlled exit');
+      } finally { await opts.cleanup(); }
+    };
+    const adapter = new CodexAdapter(stream);
+    expect((adapter as unknown as { streamCommand: typeof stream }).streamCommand).toBe(stream);
+    const config = { name: 'review' } as Parameters<typeof invokeAdapter>[3];
+    try {
+      await invokeAdapter(adapter, 'synthetic fixture', '', config, undefined, async () => {}, {
+        attemptId: prepared.attempt_id,
+        onTelemetry: (telemetry) => { void lifecycle.observeAttempt(prepared, telemetry); },
+      });
+      throw new Error('expected controlled exit');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AdapterExecutionFailure);
+      await lifecycle.finalizeAttempt(prepared, (error as AdapterExecutionFailure).telemetry, 'error');
+    }
+    await lifecycle.finalize('error');
+    const snapshot = JSON.parse(await readFile(path.join(logDir, 'validation-metrics.json'), 'utf8'));
+    expect(snapshot.attempts[0]).toMatchObject({ attempt_id: prepared.attempt_id, revision: 3, tokens: { output: { value: 3 } } });
+    expect(snapshot.aggregates.current_invocation.tokens.output.coverage.complete).toBe(false);
+  });
+  test('rejects non-allowlisted partial evidence without persisting its payload', async () => {
+    const logDir = await temporaryLogDir();
+    const lifecycle = new CommandMetricsLifecycle('review');
+    await lifecycle.associate(logDir);
+    const telemetry = createUnavailableTelemetry('fixture');
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'fixture', gate: 'review', slot: 1, telemetry });
+    telemetry.provider_native_usage.push({ source: 'provider_event', name: 'prompt', value: 'synthetic-secret-canary' });
+    await lifecycle.observeAttempt(prepared, telemetry);
+    const result = await lifecycle.finalize('error');
+    expect(result.publication.state).toBe('degraded');
+    const snapshot = await readFile(path.join(logDir, 'validation-metrics.json'), 'utf8');
+    expect(snapshot).not.toContain('synthetic-secret-canary');
+  });
+  test('persists partial replacements under the prepared ID and ignores late evidence after terminal failure', async () => {
+    const logDir = await temporaryLogDir();
+    const lifecycle = new CommandMetricsLifecycle('review', { consumer: 'runner', context_id: 'partial' });
+    await lifecycle.associate(logDir);
+    const unavailable = createUnavailableTelemetry('fixture');
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'fixture', gate: 'review', slot: 1, telemetry: unavailable });
+    const partial = createUnavailableTelemetry('fixture');
+    partial.tokens.output = observedMeasurement(7, 'provider_event');
+    partial.completeness.collection = 'partial';
+    await lifecycle.observeAttempt(prepared, partial);
+    const store = await MetricsStore.openExisting(logDir);
+    const intermediate = await store!.exportPending({ consumer: 'runner', context: 'partial', protocolVersion: 1, measurementVersions: [1] });
+    expect(intermediate.records.filter((record) => record.record_type === 'model_attempt').at(-1)?.payload).toMatchObject({ attempt_id: prepared.attempt_id, revision: 2, lifecycle: { state: 'running' }, tokens: { output: { value: 7 } } });
+    await lifecycle.finalizeAttempt(prepared, unavailable, 'error');
+    partial.tokens.output = observedMeasurement(999, 'provider_event');
+    await lifecycle.observeAttempt(prepared, partial);
+    await lifecycle.finalize('error');
+    const snapshot = JSON.parse(await readFile(path.join(logDir, 'validation-metrics.json'), 'utf8'));
+    expect(snapshot.attempts).toHaveLength(1);
+    expect(snapshot.attempts[0]).toMatchObject({ revision: 3, lifecycle: { state: 'failed' }, tokens: { output: { value: 7 } }, completeness: { collection: 'partial' } });
+  });
   test('publishes a terminal zero-dispatch invocation owned by this command', async () => {
     const logDir = await temporaryLogDir();
     const lifecycle = new CommandMetricsLifecycle('run');

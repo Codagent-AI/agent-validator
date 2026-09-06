@@ -48,6 +48,24 @@ function attempt(id: string, sessionId: string, invocationId: string): ModelAtte
 }
 
 describe('durable metrics recorder', () => {
+  test('does not claim publication success when its directory durability barrier fails', async () => {
+    const logDir = await temporaryLogDir();
+    let failPublication = false;
+    const recorder = await MetricsRecorder.open(logDir, {
+      syncFile: (file) => file.sync(),
+      async syncDirectory(directory) {
+        if (failPublication && directory === logDir) throw new Error('snapshot directory sync failed');
+        const handle = await open(directory, 'r');
+        try { await handle.sync(); } finally { await handle.close(); }
+      },
+    });
+    const session = await recorder.createSession();
+    await recorder.recordInvocation(invocation('invocation-1', session.session_id));
+    failPublication = true;
+    const result = await recorder.publishSnapshot(session.session_id, 'invocation-1');
+    expect(result.state).toBe('degraded');
+    expect(result.reasons).toContain('snapshot directory sync failed');
+  });
   test('commits prepared attempts and parent membership together across concurrent writers', async () => {
     const logDir = await temporaryLogDir();
     const recorder = await MetricsRecorder.open(logDir);

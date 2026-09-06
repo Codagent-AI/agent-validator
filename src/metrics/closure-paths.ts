@@ -41,7 +41,7 @@ export async function ensureSafeDirectory(
   const resolvedDirectory = path.resolve(directory);
   if (!pathWithin(resolvedRoot, resolvedDirectory, true))
     throw invalidPath('archive path escapes its root');
-  if (!(await fs.stat(resolvedRoot)).isDirectory())
+  if (!(await fs.lstat(resolvedRoot)).isDirectory())
     throw invalidPath('archive root is not a directory');
   const relative = path.relative(resolvedRoot, resolvedDirectory);
   let current = resolvedRoot;

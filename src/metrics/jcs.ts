@@ -8,7 +8,7 @@ function invalidUnicode(value: string): boolean {
     const code = value.charCodeAt(i);
     if (code >= 0xd800 && code <= 0xdbff) {
       const next = value.charCodeAt(i + 1);
-      if (next < 0xdc00 || next > 0xdfff) return true;
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
       i++;
     } else if (code >= 0xdc00 && code <= 0xdfff) return true;
   }

@@ -471,6 +471,14 @@ export class ReviewGateExecutor {
         config,
         adapterConfigs?.[toolName],
         adapterLogger,
+        preparedAttempt && metrics
+          ? {
+              attemptId: preparedAttempt.attempt_id,
+              onTelemetry: (telemetry) => {
+                void metrics.observeAttempt(preparedAttempt, telemetry);
+              },
+            }
+          : undefined,
       );
     } catch (error) {
       await metrics?.finalizeAttempt(

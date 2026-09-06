@@ -19,6 +19,28 @@ async function logDirectory(): Promise<string> {
 }
 
 describe('measured session closure', () => {
+  for (const linkedComponent of ['staging', 'closures', '.metrics']) {
+    test(`rejects a symlinked ${linkedComponent} root before reading or moving closure evidence`, async () => {
+      const parent = await logDirectory();
+      const logDir = path.join(parent, 'logs');
+      const external = path.join(parent, 'external');
+      const closeId = 'f4d0273d-a7d4-42c7-97ee-00b1eb7348d7';
+      const staging = path.join(logDir, '.metrics', 'closures', closeId);
+      const link = linkedComponent === 'staging' ? staging : linkedComponent === 'closures' ? path.dirname(staging) : path.join(logDir, '.metrics');
+      await mkdir(path.dirname(link), { recursive: true });
+      await mkdir(external);
+      await symlink(external, link);
+      await mkdir(staging, { recursive: true });
+      await mkdir(path.join(logDir, 'previous'), { recursive: true });
+      await writeFile(path.join(logDir, 'previous', 'archive.log'), 'archive');
+      const journal = JSON.stringify({ close_id: closeId, session_id: null, max_previous_logs: 1, ordinary: [], archive_directories: ['previous'], archive_operations: [{ source: 'previous', destination: 'evicted/previous', state: 'pending' }], snapshot: null, snapshot_digest: null, phase: 'staged' });
+      await writeFile(path.join(staging, 'journal.json'), journal);
+      const result = await recoverPendingSessionClosures(logDir);
+      expect(result.warnings).toHaveLength(1);
+      expect(await readFile(path.join(logDir, 'previous', 'archive.log'), 'utf8')).toBe('archive');
+      expect(await readFile(path.join(staging, 'journal.json'), 'utf8')).toBe(journal);
+    });
+  }
   test('closes an active metrics-only session once and archives its immutable snapshot', async () => {
     const logDir = await logDirectory();
     const recorder = await MetricsRecorder.open(logDir);

@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { MetricsOperationError } from './errors.js';
 import { createDigest, parseJsonStrict, verifyDigest } from './jcs.js';
 import {
   type Digest,
@@ -45,6 +46,14 @@ interface StoreState {
   heads: Record<string, RecordHead>;
   dispositions: Record<string, string>;
   receipts?: Record<string, ReceiptManifest>;
+  record_index: Record<string, RecordIndexEntry>;
+}
+
+interface RecordIndexEntry extends ReceiptItem {
+  original_consumer_context: StoredMetricRecord['original_consumer_context'];
+  started_at: string | null;
+  bytes: number;
+  generation: number;
 }
 
 interface StoreIdentity {
@@ -159,12 +168,13 @@ function initialState(): StoreState {
     heads: {},
     dispositions: {},
     receipts: {},
+    record_index: {},
   };
 }
 
 function evidenceState(
   selected: StoredMetricRecord[],
-  matching: StoredMetricRecord[],
+  matching: RecordIndexEntry[],
   gaps: number,
 ): MetricsExport['evidence_state'] {
   if (selected.length > 0) return 'pending';
@@ -179,6 +189,41 @@ function isMissing(error: unknown): boolean {
       typeof error === 'object' &&
       'code' in error &&
       (error as NodeJS.ErrnoException).code === 'ENOENT',
+  );
+}
+
+function conflictingDisposition(previous: string): MetricsOperationError {
+  return new MetricsOperationError(
+    previous === 'discarded' ? 'delivery_gap' : 'invalid_receipt',
+    'Receipt already has a conflicting disposition',
+  );
+}
+
+function validIndexEntry(entry: RecordIndexEntry, generation: number): boolean {
+  const context = entry?.original_consumer_context;
+  return Boolean(
+    entry &&
+      ['invocation', 'model_attempt'].includes(entry.record_type) &&
+      typeof entry.record_id === 'string' &&
+      /^[A-Za-z0-9_-]+$/.test(entry.record_id) &&
+      Number.isSafeInteger(entry.revision) &&
+      entry.revision > 0 &&
+      Number.isSafeInteger(entry.measurement_schema_version) &&
+      entry.measurement_schema_version > 0 &&
+      Number.isSafeInteger(entry.bytes) &&
+      entry.bytes > 0 &&
+      Number.isSafeInteger(entry.generation) &&
+      entry.generation > 0 &&
+      entry.generation <= generation &&
+      entry.digest?.algorithm === 'sha256' &&
+      entry.digest.canonicalization === 'rfc8785' &&
+      typeof entry.digest.value === 'string' &&
+      /^[a-f0-9]{64}$/.test(entry.digest.value) &&
+      (entry.started_at === null || typeof entry.started_at === 'string') &&
+      (context === null ||
+        (context &&
+          typeof context.consumer === 'string' &&
+          typeof context.context_id === 'string')),
   );
 }
 
@@ -365,7 +410,7 @@ export class MetricsStore {
     return this.withLock(async () => {
       const state = await this.readState();
       const identity = await this.readIdentity();
-      const matching = (await this.readAllRecords()).filter(
+      const matching = Object.values(state.record_index).filter(
         (record) =>
           record.original_consumer_context?.consumer === options.consumer &&
           record.original_consumer_context.context_id === options.context,
@@ -376,10 +421,6 @@ export class MetricsStore {
       const discarded = matching.filter(
         (record) =>
           state.dispositions[this.revisionKey(record)] === 'discarded',
-      );
-      const _acknowledged = matching.filter(
-        (record) =>
-          state.dispositions[this.revisionKey(record)] === 'acknowledged',
       );
       if (
         pending.some(
@@ -397,8 +438,15 @@ export class MetricsStore {
       const maxBytes = options.maxBytes ?? 1_000_000;
       const selected: StoredMetricRecord[] = [];
       let bytes = 0;
-      for (const record of pending) {
-        const size = Buffer.byteLength(JSON.stringify(record));
+      pending.sort(
+        (left, right) =>
+          left.generation - right.generation ||
+          left.record_type.localeCompare(right.record_type) ||
+          left.record_id.localeCompare(right.record_id) ||
+          left.revision - right.revision,
+      );
+      for (const entry of pending) {
+        const size = entry.bytes;
         if (size > maxBytes && selected.length === 0)
           throw new Error('Metrics record exceeds export byte limit');
         if (
@@ -406,6 +454,17 @@ export class MetricsStore {
           (selected.length > 0 && bytes + size > maxBytes)
         )
           break;
+        const record = await this.readRecord(entry.record_id, entry.revision);
+        if (
+          record.digest.value !== entry.digest.value ||
+          record.record_type !== entry.record_type ||
+          JSON.stringify(record.original_consumer_context) !==
+            JSON.stringify(entry.original_consumer_context) ||
+          record.measurement_schema_version !==
+            entry.measurement_schema_version ||
+          Buffer.byteLength(JSON.stringify(record)) !== size
+        )
+          throw new Error('Corrupt metrics record index');
         selected.push(record);
         bytes += size;
       }
@@ -470,16 +529,15 @@ export class MetricsStore {
 
   /** Read-only scope discovery; this never creates a receipt or store state. */
   async pendingInventory(consumer?: string): Promise<PendingInventory> {
-    const [state, identity, records] = await Promise.all([
+    const [state, identity] = await Promise.all([
       this.readState(),
       this.readIdentity(),
-      this.readAllRecords(),
     ]);
     const grouped = new Map<
       string,
-      { consumer: string; context: string; records: StoredMetricRecord[] }
+      { consumer: string; context: string; records: RecordIndexEntry[] }
     >();
-    for (const record of records) {
+    for (const record of Object.values(state.record_index)) {
       const context = record.original_consumer_context;
       if (!context || (consumer && context.consumer !== consumer)) continue;
       const key = `${context.consumer}\u0000${context.context_id}`;
@@ -506,12 +564,11 @@ export class MetricsStore {
           pending_revision_count: pending.length,
           oldest_pending_at:
             pending
-              .map((record) => record.payload.lifecycle.started_at)
+              .map((record) => record.started_at)
               .filter((time): time is string => Boolean(time))
               .sort()[0] ?? null,
           approximate_payload_bytes: pending.reduce(
-            (total, record) =>
-              total + Buffer.byteLength(JSON.stringify(record)),
+            (total, record) => total + record.bytes,
             0,
           ),
           delivery_gap_count: discarded.length,
@@ -658,6 +715,17 @@ export class MetricsStore {
       record_type: record.record_type,
       revision: record.revision,
     };
+    state.record_index[this.revisionKey(envelope)] = {
+      record_type: envelope.record_type,
+      record_id: id,
+      revision: record.revision,
+      measurement_schema_version: envelope.measurement_schema_version,
+      digest: envelope.digest,
+      original_consumer_context: envelope.original_consumer_context,
+      started_at: record.lifecycle.started_at,
+      bytes: Buffer.byteLength(JSON.stringify(envelope)),
+      generation: state.generation + 1,
+    };
   }
 
   private revisionKey(
@@ -675,28 +743,6 @@ export class MetricsStore {
     return identity;
   }
 
-  private async readAllRecords(): Promise<StoredMetricRecord[]> {
-    const ids = await fs.readdir(this.recordsPath);
-    const records: StoredMetricRecord[] = [];
-    for (const id of ids.sort()) {
-      const entries = await fs.readdir(path.join(this.recordsPath, id));
-      for (const entry of entries.sort(
-        (left, right) => Number(left.slice(0, -5)) - Number(right.slice(0, -5)),
-      )) {
-        if (!entry.endsWith('.json')) continue;
-        const revision = Number(entry.slice(0, -5));
-        if (Number.isInteger(revision) && revision > 0)
-          records.push(await this.readRecord(id, revision));
-      }
-    }
-    return records.sort(
-      (left, right) =>
-        left.record_type.localeCompare(right.record_type) ||
-        left.record_id.localeCompare(right.record_id) ||
-        left.revision - right.revision,
-    );
-  }
-
   private async disposeReceipt(
     options: ReceiptOperation,
     disposition: 'acknowledged' | 'discarded',
@@ -706,18 +752,25 @@ export class MetricsStore {
     await this.withLock(async () => {
       const state = await this.readState();
       const receipt = state.receipts?.[options.receipt];
-      if (!receipt) throw new Error('Invalid metrics receipt');
+      if (!receipt)
+        throw new MetricsOperationError(
+          'invalid_receipt',
+          'Invalid metrics receipt',
+        );
       if (
         receipt.consumer !== options.consumer ||
         receipt.context !== options.context ||
         receipt.protocol_version !== options.protocolVersion
       )
-        throw new Error('Metrics receipt does not match the requested scope');
+        throw new MetricsOperationError(
+          'scope_mismatch',
+          'Metrics receipt does not match the requested scope',
+        );
       for (const item of receipt.records) {
         const key = this.revisionKey(item);
         const previous = state.dispositions[key];
         if (previous && previous !== disposition)
-          throw new Error('Receipt already has a conflicting disposition');
+          throw conflictingDisposition(previous);
         if (!previous) state.dispositions[key] = disposition;
       }
       await this.commitState(state);
@@ -736,7 +789,10 @@ export class MetricsStore {
     ) as unknown as StoredMetricRecord;
     const verified = verifyDigest(parsed);
     if (!verified.valid)
-      throw new Error(`Corrupt metrics record: ${id}:${revision}`);
+      throw new MetricsOperationError(
+        'storage_corrupt',
+        `Corrupt metrics record: ${id}:${revision}`,
+      );
     if (
       parsed.record_id !== id ||
       parsed.revision !== revision ||
@@ -757,8 +813,36 @@ export class MetricsStore {
       !Number.isInteger(state.generation)
     )
       throw new Error('Corrupt or unsupported metrics storage');
+    const objectMap = (value: unknown): boolean =>
+      Boolean(value && typeof value === 'object' && !Array.isArray(value));
+    if (
+      !(objectMap(state.sessions) && objectMap(state.heads)) ||
+      (state.dispositions !== undefined && !objectMap(state.dispositions)) ||
+      (state.receipts !== undefined && !objectMap(state.receipts))
+    )
+      throw new Error('Corrupt metrics storage metadata');
     state.dispositions ??= {};
     state.receipts ??= {};
+    if (
+      Object.values(state.dispositions).some(
+        (value) => !['acknowledged', 'discarded'].includes(value),
+      )
+    )
+      throw new Error('Corrupt metrics disposition');
+    if (state.record_index === undefined && Object.keys(state.heads).length > 0)
+      throw new Error(
+        'Unsupported unindexed metrics storage: preserve evidence and use a compatible producer; automatic migration is unavailable',
+      );
+    state.record_index ??= {};
+    if (!objectMap(state.record_index))
+      throw new Error('Corrupt metrics record index');
+    for (const [key, entry] of Object.entries(state.record_index)) {
+      if (
+        !validIndexEntry(entry, state.generation) ||
+        key !== this.revisionKey(entry)
+      )
+        throw new Error('Corrupt metrics record index');
+    }
     return state;
   }
 

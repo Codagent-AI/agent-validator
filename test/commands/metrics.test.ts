@@ -87,3 +87,20 @@ test('invalid receipts retain their protocol error code', async () => {
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test('acknowledging discarded evidence reports delivery_gap rather than invalid_receipt', async () => {
+  const root = path.resolve(import.meta.dir, '../..');
+  const project = await mkdtemp(path.join(os.tmpdir(), 'agent-validator-metrics-gap-'));
+  try {
+    await mkdir(path.join(project, '.validator'));
+    await writeFile(path.join(project, '.validator/config.yml'), 'log_dir: logs\n');
+    const store = await MetricsStore.open(path.join(project, 'logs'));
+    await store.commit([{ ...invocation(), diagnostics: [] }]);
+    const batch = await store.exportPending({ consumer: 'agent-runner', context: 'context-a', protocolVersion: 1, measurementVersions: [1] });
+    await store.discardReceipt({ consumer: 'agent-runner', context: 'context-a', protocolVersion: 1, receipt: batch.receipt! });
+    const child = Bun.spawn({ cmd: [process.execPath, path.join(root, 'src/index.ts'), 'metrics', 'acknowledge', '--project', project, '--consumer', 'agent-runner', '--context', 'context-a', '--protocol-version', '1', '--receipt', batch.receipt!], cwd: root, stdout: 'pipe', stderr: 'pipe' });
+    const response = JSON.parse(await new Response(child.stdout).text());
+    expect(await child.exited).toBe(1);
+    expect(response.error.code).toBe('delivery_gap');
+  } finally { await rm(project, { recursive: true, force: true }); }
+});

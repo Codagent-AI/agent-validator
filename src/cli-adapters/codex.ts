@@ -249,6 +249,7 @@ export function parseCodexTelemetry(
 
 export class CodexAdapter implements CLIAdapter {
   name = 'codex';
+  constructor(private readonly streamCommand = runStreamingCommand) {}
 
   async isAvailable(): Promise<boolean> {
     try {
@@ -347,11 +348,28 @@ export class CodexAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
+    attemptId?: string;
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
-    const fallbackTelemetry = createUnavailableTelemetry('codex', {
+    let fallbackTelemetry = createUnavailableTelemetry('codex', {
       requestedModel: opts.model,
       requestedEffort: opts.thinkingBudget,
     });
+    let evidenceStream = '';
+    const collect = (chunk: string) => {
+      evidenceStream += chunk;
+      const telemetry = parseCodexTelemetry(evidenceStream, {
+        requestedModel: opts.model,
+        thinkingBudget: opts.thinkingBudget,
+      });
+      if (telemetry.provider_native_usage.length === 0) return;
+      // Only complete parsed usage events change the replacement evidence.
+      telemetry.completeness.collection = 'partial';
+      if (JSON.stringify(telemetry) === JSON.stringify(fallbackTelemetry))
+        return;
+      fallbackTelemetry = telemetry;
+      opts.onTelemetry?.(telemetry);
+    };
     try {
       const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
@@ -374,12 +392,13 @@ export class CodexAdapter implements CLIAdapter {
       const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
       // If onOutput callback is provided, use spawn for real-time streaming
-      if (opts.onOutput) {
-        const raw = await runStreamingCommand({
+      if (opts.onOutput || opts.onTelemetry) {
+        const raw = await this.streamCommand({
           command: 'codex',
           args,
           tmpFile,
           timeoutMs: opts.timeoutMs,
+          onStdout: collect,
           onOutput: (chunk: string) => {
             opts.onOutput?.(chunk);
           },
