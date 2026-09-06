@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { verifyDigest } from './jcs.js';
 
 const nonEmpty = z.string().min(1);
 const exactInteger = z.number().int().safe().nonnegative();
@@ -276,6 +277,41 @@ const invocationSchema = z
     diagnostics: z.array(nonEmpty),
   })
   .strict();
+
+function validateEnvelopeMetadata(
+  record: {
+    record_type: 'invocation' | 'model_attempt';
+    revision: number;
+    measurement_schema_version: number;
+  },
+  payload: {
+    record_type: 'invocation' | 'model_attempt';
+    revision: number;
+    measurement_schema_version: number;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (record.record_type !== payload.record_type)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['record_type'],
+      message: 'Record type must match complete replacement payload',
+    });
+  if (record.revision !== payload.revision)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['revision'],
+      message: 'Revision must match complete replacement payload',
+    });
+  if (record.measurement_schema_version !== payload.measurement_schema_version)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['measurement_schema_version'],
+      message:
+        'Measurement schema version must match complete replacement payload',
+    });
+}
+
 const exportRecordSchema = z
   .object({
     record_type: z.enum(['invocation', 'model_attempt']),
@@ -299,33 +335,43 @@ const exportRecordSchema = z
   })
   .strict()
   .superRefine((record, ctx) => {
+    if (!verifyDigest(record).valid)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['digest', 'value'],
+        message: 'Digest does not match complete record contents',
+      });
     if (record.record_type === 'model_attempt') {
       const result = modelAttemptSchema.safeParse(record.payload);
-      if (!result.success)
+      if (result.success) {
+        if (result.data.attempt_id !== record.record_id)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['record_id'],
+            message: 'Record id must match complete replacement payload',
+          });
+        validateEnvelopeMetadata(record, result.data, ctx);
+      } else
         ctx.addIssue({
           code: 'custom',
           path: ['payload'],
           message: result.error.issues[0]?.message ?? 'Invalid payload',
-        });
-      else if (result.data.attempt_id !== record.record_id)
-        ctx.addIssue({
-          code: 'custom',
-          path: ['record_id'],
-          message: 'Record id must match complete replacement payload',
         });
     } else {
       const result = invocationSchema.safeParse(record.payload);
-      if (!result.success)
+      if (result.success) {
+        if (result.data.invocation_id !== record.record_id)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['record_id'],
+            message: 'Record id must match complete replacement payload',
+          });
+        validateEnvelopeMetadata(record, result.data, ctx);
+      } else
         ctx.addIssue({
           code: 'custom',
           path: ['payload'],
           message: result.error.issues[0]?.message ?? 'Invalid payload',
-        });
-      else if (result.data.invocation_id !== record.record_id)
-        ctx.addIssue({
-          code: 'custom',
-          path: ['record_id'],
-          message: 'Record id must match complete replacement payload',
         });
     }
   });

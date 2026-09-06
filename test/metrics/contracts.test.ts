@@ -83,6 +83,10 @@ describe('RFC 8785 canonical record digests', () => {
     expect(() => canonicalizeJson({ count: Number.NaN })).toThrow('finite');
   });
 
+  test('parses a valid JSON string ending in a literal backslash', () => {
+    expect(parseJsonStrict('{"path":"\\\\"}')).toEqual({ path: '\\' });
+  });
+
   test('replays the pinned canonical fixture bytes and digest', async () => {
     const root = path.resolve(import.meta.dir, '../..');
     const original = await readFile(path.join(root, 'contracts/model-metrics/v1/fixtures/fraction-unicode-signed-zero.json'), 'utf8');
@@ -119,6 +123,16 @@ describe('closed measurement contracts', () => {
     expect(manifest.cases.some((item: { expected_digest: string }) => /^[a-f0-9]{64}$/.test(item.expected_digest))).toBe(true);
     expect(schema.additionalProperties).toBe(false);
     expect(artifact.properties.artifact_schema_version.const).toBe(1);
+  });
+
+  test('keeps published schema string evidence and nested usage shapes aligned with runtime validation', async () => {
+    const root = path.resolve(import.meta.dir, '../..');
+    const schema = JSON.parse(await readFile(path.join(root, 'contracts/model-metrics/v1/model-attempt.schema.json'), 'utf8'));
+    expect(schema.$defs.stringEvidence).toBeDefined();
+    expect(schema.$defs.observedIdentity.properties.provider.$ref).toBe('#/$defs/stringEvidence');
+    expect(schema.$defs.allocation.properties.usage.$ref).toBe('#/$defs/usage');
+    expect(schema.$defs.usage).toEqual({ type: 'object', additionalProperties: false, required: ['normalized_total'], properties: { normalized_total: { $ref: '#/$defs/measurement' } } });
+    expect(schema.$defs.cost.properties.amount.$ref).toBe('#/$defs/decimalMeasurement');
   });
 
   test('preserves declared optional evidence and rejects undeclared fields and invalid exact token counts', () => {
@@ -200,5 +214,12 @@ describe('accounting and deterministic projections', () => {
   test('rejects export records with invalid allocation or cost references', () => {
     const bad = projectExport([attempt({ provider_reported_costs: [{ cost_evidence_id: 'cost', amount: available(1), currency: { availability: 'available', value: 'USD', reason: null }, scope: 'allocation', allocation_id: 'missing', coverage: 'full', overlap: 'unknown', source: 'provider_usage' }] })], { consumer: 'runner', context_id: 'opaque' }).records[0];
     expect(validateExportRecord(bad).success).toBe(false);
+  });
+
+  test('rejects tampered export envelopes and payload metadata mismatches', () => {
+    const record = projectExport([attempt()], { consumer: 'runner', context_id: 'opaque' }).records[0]!;
+    expect(validateExportRecord(record).success).toBe(true);
+    expect(validateExportRecord({ ...record, revision: 2 }).success).toBe(false);
+    expect(validateExportRecord({ ...record, payload: { ...record.payload, adapter: 'tampered' } }).success).toBe(false);
   });
 });
