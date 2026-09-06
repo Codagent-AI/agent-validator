@@ -276,4 +276,27 @@ describe('accounting and deterministic projections', () => {
     expect(validateExportRecord({ ...record, revision: 2 }).success).toBe(false);
     expect(validateExportRecord({ ...record, payload: { ...record.payload, adapter: 'tampered' } }).success).toBe(false);
   });
+
+  test('validates invocation payloads and reports the same metadata errors as attempt payloads', () => {
+    const payload = {
+      record_type: 'invocation', invocation_id: 'invocation-1', session_id: 'session-1', revision: 1,
+      measurement_schema_version: 1, lifecycle: { state: 'completed', started_at: '2026-09-06T12:00:00.000Z', ended_at: '2026-09-06T12:00:10.000Z' },
+      attempt_ids: [], zero_dispatch: true, diagnostics: [],
+    };
+    const record = {
+      record_type: 'invocation', record_id: 'invocation-1', revision: 1, measurement_schema_version: 1,
+      producer: { name: 'agent-validator', version: 'fixture' }, original_consumer_context: { consumer: 'runner', context_id: 'opaque' }, payload,
+    };
+    const sign = (value: object) => ({ ...value, digest: createDigest(value) });
+    expect(validateExportRecord(sign(record)).success).toBe(true);
+    for (const [candidate, expectedPath] of [
+      [{ ...record, record_id: 'different' }, ['record_id']],
+      [{ ...record, revision: 2 }, ['revision']],
+      [{ ...record, payload: { ...payload, zero_dispatch: 'invalid' } }, ['payload']],
+    ] as const) {
+      const result = validateExportRecord(sign(candidate));
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues[0]?.path).toEqual([...expectedPath]);
+    }
+  });
 });

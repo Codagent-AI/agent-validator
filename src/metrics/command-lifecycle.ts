@@ -23,6 +23,30 @@ export interface CommandTelemetry {
 
 export type ValidationCommand = 'run' | 'check' | 'review';
 
+const METRICS_IDENTIFIER_MAX_LENGTH = 256;
+
+/** Shared correlation-option grammar for run, check, and review. */
+export function validateMetricsContext(options: {
+  metricsConsumer?: string;
+  metricsContext?: string;
+}): { consumer: string; context_id: string } | null {
+  if (!(options.metricsConsumer || options.metricsContext)) return null;
+  if (!(options.metricsConsumer && options.metricsContext))
+    throw new Error(
+      'metrics-consumer and metrics-context must be supplied together',
+    );
+  for (const value of [options.metricsConsumer, options.metricsContext]) {
+    if (!value.trim() || value.length > METRICS_IDENTIFIER_MAX_LENGTH)
+      throw new Error(
+        'metrics consumer and context must be bounded nonempty values',
+      );
+  }
+  return {
+    consumer: options.metricsConsumer,
+    context_id: options.metricsContext,
+  };
+}
+
 export interface PreparedAttempt {
   attempt_id: string;
   record: ModelAttempt | null;

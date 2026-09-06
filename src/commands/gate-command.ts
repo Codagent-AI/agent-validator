@@ -8,7 +8,10 @@ import { EntryPointExpander } from '../core/entry-point.js';
 import { JobGenerator } from '../core/job.js';
 import { findPreviousFailedCheckJobs } from '../core/rerun-check-recovery.js';
 import { Runner } from '../core/runner.js';
-import { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
+import {
+  CommandMetricsLifecycle,
+  validateMetricsContext,
+} from '../metrics/command-lifecycle.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { Logger } from '../output/logger.js';
 import type { RunResult, ValidatorStatus } from '../types/validator-status.js';
@@ -546,28 +549,6 @@ export function shouldCleanGateOutcome(outcome: {
   retryLimitExceeded: boolean;
 }): boolean {
   return outcome.allPassed || outcome.retryLimitExceeded;
-}
-
-const METRICS_IDENTIFIER_MAX_LENGTH = 256;
-
-function validateMetricsContext(
-  options: GateCommandOptions,
-): { consumer: string; context_id: string } | null {
-  if (!(options.metricsConsumer || options.metricsContext)) return null;
-  if (!(options.metricsConsumer && options.metricsContext))
-    throw new Error(
-      'metrics-consumer and metrics-context must be supplied together',
-    );
-  for (const value of [options.metricsConsumer, options.metricsContext]) {
-    if (!value.trim() || value.length > METRICS_IDENTIFIER_MAX_LENGTH)
-      throw new Error(
-        'metrics consumer and context must be bounded nonempty values',
-      );
-  }
-  return {
-    consumer: options.metricsConsumer,
-    context_id: options.metricsContext,
-  };
 }
 
 async function withTelemetry(

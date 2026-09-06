@@ -29,6 +29,8 @@ type SharedOptions = {
   measurementVersion?: string[];
   maxRecords?: string;
   maxBytes?: string;
+  after?: string;
+  limit?: string;
   confirm?: boolean;
 };
 
@@ -186,12 +188,10 @@ async function pending(options: SharedOptions): Promise<void> {
       (store) => store.pendingInventory(options.consumer),
     );
     const limit =
-      bounded(
-        (options as SharedOptions & { limit?: string }).limit,
-        limits.maximum_inventory_count,
-      ) ?? limits.default_inventory_count;
+      bounded(options.limit, limits.maximum_inventory_count) ??
+      limits.default_inventory_count;
     const cursor = decodeCursor(
-      (options as SharedOptions & { after?: string }).after,
+      options.after,
       inventory.store_id,
       options.consumer,
     );

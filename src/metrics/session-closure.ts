@@ -6,6 +6,7 @@ import {
   moveArchiveDirectory,
   operationPath,
 } from './closure-paths.js';
+import { isMissingFileError } from './errors.js';
 import { MetricsRecorder } from './recorder.js';
 
 interface InventoryEntry {
@@ -39,15 +40,6 @@ export interface SessionClosureResult {
 }
 
 const snapshotName = 'validation-metrics.json';
-
-function isMissing(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as NodeJS.ErrnoException).code === 'ENOENT',
-  );
-}
 
 async function exists(target: string): Promise<boolean> {
   return fs
@@ -118,7 +110,7 @@ async function readJournal(
     validateJournal(journal);
     return journal;
   } catch (error) {
-    if (isMissing(error)) return null;
+    if (isMissingFileError(error)) return null;
     throw error;
   }
 }
@@ -200,7 +192,7 @@ async function moveFrozenFiles(
     const staged = path.join(files, entry.name);
     if (await exists(staged)) continue;
     const stat = await fs.stat(source).catch((error) => {
-      if (isMissing(error))
+      if (isMissingFileError(error))
         throw new Error(`closure inventory conflict: missing ${entry.name}`);
       throw error;
     });
@@ -326,7 +318,7 @@ export async function recoverPendingSessionClosures(
     names = await fs.readdir(closures);
     await ensureSafeDirectory(logDir, closures);
   } catch (error) {
-    if (isMissing(error))
+    if (isMissingFileError(error))
       return { closed: false, close_id: null, warnings: [] };
     return {
       closed: false,
@@ -424,7 +416,7 @@ export async function closeMeasuredSession(
   try {
     recorder = await MetricsRecorder.openExisting(logDir);
   } catch (error) {
-    if (!isMissing(error))
+    if (!isMissingFileError(error))
       return {
         closed: false,
         close_id: null,

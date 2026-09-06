@@ -12,6 +12,7 @@ import { loadConfig } from '../config/loader.js';
 import {
   CommandMetricsLifecycle,
   type CommandTelemetry,
+  validateMetricsContext,
 } from '../metrics/command-lifecycle.js';
 import { recoverPendingSessionClosures } from '../metrics/session-closure.js';
 import {
@@ -65,28 +66,6 @@ export interface ExecuteRunOptions {
   contextFile?: string;
   metricsConsumer?: string;
   metricsContext?: string;
-}
-
-const METRICS_IDENTIFIER_MAX_LENGTH = 256;
-
-function validateMetricsContext(
-  options: ExecuteRunOptions,
-): { consumer: string; context_id: string } | null {
-  if (!(options.metricsConsumer || options.metricsContext)) return null;
-  if (!(options.metricsConsumer && options.metricsContext))
-    throw new Error(
-      'metrics-consumer and metrics-context must be supplied together',
-    );
-  for (const value of [options.metricsConsumer, options.metricsContext]) {
-    if (!value.trim() || value.length > METRICS_IDENTIFIER_MAX_LENGTH)
-      throw new Error(
-        'metrics consumer and context must be bounded nonempty values',
-      );
-  }
-  return {
-    consumer: options.metricsConsumer,
-    context_id: options.metricsContext,
-  };
 }
 
 async function withTelemetry(

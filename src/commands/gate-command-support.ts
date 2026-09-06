@@ -179,9 +179,6 @@ export async function acquireAndReconcileGateStartup(args: {
         enableReviews: args.options.enableReviews,
       },
     });
-    if (reconciliation.kind === 'trusted') {
-      return reconciliation;
-    }
     return reconciliation;
   } catch (error) {
     if (lockAcquired) {

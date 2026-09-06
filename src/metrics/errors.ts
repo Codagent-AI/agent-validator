@@ -14,3 +14,13 @@ export class MetricsOperationError extends Error {
     this.name = 'MetricsOperationError';
   }
 }
+
+/** ENOENT only: permission, malformed-path, and storage failures stay distinct. */
+export function isMissingFileError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'ENOENT',
+  );
+}

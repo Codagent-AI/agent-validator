@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { MetricsOperationError } from './errors.js';
+import { isMissingFileError, MetricsOperationError } from './errors.js';
 import { createDigest, parseJsonStrict, verifyDigest } from './jcs.js';
 import {
   type Digest,
@@ -183,15 +183,6 @@ function evidenceState(
   return 'previously_acknowledged';
 }
 
-function isMissing(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as NodeJS.ErrnoException).code === 'ENOENT',
-  );
-}
-
 function conflictingDisposition(previous: string): MetricsOperationError {
   return new MetricsOperationError(
     previous === 'discarded' ? 'delivery_gap' : 'invalid_receipt',
@@ -264,7 +255,7 @@ export class MetricsStore {
       )
         throw new Error('Unsupported metrics storage');
     } catch (error) {
-      if (!isMissing(error)) throw error;
+      if (!isMissingFileError(error)) throw error;
       await store.writeAtomic(store.identityPath, {
         storage_version: STORAGE_VERSION,
         store_id: randomUUID(),
@@ -273,7 +264,7 @@ export class MetricsStore {
     try {
       await store.readState();
     } catch (error) {
-      if (!isMissing(error)) throw error;
+      if (!isMissingFileError(error)) throw error;
       await store.writeAtomic(store.statePath, initialState());
     }
     await store.recoverDeadSessionOwners();
@@ -708,7 +699,7 @@ export class MetricsStore {
           `Conflicting immutable metrics revision: ${id}:${record.revision}`,
         );
     } catch (error) {
-      if (!isMissing(error)) throw error;
+      if (!isMissingFileError(error)) throw error;
       await this.writeAtomic(destination, envelope);
     }
     state.heads[id] = {

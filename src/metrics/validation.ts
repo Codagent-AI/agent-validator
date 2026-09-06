@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { verifyDigest } from './jcs.js';
 
 const nonEmpty = z.string().min(1);
+const consumerContext = z
+  .object({ consumer: nonEmpty, context_id: nonEmpty })
+  .strict();
 const exactInteger = z.number().int().safe().nonnegative();
 const numberValue = z.number().finite().nonnegative();
 const source = z.enum([
@@ -196,11 +199,7 @@ export const modelAttemptSchema = z
       .object({ gate: nonEmpty, slot: z.number().int().nonnegative() })
       .strict()
       .optional(),
-    consumer_context: z
-      .object({ consumer: nonEmpty, context_id: nonEmpty })
-      .strict()
-      .nullable()
-      .optional(),
+    consumer_context: consumerContext.nullable().optional(),
   })
   .strict()
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Contract cross-field validation keeps all revision-local reference rules together.
@@ -281,11 +280,7 @@ const invocationSchema = z
     zero_dispatch: z.boolean(),
     diagnostics: z.array(nonEmpty),
     command: z.enum(['run', 'check', 'review']).optional(),
-    consumer_context: z
-      .object({ consumer: nonEmpty, context_id: nonEmpty })
-      .strict()
-      .nullable()
-      .optional(),
+    consumer_context: consumerContext.nullable().optional(),
     outcome: z.string().nullable().optional(),
   })
   .strict();
@@ -333,9 +328,7 @@ const exportRecordSchema = z
     producer: z
       .object({ name: z.literal('agent-validator'), version: nonEmpty })
       .strict(),
-    original_consumer_context: z
-      .object({ consumer: nonEmpty, context_id: nonEmpty })
-      .strict(),
+    original_consumer_context: consumerContext,
     payload: z.unknown(),
     digest: z
       .object({
@@ -353,39 +346,31 @@ const exportRecordSchema = z
         path: ['digest', 'value'],
         message: 'Digest does not match complete record contents',
       });
-    if (record.record_type === 'model_attempt') {
-      const result = modelAttemptSchema.safeParse(record.payload);
-      if (result.success) {
-        if (result.data.attempt_id !== record.record_id)
-          ctx.addIssue({
-            code: 'custom',
-            path: ['record_id'],
-            message: 'Record id must match complete replacement payload',
-          });
-        validateEnvelopeMetadata(record, result.data, ctx);
-      } else
-        ctx.addIssue({
-          code: 'custom',
-          path: ['payload'],
-          message: result.error.issues[0]?.message ?? 'Invalid payload',
-        });
-    } else {
-      const result = invocationSchema.safeParse(record.payload);
-      if (result.success) {
-        if (result.data.invocation_id !== record.record_id)
-          ctx.addIssue({
-            code: 'custom',
-            path: ['record_id'],
-            message: 'Record id must match complete replacement payload',
-          });
-        validateEnvelopeMetadata(record, result.data, ctx);
-      } else
-        ctx.addIssue({
-          code: 'custom',
-          path: ['payload'],
-          message: result.error.issues[0]?.message ?? 'Invalid payload',
-        });
+    const payloadSchema =
+      record.record_type === 'model_attempt'
+        ? modelAttemptSchema
+        : invocationSchema;
+    const result = payloadSchema.safeParse(record.payload);
+    if (!result.success) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['payload'],
+        message: result.error.issues[0]?.message ?? 'Invalid payload',
+      });
+      return;
     }
+    const payload = result.data;
+    const payloadId =
+      payload.record_type === 'model_attempt'
+        ? payload.attempt_id
+        : payload.invocation_id;
+    if (payloadId !== record.record_id)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['record_id'],
+        message: 'Record id must match complete replacement payload',
+      });
+    validateEnvelopeMetadata(record, payload, ctx);
   });
 
 export const capabilitiesSchema = z

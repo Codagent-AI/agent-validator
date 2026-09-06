@@ -1,14 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-
-function isMissing(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as NodeJS.ErrnoException).code === 'ENOENT',
-  );
-}
+import { isMissingFileError } from './errors.js';
 
 function invalidPath(message: string): Error {
   return new Error(`invalid closure journal: ${message}`);
@@ -48,7 +40,7 @@ export async function ensureSafeDirectory(
   for (const component of relative ? relative.split(path.sep) : []) {
     current = path.join(current, component);
     const stats = await fs.lstat(current).catch(async (error) => {
-      if (!isMissing(error)) throw error;
+      if (!isMissingFileError(error)) throw error;
       await fs.mkdir(current);
       return fs.lstat(current);
     });
