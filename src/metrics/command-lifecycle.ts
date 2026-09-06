@@ -36,6 +36,7 @@ export class CommandMetricsLifecycle {
   private sessionId: string | null = null;
   private record: Invocation | null = null;
   private unavailableReasons: string[] = [];
+  private attemptPersistenceFailed = false;
 
   constructor(
     private readonly command: ValidationCommand,
@@ -111,12 +112,31 @@ export class CommandMetricsLifecycle {
           started_at: current.lifecycle.started_at,
           ended_at: new Date().toISOString(),
         },
-        zero_dispatch: current.attempt_ids.length === 0,
+        zero_dispatch:
+          current.attempt_ids.length === 0 && !this.attemptPersistenceFailed,
+        diagnostics: this.attemptPersistenceFailed
+          ? [...new Set([...current.diagnostics, 'attempt_persistence_failed'])]
+          : current.diagnostics,
         outcome,
       };
       await this.recorder.updateInvocation(this.record);
+      const publication = await this.recorder.publishSnapshot(
+        this.sessionId,
+        this.invocationId,
+      );
       return this.telemetry(
-        await this.recorder.publishSnapshot(this.sessionId, this.invocationId),
+        this.attemptPersistenceFailed
+          ? {
+              ...publication,
+              state: 'degraded',
+              reasons: [
+                ...new Set([
+                  ...publication.reasons,
+                  'attempt_persistence_failed',
+                ]),
+              ],
+            }
+          : publication,
       );
     } catch (error) {
       return this.telemetry({
@@ -184,6 +204,7 @@ export class CommandMetricsLifecycle {
       await this.recorder.prepareAttempt(record);
       return { attempt_id, record };
     } catch (error) {
+      this.attemptPersistenceFailed = true;
       this.unavailableReasons.push(errorMessage(error));
       return { attempt_id, record: null };
     }
@@ -225,6 +246,7 @@ export class CommandMetricsLifecycle {
       await this.recorder.updateAttempt(record);
       prepared.record = record;
     } catch (error) {
+      this.attemptPersistenceFailed = true;
       this.unavailableReasons.push(errorMessage(error));
     }
   }

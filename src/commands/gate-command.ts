@@ -492,8 +492,11 @@ export async function executeGateCommand(
       },
       lifecycle,
     );
-    if (outcome.allPassed) {
-      await debugLogger?.logClean('auto', 'all_passed');
+    if (shouldCleanGateOutcome(outcome)) {
+      const reason = outcome.retryLimitExceeded
+        ? 'retry_limit_exceeded'
+        : 'all_passed';
+      await debugLogger?.logClean('auto', reason);
       await cleanLogs(logDir, config.project.max_previous_logs);
     }
     await writeExecutionState(logDir);
@@ -536,6 +539,13 @@ export async function executeGateCommand(
     }
     restoreConsole?.restore();
   }
+}
+
+export function shouldCleanGateOutcome(outcome: {
+  allPassed: boolean;
+  retryLimitExceeded: boolean;
+}): boolean {
+  return outcome.allPassed || outcome.retryLimitExceeded;
 }
 
 const METRICS_IDENTIFIER_MAX_LENGTH = 256;

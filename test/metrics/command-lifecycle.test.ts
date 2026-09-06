@@ -94,4 +94,36 @@ describe('command metrics lifecycle', () => {
       lifecycle: { state: 'completed' },
     });
   });
+
+  test('degrades publication rather than claiming zero dispatch after attempt persistence fails', async () => {
+    const logDir = await temporaryLogDir();
+    const lifecycle = new CommandMetricsLifecycle('review');
+    await lifecycle.associate(logDir);
+    const recorder = (lifecycle as unknown as {
+      recorder: { prepareAttempt: () => Promise<void> };
+    }).recorder;
+    recorder.prepareAttempt = async () => {
+      throw new Error('injected attempt persistence failure');
+    };
+
+    await lifecycle.prepareAttempt({
+      adapter: 'fixture',
+      gate: 'review-source',
+      slot: 1,
+      telemetry: createUnavailableTelemetry('fixture'),
+    });
+    const telemetry = await lifecycle.finalize('passed');
+    const snapshot = JSON.parse(
+      await readFile(path.join(logDir, 'validation-metrics.json'), 'utf8'),
+    );
+
+    expect(telemetry.publication).toMatchObject({
+      state: 'degraded',
+      reasons: ['attempt_persistence_failed'],
+    });
+    expect(snapshot.invocations[0]).toMatchObject({
+      zero_dispatch: false,
+      diagnostics: ['attempt_persistence_failed'],
+    });
+  });
 });
