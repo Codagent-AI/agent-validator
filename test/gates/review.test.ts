@@ -22,7 +22,7 @@ let currentGetAdapter: (name: string) => CLIAdapter;
 let currentGetAllAdapters: () => CLIAdapter[];
 let currentGetValidCLITools: () => string[];
 let currentIsUsageLimit: (output: string) => boolean;
-let currentExecute: (...args: unknown[]) => Promise<string>;
+let currentExecute: (...args: unknown[]) => Promise<unknown>;
 
 function defaultMockAdapter(name: string): CLIAdapter {
 	return {

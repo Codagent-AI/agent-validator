@@ -394,7 +394,7 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 				onOutput: (chunk: string) => chunks.push(chunk),
 			});
 
-			expect(result).toContain("review output");
+			expect(result.text).toContain("review output");
 			expect(chunks.some((chunk) => chunk.includes("[copilot-telemetry]"))).toBe(
 				true,
 			);

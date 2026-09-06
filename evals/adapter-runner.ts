@@ -18,7 +18,7 @@ export async function runAdapter(
 	const start = Date.now();
 
 	try {
-		const rawOutput = await adapter.execute({
+		const execution = await adapter.execute({
 			prompt,
 			diff,
 			model: config.model,
@@ -30,6 +30,7 @@ export async function runAdapter(
 
 		const durationMs = Date.now() - start;
 
+		const rawOutput = execution.text;
 		if (isUsageLimit(rawOutput)) {
 			return {
 				...errorResult(config, durationMs, "Usage limit reached"),

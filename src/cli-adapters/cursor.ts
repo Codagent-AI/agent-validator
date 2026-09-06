@@ -11,7 +11,12 @@ import {
   resolveModelFromList,
   SAFE_MODEL_ID_PATTERN,
 } from './model-resolution.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import {
+  AdapterExecutionFailure,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  runStreamingCommand,
+} from './shared.js';
 
 const execAsync = promisify(exec);
 
@@ -149,68 +154,86 @@ export class CursorAdapter implements CLIAdapter {
     timeoutMs?: number;
     onOutput?: (chunk: string) => void;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-
-    const tmpDir = os.tmpdir();
-    // Include process.pid and a counter for uniqueness across concurrent invocations
-    // in the same process (parallel review gates can call execute() within the same
-    // millisecond, causing Date.now() collisions and tmp file overwrites).
-    const tmpFile = path.join(
-      tmpDir,
-      `validator-cursor-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
-    );
-    await fs.writeFile(tmpFile, fullContent);
-
-    // Cursor agent command reads from stdin
-    // Note: As of the current version, the Cursor 'agent' CLI does not expose
-    // flags for restricting tools or enforcing read-only mode (unlike claude's --allowedTools
-    // or codex's --sandbox read-only). The agent is assumed to be repo-scoped and
-    // safe for code review use. If Cursor adds such flags in the future, they should
-    // be added here for defense-in-depth.
-
-    // Resolve model if a base name is provided
-    let resolvedModel: string | undefined;
-    if (opts.model) {
-      resolvedModel = await this.resolveModel(opts.model, opts.thinkingBudget);
-    }
-
-    const cleanup = () => fs.unlink(tmpFile).catch(() => {});
-
-    // Build args with optional --model flag
-    const args = ['--trust'];
-    if (resolvedModel) {
-      args.push('--model', resolvedModel);
-    }
-
-    // If onOutput callback is provided, use spawn for real-time streaming
-    if (opts.onOutput) {
-      return runStreamingCommand({
-        command: 'agent',
-        args,
-        tmpFile,
-        timeoutMs: opts.timeoutMs,
-        onOutput: opts.onOutput,
-        cleanup,
-      });
-    }
-
-    // Otherwise use exec for buffered output
-    // Shell command construction: We use exec() with shell piping
-    // because the agent requires stdin input. The tmpFile path is system-controlled
-    // (os.tmpdir() + Date.now() + process.pid), not user-supplied, eliminating injection risk.
-    // Double quotes handle paths with spaces.
+  }): Promise<{
+    text: string;
+    telemetry: ReturnType<typeof createUnavailableTelemetry>;
+  }> {
+    const telemetry = createUnavailableTelemetry('cursor', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
+    });
     try {
-      const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : '';
-      const cmd = `cat "${tmpFile}" | agent --trust${modelFlag}`;
-      const { stdout } = await execAsync(cmd, {
-        timeout: opts.timeoutMs,
-        maxBuffer: MAX_BUFFER_BYTES,
-      });
-      return stdout;
-    } finally {
-      // Cleanup errors are intentionally ignored - the tmp file will be cleaned up by OS
-      await cleanup();
+      const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
+
+      const tmpDir = os.tmpdir();
+      // Include process.pid and a counter for uniqueness across concurrent invocations
+      // in the same process (parallel review gates can call execute() within the same
+      // millisecond, causing Date.now() collisions and tmp file overwrites).
+      const tmpFile = path.join(
+        tmpDir,
+        `validator-cursor-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+      );
+      await fs.writeFile(tmpFile, fullContent);
+
+      // Cursor agent command reads from stdin
+      // Note: As of the current version, the Cursor 'agent' CLI does not expose
+      // flags for restricting tools or enforcing read-only mode (unlike claude's --allowedTools
+      // or codex's --sandbox read-only). The agent is assumed to be repo-scoped and
+      // safe for code review use. If Cursor adds such flags in the future, they should
+      // be added here for defense-in-depth.
+
+      // Resolve model if a base name is provided
+      let resolvedModel: string | undefined;
+      if (opts.model) {
+        resolvedModel = await this.resolveModel(
+          opts.model,
+          opts.thinkingBudget,
+        );
+      }
+
+      const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+
+      // Build args with optional --model flag
+      const args = ['--trust'];
+      if (resolvedModel) {
+        args.push('--model', resolvedModel);
+      }
+
+      // If onOutput callback is provided, use spawn for real-time streaming
+      if (opts.onOutput) {
+        const text = await runStreamingCommand({
+          command: 'agent',
+          args,
+          tmpFile,
+          timeoutMs: opts.timeoutMs,
+          onOutput: opts.onOutput,
+          cleanup,
+        });
+        return { text, telemetry };
+      }
+
+      // Otherwise use exec for buffered output
+      // Shell command construction: We use exec() with shell piping
+      // because the agent requires stdin input. The tmpFile path is system-controlled
+      // (os.tmpdir() + Date.now() + process.pid), not user-supplied, eliminating injection risk.
+      // Double quotes handle paths with spaces.
+      try {
+        const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : '';
+        const cmd = `cat "${tmpFile}" | agent --trust${modelFlag}`;
+        const { stdout } = await execAsync(cmd, {
+          timeout: opts.timeoutMs,
+          maxBuffer: MAX_BUFFER_BYTES,
+        });
+        return { text: stdout, telemetry };
+      } finally {
+        // Cleanup errors are intentionally ignored - the tmp file will be cleaned up by OS
+        await cleanup();
+      }
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        telemetry,
+      );
     }
   }
 

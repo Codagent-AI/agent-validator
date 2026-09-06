@@ -10,9 +10,19 @@ import {
   installPlugin as installPluginCli,
   listPlugins,
 } from '../plugin/claude-cli.js';
-import { buildOtelEnv, safeExtractOtelMetrics } from './claude-otel.js';
+import {
+  buildOtelEnv,
+  parseClaudeOtelTelemetry,
+  safeExtractOtelMetrics,
+} from './claude-otel.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterExecutionResult,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  runStreamingCommand,
+} from './shared.js';
 import { CLAUDE_THINKING_TOKENS } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
@@ -159,23 +169,34 @@ export class ClaudeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
-    let timer: ReturnType<typeof setTimeout>;
-    return Promise.race([
-      this.doExecute(opts).finally(() => clearTimeout(timer)),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(
-                'Adapter execution timed out (post-processing exceeded limit)',
+  }): Promise<AdapterExecutionResult> {
+    const telemetry = createUnavailableTelemetry('claude', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
+    });
+    try {
+      const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
+      let timer: ReturnType<typeof setTimeout>;
+      return await Promise.race([
+        this.doExecute(opts).finally(() => clearTimeout(timer)),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'Adapter execution timed out (post-processing exceeded limit)',
+                ),
               ),
-            ),
-          totalTimeout,
-        );
-      }),
-    ]);
+            totalTimeout,
+          );
+        }),
+      ]);
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        telemetry,
+      );
+    }
   }
 
   private async doExecute(opts: {
@@ -186,7 +207,7 @@ export class ClaudeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
+  }): Promise<AdapterExecutionResult> {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
     const tmpFile = path.join(
@@ -244,7 +265,13 @@ export class ClaudeAdapter implements CLIAdapter {
       });
       const cleaned = safeExtractOtelMetrics(raw, opts.onOutput);
       opts.onOutput(cleaned);
-      return cleaned;
+      return {
+        text: cleaned,
+        telemetry: parseClaudeOtelTelemetry(raw, {
+          requestedModel: opts.model,
+          thinkingBudget: opts.thinkingBudget,
+        }),
+      };
     }
 
     try {
@@ -254,7 +281,13 @@ export class ClaudeAdapter implements CLIAdapter {
         maxBuffer: MAX_BUFFER_BYTES,
         env: execEnv,
       });
-      return safeExtractOtelMetrics(stdout);
+      return {
+        text: safeExtractOtelMetrics(stdout),
+        telemetry: parseClaudeOtelTelemetry(stdout, {
+          requestedModel: opts.model,
+          thinkingBudget: opts.thinkingBudget,
+        }),
+      };
     } finally {
       await cleanup();
     }

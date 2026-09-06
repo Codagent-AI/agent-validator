@@ -1,8 +1,12 @@
 // Re-export shared types and utilities (used by adapter implementations)
 export {
+  AdapterExecutionFailure,
+  type AdapterExecutionResult,
+  type AdapterTelemetry,
   type CLIAdapter,
   type CLIAdapterHealth,
   collectStderr,
+  createUnavailableTelemetry,
   finalizeProcessClose,
   isUsageLimit,
   processExitError,

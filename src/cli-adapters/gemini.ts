@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: this adapter retains its established OTel parser and execution implementation together.
 import { exec } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -5,7 +6,15 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterExecutionResult,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  observedMeasurement,
+  runStreamingCommand,
+} from './shared.js';
 import { GEMINI_THINKING_BUDGET } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
@@ -254,6 +263,55 @@ function formatGeminiSummary(usage: GeminiTelemetryUsage): string | null {
   return parts.length > 0 ? `[telemetry] ${parts.join(' ')}` : null;
 }
 
+function createGeminiTelemetry(
+  usage: GeminiTelemetryUsage,
+  opts: { model?: string; thinkingBudget?: string },
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('gemini', {
+    requestedModel: opts.model,
+    requestedEffort: opts.thinkingBudget,
+    reason: 'gemini_otel_not_observed',
+  });
+  const source = 'provider_event' as const;
+  const fields: Array<
+    [
+      keyof GeminiTelemetryUsage,
+      'input_total' | 'output' | 'reasoning' | 'cache_read',
+    ]
+  > = [
+    ['inputTokens', 'input_total'],
+    ['outputTokens', 'output'],
+    ['thoughtTokens', 'reasoning'],
+    ['cacheTokens', 'cache_read'],
+  ];
+  for (const [usageKey, tokenKey] of fields) {
+    const value = usage[usageKey];
+    if (typeof value !== 'number') continue;
+    telemetry.tokens[tokenKey] = observedMeasurement(
+      value,
+      source,
+      'exact',
+      tokenKey === 'cache_read' ? ['input_total'] : null,
+    );
+    telemetry.provider_native_usage.push({
+      source,
+      name: `gemini_${usageKey}`,
+      value,
+    });
+  }
+  if (telemetry.provider_native_usage.length > 0) {
+    telemetry.completeness.collection = 'partial';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = ['gemini_counter_relationships_unestablished'];
+  }
+  telemetry.provenance.source_format_version = {
+    availability: 'available',
+    value: 'gemini-otel-json',
+    reason: null,
+  };
+  return telemetry;
+}
+
 async function logTelemetryToStderr(telemetryFile: string): Promise<void> {
   if (process.env.GEMINI_TELEMETRY_OUTFILE) return;
   const usage = await parseGeminiTelemetry(telemetryFile);
@@ -447,64 +505,89 @@ ${body.trim()}
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-
-    const tmpDir = os.tmpdir();
-    const tmpFile = path.join(
-      tmpDir,
-      `validator-gemini-${process.pid}-${Date.now()}.txt`,
-    );
-    await fs.writeFile(tmpFile, fullContent);
-
-    // Use cwd for telemetry file — Gemini's --sandbox restricts writes
-    // to the project directory, so os.tmpdir() would fail with EPERM.
-    const telemetryFile = path.join(
-      process.cwd(),
-      `.validator-gemini-telemetry-${process.pid}-${Date.now()}.log`,
-    );
-
-    const telemetryEnv = this.buildTelemetryEnv(telemetryFile);
-    const args = this.buildArgs(opts.allowToolUse);
-    const cleanupThinking = await this.maybeApplyThinking(opts.thinkingBudget);
-
-    const cleanup = () => fs.unlink(tmpFile).catch(() => {});
-    const cleanupTelemetry = () => fs.unlink(telemetryFile).catch(() => {});
-
+  }): Promise<AdapterExecutionResult> {
+    const fallbackTelemetry = createUnavailableTelemetry('gemini', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
+    });
     try {
-      if (opts.onOutput) {
-        try {
-          const result = await runStreamingCommand({
-            command: 'gemini',
-            args,
-            tmpFile,
-            timeoutMs: opts.timeoutMs,
-            onOutput: opts.onOutput,
-            cleanup,
-            env: { ...process.env, ...telemetryEnv },
-          });
-          await this.logTelemetry(telemetryFile, opts.onOutput);
-          return result;
-        } finally {
-          await cleanupTelemetry();
-        }
-      }
+      const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
+
+      const tmpDir = os.tmpdir();
+      const tmpFile = path.join(
+        tmpDir,
+        `validator-gemini-${process.pid}-${Date.now()}.txt`,
+      );
+      await fs.writeFile(tmpFile, fullContent);
+
+      // Use cwd for telemetry file — Gemini's --sandbox restricts writes
+      // to the project directory, so os.tmpdir() would fail with EPERM.
+      const telemetryFile = path.join(
+        process.cwd(),
+        `.validator-gemini-telemetry-${crypto.randomUUID()}.log`,
+      );
+
+      const telemetryEnv = this.buildTelemetryEnv(telemetryFile);
+      const args = this.buildArgs(opts.allowToolUse);
+      const cleanupThinking = await this.maybeApplyThinking(
+        opts.thinkingBudget,
+      );
+
+      const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+      const cleanupTelemetry = () => fs.unlink(telemetryFile).catch(() => {});
 
       try {
-        const cmd = `gemini ${args.join(' ')} < "${tmpFile}"`;
-        const { stdout } = await execAsync(cmd, {
-          timeout: opts.timeoutMs,
-          maxBuffer: MAX_BUFFER_BYTES,
-          env: { ...process.env, ...telemetryEnv },
-        });
-        await logTelemetryToStderr(telemetryFile);
-        return stdout;
+        if (opts.onOutput) {
+          try {
+            const result = await runStreamingCommand({
+              command: 'gemini',
+              args,
+              tmpFile,
+              timeoutMs: opts.timeoutMs,
+              onOutput: opts.onOutput,
+              cleanup,
+              env: { ...process.env, ...telemetryEnv },
+            });
+            await this.logTelemetry(telemetryFile, opts.onOutput);
+            return {
+              text: result,
+              telemetry: createGeminiTelemetry(
+                await parseGeminiTelemetry(telemetryFile),
+                opts,
+              ),
+            };
+          } finally {
+            await cleanupTelemetry();
+          }
+        }
+
+        try {
+          const cmd = `gemini ${args.join(' ')} < "${tmpFile}"`;
+          const { stdout } = await execAsync(cmd, {
+            timeout: opts.timeoutMs,
+            maxBuffer: MAX_BUFFER_BYTES,
+            env: { ...process.env, ...telemetryEnv },
+          });
+          await logTelemetryToStderr(telemetryFile);
+          return {
+            text: stdout,
+            telemetry: createGeminiTelemetry(
+              await parseGeminiTelemetry(telemetryFile),
+              opts,
+            ),
+          };
+        } finally {
+          await cleanup();
+          await cleanupTelemetry();
+        }
       } finally {
-        await cleanup();
-        await cleanupTelemetry();
+        await cleanupThinking?.();
       }
-    } finally {
-      await cleanupThinking?.();
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        fallbackTelemetry,
+      );
     }
   }
 }

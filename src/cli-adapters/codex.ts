@@ -6,7 +6,14 @@ import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  observedMeasurement,
+  runStreamingCommand,
+} from './shared.js';
 import { CODEX_REASONING_EFFORT } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
@@ -143,6 +150,7 @@ function emitCodexSummary(
 function parseCodexJsonl(
   raw: string,
   onLog?: (msg: string) => void,
+  emitSummary = true,
 ): { text: string; usage: CodexUsage } {
   const usage: CodexUsage = {};
   let lastAgentMessage = '';
@@ -154,8 +162,89 @@ function parseCodexJsonl(
     if (msg !== undefined) lastAgentMessage = msg;
   }
 
-  emitCodexSummary(usage, onLog);
+  if (emitSummary) emitCodexSummary(usage, onLog);
   return { text: lastAgentMessage, usage };
+}
+
+/**
+ * Maps structured `turn.completed` usage into the canonical measurement fields.
+ * Codex reports input as a total that includes cached input; cache-write and
+ * reasoning relationships are not established by this event format.
+ */
+export function parseCodexTelemetry(
+  raw: string,
+  opts: { requestedModel?: string; thinkingBudget?: string } = {},
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('codex', {
+    requestedModel: opts.requestedModel,
+    requestedEffort: opts.thinkingBudget,
+    reason: 'codex_usage_not_observed',
+  });
+  const { usage } = parseCodexJsonl(raw, undefined, false);
+  const source = 'provider_event' as const;
+  const input = usage.inputTokens;
+  const cacheRead = usage.cachedInputTokens;
+  const output = usage.outputTokens;
+
+  if (input !== undefined) {
+    telemetry.tokens.input_total = observedMeasurement(input, source);
+    telemetry.provider_native_usage.push({
+      source,
+      name: 'input_tokens',
+      value: input,
+    });
+  }
+  if (cacheRead !== undefined) {
+    telemetry.tokens.cache_read = observedMeasurement(
+      cacheRead,
+      source,
+      'exact',
+      ['input_total'],
+    );
+    telemetry.provider_native_usage.push({
+      source,
+      name: 'cached_input_tokens',
+      value: cacheRead,
+    });
+  }
+  if (output !== undefined) {
+    telemetry.tokens.output = observedMeasurement(output, source);
+    telemetry.provider_native_usage.push({
+      source,
+      name: 'output_tokens',
+      value: output,
+    });
+  }
+
+  if (
+    telemetry.tokens.input_total.availability === 'available' &&
+    telemetry.tokens.output.availability === 'available'
+  ) {
+    telemetry.tokens.normalized_total = {
+      availability: 'available',
+      value: telemetry.tokens.input_total.value + telemetry.tokens.output.value,
+      reason: null,
+      source: 'validator_derivation',
+      origin: 'derived',
+      precision: 'exact',
+      derivation: 'codex_input_total_plus_output',
+      included_in: null,
+    };
+    telemetry.completeness.normalized_total = 'complete';
+  }
+  if (telemetry.provider_native_usage.length > 0) {
+    telemetry.completeness.collection = 'complete';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = telemetry.diagnostics.filter(
+      (diagnostic) => diagnostic !== 'codex_usage_not_observed',
+    );
+  }
+  telemetry.provenance.source_format_version = {
+    availability: 'available',
+    value: 'codex-exec-jsonl-turn.completed',
+    reason: null,
+  };
+  return telemetry;
 }
 
 export class CodexAdapter implements CLIAdapter {
@@ -258,56 +347,79 @@ export class CodexAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-
-    const tmpDir = os.tmpdir();
-    // Include process.pid and a counter for uniqueness across concurrent invocations
-    // in the same process (parallel review gates can call execute() within the same
-    // millisecond, causing Date.now() collisions and tmp file overwrites).
-    const tmpFile = path.join(
-      tmpDir,
-      `validator-codex-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
-    );
-    await fs.writeFile(tmpFile, fullContent);
-
-    const args = this.buildArgs(
-      opts.allowToolUse,
-      opts.thinkingBudget,
-      opts.model,
-    );
-
-    const cleanup = () => fs.unlink(tmpFile).catch(() => {});
-
-    // If onOutput callback is provided, use spawn for real-time streaming
-    if (opts.onOutput) {
-      const raw = await runStreamingCommand({
-        command: 'codex',
-        args,
-        tmpFile,
-        timeoutMs: opts.timeoutMs,
-        onOutput: (chunk: string) => {
-          opts.onOutput?.(chunk);
-        },
-        cleanup,
-      });
-
-      const { text } = parseCodexJsonl(raw, opts.onOutput);
-      return text || raw.trimEnd();
-    }
-
-    // Otherwise use exec for buffered output
+  }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
+    const fallbackTelemetry = createUnavailableTelemetry('codex', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
+    });
     try {
-      const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, '\\$1')}"`;
-      const cmd = `cat "${tmpFile}" | codex ${args.map(quoteArg).join(' ')}`;
-      const { stdout } = await execAsync(cmd, {
-        timeout: opts.timeoutMs,
-        maxBuffer: MAX_BUFFER_BYTES,
-      });
-      const { text } = parseCodexJsonl(stdout);
-      return text || stdout.trimEnd();
-    } finally {
-      await cleanup();
+      const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
+
+      const tmpDir = os.tmpdir();
+      // Include process.pid and a counter for uniqueness across concurrent invocations
+      // in the same process (parallel review gates can call execute() within the same
+      // millisecond, causing Date.now() collisions and tmp file overwrites).
+      const tmpFile = path.join(
+        tmpDir,
+        `validator-codex-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+      );
+      await fs.writeFile(tmpFile, fullContent);
+
+      const args = this.buildArgs(
+        opts.allowToolUse,
+        opts.thinkingBudget,
+        opts.model,
+      );
+
+      const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+
+      // If onOutput callback is provided, use spawn for real-time streaming
+      if (opts.onOutput) {
+        const raw = await runStreamingCommand({
+          command: 'codex',
+          args,
+          tmpFile,
+          timeoutMs: opts.timeoutMs,
+          onOutput: (chunk: string) => {
+            opts.onOutput?.(chunk);
+          },
+          cleanup,
+        });
+
+        const { text } = parseCodexJsonl(raw, opts.onOutput);
+        return {
+          text: text || raw.trimEnd(),
+          telemetry: parseCodexTelemetry(raw, {
+            requestedModel: opts.model,
+            thinkingBudget: opts.thinkingBudget,
+          }),
+        };
+      }
+
+      // Otherwise use exec for buffered output
+      try {
+        const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, '\\$1')}"`;
+        const cmd = `cat "${tmpFile}" | codex ${args.map(quoteArg).join(' ')}`;
+        const { stdout } = await execAsync(cmd, {
+          timeout: opts.timeoutMs,
+          maxBuffer: MAX_BUFFER_BYTES,
+        });
+        const { text } = parseCodexJsonl(stdout);
+        return {
+          text: text || stdout.trimEnd(),
+          telemetry: parseCodexTelemetry(stdout, {
+            requestedModel: opts.model,
+            thinkingBudget: opts.thinkingBudget,
+          }),
+        };
+      } finally {
+        await cleanup();
+      }
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        fallbackTelemetry,
+      );
     }
   }
 }

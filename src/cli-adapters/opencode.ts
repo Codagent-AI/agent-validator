@@ -5,7 +5,14 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  observedMeasurement,
+  runStreamingCommand,
+} from './shared.js';
 import { OPENCODE_VARIANT } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
@@ -181,6 +188,59 @@ function parseOpenCodeJsonl(
   return { text: textParts.join(''), usage };
 }
 
+export function parseOpenCodeTelemetry(
+  raw: string,
+  opts: { model?: string; thinkingBudget?: string } = {},
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('opencode', {
+    requestedModel: opts.model,
+    requestedEffort: opts.thinkingBudget,
+    reason: 'opencode_usage_not_observed',
+  });
+  const { usage } = parseOpenCodeJsonl(raw, undefined, false);
+  const source = 'provider_event' as const;
+  const fields: Array<
+    [
+      keyof OpenCodeUsage,
+      'input_total' | 'output' | 'reasoning' | 'cache_read' | 'cache_write',
+    ]
+  > = [
+    ['inputTokens', 'input_total'],
+    ['outputTokens', 'output'],
+    ['reasoningTokens', 'reasoning'],
+    ['cacheReadTokens', 'cache_read'],
+    ['cacheWriteTokens', 'cache_write'],
+  ];
+  for (const [usageKey, tokenKey] of fields) {
+    const value = usage[usageKey];
+    if (typeof value !== 'number') continue;
+    telemetry.tokens[tokenKey] = observedMeasurement(
+      value,
+      source,
+      'exact',
+      tokenKey === 'cache_read' || tokenKey === 'cache_write'
+        ? ['input_total']
+        : null,
+    );
+    telemetry.provider_native_usage.push({
+      source,
+      name: `opencode_${usageKey}`,
+      value,
+    });
+  }
+  if (telemetry.provider_native_usage.length > 0) {
+    telemetry.completeness.collection = 'partial';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = ['opencode_field_inclusion_unestablished'];
+  }
+  telemetry.provenance.source_format_version = {
+    availability: 'available',
+    value: 'opencode-jsonl-step_finish',
+    reason: null,
+  };
+  return telemetry;
+}
+
 export class OpenCodeAdapter implements CLIAdapter {
   name = 'opencode';
 
@@ -265,6 +325,7 @@ export class OpenCodeAdapter implements CLIAdapter {
     return args;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: streaming protocol handling predates telemetry wrapping.
   async execute(opts: {
     prompt: string;
     diff: string;
@@ -273,79 +334,96 @@ export class OpenCodeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const bin = await this.getBin();
-    if (!bin) {
-      throw new Error('opencode binary not found');
-    }
-
-    const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-
-    const tmpDir = os.tmpdir();
-    const tmpFile = path.join(
-      tmpDir,
-      `validator-opencode-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
-    );
-    await fs.writeFile(tmpFile, fullContent);
-
-    const args = this.buildArgs({
-      model: opts.model,
-      allowToolUse: opts.allowToolUse,
-      thinkingBudget: opts.thinkingBudget,
+  }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
+    const fallbackTelemetry = createUnavailableTelemetry('opencode', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
     });
+    try {
+      const bin = await this.getBin();
+      if (!bin) {
+        throw new Error('opencode binary not found');
+      }
 
-    const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+      const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
-    if (opts.onOutput) {
-      // Buffer partial lines so we only forward parsed text content,
-      // not raw JSONL protocol events.
-      let lineBuf = '';
-      const streamingUsage: OpenCodeUsage = {};
-      const raw = await runStreamingCommand({
-        command: bin,
-        args,
-        tmpFile,
-        timeoutMs: opts.timeoutMs,
-        onOutput: (chunk: string) => {
-          lineBuf += chunk;
-          const lines = lineBuf.split('\n');
-          // Keep the last (possibly incomplete) segment in the buffer
-          lineBuf = lines.pop() ?? '';
-          for (const line of lines) {
-            const event = parseJsonlLine(line.trim());
-            if (!event) continue;
+      const tmpDir = os.tmpdir();
+      const tmpFile = path.join(
+        tmpDir,
+        `validator-opencode-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+      );
+      await fs.writeFile(tmpFile, fullContent);
+
+      const args = this.buildArgs({
+        model: opts.model,
+        allowToolUse: opts.allowToolUse,
+        thinkingBudget: opts.thinkingBudget,
+      });
+
+      const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+
+      if (opts.onOutput) {
+        // Buffer partial lines so we only forward parsed text content,
+        // not raw JSONL protocol events.
+        let lineBuf = '';
+        const streamingUsage: OpenCodeUsage = {};
+        const raw = await runStreamingCommand({
+          command: bin,
+          args,
+          tmpFile,
+          timeoutMs: opts.timeoutMs,
+          onOutput: (chunk: string) => {
+            lineBuf += chunk;
+            const lines = lineBuf.split('\n');
+            // Keep the last (possibly incomplete) segment in the buffer
+            lineBuf = lines.pop() ?? '';
+            for (const line of lines) {
+              const event = parseJsonlLine(line.trim());
+              if (!event) continue;
+              const text = processOpenCodeEvent(event, streamingUsage);
+              if (text !== undefined) opts.onOutput?.(text);
+            }
+          },
+          cleanup,
+        });
+
+        // Flush any remaining buffered line
+        if (lineBuf.trim()) {
+          const event = parseJsonlLine(lineBuf.trim());
+          if (event) {
             const text = processOpenCodeEvent(event, streamingUsage);
             if (text !== undefined) opts.onOutput?.(text);
           }
-        },
-        cleanup,
-      });
-
-      // Flush any remaining buffered line
-      if (lineBuf.trim()) {
-        const event = parseJsonlLine(lineBuf.trim());
-        if (event) {
-          const text = processOpenCodeEvent(event, streamingUsage);
-          if (text !== undefined) opts.onOutput?.(text);
         }
+
+        emitOpenCodeSummary(streamingUsage, opts.onOutput);
+        const { text } = parseOpenCodeJsonl(raw, undefined, false);
+        return {
+          text: text || raw.trimEnd(),
+          telemetry: parseOpenCodeTelemetry(raw, opts),
+        };
       }
 
-      emitOpenCodeSummary(streamingUsage, opts.onOutput);
-      const { text } = parseOpenCodeJsonl(raw, undefined, false);
-      return text || raw.trimEnd();
-    }
-
-    try {
-      const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, '\\$1')}"`;
-      const cmd = `cat "${tmpFile}" | ${quoteArg(bin)} ${args.map(quoteArg).join(' ')}`;
-      const { stdout } = await execAsync(cmd, {
-        timeout: opts.timeoutMs,
-        maxBuffer: MAX_BUFFER_BYTES,
-      });
-      const { text } = parseOpenCodeJsonl(stdout);
-      return text || stdout.trimEnd();
-    } finally {
-      await cleanup();
+      try {
+        const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, '\\$1')}"`;
+        const cmd = `cat "${tmpFile}" | ${quoteArg(bin)} ${args.map(quoteArg).join(' ')}`;
+        const { stdout } = await execAsync(cmd, {
+          timeout: opts.timeoutMs,
+          maxBuffer: MAX_BUFFER_BYTES,
+        });
+        const { text } = parseOpenCodeJsonl(stdout);
+        return {
+          text: text || stdout.trimEnd(),
+          telemetry: parseOpenCodeTelemetry(stdout, opts),
+        };
+      } finally {
+        await cleanup();
+      }
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        fallbackTelemetry,
+      );
     }
   }
 }

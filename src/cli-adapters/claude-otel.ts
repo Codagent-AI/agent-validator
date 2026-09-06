@@ -1,4 +1,9 @@
 import { getDebugLogger } from '../utils/debug-log.js';
+import {
+  type AdapterTelemetry,
+  createUnavailableTelemetry,
+  observedMeasurement,
+} from './shared.js';
 
 // ─── OTel Usage Types ────────────────────────────────────────────────────────
 
@@ -265,6 +270,70 @@ export function safeExtractOtelMetrics(
     process.stderr.write(`[agent-validator] OTel extraction failed: ${msg}\n`);
     return raw;
   }
+}
+
+/**
+ * Converts the allowlisted Claude OTel counters into safe partial evidence.
+ * Metric counters take precedence over API-request logs because both may
+ * describe the same work and the existing source does not establish a safe
+ * way to add them together.
+ */
+export function parseClaudeOtelTelemetry(
+  raw: string,
+  opts: { requestedModel?: string; thinkingBudget?: string } = {},
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('claude', {
+    requestedModel: opts.requestedModel,
+    requestedEffort: opts.thinkingBudget,
+    reason: 'claude_otel_not_observed',
+  });
+  const { metricBlocks, logBlocks } = scanOtelBlocks(raw);
+  const usage = metricBlocks.length > 0 ? parseOtelMetrics(metricBlocks) : {};
+  if (metricBlocks.length === 0) {
+    for (const block of logBlocks) {
+      const body = block.match(OTEL_ATTR_RE.body)?.[1];
+      if (body === 'claude_code.api_request')
+        accumulateApiRequest(block, usage);
+    }
+  }
+  const source = 'provider_event' as const;
+  const fields: Array<
+    [keyof OtelUsage, 'input_total' | 'output' | 'cache_read' | 'cache_write']
+  > = [
+    ['input', 'input_total'],
+    ['output', 'output'],
+    ['cacheRead', 'cache_read'],
+    ['cacheCreation', 'cache_write'],
+  ];
+  for (const [usageKey, tokenKey] of fields) {
+    const value = usage[usageKey];
+    if (typeof value !== 'number') continue;
+    telemetry.tokens[tokenKey] = observedMeasurement(
+      value,
+      source,
+      'exact',
+      tokenKey.startsWith('cache_') ? ['input_total'] : null,
+    );
+    telemetry.provider_native_usage.push({
+      source,
+      name: `claude_otel_${usageKey}`,
+      value,
+    });
+  }
+  if (telemetry.provider_native_usage.length > 0) {
+    telemetry.completeness.collection = 'partial';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = [
+      'claude_metric_request_overlap_unresolved',
+      'claude_normalized_total_not_established',
+    ];
+  }
+  telemetry.provenance.source_format_version = {
+    availability: 'available',
+    value: 'claude-otel-console',
+    reason: null,
+  };
+  return telemetry;
 }
 
 /** Build OTel environment overrides for console export. */

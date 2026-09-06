@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: the review runtime remains intentionally co-located pending its own extraction task.
 import {
   type CLIAdapter,
   getAdapter,
@@ -437,7 +438,7 @@ export class ReviewGateExecutor {
     logInputStats(finalPrompt, diff, adapterLogger);
     await adapterLogger(`[diff]\n${diff}\n`);
 
-    const output = await invokeAdapter(
+    const adapterResult = await invokeAdapter(
       adapter,
       finalPrompt,
       diff,
@@ -445,6 +446,9 @@ export class ReviewGateExecutor {
       adapterConfigs?.[toolName],
       adapterLogger,
     );
+    // Review interpretation continues to consume text only. The structured
+    // telemetry remains available to the dispatch lifecycle/recorder boundary.
+    const output = adapterResult.text;
     await adapterLogger(
       `\n--- Review Output (${adapter.name}) ---\n${output}\n`,
     );
