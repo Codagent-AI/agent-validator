@@ -39,6 +39,8 @@ export function parseCopilotSessionSummary(
   if (!premiumMatch) return undefined;
 
   const premiumRequests = Number(premiumMatch[1]);
+  if (!Number.isSafeInteger(premiumRequests) || premiumRequests < 0)
+    return undefined;
 
   // Parse per-model token lines: " <model>  <N>k in, <N> out, <N>k cached"
   const modelLines = [
@@ -59,9 +61,20 @@ export function parseCopilotSessionSummary(
       fullMatch.includes(`${val}k`)
         ? Math.round(Number(val) * 1000)
         : Number(val);
-    totalIn += toTokens(inRaw);
-    totalOut += toTokens(outRaw);
-    if (cachedRaw) totalCached += toTokens(cachedRaw);
+    const input = toTokens(inRaw);
+    const output = toTokens(outRaw);
+    const cached = cachedRaw ? toTokens(cachedRaw) : 0;
+    if (
+      ![input, output, cached].every(
+        (value) => Number.isSafeInteger(value) && value >= 0,
+      )
+    )
+      return undefined;
+    totalIn += input;
+    totalOut += output;
+    totalCached += cached;
+    if (![totalIn, totalOut, totalCached].every(Number.isSafeInteger))
+      return undefined;
     models.push(model);
   }
 

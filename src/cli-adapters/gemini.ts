@@ -513,12 +513,11 @@ ${body.trim()}
     try {
       const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
-      const tmpDir = os.tmpdir();
       const tmpFile = path.join(
-        tmpDir,
-        `validator-gemini-${process.pid}-${Date.now()}.txt`,
+        os.tmpdir(),
+        `validator-gemini-${crypto.randomUUID()}.txt`,
       );
-      await fs.writeFile(tmpFile, fullContent);
+      await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
 
       // Use cwd for telemetry file — Gemini's --sandbox restricts writes
       // to the project directory, so os.tmpdir() would fail with EPERM.

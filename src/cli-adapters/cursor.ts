@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import {
   resolveModelFromList,
@@ -199,36 +198,17 @@ export class CursorAdapter implements CLIAdapter {
         args.push('--model', resolvedModel);
       }
 
-      // If onOutput callback is provided, use spawn for real-time streaming
-      if (opts.onOutput) {
-        const text = await runStreamingCommand({
-          command: 'agent',
-          args,
-          tmpFile,
-          timeoutMs: opts.timeoutMs,
-          onOutput: opts.onOutput,
-          cleanup,
-        });
-        return { text, telemetry };
-      }
-
-      // Otherwise use exec for buffered output
-      // Shell command construction: We use exec() with shell piping
-      // because the agent requires stdin input. The tmpFile path is system-controlled
-      // (os.tmpdir() + Date.now() + process.pid), not user-supplied, eliminating injection risk.
-      // Double quotes handle paths with spaces.
-      try {
-        const modelFlag = resolvedModel ? ` --model ${resolvedModel}` : '';
-        const cmd = `cat "${tmpFile}" | agent --trust${modelFlag}`;
-        const { stdout } = await execAsync(cmd, {
-          timeout: opts.timeoutMs,
-          maxBuffer: MAX_BUFFER_BYTES,
-        });
-        return { text: stdout, telemetry };
-      } finally {
-        // Cleanup errors are intentionally ignored - the tmp file will be cleaned up by OS
-        await cleanup();
-      }
+      // Always invoke the CLI with an argument array. Model identifiers come
+      // from an external CLI and must never be interpolated into a shell.
+      const text = await runStreamingCommand({
+        command: 'agent',
+        args,
+        tmpFile,
+        timeoutMs: opts.timeoutMs,
+        onOutput: opts.onOutput,
+        cleanup,
+      });
+      return { text, telemetry };
     } catch (error) {
       throw new AdapterExecutionFailure(
         error instanceof Error ? error : new Error(String(error)),
