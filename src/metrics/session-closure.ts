@@ -15,9 +15,16 @@ interface ClosureJournal {
   max_previous_logs: number;
   ordinary: InventoryEntry[];
   archive_directories: string[];
+  archive_operations?: ArchiveOperation[];
   snapshot: unknown | null;
   snapshot_digest: string | null;
   phase: 'closing' | 'staged' | 'rotated' | 'published' | 'closed';
+}
+
+interface ArchiveOperation {
+  source: string;
+  destination: string;
+  state: 'pending' | 'started' | 'done';
 }
 
 export interface SessionClosureResult {
@@ -129,32 +136,76 @@ async function moveFrozenFiles(
   }
 }
 
+function archiveIndex(name: string): number {
+  return name === 'previous' ? 0 : Number(name.slice('previous.'.length));
+}
+
+function archiveOperations(
+  archives: string[],
+  depth: number,
+): ArchiveOperation[] {
+  if (depth === 0) return [];
+  const indexed = archives
+    .map((name) => ({ name, index: archiveIndex(name) }))
+    .sort((left, right) => right.index - left.index);
+  return [
+    ...indexed
+      .filter(({ index }) => index >= depth - 1)
+      .map(({ name }) => ({
+        source: name,
+        destination: path.join('evicted', name),
+        state: 'pending' as const,
+      })),
+    ...indexed
+      .filter(({ index }) => index < depth - 1)
+      .map(({ name, index }) => ({
+        source: name,
+        destination: `previous.${index + 1}`,
+        state: 'pending' as const,
+      })),
+  ];
+}
+
+function operationPath(logDir: string, staging: string, value: string): string {
+  return value.startsWith('evicted/')
+    ? path.join(staging, value)
+    : path.join(logDir, value);
+}
+
 async function rotateArchives(
   logDir: string,
   staging: string,
-  depth: number,
+  journalPath: string,
+  journal: ClosureJournal,
 ): Promise<void> {
-  if (depth === 0) return;
-  const evicted = path.join(staging, 'evicted');
-  const oldest = depth === 1 ? 'previous' : `previous.${depth - 1}`;
-  const oldestPath = path.join(logDir, oldest);
-  if (await exists(oldestPath)) {
-    await fs.mkdir(evicted, { recursive: true });
-    await fs.rename(oldestPath, path.join(evicted, oldest));
-  }
-  for (let index = depth - 2; index >= 0; index -= 1) {
-    const from = path.join(
-      logDir,
-      index === 0 ? 'previous' : `previous.${index}`,
-    );
-    const to = path.join(logDir, `previous.${index + 1}`);
-    if (await exists(from)) {
-      if (await exists(to))
-        throw new Error(`closure archive conflict: ${path.basename(to)}`);
-      await fs.rename(from, to);
+  journal.archive_operations ??= archiveOperations(
+    journal.archive_directories ?? [],
+    journal.max_previous_logs,
+  );
+  await writeAtomic(journalPath, journal);
+  for (const operation of journal.archive_operations) {
+    if (operation.state === 'done') continue;
+    operation.state = 'started';
+    await writeAtomic(journalPath, journal);
+    const source = operationPath(logDir, staging, operation.source);
+    const destination = operationPath(logDir, staging, operation.destination);
+    const [sourceExists, destinationExists] = await Promise.all([
+      exists(source),
+      exists(destination),
+    ]);
+    if (sourceExists && !destinationExists) {
+      await fs.mkdir(path.dirname(destination), { recursive: true });
+      await fs.rename(source, destination);
+    } else if (!(sourceExists || destinationExists)) {
+      throw new Error(`closure archive conflict: missing ${operation.source}`);
+    } else if (sourceExists) {
+      throw new Error(`closure archive conflict: ${operation.destination}`);
     }
+    operation.state = 'done';
+    await writeAtomic(journalPath, journal);
   }
-  await fs.mkdir(path.join(logDir, 'previous'), { recursive: true });
+  if (journal.max_previous_logs > 0)
+    await fs.mkdir(path.join(logDir, 'previous'), { recursive: true });
 }
 
 async function continueClosure(
@@ -185,7 +236,7 @@ async function continueClosure(
     await writeAtomic(journalPath, journal);
   }
   if (journal.phase === 'staged') {
-    await rotateArchives(logDir, staging, journal.max_previous_logs);
+    await rotateArchives(logDir, staging, journalPath, journal);
     journal.phase = 'rotated';
     await writeAtomic(journalPath, journal);
   }
@@ -235,33 +286,21 @@ async function recoverOneClosure(
 ): Promise<SessionClosureResult | null> {
   const staging = path.join(closures, name);
   const journalPath = path.join(staging, 'journal.json');
-  const journal = await readJournal(journalPath);
-  if (!journal || journal.phase === 'closed') return null;
-  let recorder: MetricsRecorder | null = null;
-  if (journal.session_id) {
-    try {
-      recorder = await MetricsRecorder.openExisting(logDir);
-    } catch (error) {
-      return {
-        closed: false,
-        close_id: null,
-        warnings: [
-          error instanceof Error
-            ? error.message
-            : 'metrics storage unavailable',
-        ],
-      };
-    }
-  }
   try {
+    const journal = await readJournal(journalPath);
+    if (!journal || journal.phase === 'closed') return null;
+    let recorder: MetricsRecorder | null = null;
+    if (journal.session_id) {
+      recorder = await MetricsRecorder.openExisting(logDir);
+    }
     await continueClosure(logDir, staging, journalPath, journal, recorder);
     return null;
   } catch (error) {
     return {
       closed: false,
-      close_id: journal.close_id,
+      close_id: null,
       warnings: [
-        error instanceof Error ? error.message : 'closure recovery failed',
+        `closure ${name}: ${error instanceof Error ? error.message : 'recovery failed'}`,
       ],
     };
   }
@@ -337,12 +376,14 @@ export async function closeMeasuredSession(
   const closeId = randomUUID();
   const staging = path.join(logDir, '.metrics', 'closures', closeId);
   const journalPath = path.join(staging, 'journal.json');
+  const archives = await archiveInventory(logDir);
   const journal: ClosureJournal = {
     close_id: closeId,
     session_id: active?.session_id ?? null,
     max_previous_logs: maxPreviousLogs,
     ordinary,
-    archive_directories: await archiveInventory(logDir),
+    archive_directories: archives,
+    archive_operations: archiveOperations(archives, maxPreviousLogs),
     snapshot: null,
     snapshot_digest: null,
     phase: 'closing',

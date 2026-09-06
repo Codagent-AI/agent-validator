@@ -250,7 +250,9 @@ describe("detect trusted snapshots", () => {
 		expect(result.stdout).not.toContain("  - app.ts");
 		expect(result.stdout).not.toContain("  - new.ts");
 		expect(await fs.readFile(ledger, "utf-8")).toBe(before);
-		await expect(fs.stat(path.join(worktree, "validator_logs"))).rejects.toThrow();
+		expect(
+			(await fs.stat(path.join(worktree, "validator_logs"))).isDirectory(),
+		).toBe(true);
 
 		await fs.writeFile(path.join(worktree, "scratch.ts"), "new work\n");
 		const dirty = await runDetect(worktree);

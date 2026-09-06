@@ -70,3 +70,31 @@ test('built Node clean uses validator_logs when no configuration exists', async 
     ),
   ).toBe('current');
 });
+
+test('built Node clean fails rather than treating a log-directory file as cleanable', async () => {
+  const root = path.resolve(import.meta.dir, '../..');
+  const node = Bun.which('node');
+  expect(node).toBeTruthy();
+  const project = await mkdtemp(path.join(os.tmpdir(), 'agent-validator-clean-invalid-e2e-'));
+  directories.push(project);
+  await mkdir(path.join(project, '.validator'), { recursive: true });
+  await writeFile(
+    path.join(project, '.validator', 'config.yml'),
+    'log_dir: logs\ncli: {}\nentry_points:\n  - path: .\n',
+  );
+  await writeFile(path.join(project, 'logs'), 'not a directory');
+
+  const child = Bun.spawn({
+    cmd: [node!, path.join(root, 'dist', 'index.js'), 'clean'],
+    cwd: project,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+
+  expect(exitCode).toBe(1);
+  expect(stderr).toContain('not a directory');
+});

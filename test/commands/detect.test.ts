@@ -52,4 +52,13 @@ describe("Detect Command", () => {
 		expect(source).toMatch(/performAutoClean\(logDir, result, maxPreviousLogs\)/);
 		expect(source).toMatch(/config\.project\.max_previous_logs/);
 	});
+
+	it("always resolves detect cleanup and log state under the run lock", async () => {
+		const source = await readFile(
+			path.join(import.meta.dir, "../../src/commands/detect.ts"),
+			"utf8",
+		);
+		expect(source).toMatch(/resolveDetectOptionsUnderLock\([\s\S]*?resolveOptions/);
+		expect(source).not.toContain("logDirectoryExists");
+	});
 });

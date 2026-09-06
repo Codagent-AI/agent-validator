@@ -72,8 +72,18 @@ function isMissingConfig(error: unknown): boolean {
 }
 
 async function directoryExists(directory: string): Promise<boolean> {
-  return fs
-    .stat(directory)
-    .then((stat) => stat.isDirectory())
-    .catch(() => false);
+  try {
+    const stat = await fs.stat(directory);
+    if (!stat.isDirectory()) throw new Error(`${directory} is not a directory`);
+    return true;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as NodeJS.ErrnoException).code === 'ENOENT'
+    )
+      return false;
+    throw error;
+  }
 }

@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { loadConfig } from '../config/loader.js';
@@ -127,16 +126,10 @@ async function executeDetect(options: DetectCliOptions): Promise<void> {
       trustedChangeOptions,
       config.project.max_previous_logs,
     );
-  const logDirectoryExists = await fs
-    .access(config.project.log_dir)
-    .then(() => true)
-    .catch(() => false);
-  const changeOptions = logDirectoryExists
-    ? await resolveDetectOptionsUnderLock(
-        config.project.log_dir,
-        resolveOptions,
-      )
-    : await resolveOptions();
+  const changeOptions = await resolveDetectOptionsUnderLock(
+    config.project.log_dir,
+    resolveOptions,
+  );
 
   const changeDetector = new ChangeDetector(effectiveBaseBranch, changeOptions);
   const expander = new EntryPointExpander();
