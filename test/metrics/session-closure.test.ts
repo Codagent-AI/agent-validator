@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { closeMeasuredSession } from '../../src/metrics/session-closure.js';
@@ -167,6 +167,42 @@ describe('measured session closure', () => {
     await expect(readFile(path.join(escaped, 'archive.log'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  test('rejects a closure journal archive destination with a symlinked staging component', async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), 'agent-validator-close-parent-'));
+    directories.push(parent);
+    const logDir = path.join(parent, 'logs');
+    const closeId = 'f4d0273d-a7d4-42c7-97ee-00b1eb7348d5';
+    const staging = path.join(logDir, '.metrics', 'closures', closeId);
+    const external = path.join(parent, 'external');
+    await mkdir(path.join(logDir, 'previous'), { recursive: true });
+    await mkdir(staging, { recursive: true });
+    await mkdir(external);
+    await symlink(external, path.join(staging, 'evicted'));
+    await writeFile(path.join(logDir, 'previous', 'archive.log'), 'archive');
+    await writeFile(
+      path.join(staging, 'journal.json'),
+      JSON.stringify({
+        close_id: closeId,
+        session_id: null,
+        max_previous_logs: 3,
+        ordinary: [],
+        archive_directories: ['previous'],
+        archive_operations: [
+          { source: 'previous', destination: 'evicted/previous', state: 'pending' },
+        ],
+        snapshot: null,
+        snapshot_digest: null,
+        phase: 'staged',
+      }),
+    );
+
+    const result = await recoverPendingSessionClosures(logDir);
+
+    expect(result.warnings).toHaveLength(1);
+    expect(await readFile(path.join(logDir, 'previous', 'archive.log'), 'utf8')).toBe('archive');
+    await expect(readFile(path.join(external, 'previous', 'archive.log'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   test('rejects a closure journal ordinary-file inventory that escapes the log directory', async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), 'agent-validator-close-parent-'));
     directories.push(parent);
@@ -203,6 +239,46 @@ describe('measured session closure', () => {
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toContain('invalid closure journal');
     expect(await readFile(external, 'utf8')).toBe('external');
+  });
+
+  test('rejects a symlinked staging files directory before moving ordinary logs', async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), 'agent-validator-close-parent-'));
+    directories.push(parent);
+    const logDir = path.join(parent, 'logs');
+    const closeId = 'f4d0273d-a7d4-42c7-97ee-00b1eb7348d6';
+    const staging = path.join(logDir, '.metrics', 'closures', closeId);
+    const external = path.join(parent, 'external');
+    await mkdir(staging, { recursive: true });
+    await mkdir(external);
+    await symlink(external, path.join(staging, 'files'));
+    await writeFile(path.join(logDir, 'current.log'), 'current');
+    const metadata = await stat(path.join(logDir, 'current.log'));
+    await writeFile(
+      path.join(staging, 'journal.json'),
+      JSON.stringify({
+        close_id: closeId,
+        session_id: null,
+        max_previous_logs: 3,
+        ordinary: [
+          {
+            name: 'current.log',
+            size: metadata.size,
+            mtime_ms: metadata.mtimeMs,
+          },
+        ],
+        archive_directories: [],
+        archive_operations: [],
+        snapshot: null,
+        snapshot_digest: null,
+        phase: 'closing',
+      }),
+    );
+
+    const result = await recoverPendingSessionClosures(logDir);
+
+    expect(result.warnings).toHaveLength(1);
+    expect(await readFile(path.join(logDir, 'current.log'), 'utf8')).toBe('current');
+    await expect(readFile(path.join(external, 'current.log'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   test('evicts every archive beyond a reduced retention depth', async () => {

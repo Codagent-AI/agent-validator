@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {
+  ensureSafeDirectory,
+  moveArchiveDirectory,
+  operationPath,
+} from './closure-paths.js';
 import { MetricsRecorder } from './recorder.js';
 
 interface InventoryEntry {
@@ -189,7 +194,7 @@ async function moveFrozenFiles(
   entries: InventoryEntry[],
 ): Promise<void> {
   const files = path.join(staging, 'files');
-  await fs.mkdir(files, { recursive: true });
+  await ensureSafeDirectory(staging, files);
   for (const entry of entries) {
     const source = path.join(logDir, entry.name);
     const staged = path.join(files, entry.name);
@@ -235,15 +240,6 @@ function archiveOperations(
   ];
 }
 
-function operationPath(logDir: string, staging: string, value: string): string {
-  const root = value.startsWith('evicted/') ? staging : logDir;
-  const resolvedRoot = path.resolve(root);
-  const resolved = path.resolve(root, value);
-  if (!resolved.startsWith(`${resolvedRoot}${path.sep}`))
-    throw invalidJournal('archive path escapes its root');
-  return resolved;
-}
-
 async function rotateArchives(
   logDir: string,
   staging: string,
@@ -261,23 +257,18 @@ async function rotateArchives(
     await writeAtomic(journalPath, journal);
     const source = operationPath(logDir, staging, operation.source);
     const destination = operationPath(logDir, staging, operation.destination);
-    const [sourceExists, destinationExists] = await Promise.all([
-      exists(source),
-      exists(destination),
-    ]);
-    if (sourceExists && !destinationExists) {
-      await fs.mkdir(path.dirname(destination), { recursive: true });
-      await fs.rename(source, destination);
-    } else if (!(sourceExists || destinationExists)) {
-      throw new Error(`closure archive conflict: missing ${operation.source}`);
-    } else if (sourceExists) {
-      throw new Error(`closure archive conflict: ${operation.destination}`);
-    }
+    await moveArchiveDirectory(
+      source,
+      destination,
+      operation.destination.startsWith('evicted/') ? staging : logDir,
+      operation.source,
+      operation.destination,
+    );
     operation.state = 'done';
     await writeAtomic(journalPath, journal);
   }
   if (journal.max_previous_logs > 0)
-    await fs.mkdir(path.join(logDir, 'previous'), { recursive: true });
+    await ensureSafeDirectory(logDir, path.join(logDir, 'previous'));
 }
 
 async function continueClosure(
@@ -389,6 +380,8 @@ async function installArchive(
   }
   const previous = path.join(logDir, 'previous');
   const files = path.join(staging, 'files');
+  await ensureSafeDirectory(staging, files);
+  await ensureSafeDirectory(logDir, previous);
   for (const entry of journal.ordinary) {
     const staged = path.join(files, entry.name);
     const target = path.join(previous, entry.name);
