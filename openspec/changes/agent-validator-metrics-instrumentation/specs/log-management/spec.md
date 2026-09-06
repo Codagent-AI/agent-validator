@@ -136,6 +136,18 @@ A finalized session's historical metrics copy SHALL follow the same archive rete
 
 The system MUST support a log clean operation that archives current logs using configurable N-deep rotation into `previous/` subdirectories. The clean operation SHALL preserve persistent state files (`.execution_state`, `.debug.log`, `.debug.log.1`), the latest `validation-metrics.json` snapshot, and private telemetry lifecycle, receipt, and pending-delivery state. It SHALL be a no-op if the log directory does not exist, or if there are neither ordinary current logs nor an active telemetry session requiring closure. An active telemetry session SHALL be closed even if no ordinary logs exist. The latest snapshot and private telemetry state SHALL NOT themselves count as ordinary current logs. The rotation depth is controlled by the `max_previous_logs` configuration field (default: 3).
 
+Every existing cleanup caller SHALL use this same session-close coordinator and explicitly resolved project retention depth: manual clean, `skip`, run/check/review success, retry-limit cleanup, and context-change cleanup. The coordinator SHALL resolve/freeze depth from loaded project configuration; the default applies only when configuration omits it, not when a caller forgets to pass it. `skip` SHALL close an active telemetry session before advancing the baseline while retaining pending evidence; it SHALL NOT create a validation invocation or model attempt. Subsequent validation SHALL begin a new session.
+
+#### Scenario: Skip closes an active measured session
+- **WHEN** the user advances the baseline with `skip` while a telemetry session is active
+- **THEN** cleanup closes that session under the run lock using configured retention and preserves pending delivery
+- **AND** skip creates no validation/model consumption record, and the next validation receives a new session ID
+
+#### Scenario: Check or review uses zero configured retention
+- **WHEN** successful check or review triggers cleanup with `max_previous_logs: 0`
+- **THEN** closure freezes depth zero rather than a helper default, creates no archive, and leaves preexisting archives untouched
+- **AND** latest and pending measurements survive
+
 #### Scenario: Clean with existing previous logs
 
 - **GIVEN** `previous/` and `previous.1/` subdirectories exist and contain files
@@ -302,6 +314,13 @@ Session closure SHALL finalize the session with the evidence actually recorded, 
 
 The overall close transition SHALL be recoverable across interruption: persisted closure evidence SHALL allow recovery without archiving the same session repeatedly, losing protected pending evidence, or attaching new validation work to a session already closed. A session's historical metrics copy SHALL retain its original identities and as-of-closure measurements; subsequent acknowledgment or replay SHALL not rewrite that archived measurement history. A session with no ordinary logs is still eligible for closure and, when enabled, a metrics-only archive.
 
+A metrics-only session archive SHALL consume one ordinary historical rotation slot at nonzero retention, with the same eviction rules as an archive containing review logs. Depth zero SHALL create no such archive and SHALL leave preexisting historical directories untouched. Repeated cleanup after the closed boundary SHALL not consume another slot.
+
+#### Scenario: Metrics-only closure uses one rotation slot
+- **WHEN** an active measured session has no ordinary logs and closes with nonzero historical retention
+- **THEN** exactly one metrics-only archive participates in the configured rotation, including normal oldest-archive eviction
+- **AND** repeating cleanup without a new active session performs no additional rotation
+
 Guarantees apply to successfully persisted evidence. If closure persistence fails, Validator SHALL warn and expose incomplete publication/history rather than claim a fully durable close. Telemetry write failures SHALL NOT change validation outcomes, and recovery MUST NOT invent history when evidence is insufficient.
 
 #### Scenario: Session closure archives complete known history
@@ -315,7 +334,21 @@ Guarantees apply to successfully persisted evidence. If closure persistence fail
 - **THEN** recovery uses the persisted session identity and closure evidence to avoid creating a second archive or performing the same historical rotation twice
 - **AND** protected pending evidence remains available with original attribution
 
-<!-- deferred-to-design: Define the closure journal/transaction and its coordination with log rotation, publication, locking, and recovery; the consumer-visible requirement is an idempotent recoverable close, not a particular storage mechanism. -->
+Closure SHALL use a persisted transaction identity and frozen session/revision and ordinary-file/archive inventory before destructive rotation. The transition SHALL stage moves at transaction-specific locations, retain recoverable operation identities, and reconcile unfinished operations before associating new validation work. Recovery SHALL NOT repeat the ordinary rotation loop against already shifted archives or use a fresh wildcard inventory that could capture newer files. The historical metrics copy SHALL contain the frozen as-of-close measurements.
+
+Manual and automatic closure SHALL coordinate under the validation run lock. Short telemetry metadata transactions SHALL separately serialize recording and receipt/disposition changes without holding that metadata lock throughout model execution or bulk archive movement. A durable closing boundary SHALL prevent new work from joining the closing session. If storage prevents safe recovery, Validator SHALL preserve known evidence, skip unsafe replay, and expose unavailable/degraded association while permitting otherwise allowed validation; it SHALL NOT guess a complete history or change validation outcome because of telemetry failure.
+
+Closure recovery SHALL NOT be a prerequisite for metrics export or acknowledgment against intact committed delivery state. Closure staging and recovery SHALL preserve independently accessible delivery records/receipts and SHALL merge current delivery dispositions when committing metadata, rather than overwrite acknowledgment state from a frozen closure snapshot.
+
+#### Scenario: Delivery is acknowledged before archive recovery finishes
+- **WHEN** a consumer exports and acknowledges committed evidence while closure remains unfinished
+- **THEN** those metrics operations require no new validation or clean invocation
+- **AND** later closure recovery preserves the acknowledgment without replaying the records as newly pending work
+
+#### Scenario: Recovery encounters conflicting file evidence
+- **WHEN** an interrupted closure's frozen file identities no longer match files found during recovery
+- **THEN** recovery reports the conflict and does not overwrite or delete files by guessing that they belong to the old closure
+- **AND** unavailable/degraded telemetry is explicit without turning the telemetry failure into a validation failure
 
 #### Scenario: Interruption occurs before the closed boundary is fully published
 - **WHEN** durable closure evidence exists but interruption prevents all close operations from finishing

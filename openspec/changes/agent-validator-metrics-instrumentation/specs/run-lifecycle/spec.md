@@ -137,7 +137,12 @@ An invocation identity SHALL still be allocated for a lock-rejected command, and
 - **THEN** its result identifies a distinct invocation, the lock-conflict outcome, and confirmed absence of model dispatch
 - **AND** the lock owner's snapshot and invocation identity are unchanged
 
-<!-- deferred-to-design: Define safely isolated recording/export of lock-rejected consumer-correlated invocations without altering the active session snapshot; unavailable persistence must not masquerade as a recorded zero-dispatch marker. -->
+Lock-rejected invocations SHALL be eligible for isolated consumer-scoped recording/export through a short telemetry metadata lock independent of the validation run lock. Isolated recording SHALL NOT update the active session association or latest snapshot. If it fails, the local result SHALL retain known invocation/dispatch facts and explicitly unavailable durable evidence; export SHALL NOT synthesize a persisted zero-dispatch marker from the failed write.
+
+#### Scenario: Lock-rejected invocation is exported independently
+- **WHEN** a consumer-correlated command loses the run lock but its isolated terminal invocation record is successfully persisted
+- **THEN** its scoped export identifies `lock_conflict`, its own invocation ID, unavailable session association, and confirmed zero dispatch
+- **AND** the lock owner's session snapshot is unchanged
 
 ## ADDED Requirements
 
@@ -249,4 +254,16 @@ Telemetry persistence/finalization failures SHALL be surfaced as warnings and ex
 - **WHEN** model reviews execute and structured results are returned
 - **THEN** the result includes invocation/session/publication metadata and actual attempt references in addition to the existing gate result information
 
-<!-- deferred-to-design: Define additive result fields and publication diagnostics for all controlled early exits without changing existing report text. -->
+`RunResult.telemetry` SHALL expose the additive identity, location, and publication fields specified by `validation-metrics`, with independent history and delivery diagnostics. Validation-command invocation allocation SHALL precede controlled configuration and context-file errors. Controlled command helpers SHALL return their outcomes to a finalization owner before CLI process exit. No metric-operation invocation SHALL be confused with a validation-command invocation.
+
+The run, check, and review executors SHALL all return non-exiting structured internal/programmatic results carrying the common telemetry metadata. Only CLI wrappers SHALL format the existing output and choose process exit behavior. Controlled pre-storage errors SHALL retain invocation identity and known facts in those results; when no evidence could be persisted, CLI export SHALL report missing/unavailable delivery rather than invent a marker. This SHALL NOT add a second machine-readable console/failure transport.
+
+#### Scenario: Check and review return controlled error outcomes
+- **WHEN** a programmatic caller invokes the check or review executor and configuration, context-file, or lock handling fails in a controlled way
+- **THEN** the executor returns its structured outcome and telemetry metadata without terminating the caller's process
+- **AND** the corresponding CLI wrapper preserves the existing validation error and exit semantics
+
+#### Scenario: Context file cannot be read
+- **WHEN** a validation command encounters a controlled context-file read error before adapter dispatch
+- **THEN** it retains its own invocation identity, known zero-dispatch state, original validation error, and explicit persistence/publication availability
+- **AND** finalization occurs before the command exits without changing the existing validation exit semantics

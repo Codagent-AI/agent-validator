@@ -1,4 +1,38 @@
-## ADDED Requirements
+# Task: Define versioned measurement contracts and deterministic projections
+
+## Goal
+
+Deliver an independently testable, language-neutral measurement foundation that preserves identity, uncertainty, accounting relationships, and revision integrity in both standalone and export representations.
+
+## Background
+
+Paths under `src/`, `test/`, `docs/`, `contracts/`, and `.github/` are relative to the repository root. Definition references are relative to `openspec/changes/agent-validator-metrics-instrumentation/`. New metrics modules, contract assets, and `test/metrics/` are planned implementation paths, not claims that they already exist.
+
+Read the approved `proposal.md`, the relevant sections of `design.md`, and `test-plan.md` (including Coverage Strategy and Completion and Evidence Boundaries), together with repository `AGENTS.md` and `test/AGENTS.md`. The verbatim specification requirements below are authoritative; the scope explanation identifies this delivery unit's portion where a requirement spans several boundaries.
+
+This change implements Validator only. Preserve Validator measurement → Runner attribution/consolidation → Evals valuation ownership. Do not implement companion repositories, modify/regenerate the stopped evaluation artifact, introduce pricing/rate lookup, backfill from logs, or add a JSONL sink. Both companion reviews and the resolutions are approved; targeted confirmation of the revised contracts remains an implementation prerequisite, not a reason to repeat broad design review or claim interoperability passed. Track that prerequisite from `handoffs/agent-runner/handoff.md` and `handoffs/agent-evals/handoff.md`; these task files do not assert that confirmation has occurred.
+
+Implement specification behavior with meaningful TDD and regression coverage. Use dependency injection, unique absolute temporary directories, restored child environments, and explicit synchronization barriers. Persistence/locking/termination checks use real filesystems and independent processes; failure injection supplements those checks. Use deterministic provider executables for all child calls including health/version probes, without real provider credentials or fallback to authenticated installed CLIs. Existing sanitized recordings must substantiate supported mappings; synthetic variations cannot establish provider accounting semantics. New live/paid captures are not authorized.
+
+Source tests belong in the affected `test/metrics/`, `test/cli-adapters/`, `test/gates/`, `test/core/`, and `test/commands/` areas and run with `bun run test`. Built CLI tests belong in `test/integration/`, after `bun run build:npm`, and must be wired into `bun run test:e2e`, retaining its Docker coverage. Use an explicit Node executable with the absolute built `dist/index.js`; Bun's `process.execPath` is not Node coverage. Required build/runtime/assets must fail their designated check when absent, not silently pass. Run applicable lint/type checks as well. Automated filesystem/process evidence uses Linux CI; record runtime versions and filesystem context. No tests may clean/discard real project metrics or publish/install packages globally.
+
+Do not execute `AT-*` or human acceptance as implementor work. Leave acceptance to the acceptance workflow, with accurate prerequisites and sanitized automated evidence. Producer tests do not establish actual Runner/Evals integration. No human-only flow is required. If full Validator review is explicitly requested during implementation, use `bun run build:npm && node dist/index.js run` from this checkout, never a Validator executable from PATH.
+
+Use new domain modules under `src/metrics/`, distribution assets under `contracts/model-metrics/v1/` and `contracts/validator-metrics/v1/`, and contract tests under `test/metrics/`. Consult `src/types/validator-status.ts`, `src/config/types.ts`, `src/cli-adapters/model-resolution.ts`, and `build.ts` for current public types and producer/build metadata conventions. Document the concrete contract, version policy, fixture manifest and provenance in the contract directories and `docs/`; read `docs/AGENTS.md` before documentation edits.
+
+Read design sections “Contract versions and ownership,” “Record model,” “Measurement shape and accounting,” “Aggregates and standalone snapshot,” and the CLI response shapes. This is the shared schema/reducer/projection foundation, including protocol and artifact schemas. It does not implement storage transactions, CLI command handlers, real dispatch orchestration, or provider parsers. Shared standalone/discovery requirements below are owned here for their shapes and pure projections; command publication behavior remains an integration obligation. Shared receipt requirements are owned here for the envelope, canonical bytes, digest and compatibility fixtures, not receipt transactions.
+
+Produce independent initial versions `measurement_schema_version`, `artifact_schema_version`, `protocol_version`, `capabilities_version`, and private `storage_version`, all starting at 1. Every record revision retains its own measurement version in its hash input. The v1 capabilities/protocol schemas must declare typed fields for default/maximum inventory/export counts, byte budgets and maximum individual record size, as required by `specs/nested-metrics-handoff/spec.md` “Validator-owned metrics retrieval interface” and design “CLI contract.” Define their shapes and validity relationships without treating runtime limits as immutable schema constants. Concrete operational values, enforcement and packaged examples are owned by the metrics CLI implementation; no new schema fields should be needed to choose those values. Define closed nested fields/source variants/enums, typed unavailable values and diagnostics, and version bumps for new fields including optional additions. Existing schema-declared optional evidence must round-trip losslessly. No opaque extension bag, blind forwarding, or lossy stripping.
+
+Implement complete replacement invocation/attempt envelopes and deterministic RFC 8785 JCS UTF-8/SHA-256 generation and verification excluding only the top-level digest. Reject duplicate keys before ordinary parsing loses that information, invalid Unicode, non-finite numbers, and invalid exact-token integers. Include original JSON, exact canonical bytes, expected digests, acceptance/rejection and semantic projections in a pinned fixture manifest. Do not substitute default JSON stringification for JCS. Keep Node/Bun portability and the approved expectation of no new runtime dependency; do not replace the architecture with a database or cross-language runtime package.
+
+Implement the canonical fields and reviewed derivation rules, native-source separation, availability/origin/precision independence, and inclusion/non-overlap relationships. Unknown cache-write prevents unsupported uncached derivation; reasoning included in output is not added again. Stable identity/allocation/cost IDs and within-revision references must preserve partial allocation, unallocated usage, scoped cost/currency/coverage, and overlap without pricing. Exclude prompts, responses, credentials, environment values and account/user/organization/email/host data from every schema surface including diagnostics.
+
+Implement pure latest-head selection, conflict detection, invocation/session reducers and lossless snapshot/export projection functions. Retain failed work, typed category coverage and incomplete history, incomparable provider-total groups, unknown identities and work-duration versus elapsed-time distinction. Mixed versions require explicit reviewed mappings; retain incompatible latest heads as limitations instead of using older compatible measurements. Exercise future versions with test-only schemas, without shipping a fictitious production v2. Shared original JSON/bytes/hashes must be usable by Runner Go and Evals independently; their runtime execution belongs to companion CI and must remain reported as outstanding until actually performed.
+
+## Spec
+
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/validation-metrics/spec.md`. The following requirement and all its scenarios are copied verbatim.
 
 ### Requirement: Versioned standalone artifact and invocation discovery
 
@@ -55,69 +89,7 @@ All three validation command executors SHALL return non-exiting structured inter
 - **WHEN** a current-invocation snapshot exists but recording or publishing terminal evidence fails
 - **THEN** result metadata identifies degraded or unavailable final publication rather than claiming that the existing file establishes complete terminal evidence
 
-### Requirement: Stable attempt identity and review correlation
-
-Every `run`, `review`, and `check` command execution SHALL receive a distinct invocation identity. Every actual model-backed adapter dispatch SHALL receive a distinct stable `attempt_id` and retain its parent invocation/session identity, gate, review slot, adapter, and retry/run context. Review result records and per-review JSON artifacts for actual dispatches SHALL reference their telemetry attempts. Provider CLI session identity and consumer workflow correlation SHALL remain separate from Validator's identities.
-
-Finalization, rereading, archival, or delivery replay SHALL preserve an existing attempt identity. New dispatches SHALL NOT reuse it. Skipped review slots and preserved one-shot results SHALL NOT create new model attempts or assign earlier consumption to the current invocation; an available reference to earlier evidence remains a historical reference. One adapter dispatch is one attempt, not one attempt per provider-internal request or observed model.
-
-#### Scenario: Parallel dispatches use the same adapter
-- **WHEN** multiple gates or review slots dispatch the same adapter concurrently
-- **THEN** each actual dispatch has its own attempt ID and unambiguous gate/slot and parent-invocation context
-- **AND** collection sources are isolated per dispatch, including same-clock-tick launches, and one dispatch's cleanup cannot destroy another's evidence
-
-Collection from a shared source SHALL require source-supported per-attempt correlation. Ambiguous or cross-contaminated observations SHALL NOT support complete per-attempt measurements; unaffected established evidence MAY remain available with explicit partial/unavailable affected fields. Source cleanup SHALL affect only the owning attempt's resources.
-
-#### Scenario: Shared collection cannot establish ownership
-- **WHEN** a collection source contains observations from several attempts without reliable source correlation
-- **THEN** the adapter reports attribution/collection limitations rather than assigning their combined usage to one attempt or guessing a split
-
-#### Scenario: Actual retry creates new consumption
-- **WHEN** a previously failed review is dispatched again
-- **THEN** it receives a new attempt ID and retains the earlier attempt as distinct history
-
-#### Scenario: Finalization and archival preserve identity
-- **WHEN** an attempt is finalized, reread, archived, or exported again
-- **THEN** its identity and originating invocation/session remain unchanged
-
-#### Scenario: Review result joins to telemetry
-- **WHEN** a review dispatch produces a result and its JSON artifact
-- **THEN** the result and artifact identify the corresponding telemetry attempt without requiring filename or execution-order inference
-
-#### Scenario: Preserved and skipped reviews create no attempts
-- **WHEN** a command skips a previously passed review or preserves a one-shot result without dispatch
-- **THEN** that decision creates no new model attempt or current-invocation usage
-- **AND** the enclosing validation command still has its own invocation identity
-
-### Requirement: Attempt lifecycle and failure evidence
-
-Validator SHALL persist attempt identity and initial lifecycle evidence before dispatch when storage permits, retain observed evidence through controlled success and failure paths, and finalize the same attempt on terminal execution. Parallel updates SHALL NOT lose another attempt's recorded evidence. Adapter execution outcome, review findings, and telemetry completeness SHALL be independently represented.
-
-Interrupted attempts SHALL retain their last persisted evidence and explicit incomplete lifecycle/collection state; Validator MUST NOT invent terminal usage or success. Initial or final telemetry persistence failure SHALL warn and make publication/history degradation explicit without preventing validation or changing its outcome or exit code.
-
-#### Scenario: Review violations with complete telemetry
-- **WHEN** an adapter completes with review violations and complete source usage
-- **THEN** the attempt retains the failed review outcome and independently complete usage collection
-
-#### Scenario: Failure or timeout retains partial evidence
-- **WHEN** an adapter fails or times out after reporting some usage or identity evidence
-- **THEN** the terminal attempt retains that evidence with its failure and applicable collection limitations
-
-#### Scenario: Process interruption leaves an incomplete attempt
-- **WHEN** initial attempt evidence was persisted but the process is interrupted before finalization
-- **THEN** the stored attempt retains its identity and known evidence without a fabricated successful outcome or final usage count
-
-#### Scenario: Initial persistence fails
-- **WHEN** recording initial telemetry fails before an otherwise permitted dispatch
-- **THEN** validation continues with a warning and degraded telemetry state rather than claiming successful durable recording
-
-#### Scenario: Final persistence fails
-- **WHEN** validation completes but writing terminal telemetry fails
-- **THEN** validation outcome and exit code remain unchanged while publication/history limitations are surfaced
-
-#### Scenario: Parallel finalizations retain both attempts
-- **WHEN** two reviews finalize concurrently
-- **THEN** successful telemetry persistence retains both attempts and their evidence rather than overwriting one with the other
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/validation-metrics/spec.md`. The following requirement and all its scenarios are copied verbatim.
 
 ### Requirement: Requested resolved and observed model identity
 
@@ -138,6 +110,8 @@ Measurements SHALL distinguish requested configuration, resolved launch configur
 #### Scenario: Multiple observed models and unknown effort
 - **WHEN** a source establishes several effective models but does not report effective effort or provider for some identity fields
 - **THEN** the established models remain distinct and the unsupported identity fields remain explicitly unavailable
+
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/validation-metrics/spec.md`. The following requirement and all its scenarios are copied verbatim.
 
 ### Requirement: Explicit canonical token accounting
 
@@ -185,6 +159,8 @@ Negative, non-finite, or internally inconsistent evidence SHALL NOT be silently 
 - **WHEN** source evidence contains a negative or non-finite count or a cache count inconsistent with its established containing total
 - **THEN** normalization reports the inconsistency instead of publishing a silently valid count or fabricated corrected total
 
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/validation-metrics/spec.md`. The following requirement and all its scenarios are copied verbatim.
+
 ### Requirement: Version provenance precision and independent completeness
 
 Measurements SHALL identify the Validator producer version and build provenance, adapter name and parser/mapping version, underlying CLI version, and usage-source format/event version. Producer and parser/mapping versions SHALL identify the measuring implementation; build revision, CLI version, or source event version that cannot be established SHALL remain explicitly unavailable with a reason rather than be invented. A source with no exposed event-version identifier SHALL be documented as such.
@@ -215,6 +191,8 @@ Derivation and precision SHALL remain separate dimensions. Direct observations S
 #### Scenario: Version metadata is only partly observable
 - **WHEN** Validator and parser/mapping versions are known but the CLI or source event version cannot be established
 - **THEN** the known versions are retained and unavailable version fields state their limitations explicitly
+
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/validation-metrics/spec.md`. The following requirement and all its scenarios are copied verbatim.
 
 ### Requirement: Multiple-model allocations and unallocated usage
 
@@ -249,6 +227,8 @@ Every represented allocation SHALL have a stable `allocation_id` within its atte
 #### Scenario: Allocation rows are not extra work
 - **WHEN** an aggregate is computed from an attempt containing per-model and unallocated usage details
 - **THEN** each measured token contributes once and the attempt count remains one for that dispatch
+
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/validation-metrics/spec.md`. The following requirement and all its scenarios are copied verbatim.
 
 ### Requirement: Typed deduplicated invocation and session aggregates
 
@@ -305,6 +285,8 @@ Aggregation SHALL select each attempt's latest revision once, not its latest com
 - **WHEN** two attempts each take ten seconds and execute during the same ten-second interval
 - **THEN** their durations may represent twenty seconds of attempt work but are not reported as twenty seconds of invocation elapsed time
 
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/validation-metrics/spec.md`. The following requirement and all its scenarios are copied verbatim.
+
 ### Requirement: Allowlisted evidence and pricing independence
 
 Durable measurement evidence SHALL be restricted to allowlisted identity, usage, timing, and provenance fields. Provider-native usage SHALL remain separate from normalized fields. Prompts, responses, credentials, environment values, and unrestricted provider event payloads MUST NOT enter the metrics artifact or handoff. Explanations of environment-conditioned collection limitations SHALL not expose the environment values themselves.
@@ -354,33 +336,112 @@ Scoped evidence SHALL NOT expand to unrelated or unallocated work. Whole-attempt
 - **WHEN** normalized total tokens are known but effective-model identity or needed billing categories are unavailable
 - **THEN** those limitations remain visible and no priceability or cost-completeness claim is inferred from the total
 
-### Requirement: Documented adapter support and representative evidence
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/nested-metrics-handoff/spec.md`. The following requirement and all its scenarios are copied verbatim.
 
-Validator SHALL document a field-level telemetry support matrix and collection prerequisites for its Claude, Codex, Cursor, Gemini, GitHub Copilot, and OpenCode adapters. Documentation SHALL distinguish fields the adapter/source cannot report from fields unavailable because collection was disabled, redirected, incomplete, or unrecognized. Requested/resolved configuration MUST NOT be documented as verified effective identity merely to fill a support gap.
+### Requirement: Semantics-preserving measurement export
 
-Adapter parsers SHALL be validated against recorded representative CLI output before their values can be labeled complete. Fixtures SHALL exercise applicable identity evidence, rounded counts, accounting relationships, and overlapping metric/request sources. Unrecognized formats SHALL yield explicitly partial/unavailable measurements rather than fabricated zeros or unsupported completeness claims. Versioned contract fixtures SHALL support verification that the standalone artifact and consumer export preserve the same measurement semantics.
+Export SHALL project the same recorded evidence used for Validator's standalone telemetry. It SHALL preserve the common versioned model-attempt semantics needed for accounting and attribution: stable producer identities and original consumer context; outcome and timing; requested, resolved, and observed effective identity with provenance and availability; canonical token values and their accounting relationships; allowlisted provider-native usage; derivation and precision; completeness; producer/parser/source version provenance; per-model allocations and unallocated usage; and provider-reported cost when available.
 
-Producer acceptance SHALL require evidence-backed canonical `input_total` and `output` usage for both Codex and Claude on representative successful dispatches, with established accounting relationships and declared precision. An implementation reporting every token category unavailable SHALL NOT meet this acceptance floor. This floor SHALL NOT imply complete cache/reasoning categories, effective identity, or failure-path collection where evidence cannot establish them. Missing representative recordings SHALL block the affected support/acceptance claim, not permit a synthetic support claim or lower the floor. New paid/live captures require separate authorization.
+Export SHALL preserve allocation IDs, observed-identity IDs/references, and `provider_reported_costs[]` with stable evidence IDs, exact scope/allocation references, currency availability, coverage, and overlap relationships. Consumers SHALL be able to join usage and cost within the same attempt revision without inferring joins from array order or a model label. Unknown identity/scope/currency SHALL remain explicit. No export transformation SHALL promote allocation cost to complete attempt cost.
 
-Legacy log-based reports, including `review-audit` and `newsletter-metrics`, SHALL be documented as outside this migration and its measurement-accuracy guarantees. Documentation SHALL identify `review-audit`'s existing zero-filling limitation and direct machine consumers to the new artifact/handoff. This change SHALL NOT claim those legacy reports are migrated or authoritative for the new contract.
+#### Scenario: Scoped cost and allocation join survives export and replay
+- **WHEN** a multi-model attempt includes one attributed allocation, unallocated remaining usage, and cost reported only for that attributed allocation
+- **THEN** standalone and exported evidence preserve the same stable allocation/identity/cost references and partial coverage
+- **AND** replay retains those references without counting another attempt or assigning cost to the remaining usage
 
-#### Scenario: Minimum useful adapter support is not established
-- **WHEN** either Codex or Claude lacks recorded evidence substantiating its supported input/output mapping
-- **THEN** producer acceptance remains incomplete even if persistence and handoff tests pass
-- **AND** no live/paid capture is implicitly authorized to resolve the missing evidence
+Export MUST NOT invent effective identity, allocate aggregate usage across models without evidence, replace unavailable values with zero, apply pricing policy, or include prompts, responses, credentials, environment values, or unrestricted provider payloads. Exported lifecycle revisions describe updates to one measured attempt, not additive usage events.
 
-#### Scenario: Unsupported field versus disabled collection
-- **WHEN** an adapter cannot expose a field and another configured execution disables otherwise supported collection
-- **THEN** documentation and runtime unavailability reasons distinguish the two conditions
+#### Scenario: Requested-only identity remains usable evidence
+- **WHEN** an attempt has measured usage but no evidence of its effective model
+- **THEN** export retains the measured usage and requested/resolved identity while explicitly marking the effective identity unavailable
 
-#### Scenario: Parser encounters an unrecognized format
-- **WHEN** CLI output differs from a supported telemetry format
-- **THEN** unsupported measurements remain partial or unavailable with diagnostics rather than silently complete or zero
+#### Scenario: Multiple models have only aggregate usage
+- **WHEN** an attempt reports several effective models but cannot establish their individual usage allocations
+- **THEN** export retains those identities and the unallocated attempt usage without splitting or duplicating the aggregate
 
-#### Scenario: Representative fixtures establish parser claims
-- **WHEN** an adapter parser claims complete collection or defensible normalized totals
-- **THEN** recorded representative fixtures verify its applicable identity, rounding, category-inclusion, and metric/request-overlap behavior
+#### Scenario: Provider cost passes through without pricing
+- **WHEN** a source reports usage and cost together with unrelated response content
+- **THEN** export preserves the allowlisted usage and provider-reported cost evidence without calculating a price or exporting the response content
 
-#### Scenario: Artifact and export use the same measurement semantics
-- **WHEN** a contract fixture containing partial identity, approximate usage, and unallocated model usage is materialized as a standalone snapshot and consumer export
-- **THEN** both preserve the same accounting evidence, provenance, uncertainty, and attribution semantics
+#### Scenario: Export preserves uncertainty and provenance
+- **WHEN** recorded usage includes approximate or derived values, unavailable categories, and source/version metadata
+- **THEN** export preserves those distinctions and metadata instead of reducing the measurements to unqualified numbers
+
+Source: `openspec/changes/agent-validator-metrics-instrumentation/specs/nested-metrics-handoff/spec.md`. The following requirement and all its scenarios are copied verbatim.
+
+### Requirement: Non-consuming exports and revision-bound receipts
+
+A successful export of pending evidence SHALL return an opaque receipt bound to the selected consumer/context and the exact record revisions in that export. Export SHALL NOT itself acknowledge delivery or release pending evidence. Exporting while recording continues SHALL produce a coherent batch whose receipt cannot acknowledge revisions omitted from that batch.
+
+The consumer contract SHALL require durable incorporation of the exported evidence before acknowledgment. Validator SHALL treat acknowledgment as the consumer's assertion of durable receipt; successful export alone does not establish it.
+
+#### Scenario: Consumer crashes before durable incorporation
+- **WHEN** Runner exports a batch and crashes before saving it or acknowledging its receipt
+- **THEN** the unacknowledged evidence remains available for retrieval with the same producer record identities and revisions
+
+#### Scenario: Completion arrives after an in-progress export
+- **WHEN** an export contains an in-progress attempt revision and a completion revision is recorded afterward
+- **THEN** the earlier receipt covers only the exported revision and cannot release the later completion revision
+
+An export SHALL identify `store_id`, `consumer_context`, `export_id`, `evidence_state`, `records`, `batch`, `delivery_gaps`, and `receipt`. Evidence state SHALL distinguish `pending`, `previously_acknowledged`, `discarded`, and `missing`; pending evidence MAY coexist with explicit delivery gaps. No matching invocation SHALL return `missing` and no receipt rather than a zero-dispatch claim. Version 1 SHALL NOT include `context_records`: complete replacement records retain their original parent identities and consumers retain their already incorporated evidence. Missing required parent evidence SHALL remain a gap, not fabricated context.
+
+Records SHALL identify `record_type` (`invocation` or `model_attempt`), `record_id` (the invocation ID or attempt ID respectively), positive integer `revision`, per-revision `measurement_schema_version`, producer/version metadata, original consumer context, and a complete replacement `payload`. Newer revisions SHALL replace earlier views of the same record, not add usage. Conflicting payloads claiming the same record/revision SHALL yield a diagnostic rather than arbitrary replacement or addition.
+
+Each record SHALL carry `digest.algorithm: sha256`, `digest.canonicalization: rfc8785`, and a lowercase hexadecimal `digest.value`. Digest input SHALL be the RFC 8785 JCS UTF-8 serialization of the complete record excluding only its top-level `digest` member. Duplicate object names, invalid Unicode, and non-finite numbers SHALL be rejected; token-count numeric limits remain independently enforced. Runner SHALL verify the producer digest from the complete received record before transformation and durable incorporation/acknowledgment. Equivalent serializations with identical canonical content SHALL NOT be treated as conflicting revisions. Evals SHALL preserve the digest/revision evidence but need not recompute hashes merely for valuation.
+
+Shared compatibility fixtures SHALL provide original JSON, exact canonical bytes, and expected SHA-256 hashes covering fractional values, exponent notation, Unicode ordering and escaping, signed zero, and numeric limits, plus rejection cases. Consumers SHALL NOT substitute their language's default JSON reserialization for JCS.
+
+#### Scenario: Cross-language representations yield the same record digest
+- **WHEN** Validator and Runner canonicalize a shared record fixture containing fractional numbers, exponent spellings, and escaped Unicode under RFC 8785
+- **THEN** both produce the fixture's canonical bytes and SHA-256 digest
+- **AND** changes to canonical content under the same record/revision are diagnosed before acknowledgment
+
+Export SHALL select a coherent committed generation and a bounded batch from the selected scope, with a durable opaque receipt covering exactly the returned identities, revisions, measurement versions, and payload digests. Select earliest pending revisions in stable commit order, with record type/ID/revision tie-breakers, within count/byte bounds; do not split records. Valid compatible pending evidence SHALL permit at least one returned record without materializing the whole backlog. `batch` SHALL state `generation`, `returned_revision_count`, `remaining_revision_count`, and `scope_complete` as of that generation. Every unreturned revision SHALL remain pending; a later head SHALL NOT implicitly release an earlier revision. A changed batch SHALL NOT reuse a receipt covering different revisions. Invalid/corrupt evidence SHALL yield explicit failure, not truncation presented as complete delivery.
+
+Consumers SHALL drain by durably incorporating and acknowledging each batch, then exporting again; operators MAY explicitly discard a previewed batch instead. Export without disposition SHALL NOT advance a hidden cursor or consume evidence; it MAY return the same batch again. New recording or dispositions MAY change later batches. A scope-complete batch SHALL NOT promise no future revisions. Delivery gaps SHALL be reported through bounded summaries with counts, not unbounded historical payload/manifest lists.
+
+`remaining_revision_count` SHALL count pending revisions omitted from the response; returned revisions remain pending until disposition. `scope_complete` SHALL be true exactly when that omitted count is zero, including an empty scope. Neither these counts nor batch completeness SHALL establish zero dispatch, successful acknowledgment, or absence of delivery gaps.
+
+Invocation membership and attempt creation SHALL be committed coherently even when their delivery spans batches. Invocation measurement/finalization completeness SHALL remain distinct from delivery completeness. Consumers SHALL reconcile imported heads, expected attempt membership, batch coverage, and gaps before claiming complete delivery; one terminal invocation record or `scope_complete` alone SHALL NOT establish it.
+
+#### Scenario: Both initial and final revisions remain pending
+- **WHEN** an attempt's initial and terminal revisions have not been acknowledged
+- **THEN** bounded exports deliver those pending revisions as updates to one attempt, each receipt identifying exactly its returned revisions
+- **AND** the consumer can select the terminal revision without adding initial and terminal usage together
+
+#### Scenario: Backlog exceeds one export batch
+- **WHEN** a compatible pending scope exceeds a supported export count or byte limit
+- **THEN** export returns a bounded nonempty batch and explicit remaining coverage instead of failing solely because the whole backlog is large
+- **AND** acknowledgment or confirmed discard covers only that batch, leaving the rest retrievable for the next export
+
+#### Scenario: Invocation and attempts span batches
+- **WHEN** a consumer receives terminal invocation evidence while some associated attempt revisions remain in another batch
+- **THEN** it retains incomplete delivery until imported evidence and coverage establish the expected attempt set without gaps
+
+#### Scenario: Repeating bounded export without acknowledgment
+- **WHEN** no recording/disposition changes occur and the caller repeats export with the same scope and limits
+- **THEN** it receives the same selected revision set without consuming or skipping to later evidence
+
+## Test Plan
+
+Own INT-005's Validator schema/runtime, JCS, semantic fixture and pure projection boundary. Supply executable shared fixtures and expected outcomes for companion tests, retaining their execution as a separate prerequisite. Fixture projections exercise the real pure functions that persistence and CLI code consume; do not write a test-only alternate projection. Store retention and protocol tests must reuse this corpus for integrated mixed-version behavior. Pure normalization/reducer cases are selected from the copied scenarios through TDD, rather than creating a duplicate unit inventory.
+
+From the approved `test-plan.md`, retained verbatim:
+
+### INT-005: Versioned schemas and lossless cross-language measurement contracts
+
+- Covers: VM versioning, canonical accounting, allocations, typed aggregates, and allowlisted pricing-independent evidence; NH “Semantics-preserving measurement export” and “Non-consuming exports and revision-bound receipts”; approved companion contract obligations in the design.
+- Boundary: Published JSON Schemas ↔ runtime validators ↔ standalone/export projections; the same fixture package ↔ Runner's Go ingestion and Evals' measurement/valuation ingestion.
+- Setup: Pin the schema and fixture revision. Provide original JSON, exact RFC 8785 canonical UTF-8 bytes, expected SHA-256, accepted/rejected schema outcomes, and expected semantic projections. Cases include fractional cost/exponent/signed-zero serialization, Unicode ordering/escaping, numeric limits and malformed input; known optional versus undeclared fields; requested-only identity; partial/approximate envelopes; prepared/terminal revisions and conflicting duplicates.
+- Action: Validate and project the same fixtures as snapshots and exports; verify digests before transformation. Run the shared corpus in each companion's actual implementation when that implementation is available. Exercise one attempt observing A and B, total 150, allocation A of 100, unallocated remainder 50, and cost only for A; also test overlapping whole-attempt/allocation costs, unknown currency/scope, stable joins after reordering/revisions, and new usage exceeding old cost coverage.
+- **Mixed-version cases:** A failed v1 invocation is retained through a producer upgrade and a new-version retry in the same session; the pending scope and snapshot contain both versions. Exercise explicitly declared consumer version sets, required-version errors before any receipt, per-record versions covered by digests, actual batch version sets, and separately versioned root aggregates. Use explicitly test-only later-version schemas until another production version exists; do not publish a fictitious v2 merely for this fixture. Include a reviewed comparable mapping and an incompatible current head with an older compatible revision: preserve source bytes and known coverage without fallback to stale measurements, relabeling, dropping, or double-counting.
+- Assertions: Schema/runtime agreement; identical expected canonical hashes across supported runtimes/languages; all supported evidence preserved, including declared optional fields. Undeclared fields/unsupported versions reject without acknowledgment; no opaque unknown-field forwarding. Allocation/cost references stay within the selected attempt revision; allocation-only cost never resolves uncovered work. Runner selects one current head per producer attempt while preserving digest/revision/original attribution/gaps. Evals keeps overall dispatch counts separate from row participation, preserves unknown cache-write, and distinguishes known subtotal from complete non-overlapping cost. Whole token-total availability does not establish billing completeness.
+- **Constraints:** Validator fixtures and projection checks are required for producer acceptance. Runner/Evals executions are required for their companion acceptance and end-to-end readiness, not silently presumed from Validator passing. No Go/Evals runtime dependency need be added to ordinary Validator CI; each repository must pin and run the shared corpus in its own CI. Until those implementations exist, record that cross-language/consumer execution is outstanding, not passed. Use fixture evidence and locally controlled valuation inputs, not live rate lookup or paid judges, for automated contract assertions.
+- Execution: Validator `test/metrics/` contract tests via `bun run test`; companion Go/JavaScript contract tests in their separately authorized changes/CI. Record versions and fixture revision in acceptance evidence.
+
+## Done When
+
+- Published v1 schemas, runtime validators, pure reducers/projections, and versioned fixture manifest agree; all accepted fields and source versions survive both projections. Capabilities/protocol schemas explicitly declare all advertised limit fields and their types/relationships; concrete runtime values and executable packaged examples remain part of the CLI delivery boundary.
+- All copied domain scenarios within this foundation’s stated scope and the schema/JCS/pure-projection portion of INT-005 pass, including the 150/100/50 partial allocation with allocation-only cost, overlap, unknown currency/scope, cost coverage after later usage, mixed-version latest-head behavior and canonicalization rejection cases.
+- The schema and contract documentation explain unknown versus zero, immutable replacement revisions, independent versions, digest input, supported numeric bounds and pricing ownership.
+- Shared fixture outputs are ready for separately authorized Go/JavaScript consumer verification. Integrated mixed-version retention/export checks remain outstanding until the real store and CLI exercise them; do not mark all Validator portions of INT-005 complete from pure projections alone. Unexecuted companion checks and targeted contract confirmation are not marked passed.
