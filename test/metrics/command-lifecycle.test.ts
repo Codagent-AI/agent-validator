@@ -28,14 +28,14 @@ async function temporaryLogDir(): Promise<string> {
 }
 
 describe('command metrics lifecycle', () => {
-  test('threads collector replacements through the review runtime into the durable attempt', async () => {
+  test.each(['\n', ''])('persists failed collector usage through the review runtime with final delimiter %j', async (delimiter) => {
     const logDir = await temporaryLogDir();
     const lifecycle = new CommandMetricsLifecycle('review');
     await lifecycle.associate(logDir);
     const prepared = await lifecycle.prepareAttempt({ adapter: 'codex', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('codex') });
     const stream: typeof runStreamingCommand = async (opts) => {
       try {
-        opts.onStdout?.('{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}\n');
+        opts.onStdout?.(`{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}${delimiter}`);
         throw new Error('controlled exit');
       } finally { await opts.cleanup(); }
     };

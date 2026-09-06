@@ -7,6 +7,7 @@ export function createBoundedLineCollector(onLine: (line: string) => void) {
   let fragments: string[] = [];
   let length = 0;
   let discarding = false;
+  let closed = false;
 
   const append = (chunk: string, start: number, end: number): void => {
     if (discarding || end === start) return;
@@ -19,19 +20,32 @@ export function createBoundedLineCollector(onLine: (line: string) => void) {
     }
   };
 
-  return (chunk: string): void => {
+  const emit = (): void => {
+    const line = discarding ? undefined : fragments.join('');
+    fragments = [];
+    length = 0;
+    discarding = false;
+    if (line) onLine(line);
+  };
+
+  const write = (chunk: string): void => {
+    if (closed) return;
     let start = 0;
     while (start < chunk.length) {
       const newline = chunk.indexOf('\n', start);
       const end = newline === -1 ? chunk.length : newline;
       append(chunk, start, end);
       if (newline === -1) return;
-      const line = discarding ? undefined : fragments.join('');
-      fragments = [];
-      length = 0;
-      discarding = false;
-      if (line !== undefined) onLine(line);
+      emit();
       start = newline + 1;
     }
   };
+
+  const flush = (): void => {
+    if (closed) return;
+    closed = true;
+    emit();
+  };
+
+  return { write, flush };
 }

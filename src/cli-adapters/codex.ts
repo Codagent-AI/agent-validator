@@ -420,7 +420,7 @@ export class CodexAdapter implements CLIAdapter {
           args,
           tmpFile,
           timeoutMs: opts.timeoutMs,
-          onStdout: collect,
+          onStdout: collect.write,
           onOutput: (chunk: string) => {
             opts.onOutput?.(chunk);
           },
@@ -457,6 +457,7 @@ export class CodexAdapter implements CLIAdapter {
         await cleanup();
       }
     } catch (error) {
+      collect.flush();
       throw new AdapterExecutionFailure(
         error instanceof Error ? error : new Error(String(error)),
         fallbackTelemetry,

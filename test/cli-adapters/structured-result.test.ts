@@ -7,6 +7,31 @@ import { CodexAdapter, parseCodexTelemetry } from '../../src/cli-adapters/codex.
 import type { AdapterTelemetry, runStreamingCommand } from '../../src/cli-adapters/shared.js';
 
 describe('structured adapter results', () => {
+  test('retains a complete final usage event without a newline when the stream fails', async () => {
+    const updates: AdapterTelemetry[] = [];
+    const stream: typeof runStreamingCommand = async (opts) => {
+      try {
+        opts.onStdout?.('{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}');
+        expect(updates).toHaveLength(0);
+        throw new Error('Command timed out');
+      } finally {
+        await opts.cleanup();
+      }
+    };
+    const adapter = new CodexAdapter(stream);
+    expect((adapter as unknown as { streamCommand: typeof stream }).streamCommand).toBe(stream);
+    try {
+      await adapter.execute({ prompt: 'synthetic fixture', diff: '', onTelemetry: (value) => updates.push(value) });
+      throw new Error('expected failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AdapterExecutionFailure);
+      const failure = error as AdapterExecutionFailure;
+      expect(failure.message).toBe('Command timed out');
+      expect(failure.telemetry.tokens.output.value).toBe(3);
+      expect(failure.telemetry.completeness.collection).toBe('partial');
+      expect(updates).toHaveLength(1);
+    }
+  });
   test('keeps final successful telemetry and review text when the last line has no newline', async () => {
     const raw = [
       '{"type":"item.completed","item":{"type":"agent_message","text":"review complete"}}',
