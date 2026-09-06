@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
+import * as fs from 'node:fs/promises';
+import { mkdtemp, open, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MetricsRecorder } from '../../src/metrics/recorder.js';
@@ -129,9 +130,40 @@ describe('durable metrics recorder', () => {
     const logDir = await temporaryLogDir();
     const recorder = await MetricsRecorder.open(logDir);
     const session = await recorder.createSession();
+    await recorder.recordInvocation(invocation('invocation-1', session.session_id));
     await recorder.closeSession(session.session_id);
 
     await expect(recorder.joinSession(session.session_id)).rejects.toThrow('closed metrics session');
-    await expect(recorder.prepareAttempt(attempt('attempt-1', session.session_id, 'missing-parent'))).rejects.toThrow('closed metrics session');
+    await expect(recorder.prepareAttempt(attempt('attempt-1', session.session_id, 'invocation-1'))).rejects.toThrow('closed metrics session');
+    await expect(recorder.store.commitAttemptWithParent(attempt('attempt-2', session.session_id, 'invocation-1'))).rejects.toThrow('closed metrics session');
+  });
+
+  test('recovers an abandoned, incomplete metadata-lock directory', async () => {
+    const logDir = await temporaryLogDir();
+    const recorder = await MetricsRecorder.open(logDir);
+    const lockPath = path.join(logDir, '.metrics', 'metadata.lock');
+    await fs.mkdir(lockPath);
+    const stale = new Date(Date.now() - 60_000);
+    await utimes(lockPath, stale, stale);
+
+    await expect(recorder.createSession()).resolves.toMatchObject({ state: 'active' });
+  });
+
+  test('closes a failed snapshot temporary handle before removing it', async () => {
+    const logDir = await temporaryLogDir();
+    const recorder = await MetricsRecorder.open(logDir);
+    let closeCalls = 0;
+    (recorder as unknown as { snapshotFilesystem: { mkdir: typeof fs.mkdir; open: typeof fs.open; rename: typeof fs.rename; rm: typeof fs.rm } }).snapshotFilesystem = {
+      mkdir: fs.mkdir,
+      open: async () => ({
+        writeFile: async () => { throw new Error('injected snapshot write failure'); },
+        sync: async () => undefined,
+        close: async () => { closeCalls += 1; },
+      } as unknown as fs.FileHandle),
+      rename: fs.rename,
+      rm: fs.rm,
+    };
+    await expect((recorder as unknown as { writePublishedSnapshot(path: string, snapshot: unknown): Promise<void> }).writePublishedSnapshot(path.join(logDir, 'validation-metrics.json'), { snapshot_id: 'fixture' })).rejects.toThrow('injected snapshot write failure');
+    expect(closeCalls).toBe(1);
   });
 });

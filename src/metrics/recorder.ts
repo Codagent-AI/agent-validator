@@ -16,11 +16,14 @@ export interface PublicationResult {
   reasons: string[];
 }
 
+type SnapshotFilesystem = Pick<typeof fs, 'mkdir' | 'open' | 'rename' | 'rm'>;
+
 /** Lifecycle facade: persistence failure is reported to callers, never converted into validation failure. */
 export class MetricsRecorder {
   private constructor(
     readonly store: MetricsStore,
     readonly logDir: string,
+    private readonly snapshotFilesystem: SnapshotFilesystem = fs,
   ) {}
 
   static async open(
@@ -124,15 +127,22 @@ export class MetricsRecorder {
     snapshot: unknown,
   ): Promise<void> {
     const temporary = `${destination}.${crypto.randomUUID()}.tmp`;
-    await fs.mkdir(path.dirname(destination), { recursive: true });
+    await this.snapshotFilesystem.mkdir(path.dirname(destination), {
+      recursive: true,
+    });
+    let handle: fs.FileHandle | undefined;
     try {
-      const handle = await fs.open(temporary, 'wx');
+      handle = await this.snapshotFilesystem.open(temporary, 'wx');
       await handle.writeFile(JSON.stringify(snapshot));
       await handle.sync();
       await handle.close();
-      await fs.rename(temporary, destination);
+      handle = undefined;
+      await this.snapshotFilesystem.rename(temporary, destination);
     } catch (error) {
-      await fs.rm(temporary, { force: true }).catch(() => undefined);
+      await handle?.close().catch(() => undefined);
+      await this.snapshotFilesystem
+        .rm(temporary, { force: true })
+        .catch(() => undefined);
       throw error;
     }
   }

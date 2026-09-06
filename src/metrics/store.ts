@@ -72,6 +72,9 @@ const realFilesystem: StoreFilesystem = {
   },
 };
 
+const LOCK_OWNER_FILENAME = 'owner.json';
+const INCOMPLETE_LOCK_STALE_MS = 30_000;
+
 function recordId(record: MetricRecord): string {
   return record.record_type === 'invocation'
     ? record.invocation_id
@@ -104,6 +107,7 @@ export class MetricsStore {
   private readonly statePath: string;
   private readonly identityPath: string;
   private readonly lockPath: string;
+  private readonly lockOwnerPath: string;
 
   private constructor(
     readonly logDir: string,
@@ -114,6 +118,7 @@ export class MetricsStore {
     this.statePath = path.join(this.root, 'state.json');
     this.identityPath = path.join(this.root, 'store.json');
     this.lockPath = path.join(this.root, 'metadata.lock');
+    this.lockOwnerPath = path.join(this.lockPath, LOCK_OWNER_FILENAME);
   }
 
   static async open(
@@ -203,6 +208,9 @@ export class MetricsStore {
   async commitAttemptWithParent(record: ModelAttempt): Promise<void> {
     await this.withLock(async () => {
       const state = await this.readState();
+      const session = state.sessions[record.session_id];
+      if (!session || session.state !== 'active')
+        throw new Error('Attempt cannot join a closed metrics session');
       const parentHead = state.heads[record.invocation_id];
       if (!parentHead || parentHead.record_type !== 'invocation')
         throw new Error(`Unknown parent invocation: ${record.invocation_id}`);
@@ -457,17 +465,7 @@ export class MetricsStore {
     const deadline = Date.now() + 2_000;
     for (;;) {
       try {
-        await fs.writeFile(
-          this.lockPath,
-          JSON.stringify({ pid: process.pid, nonce }),
-          { flag: 'wx' },
-        );
-        try {
-          return await action();
-        } finally {
-          const held = await fs.readFile(this.lockPath, 'utf8').catch(() => '');
-          if (held.includes(nonce)) await fs.rm(this.lockPath, { force: true });
-        }
+        await fs.mkdir(this.lockPath);
       } catch (error) {
         if (
           !error ||
@@ -479,25 +477,72 @@ export class MetricsStore {
         if (Date.now() >= deadline)
           throw new Error('Metrics metadata lock is held by a live owner');
         await new Promise((resolve) => setTimeout(resolve, 10));
+        continue;
+      }
+      try {
+        await fs.writeFile(
+          this.lockOwnerPath,
+          JSON.stringify({ pid: process.pid, nonce }),
+          { flag: 'wx' },
+        );
+      } catch (error) {
+        await fs
+          .rm(this.lockPath, { recursive: true, force: true })
+          .catch(() => undefined);
+        throw error;
+      }
+      try {
+        return await action();
+      } finally {
+        await this.releaseLock(nonce);
       }
     }
   }
 
   private async recoverStaleLock(): Promise<void> {
-    const contents = await fs.readFile(this.lockPath, 'utf8').catch(() => null);
-    if (!contents) return;
+    const contents = await fs
+      .readFile(this.lockOwnerPath, 'utf8')
+      .catch(() => null);
+    if (!contents) {
+      await this.removeStaleIncompleteLock(null);
+      return;
+    }
     let owner: { pid?: number; nonce?: string };
     try {
       owner = JSON.parse(contents);
     } catch {
-      throw new Error('Corrupt metrics metadata lock');
+      await this.removeStaleIncompleteLock(contents);
+      return;
     }
     const pid = owner.pid;
-    if (!(typeof pid === 'number' && Number.isInteger(pid) && owner.nonce))
-      throw new Error('Corrupt metrics metadata lock');
+    if (!(typeof pid === 'number' && Number.isInteger(pid) && owner.nonce)) {
+      await this.removeStaleIncompleteLock(contents);
+      return;
+    }
     if (this.processIsAlive(pid)) return;
-    const current = await fs.readFile(this.lockPath, 'utf8').catch(() => null);
-    if (current === contents) await fs.rm(this.lockPath, { force: true });
+    const current = await fs
+      .readFile(this.lockOwnerPath, 'utf8')
+      .catch(() => null);
+    if (current === contents)
+      await fs.rm(this.lockPath, { recursive: true, force: true });
+  }
+
+  private async releaseLock(nonce: string): Promise<void> {
+    const held = await fs.readFile(this.lockOwnerPath, 'utf8').catch(() => '');
+    if (held.includes(nonce))
+      await fs.rm(this.lockPath, { recursive: true, force: true });
+  }
+
+  private async removeStaleIncompleteLock(
+    expectedOwnerContents: string | null,
+  ): Promise<void> {
+    const stat = await fs.stat(this.lockPath).catch(() => null);
+    if (!stat || Date.now() - stat.mtimeMs < INCOMPLETE_LOCK_STALE_MS) return;
+    const current = await fs
+      .readFile(this.lockOwnerPath, 'utf8')
+      .catch(() => null);
+    if (current === expectedOwnerContents)
+      await fs.rm(this.lockPath, { recursive: true, force: true });
   }
 
   private processIsAlive(pid: number): boolean {
