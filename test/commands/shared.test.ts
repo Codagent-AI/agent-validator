@@ -100,6 +100,19 @@ describe("cleanLogs", () => {
 		await fs.mkdir(TEST_DIR, { recursive: true });
 	});
 
+	it("preserves the fixed metrics snapshot and entire private store during cleanup", async () => {
+		await fs.writeFile(path.join(TEST_DIR, "check.1.log"), "current log");
+		await fs.writeFile(path.join(TEST_DIR, "validation-metrics.json"), "snapshot");
+		await fs.mkdir(path.join(TEST_DIR, ".metrics", "records", "attempt-1"), { recursive: true });
+		await fs.writeFile(path.join(TEST_DIR, ".metrics", "records", "attempt-1", "1.json"), "record");
+
+		await cleanLogs(TEST_DIR, 0);
+
+		expect(await fs.readFile(path.join(TEST_DIR, "validation-metrics.json"), "utf8")).toBe("snapshot");
+		expect(await fs.readFile(path.join(TEST_DIR, ".metrics", "records", "attempt-1", "1.json"), "utf8")).toBe("record");
+		expect(await hasExistingLogs(TEST_DIR)).toBe(false);
+	});
+
 	afterEach(async () => {
 		await fs.rm(TEST_DIR, { recursive: true, force: true });
 	});

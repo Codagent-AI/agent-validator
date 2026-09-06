@@ -17,6 +17,8 @@ import {
 
 const LOCK_FILENAME = '.validator-run.lock';
 const SESSION_REF_FILENAME = '.session_ref';
+const METRICS_SNAPSHOT_FILENAME = 'validation-metrics.json';
+const METRICS_STORE_DIRECTORY = '.metrics';
 
 export interface AutoCleanResult {
   clean: boolean;
@@ -188,6 +190,8 @@ export async function hasExistingLogs(logDir: string): Promise<boolean> {
       (f) =>
         (f.endsWith('.log') || f.endsWith('.json')) &&
         f !== 'previous' &&
+        f !== METRICS_SNAPSHOT_FILENAME &&
+        f !== METRICS_STORE_DIRECTORY &&
         !f.startsWith('console.') &&
         !f.startsWith('.'),
     );
@@ -206,6 +210,8 @@ function getPersistentFiles(): Set<string> {
     getDebugLogBackupFilename(),
     LOCK_FILENAME,
     SESSION_REF_FILENAME, // Will be deleted, not moved
+    METRICS_SNAPSHOT_FILENAME,
+    METRICS_STORE_DIRECTORY,
   ]);
 }
 
