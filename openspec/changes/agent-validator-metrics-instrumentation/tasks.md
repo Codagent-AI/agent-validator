@@ -4,12 +4,12 @@ The approved definition is **XL**: it combines a new shared measurement contract
 
 The proposal, specifications, design and test plan remain approved and unchanged. Targeted interoperability confirmation of the revised contract remains a prerequisite before implementation as recorded in those artifacts; both original companion reviews are already received. Shared executable fixture verification remains a companion integration prerequisite. These are retained prerequisites, not claims that they have passed, and no new product decision or task-grouping approval is requested.
 
-- [ ] [Define versioned measurement contracts and deterministic projections](tasks/01-measurement-contracts.md)
-- [ ] [Persist invocation and attempt revisions with atomic snapshots](tasks/02-durable-recording.md)
-- [ ] [Collect evidence-backed telemetry from all review adapters](tasks/03-adapter-collection.md)
-- [ ] [Record every validation invocation and correlate actual review dispatches](tasks/04-command-lifecycle.md)
-- [ ] [Deliver bounded metrics retrieval, receipts and packaged Node contracts](tasks/05-metrics-cli-distribution.md)
-- [ ] [Integrate recoverable session closure across every cleanup path](tasks/06-recoverable-session-closure.md)
+- [x] [Define versioned measurement contracts and deterministic projections](tasks/01-measurement-contracts.md)
+- [x] [Persist invocation and attempt revisions with atomic snapshots](tasks/02-durable-recording.md)
+- [x] [Collect evidence-backed telemetry from all review adapters](tasks/03-adapter-collection.md)
+- [x] [Record every validation invocation and correlate actual review dispatches](tasks/04-command-lifecycle.md)
+- [x] [Deliver bounded metrics retrieval, receipts and packaged Node contracts](tasks/05-metrics-cli-distribution.md)
+- [x] [Integrate recoverable session closure across every cleanup path](tasks/06-recoverable-session-closure.md)
 
 ## Ordering and dependencies
 
