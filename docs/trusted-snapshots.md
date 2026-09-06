@@ -64,15 +64,23 @@ clean `HEAD` is trusted by commit or tree, Agent Validator:
 2. Exits with status `trusted`.
 3. Returns exit code `0` without running gates or incrementing the run count.
 
-Dirty worktrees skip reconciliation and use the normal execution-state and
-auto-clean flow.
+If a validated dirty snapshot was committed while some validated untracked files
+were left out, reconciliation can reuse the original snapshot as a diff baseline.
+All committed content must match the validated snapshot, including file modes;
+only files from the snapshot's untracked-files parent may be omitted. The omitted
+files are reported as changes and validated, without repeating the entire branch
+diff. This also works in a linked worktree with no local `.execution_state`.
+The snapshot must still exist in Git, and its ledger record must be trusted.
+
+Dirty worktrees can use a trusted HEAD or an applicable committed snapshot as a
+baseline. An existing local dirty execution-state snapshot takes precedence.
 
 `agent-validate detect` uses the same trust lookup in read-only mode. If the
 current clean `HEAD` is trusted, `detect` reports no changes without rewriting
 `.execution_state` or appending ledger records.
 
-If the worktree is still dirty after a successful run or skip, `detect` does
-not use the ledger. It uses `.execution_state.working_tree_ref` as the baseline
+If the worktree is still dirty after a successful run or skip, `detect` preserves
+`.execution_state.working_tree_ref` as the baseline
 and compares the current worktree to that full snapshot, including untracked
 files captured by the stash. If nothing changed since the validated dirty
 snapshot, `detect` reports no changes before you commit.

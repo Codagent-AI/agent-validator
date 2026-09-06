@@ -5,7 +5,13 @@ import path from 'node:path';
 import { getCategoryLogger } from '../output/app-logger.js';
 import * as copilotCli from '../plugin/copilot-cli.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
-import type { CLIAdapter } from './shared.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  observedMeasurement,
+} from './shared.js';
 
 let tmpCounter = 0;
 
@@ -33,6 +39,8 @@ export function parseCopilotSessionSummary(
   if (!premiumMatch) return undefined;
 
   const premiumRequests = Number(premiumMatch[1]);
+  if (!Number.isSafeInteger(premiumRequests) || premiumRequests < 0)
+    return undefined;
 
   // Parse per-model token lines: " <model>  <N>k in, <N> out, <N>k cached"
   const modelLines = [
@@ -53,15 +61,100 @@ export function parseCopilotSessionSummary(
       fullMatch.includes(`${val}k`)
         ? Math.round(Number(val) * 1000)
         : Number(val);
-    totalIn += toTokens(inRaw);
-    totalOut += toTokens(outRaw);
-    if (cachedRaw) totalCached += toTokens(cachedRaw);
+    const input = toTokens(inRaw);
+    const output = toTokens(outRaw);
+    const cached = cachedRaw ? toTokens(cachedRaw) : 0;
+    if (
+      ![input, output, cached].every(
+        (value) => Number.isSafeInteger(value) && value >= 0,
+      )
+    )
+      return undefined;
+    totalIn += input;
+    totalOut += output;
+    totalCached += cached;
+    if (![totalIn, totalOut, totalCached].every(Number.isSafeInteger))
+      return undefined;
     models.push(model);
   }
 
   const model = models.join(',') || 'unknown';
   const telemetryLine = `[copilot-telemetry] model=${model} in=${totalIn} out=${totalOut} cache=${totalCached} premium_requests=${premiumRequests}`;
   return { telemetryLine, model };
+}
+
+export function parseCopilotTelemetry(
+  output: string,
+  opts: { model?: string; thinkingBudget?: string } = {},
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('github-copilot', {
+    requestedModel: opts.model,
+    requestedEffort: opts.thinkingBudget,
+    reason: 'copilot_summary_not_observed',
+  });
+  const summary = parseCopilotSessionSummary(output);
+  if (!summary) return telemetry;
+
+  const values = Object.fromEntries(
+    [...summary.telemetryLine.matchAll(/\b(in|out|cache)=(\d+)/g)].map(
+      (match) => [match[1], Number(match[2])],
+    ),
+  ) as Partial<Record<'in' | 'out' | 'cache', number>>;
+  const source = 'provider_display' as const;
+  if (values.in !== undefined)
+    telemetry.tokens.input_total = observedMeasurement(
+      values.in,
+      source,
+      'approximate',
+    );
+  if (values.out !== undefined)
+    telemetry.tokens.output = observedMeasurement(
+      values.out,
+      source,
+      'approximate',
+    );
+  if (values.cache !== undefined)
+    telemetry.tokens.cache_read = observedMeasurement(
+      values.cache,
+      source,
+      'approximate',
+      ['input_total'],
+    );
+  for (const model of summary.model
+    .split(',')
+    .filter((item) => item !== 'unknown')) {
+    telemetry.observed_identities.push({
+      identity_id: `copilot-model-${telemetry.observed_identities.length + 1}`,
+      model,
+      provider: {
+        availability: 'unavailable',
+        value: null,
+        reason: 'not_reported',
+      },
+      effort: {
+        availability: 'unavailable',
+        value: null,
+        reason: 'not_reported',
+      },
+      provenance: 'telemetry',
+    });
+  }
+  telemetry.observed_identity_availability =
+    telemetry.observed_identities.length > 0
+      ? { availability: 'available', reason: null }
+      : { availability: 'unavailable', reason: 'summary_has_no_model_rows' };
+  telemetry.provider_native_usage = Object.entries(values).map(
+    ([name, value]) => ({ source, name: `copilot_${name}`, value }),
+  );
+  telemetry.completeness.collection = 'partial';
+  telemetry.completeness.canonical_fields = 'partial';
+  telemetry.diagnostics = ['copilot_rounded_display_counts'];
+  telemetry.provenance.source_format_version = {
+    availability: 'available',
+    value: 'copilot-session-summary',
+    reason: null,
+  };
+  return telemetry;
 }
 
 /**
@@ -291,40 +384,52 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-    const tmpDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'validator-copilot-'),
-    );
-    const tmpFile = path.join(tmpDir, `prompt-${tmpCounter++}.txt`);
-    await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
-
-    const args = this.buildArgs({
-      ...opts,
-      model: opts.model,
-      promptFile: tmpFile,
+  }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
+    let telemetry = createUnavailableTelemetry('github-copilot', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
     });
-    const cleanup = () => fs.rm(tmpDir, { recursive: true, force: true });
-
-    log.debug(`copilot args: ${args.join(' ')}`);
-
     try {
-      const { stdout, stderr } = await this.runCopilot({
-        args,
-        timeoutMs: opts.timeoutMs,
-        onOutput: opts.onOutput,
+      const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
+      const tmpDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'validator-copilot-'),
+      );
+      const tmpFile = path.join(tmpDir, `prompt-${tmpCounter++}.txt`);
+      await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
+
+      const args = this.buildArgs({
+        ...opts,
+        model: opts.model,
+        promptFile: tmpFile,
       });
-      const summary =
-        parseCopilotSessionSummary(stdout) ??
-        parseCopilotSessionSummary(stderr);
-      if (summary) {
-        opts.onOutput?.(summary.telemetryLine);
-        log.debug(`copilot session: ${summary.telemetryLine}`);
-        verifySessionModel(summary, opts.model);
+      const cleanup = () => fs.rm(tmpDir, { recursive: true, force: true });
+
+      log.debug(`copilot args: ${args.join(' ')}`);
+
+      try {
+        const { stdout, stderr } = await this.runCopilot({
+          args,
+          timeoutMs: opts.timeoutMs,
+          onOutput: opts.onOutput,
+        });
+        const summary =
+          parseCopilotSessionSummary(stdout) ??
+          parseCopilotSessionSummary(stderr);
+        if (summary) {
+          telemetry = parseCopilotTelemetry(`${stdout}\n${stderr}`, opts);
+          opts.onOutput?.(summary.telemetryLine);
+          log.debug(`copilot session: ${summary.telemetryLine}`);
+          verifySessionModel(summary, opts.model);
+        }
+        return { text: stdout, telemetry };
+      } finally {
+        await cleanup();
       }
-      return stdout;
-    } finally {
-      await cleanup();
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        telemetry,
+      );
     }
   }
 

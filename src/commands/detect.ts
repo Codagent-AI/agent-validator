@@ -12,8 +12,10 @@ import {
 } from '../utils/execution-state.js';
 import { resolveBaseBranch } from '../utils/git.js';
 import {
+  acquireLock,
   hasExistingLogs,
   performAutoClean,
+  releaseLock,
   shouldAutoClean,
 } from './shared.js';
 
@@ -32,10 +34,11 @@ interface DetectCliOptions {
 async function autoCleanIfNeeded(
   logDir: string,
   baseBranch: string,
+  maxPreviousLogs: number,
 ): Promise<void> {
   const result = await shouldAutoClean(logDir, baseBranch);
   if (result.clean) {
-    await performAutoClean(logDir, result);
+    await performAutoClean(logDir, result, maxPreviousLogs);
   }
 }
 
@@ -57,8 +60,9 @@ async function resolveChangeOptions(
   baseBranch: string,
   cliOptions: { commit?: string; uncommitted?: boolean },
   trustedChangeOptions: ChangeOptions = {},
+  maxPreviousLogs = 3,
 ): Promise<ChangeOptions> {
-  await autoCleanIfNeeded(logDir, baseBranch);
+  await autoCleanIfNeeded(logDir, baseBranch, maxPreviousLogs);
 
   const logsExist = await hasExistingLogs(logDir);
   const isRerun = logsExist && !cliOptions.commit;
@@ -114,11 +118,17 @@ async function executeDetect(options: DetectCliOptions): Promise<void> {
   const config = await loadConfig();
   const effectiveBaseBranch = resolveBaseBranch(options, config);
   const trustedChangeOptions = await resolveTrustedChangeOptions(options);
-  const changeOptions = await resolveChangeOptions(
+  const resolveOptions = () =>
+    resolveChangeOptions(
+      config.project.log_dir,
+      effectiveBaseBranch,
+      { commit: options.commit, uncommitted: options.uncommitted },
+      trustedChangeOptions,
+      config.project.max_previous_logs,
+    );
+  const changeOptions = await resolveDetectOptionsUnderLock(
     config.project.log_dir,
-    effectiveBaseBranch,
-    { commit: options.commit, uncommitted: options.uncommitted },
-    trustedChangeOptions,
+    resolveOptions,
   );
 
   const changeDetector = new ChangeDetector(effectiveBaseBranch, changeOptions);
@@ -152,6 +162,18 @@ async function executeDetect(options: DetectCliOptions): Promise<void> {
 
   console.log(chalk.bold(`Would run ${jobs.length} gate(s):\n`));
   printJobsByWorkDir(jobs);
+}
+
+async function resolveDetectOptionsUnderLock(
+  logDir: string,
+  resolveOptions: () => Promise<ChangeOptions>,
+): Promise<ChangeOptions> {
+  await acquireLock(logDir);
+  try {
+    return await resolveOptions();
+  } finally {
+    await releaseLock(logDir);
+  }
 }
 
 export function registerDetectCommand(program: Command): void {

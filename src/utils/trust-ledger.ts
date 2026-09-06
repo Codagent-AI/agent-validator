@@ -228,6 +228,38 @@ export async function computeSnapshotTreeSha(ref: string): Promise<string> {
   return writeCombinedTree(Array.from(entries.values()));
 }
 
+/** Find a validated snapshot whose only HEAD differences are omitted untracked files. */
+export async function findCommittedSnapshotBase(
+  headTree: string,
+): Promise<string | undefined> {
+  const records = await readRecords();
+  for (const record of records.reverse()) {
+    const ref = record.working_tree_ref;
+    if (!record.trusted || record.commit !== null || !ref) continue;
+    if (
+      !((await gitObjectExists(ref)) && (await gitObjectExists(record.tree)))
+    ) {
+      continue;
+    }
+    const untrackedTree = await maybeTree(`${ref}^3`);
+    if (!untrackedTree) continue;
+    const untracked = new Set(
+      (await listTreeEntries(untrackedTree)).map((entry) => entry.path),
+    );
+    const delta = await gitStdout(
+      ['diff', '--no-renames', '--name-status', '-z', record.tree, headTree],
+      { trim: false },
+    );
+    const fields = delta.split('\0').filter(Boolean);
+    if (fields.length === 0) continue;
+    const onlyOmittedUntracked = fields.every((field, index) =>
+      index % 2 === 0 ? field === 'D' : untracked.has(field),
+    );
+    if (onlyOmittedUntracked) return ref;
+  }
+  return undefined;
+}
+
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
   if (value && typeof value === 'object') {

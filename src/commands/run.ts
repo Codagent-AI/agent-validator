@@ -2,7 +2,6 @@ import type { Command } from 'commander';
 import { executeRun } from '../core/run-executor.js';
 import { statusLineText } from '../output/report.js';
 import { isSuccessStatus } from '../types/validator-status.js';
-import { readContextFile } from './shared.js';
 
 export function registerRunCommand(program: Command): void {
   program
@@ -29,12 +28,10 @@ export function registerRunCommand(program: Command): void {
       'Inject file contents into review prompts via {{CONTEXT}} placeholder',
     )
     .option('--report', 'Write a structured failure report to stdout')
+    .option('--metrics-consumer <name>', 'Opaque metrics consumer name')
+    .option('--metrics-context <id>', 'Opaque metrics consumer context')
     .action(async (options) => {
       const reportEnabled = options.report ?? false;
-      const contextContent = options.contextFile
-        ? await readContextFile(options.contextFile)
-        : undefined;
-
       const result = await executeRun({
         baseBranch: options.baseBranch,
         gate: options.gate,
@@ -42,7 +39,9 @@ export function registerRunCommand(program: Command): void {
         uncommitted: options.uncommitted,
         enableReviews: new Set<string>(options.enableReview ?? []),
         report: reportEnabled,
-        contextContent,
+        contextFile: options.contextFile,
+        metricsConsumer: options.metricsConsumer,
+        metricsContext: options.metricsContext,
       });
 
       if (reportEnabled) {

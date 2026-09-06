@@ -6,6 +6,7 @@ import type {
 import { CheckGateExecutor } from '../gates/check.js';
 import type { GateResult } from '../gates/result.js';
 import { ReviewGateExecutor } from '../gates/review.js';
+import type { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
 import type { ConsoleReporter } from '../output/console.js';
 import type { Logger } from '../output/logger.js';
 import type { DebugLogger } from '../utils/debug-log.js';
@@ -100,6 +101,7 @@ export class Runner {
     checkExecutor?: CheckGateExecutor,
     reviewExecutor?: ReviewGateExecutor,
     private contextContent?: string,
+    private metricsLifecycle?: CommandMetricsLifecycle,
   ) {
     this.checkExecutor = checkExecutor ?? new CheckGateExecutor();
     this.reviewExecutor = reviewExecutor ?? new ReviewGateExecutor();
@@ -232,6 +234,7 @@ export class Runner {
           this.config.project.log_dir,
           this.config.project.cli?.adapters,
           this.contextContent,
+          this.metricsLifecycle,
         );
       }
     } catch (err) {

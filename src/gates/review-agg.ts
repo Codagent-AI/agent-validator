@@ -53,6 +53,7 @@ export function buildSubResults(
     issue: string;
     result?: string | null;
   }>;
+  attempt_id?: string;
 }> {
   const subResults = outputs.map((out) => buildSingleSubResult(out, logPaths));
 
@@ -100,6 +101,7 @@ function buildSingleSubResult(
     issue: string;
     result?: string | null;
   }>;
+  attempt_id?: string;
 } {
   const specificLog = findLogForReview(out.adapter, out.reviewIndex, logPaths);
 
@@ -123,6 +125,7 @@ function buildSingleSubResult(
     errorCount,
     fixedCount,
     skipped: out.skipped,
+    attempt_id: out.attempt_id,
   };
 }
 
@@ -176,6 +179,7 @@ export async function writeJsonResult(
   rawOutput: string,
   json: ReviewJsonOutput,
   reviewScope?: ReviewScope,
+  attemptId?: string,
 ): Promise<string> {
   const jsonPath = logPath.replace(/\.log$/, '.json');
   const fullOutput: ReviewFullJsonOutput = {
@@ -185,6 +189,7 @@ export async function writeJsonResult(
     rawOutput,
     violations: json.violations || [],
     reviewScope,
+    ...(attemptId ? { attempt_id: attemptId } : {}),
   };
 
   await fs.writeFile(jsonPath, JSON.stringify(fullOutput, null, 2));

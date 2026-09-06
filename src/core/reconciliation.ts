@@ -10,6 +10,7 @@ import {
   appendRecord,
   buildTrustRecord,
   computeTreeSha,
+  findCommittedSnapshotBase,
   isTrusted,
   type ScopeDescriptor,
   type TrustRecordSource,
@@ -160,7 +161,17 @@ async function analyzeDirtyWorktree(): Promise<ReconciliationContinue> {
   if (trust.trusted) {
     return { kind: 'continue', changeOptions: { fixBase: snapshot.head } };
   }
-  return { kind: 'continue' };
+  return committedSnapshotChanges(snapshot.headTree);
+}
+
+async function committedSnapshotChanges(
+  headTree: string,
+): Promise<ReconciliationContinue> {
+  const fixBase = await findCommittedSnapshotBase(headTree);
+  return {
+    kind: 'continue',
+    ...(fixBase ? { changeOptions: { fixBase } } : {}),
+  };
 }
 
 async function analyzeReconciliation(): Promise<ReconciliationAnalysis> {
@@ -181,6 +192,9 @@ async function analyzeReconciliation(): Promise<ReconciliationAnalysis> {
     }
     return { kind: 'trusted' };
   }
+
+  const snapshotChanges = await committedSnapshotChanges(headTree);
+  if (snapshotChanges.changeOptions) return snapshotChanges;
 
   const parents = await getParents(head);
   if (parents.length !== 2) {

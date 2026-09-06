@@ -325,3 +325,68 @@ issues:
     difficulty: hard
     priority: high
     source: 2026-08-30 agent-validator
+  - id: nested-workflow-progress-uses-parent-state
+    file: internal/exec/subworkflow.go
+    line_range:
+      - 349
+      - 349
+    description: repositoryProgressChain creates an entry for the current nested workflow segment but
+      copies session IDs, profiles, captured variables, and the last session step from its parent
+      context. When the current context differs from the parent, persisted resume state is assigned
+      to the wrong nesting level, which can lose captured output, resume the wrong agent session, or
+      rerun completed work.
+    code_snippet: |
+      entry := &model.NestedStepState{
+          StepID:            segment.StepID,
+          SessionIDs:        copyMap(parent.SessionIDs),
+          SessionProfiles:   copyMap(parent.SessionProfiles),
+          CapturedVariables: copyMap(parent.CapturedVariables),
+          LastSessionStepID: parent.LastSessionStepID,
+          Child:             chain,
+      }
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-08-30 agent-runner
+  - id: resume-boundary-step-id-collision
+    file: internal/runner/resume.go
+    line_range:
+      - 273
+      - 273
+    description: When reconstructing repository-scoped resume state, attachNestedRepositoryResume
+      reduces the full BoundaryID path to one StepID and scans the entire nested chain without
+      stopping at the intended path location. If a descendant workflow reuses that StepID, the later
+      node replaces the actual boundary match, causing repository progress to be attached beneath
+      the wrong invocation and potentially rerunning, skipping, or replacing unrelated work on
+      resume.
+    code_snippet: |
+      boundaryStepID := lastPrefixStepID(boundaryID)
+      var boundary *model.NestedStepState
+      for current := root; current != nil; current = current.Child {
+          if current.StepID == boundaryStepID {
+              boundary = current
+          }
+      }
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-08-30 agent-runner
+  - id: resume-attachment-step-id-collision
+    file: internal/runner/resume.go
+    line_range:
+      - 270
+      - 270
+    description: Repository resume reconstruction compared only workflow-local StepIDs to decide whether
+      an existing child was the authoritative repository frame. When a repository-local sub-workflow
+      wrapper and its nested repository step shared an ID, the code discarded the wrapper and
+      attached progress at the wrong workflow level, allowing resumed work to rerun or be skipped.
+    code_snippet: |
+      if boundary.Child == nil || boundary.Child.StepID == repository.StepID {
+          boundary.Child = repository
+      } else {
+          boundary.Child.Child = repository
+      }
+    category: bug
+    difficulty: hard
+    priority: high
+    source: 2026-08-30 agent-runner

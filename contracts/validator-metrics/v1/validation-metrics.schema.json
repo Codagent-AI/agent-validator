@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-validator.dev/contracts/validator-metrics/v1/validation-metrics.schema.json",
+  "title": "Agent Validator standalone validation metrics artifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_schema_version", "measurement_schema_versions", "aggregate_measurement_schema_version", "producer", "snapshot_id", "published_at", "session", "current_invocation_id", "invocations", "attempts", "aggregates"],
+  "properties": {
+    "artifact_schema_version": { "const": 1 },
+    "measurement_schema_versions": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true },
+    "aggregate_measurement_schema_version": { "const": 1 },
+    "producer": { "type": "object", "additionalProperties": false, "required": ["name", "version"], "properties": { "name": { "const": "agent-validator" }, "version": { "type": "string" } } },
+    "snapshot_id": { "type": "string" }, "published_at": { "type": "string", "format": "date-time" },
+    "session": { "type": "object", "additionalProperties": false, "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } },
+    "current_invocation_id": { "type": "string" }, "invocations": { "type": "array" }, "attempts": { "type": "array" },
+    "aggregates": { "type": "object", "additionalProperties": false, "required": ["current_invocation", "session"], "properties": { "current_invocation": { "type": "object" }, "session": { "type": "object" } } }
+  }
+}

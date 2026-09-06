@@ -328,6 +328,7 @@ export async function handleReviewOutput(
   mainLogger: (msg: string) => Promise<void>,
   _logDir: string | undefined,
   reviewScope?: ReviewScope,
+  attemptId?: string,
 ): Promise<PreviousViolation[]> {
   await logErrorAndFilterInfo(evaluation, adapter, adapterLogger, mainLogger);
 
@@ -346,6 +347,7 @@ export async function handleReviewOutput(
       logPath,
       adapterLogger,
       reviewScope,
+      attemptId,
     );
   }
 
@@ -382,6 +384,7 @@ async function logParsedResult(
   logPath: string,
   adapterLogger: (msg: string) => Promise<void>,
   reviewScope?: ReviewScope,
+  attemptId?: string,
 ): Promise<PreviousViolation[]> {
   if (!evaluation.json) return [];
 
@@ -394,6 +397,7 @@ async function logParsedResult(
     output,
     evaluation.json,
     reviewScope,
+    attemptId,
   );
 
   const skipped = (evaluation.json.violations || [])

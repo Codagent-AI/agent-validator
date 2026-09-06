@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { isSuccessStatus } from '../types/validator-status.js';
 import { executeGateCommand } from './gate-command.js';
 
 export function registerCheckCommand(program: Command): void {
@@ -15,5 +16,10 @@ export function registerCheckCommand(program: Command): void {
       '-u, --uncommitted',
       'Use diff for current uncommitted changes (staged and unstaged)',
     )
-    .action((options) => executeGateCommand('check', options));
+    .option('--metrics-consumer <name>', 'Opaque metrics consumer name')
+    .option('--metrics-context <id>', 'Opaque metrics consumer context')
+    .action(async (options) => {
+      const result = await executeGateCommand('check', options);
+      process.exit(isSuccessStatus(result.status) ? 0 : 1);
+    });
 }

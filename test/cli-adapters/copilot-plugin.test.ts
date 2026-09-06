@@ -252,6 +252,18 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 	});
 
 	describe("execute", () => {
+		it("rejects session summaries with unsafe token counts", async () => {
+			const { parseCopilotSessionSummary } = await import(
+				"../../src/cli-adapters/github-copilot.js"
+			);
+			const summary = parseCopilotSessionSummary(
+				"Total usage est:        1 Premium request\n" +
+					" gpt-5 9007199254740992 in, 45 out, 0 cached\n",
+			);
+
+			expect(summary).toBeUndefined();
+		});
+
 		it("uses copilot command (not gh copilot)", async () => {
 			execSpy = spyOn(childProcess, "exec").mockImplementation(
 				// biome-ignore lint/suspicious/noExplicitAny: mock typing
@@ -394,7 +406,7 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 				onOutput: (chunk: string) => chunks.push(chunk),
 			});
 
-			expect(result).toContain("review output");
+			expect(result.text).toContain("review output");
 			expect(chunks.some((chunk) => chunk.includes("[copilot-telemetry]"))).toBe(
 				true,
 			);

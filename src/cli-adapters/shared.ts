@@ -1,6 +1,177 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import type { FileHandle } from 'node:fs/promises';
 import fs from 'node:fs/promises';
+import type {
+  IdentityValue,
+  MeasurementValue,
+  ModelAttempt,
+  ObservedIdentity,
+  ReportedCost,
+  TokenMeasurements,
+  UnallocatedUsage,
+  UsageAllocation,
+} from '../metrics/types.js';
+
+/**
+ * Safe evidence emitted by an adapter. The review runtime owns attempt lifecycle,
+ * invocation context, and persistence; adapters only report what their source
+ * established.
+ */
+export interface AdapterTelemetry {
+  adapter: string;
+  requested_identity: IdentityValue;
+  resolved_identity: IdentityValue;
+  observed_identities: ObservedIdentity[];
+  observed_identity_availability: {
+    availability: 'available' | 'unavailable';
+    reason: string | null;
+  };
+  tokens: TokenMeasurements;
+  provider_native_usage: ModelAttempt['provider_native_usage'];
+  completeness: Pick<
+    ModelAttempt['completeness'],
+    | 'collection'
+    | 'canonical_fields'
+    | 'normalized_total'
+    | 'per_model_attribution'
+  >;
+  allocations: UsageAllocation[];
+  unallocated_usage: UnallocatedUsage | null;
+  provider_reported_costs: ReportedCost[];
+  provenance: Pick<
+    ModelAttempt['provenance'],
+    'adapter_mapping_version' | 'cli_version' | 'source_format_version'
+  >;
+  diagnostics: string[];
+}
+
+export interface AdapterExecutionResult {
+  text: string;
+  telemetry: AdapterTelemetry;
+}
+
+export class AdapterExecutionFailure extends Error {
+  override readonly cause: Error;
+
+  constructor(
+    operationalError: Error,
+    readonly telemetry: AdapterTelemetry,
+  ) {
+    super(operationalError.message, { cause: operationalError });
+    this.name = 'AdapterExecutionFailure';
+    this.cause = operationalError;
+  }
+}
+
+export function unavailableMeasurement<T>(reason: string): MeasurementValue<T> {
+  return {
+    availability: 'unavailable',
+    value: null,
+    reason,
+    source: null,
+    origin: null,
+    precision: null,
+    derivation: null,
+    included_in: null,
+  };
+}
+
+export function observedMeasurement(
+  value: number,
+  source: Extract<
+    MeasurementValue<number>,
+    { availability: 'available' }
+  >['source'],
+  precision: Extract<
+    MeasurementValue<number>,
+    { availability: 'available' }
+  >['precision'] = 'exact',
+  includedIn: string[] | null = null,
+): MeasurementValue<number> {
+  if (!Number.isFinite(value) || value < 0 || !Number.isSafeInteger(value)) {
+    return unavailableMeasurement('invalid_provider_measurement');
+  }
+  return {
+    availability: 'available',
+    value,
+    reason: null,
+    source,
+    origin: 'observed',
+    precision,
+    derivation: null,
+    included_in: includedIn,
+  };
+}
+
+function unavailableTokens(reason: string): TokenMeasurements {
+  return {
+    input_total: unavailableMeasurement(reason),
+    input_uncached: unavailableMeasurement(reason),
+    cache_read: unavailableMeasurement(reason),
+    cache_write: unavailableMeasurement(reason),
+    output: unavailableMeasurement(reason),
+    reasoning: unavailableMeasurement(reason),
+    provider_total: unavailableMeasurement(reason),
+    normalized_total: unavailableMeasurement(reason),
+  };
+}
+
+/** Creates the conservative baseline used before a provider establishes evidence. */
+export function createUnavailableTelemetry(
+  adapter: string,
+  opts: {
+    requestedModel?: string;
+    resolvedModel?: string;
+    requestedEffort?: string;
+    reason?: string;
+  } = {},
+): AdapterTelemetry {
+  const reason = opts.reason ?? 'adapter_usage_unsupported';
+  return {
+    adapter,
+    requested_identity: {
+      adapter,
+      model: opts.requestedModel ?? null,
+      provider: null,
+      effort: opts.requestedEffort ?? null,
+      provenance: 'configuration',
+    },
+    resolved_identity: {
+      adapter,
+      model: opts.resolvedModel ?? opts.requestedModel ?? null,
+      provider: null,
+      effort: opts.requestedEffort ?? null,
+      provenance: 'launch_resolution',
+    },
+    observed_identities: [],
+    observed_identity_availability: { availability: 'unavailable', reason },
+    tokens: unavailableTokens(reason),
+    provider_native_usage: [],
+    completeness: {
+      collection: 'unavailable',
+      canonical_fields: 'unavailable',
+      normalized_total: 'unavailable',
+      per_model_attribution: 'unavailable',
+    },
+    allocations: [],
+    unallocated_usage: null,
+    provider_reported_costs: [],
+    provenance: {
+      adapter_mapping_version: 'adapter-collection-v1',
+      cli_version: {
+        availability: 'unavailable',
+        value: null,
+        reason: 'not_collected',
+      },
+      source_format_version: {
+        availability: 'unavailable',
+        value: null,
+        reason: 'not_exposed',
+      },
+    },
+    diagnostics: [reason],
+  };
+}
 
 export interface CLIAdapterHealth {
   available: boolean;
@@ -49,6 +220,8 @@ export async function runStreamingCommand(opts: {
   tmpFile: string;
   timeoutMs?: number;
   onOutput?: (chunk: string) => void;
+  /** Raw stdout only, before human-output formatting and excluding stderr. */
+  onStdout?: (chunk: string) => void;
   cleanup: () => Promise<void>;
   env?: NodeJS.ProcessEnv;
 }): Promise<string> {
@@ -79,6 +252,7 @@ export async function runStreamingCommand(opts: {
         child.stdout.on('data', (data: Buffer) => {
           const chunk = data.toString();
           chunks.push(chunk);
+          opts.onStdout?.(chunk);
           opts.onOutput?.(chunk);
         });
 
@@ -181,7 +355,11 @@ export interface CLIAdapter {
     allowToolUse?: boolean;
     /** Thinking budget level (off/low/medium/high). */
     thinkingBudget?: string;
-  }): Promise<string>;
+    /** Producer-owned dispatch identity; never generated by a collector. */
+    attemptId?: string;
+    /** Safe cumulative replacement evidence, not a token delta. */
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
+  }): Promise<AdapterExecutionResult>;
   /**
    * Returns the project-scoped command directory path (relative to project root).
    * Returns null if the CLI only supports user-level commands.

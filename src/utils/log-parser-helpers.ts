@@ -290,6 +290,7 @@ export function parseCheckLog(
 export function collectRunNumbers(files: string[]): number[] {
   const runNumbers = new Set<number>();
   for (const file of files) {
+    if (file === 'validation-metrics.json' || file === '.metrics') continue;
     const m = file.match(/\.(\d+)\.(log|json)$/);
     if (m?.[1]) runNumbers.add(parseInt(m[1], 10));
   }

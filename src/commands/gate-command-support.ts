@@ -1,14 +1,14 @@
 import chalk from 'chalk';
 import type { loadConfig } from '../config/loader.js';
-import {
-  type ReconciliationContinue,
-  reconcileStartup,
-} from '../core/reconciliation.js';
+import { reconcileStartup } from '../core/reconciliation.js';
+import { tryAcquireLock } from '../core/run-executor-lock.js';
+import { recoverPendingSessionClosures } from '../metrics/session-closure.js';
 import {
   type ConsoleLogHandle,
   startConsoleLog,
 } from '../output/console-log.js';
 import { Logger } from '../output/logger.js';
+import type { ValidatorStatus } from '../types/validator-status.js';
 import { writeExecutionState } from '../utils/execution-state.js';
 import {
   appendCurrentTrustRecord,
@@ -16,7 +16,7 @@ import {
   pruneIfNeeded,
   type TrustRecordSource,
 } from '../utils/trust-ledger.js';
-import { acquireLock, releaseLock } from './shared.js';
+import { releaseLock } from './shared.js';
 
 export type GateCommandName = 'check' | 'review';
 
@@ -27,6 +27,9 @@ export interface GateCommandOptions {
   uncommitted?: boolean;
   enableReviews?: Set<string>;
   contextContent?: string;
+  contextFile?: string;
+  metricsConsumer?: string;
+  metricsContext?: string;
 }
 
 export interface ChangeOptions {
@@ -40,12 +43,19 @@ export interface LockContext {
   restoreConsole: ConsoleLogHandle;
 }
 
+export class GateCommandLockConflictError extends Error {
+  constructor() {
+    super('Another validator run is already in progress.');
+    this.name = 'GateCommandLockConflictError';
+  }
+}
+
 type LoadedConfig = Awaited<ReturnType<typeof loadConfig>>;
 type FailureMap = Map<string, Map<string, unknown[]>>;
 
 async function handleNoWork(
   logDir: string,
-  restoreConsole: ConsoleLogHandle | undefined,
+  _restoreConsole: ConsoleLogHandle | undefined,
   failuresMap?: FailureMap,
   ledger?: {
     config: LoadedConfig;
@@ -54,7 +64,7 @@ async function handleNoWork(
     options: GateCommandOptions;
     source?: TrustRecordSource;
   },
-): Promise<never> {
+): Promise<ValidatorStatus> {
   if (failuresMap && failuresMap.size > 0) {
     let total = 0;
     for (const adapterMap of failuresMap.values()) {
@@ -65,9 +75,7 @@ async function handleNoWork(
         `No changes detected — ${total} violation(s) still outstanding.`,
       ),
     );
-    await releaseLock(logDir);
-    restoreConsole?.restore();
-    process.exit(1);
+    return 'failed';
   }
 
   await writeExecutionState(logDir);
@@ -84,9 +92,7 @@ async function handleNoWork(
       },
     });
   }
-  await releaseLock(logDir);
-  restoreConsole?.restore();
-  process.exit(0);
+  return ledger?.status ?? 'no_changes';
 }
 
 export async function checkEarlyExit(
@@ -101,9 +107,9 @@ export async function checkEarlyExit(
     options: GateCommandOptions;
     source?: TrustRecordSource;
   },
-): Promise<void> {
+): Promise<ValidatorStatus | null> {
   if (changes.length === 0 && jobs.length === 0) {
-    await handleNoWork(
+    return handleNoWork(
       logDir,
       restoreConsole,
       failuresMap,
@@ -120,7 +126,7 @@ export async function checkEarlyExit(
     console.log(
       chalk.yellow(`No applicable ${commandName}s for these changes.`),
     );
-    await handleNoWork(
+    return handleNoWork(
       logDir,
       restoreConsole,
       undefined,
@@ -133,6 +139,7 @@ export async function checkEarlyExit(
       },
     );
   }
+  return null;
 }
 
 export async function initLoggerAfterLock(
@@ -145,44 +152,24 @@ export async function initLoggerAfterLock(
   return { logger, restoreConsole };
 }
 
-export async function handleGateError(
-  error: unknown,
-  config: LoadedConfig | undefined,
-  lockAcquired: boolean,
-  restoreConsole: ConsoleLogHandle | undefined,
-): Promise<never> {
-  if (config && lockAcquired) {
-    try {
-      await writeExecutionState(config.project.log_dir);
-    } catch {
-      // Ignore errors writing state during error handling.
-    }
-    try {
-      await releaseLock(config.project.log_dir);
-    } catch (releaseErr) {
-      console.error(
-        chalk.yellow('Warning: failed to release lock:'),
-        (releaseErr as Error).message,
-      );
-    }
-  }
-  const err = error as { message?: string };
-  console.error(chalk.red('Error:'), err.message);
-  restoreConsole?.restore();
-  process.exit(1);
-}
-
 export async function acquireAndReconcileGateStartup(args: {
   commandName: GateCommandName;
   config: LoadedConfig;
   logDir: string;
   options: GateCommandOptions;
-}): Promise<ReconciliationContinue> {
+}): Promise<Awaited<ReturnType<typeof reconcileStartup>>> {
   let lockAcquired = false;
   try {
-    await acquireLock(args.logDir);
+    if (!(await tryAcquireLock(args.logDir))) {
+      throw new GateCommandLockConflictError();
+    }
     lockAcquired = true;
     await pruneIfNeeded(DEFAULT_PRUNE_THRESHOLD);
+    const recovery = await recoverPendingSessionClosures(args.logDir);
+    if (recovery.warnings.length > 0)
+      console.warn(
+        `Metrics session closure recovery is incomplete: ${recovery.warnings.join('; ')}`,
+      );
     const reconciliation = await reconcileStartup({
       command: args.commandName,
       config: args.config,
@@ -192,11 +179,6 @@ export async function acquireAndReconcileGateStartup(args: {
         enableReviews: args.options.enableReviews,
       },
     });
-    if (reconciliation.kind === 'trusted') {
-      console.log(chalk.green(reconciliation.result.message));
-      await releaseLock(args.logDir);
-      process.exit(0);
-    }
     return reconciliation;
   } catch (error) {
     if (lockAcquired) {
