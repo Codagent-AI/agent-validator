@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AdapterTelemetry } from '../cli-adapters/shared.js';
 import { MetricsRecorder, type PublicationResult } from './recorder.js';
+import { recoverPendingSessionClosures } from './session-closure.js';
 import {
   type Invocation,
   MEASUREMENT_SCHEMA_VERSION,
@@ -49,6 +50,9 @@ export class CommandMetricsLifecycle {
 
   async associate(logDir: string): Promise<void> {
     try {
+      const recovery = await recoverPendingSessionClosures(logDir);
+      if (recovery.warnings.length > 0)
+        throw new Error(recovery.warnings.join('; '));
       this.recorder = await MetricsRecorder.open(logDir);
       const session = await this.recorder.openOrCreateActiveSession();
       this.sessionId = session.session_id;

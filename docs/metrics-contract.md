@@ -20,3 +20,11 @@ Each `run`, `check`, and `review` execution has a distinct `invocation_id`. Prog
 For Runner correlation, validation commands accept paired opaque values: `--metrics-consumer <name>` and `--metrics-context <id>`. They are stored as data, not interpreted as paths. Actual review dispatches additionally receive an `attempt_id`, written into their review JSON artifacts and gate subresults. Preserved or skipped review results do not create a new attempt.
 
 Targeted Runner and Evals confirmation and their real shared-fixture executions remain outstanding integration prerequisites.
+
+## Session closure and retention
+
+`clean`, `skip`, successful validation cleanup, retry-limit cleanup, and existing context-change cleanup all use the configured `max_previous_logs` value. Closing a measured session publishes the fixed `validation-metrics.json` snapshot and, when retention is nonzero, stores one immutable as-of-close copy beside that session's archived logs in `previous/`. Metrics-only sessions consume one normal archive slot. With `max_previous_logs: 0`, ordinary current logs are removed but no archive is created or rotated; the latest snapshot and pending delivery evidence remain available.
+
+Closure uses a same-filesystem journal below the private metrics store. If a process stops during closure, the next locked validation or clean continues the frozen transaction rather than rediscovering root files or rotating the archive again. A conflicting or inaccessible journal is reported as degraded telemetry: validation may continue, but it does not claim a durable close. This protection is designed for local POSIX-style filesystems and cannot recover files removed externally, moved across filesystems, or lost with the disk.
+
+Historical snapshots are immutable records of the session at close time. They may age out with their log archive, but this does not acknowledge, discard, or otherwise alter pending delivery evidence. Use the public `metrics` retrieval commands to export, acknowledge, or explicitly discard delivery evidence; never edit `.metrics/` directly. Older binaries that do not understand this store must use an isolated log directory rather than cleaning it.

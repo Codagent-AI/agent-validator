@@ -13,6 +13,7 @@ import {
   CommandMetricsLifecycle,
   type CommandTelemetry,
 } from '../metrics/command-lifecycle.js';
+import { recoverPendingSessionClosures } from '../metrics/session-closure.js';
 import {
   getCategoryLogger,
   initLogger,
@@ -249,7 +250,7 @@ async function runWithLock(
  * Execute the validator run logic. Returns a structured RunResult.
  * This function never calls process.exit() - the caller is responsible for that.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every controlled exit finalizes the same invocation lifecycle.
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity lint/complexity/noExcessiveLinesPerFunction: every controlled exit finalizes the same invocation lifecycle.
 export async function executeRun(
   options: ExecuteRunOptions = {},
 ): Promise<RunResult> {
@@ -280,6 +281,13 @@ export async function executeRun(
 
     try {
       await pruneIfNeeded();
+      const recovery = await recoverPendingSessionClosures(
+        config.project.log_dir,
+      );
+      if (recovery.warnings.length > 0)
+        console.warn(
+          `Metrics session closure recovery is incomplete: ${recovery.warnings.join('; ')}`,
+        );
       const reconciliation = await reconcileStartup({
         command: 'run',
         config,

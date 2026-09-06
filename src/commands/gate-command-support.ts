@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import type { loadConfig } from '../config/loader.js';
 import { reconcileStartup } from '../core/reconciliation.js';
 import { tryAcquireLock } from '../core/run-executor-lock.js';
+import { recoverPendingSessionClosures } from '../metrics/session-closure.js';
 import {
   type ConsoleLogHandle,
   startConsoleLog,
@@ -164,6 +165,11 @@ export async function acquireAndReconcileGateStartup(args: {
     }
     lockAcquired = true;
     await pruneIfNeeded(DEFAULT_PRUNE_THRESHOLD);
+    const recovery = await recoverPendingSessionClosures(args.logDir);
+    if (recovery.warnings.length > 0)
+      console.warn(
+        `Metrics session closure recovery is incomplete: ${recovery.warnings.join('; ')}`,
+      );
     const reconciliation = await reconcileStartup({
       command: args.commandName,
       config: args.config,

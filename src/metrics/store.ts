@@ -300,6 +300,48 @@ export class MetricsStore {
     });
   }
 
+  /** A closing state is durable and prevents a new command from joining this session. */
+  async beginSessionClose(sessionId: string, closeId: string): Promise<void> {
+    await this.withLock(async () => {
+      const state = await this.readState();
+      const session = state.sessions[sessionId];
+      if (!session) throw new Error(`Unknown metrics session: ${sessionId}`);
+      if (session.state === 'closed') return;
+      if (
+        session.state === 'closing' &&
+        !session.closure_refs.includes(closeId)
+      )
+        throw new Error(`Metrics session is already closing: ${sessionId}`);
+      session.state = 'closing';
+      session.owner = null;
+      if (!session.closure_refs.includes(closeId))
+        session.closure_refs.push(closeId);
+      session.updated_at = new Date().toISOString();
+      await this.commitState(state);
+    });
+  }
+
+  async completeSessionClose(
+    sessionId: string,
+    closeId: string,
+  ): Promise<void> {
+    await this.withLock(async () => {
+      const state = await this.readState();
+      const session = state.sessions[sessionId];
+      if (!session) throw new Error(`Unknown metrics session: ${sessionId}`);
+      if (session.state === 'closed') return;
+      if (
+        session.state !== 'closing' ||
+        !session.closure_refs.includes(closeId)
+      )
+        throw new Error(`Metrics session close does not match: ${sessionId}`);
+      session.state = 'closed';
+      session.owner = null;
+      session.updated_at = new Date().toISOString();
+      await this.commitState(state);
+    });
+  }
+
   async commit(records: MetricRecord[]): Promise<void> {
     await this.withLock(async () => {
       const state = await this.readState();

@@ -36,6 +36,16 @@ export class MetricsRecorder {
     );
   }
 
+  static async openExisting(
+    logDir: string,
+    filesystem?: StoreFilesystem,
+  ): Promise<MetricsRecorder> {
+    return new MetricsRecorder(
+      await MetricsStore.openExisting(logDir, filesystem),
+      path.resolve(logDir),
+    );
+  }
+
   async createSession(): Promise<StoredSession> {
     return this.store.createSession();
   }
@@ -50,6 +60,17 @@ export class MetricsRecorder {
   }
   async closeSession(sessionId: string): Promise<void> {
     await this.store.closeSession(sessionId);
+  }
+
+  async beginSessionClose(sessionId: string, closeId: string): Promise<void> {
+    await this.store.beginSessionClose(sessionId, closeId);
+  }
+
+  async completeSessionClose(
+    sessionId: string,
+    closeId: string,
+  ): Promise<void> {
+    await this.store.completeSessionClose(sessionId, closeId);
   }
   async recordInvocation(record: Invocation): Promise<void> {
     await this.store.commit([record]);
@@ -126,6 +147,37 @@ export class MetricsRecorder {
         ],
       };
     }
+  }
+
+  async publishClosedSessionSnapshot(sessionId: string): Promise<{
+    snapshot: unknown;
+    artifactPath: string;
+  }> {
+    const session = await this.store.readSession(sessionId);
+    if (!session) throw new Error('unknown_session');
+    const records = await this.store.readCommittedSession(sessionId);
+    const invocation = [...records.invocations]
+      .sort((left, right) =>
+        `${left.lifecycle.ended_at ?? left.lifecycle.started_at ?? ''}${left.invocation_id}`.localeCompare(
+          `${right.lifecycle.ended_at ?? right.lifecycle.started_at ?? ''}${right.invocation_id}`,
+        ),
+      )
+      .at(-1);
+    const snapshot = projectSnapshot(
+      sessionId,
+      invocation?.invocation_id ?? sessionId,
+      invocation
+        ? records.attempts.filter(
+            (attempt) => attempt.invocation_id === invocation.invocation_id,
+          )
+        : [],
+      records.attempts,
+    );
+    snapshot.invocations = records.invocations;
+    snapshot.session.state = 'closed';
+    const artifactPath = path.join(this.logDir, 'validation-metrics.json');
+    await this.writePublishedSnapshot(artifactPath, snapshot);
+    return { snapshot, artifactPath };
   }
 
   private async writePublishedSnapshot(
