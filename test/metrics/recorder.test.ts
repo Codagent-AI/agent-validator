@@ -167,6 +167,20 @@ describe('durable metrics recorder', () => {
     await expect(recorder.createSession()).resolves.toMatchObject({ state: 'active' });
   });
 
+  test('bounded acquisition preserves an old lock whose owner is still alive', async () => {
+    const logDir = await temporaryLogDir();
+    const recorder = await MetricsRecorder.open(logDir);
+    const lockPath = path.join(logDir, '.metrics', 'metadata.lock');
+    await fs.mkdir(lockPath);
+    const ownerPath = path.join(lockPath, 'owner.json');
+    const owner = JSON.stringify({pid:process.pid,nonce:'test-live-owner'});
+    await writeFile(ownerPath, owner);
+    const stale = new Date(Date.now()-60000);
+    await utimes(lockPath, stale, stale);
+    await expect(recorder.createSession()).rejects.toThrow('lock is held');
+    expect(await readFile(ownerPath,'utf8')).toBe(owner);
+  });
+
   test('closes a failed snapshot temporary handle before removing it', async () => {
     const logDir = await temporaryLogDir();
     const recorder = await MetricsRecorder.open(logDir);

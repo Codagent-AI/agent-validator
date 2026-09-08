@@ -57,6 +57,36 @@
       "original_json": "fixtures/unsupported-current-head.json",
       "canonical_utf8": "fixtures/unsupported-current-head.canonical.json",
       "expected_digest": "911b6a1222c010edd4a595d09ebd32b0926f760b9e50b1d611d985a806652e80"
+    },
+    {
+      "name": "requested-only-partial-approximate",
+      "original_json": "fixtures/requested-only-partial-approximate.json",
+      "canonical_utf8": "fixtures/requested-only-partial-approximate.canonical.json",
+      "expected_digest": "8b9e09531cb82eb10d7526d3a92bffc0ada1b6350efc375dedbb77ac735f0c97"
+    },
+    {
+      "name": "unknown-cost-currency-scope",
+      "original_json": "fixtures/unknown-cost-currency-scope.json",
+      "canonical_utf8": "fixtures/unknown-cost-currency-scope.canonical.json",
+      "expected_digest": "84651b8cda3315ede339aa26894f434d40c2a4102e37926fd7e28a26545ee6fd"
+    },
+    {
+      "name": "stable-allocation-reorder",
+      "original_json": "fixtures/stable-allocation-reorder.json",
+      "canonical_utf8": "fixtures/stable-allocation-reorder.canonical.json",
+      "expected_digest": "6d221354a7e81109f1e85b7378c6377c1e093f66ce1e39e038a8400bd3456cec"
+    },
+    {
+      "name": "expanded-usage-old-cost",
+      "original_json": "fixtures/expanded-usage-old-cost.json",
+      "canonical_utf8": "fixtures/expanded-usage-old-cost.canonical.json",
+      "expected_digest": "94a13b97d4334e78cbafaf346044c4652f5b563302761c19df9afbac0405ac30"
+    },
+    {
+      "name": "conflicting-current-revisions",
+      "original_json": "fixtures/conflicting-current-revisions.json",
+      "canonical_utf8": "fixtures/conflicting-current-revisions.canonical.json",
+      "expected_digest": "a31db5f79b3a16bbf5d07c4908973e2974d6ac9bf4fbe750a7c53e6f95d3dcbd"
     }
   ]
 }

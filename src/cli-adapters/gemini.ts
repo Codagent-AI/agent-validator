@@ -4,7 +4,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import {
   AdapterExecutionFailure,
@@ -325,6 +324,8 @@ async function logTelemetryToStderr(telemetryFile: string): Promise<void> {
 export class GeminiAdapter implements CLIAdapter {
   name = 'gemini';
 
+  constructor(private readonly streamCommand = runStreamingCommand) {}
+
   async isAvailable(): Promise<boolean> {
     try {
       await execAsync('which gemini');
@@ -505,8 +506,9 @@ ${body.trim()}
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): Promise<AdapterExecutionResult> {
-    const fallbackTelemetry = createUnavailableTelemetry('gemini', {
+    let fallbackTelemetry = createUnavailableTelemetry('gemini', {
       requestedModel: opts.model,
       requestedEffort: opts.thinkingBudget,
     });
@@ -536,47 +538,34 @@ ${body.trim()}
       const cleanupTelemetry = () => fs.unlink(telemetryFile).catch(() => {});
 
       try {
-        if (opts.onOutput) {
-          try {
-            const result = await runStreamingCommand({
-              command: 'gemini',
-              args,
-              tmpFile,
-              timeoutMs: opts.timeoutMs,
-              onOutput: opts.onOutput,
-              cleanup,
-              env: { ...process.env, ...telemetryEnv },
-            });
-            await this.logTelemetry(telemetryFile, opts.onOutput);
-            return {
-              text: result,
-              telemetry: createGeminiTelemetry(
+        try {
+          const result = await this.streamCommand({
+            command: 'gemini',
+            args,
+            tmpFile,
+            timeoutMs: opts.timeoutMs,
+            onOutput: opts.onOutput,
+            cleanup,
+            env: { ...process.env, ...telemetryEnv },
+            onCollected: async () => {
+              fallbackTelemetry = createGeminiTelemetry(
                 await parseGeminiTelemetry(telemetryFile),
                 opts,
-              ),
-            };
-          } finally {
-            await cleanupTelemetry();
-          }
-        }
-
-        try {
-          const cmd = `gemini ${args.join(' ')} < "${tmpFile}"`;
-          const { stdout } = await execAsync(cmd, {
-            timeout: opts.timeoutMs,
-            maxBuffer: MAX_BUFFER_BYTES,
-            env: { ...process.env, ...telemetryEnv },
+              );
+              opts.onTelemetry?.(fallbackTelemetry);
+            },
           });
-          await logTelemetryToStderr(telemetryFile);
+          if (opts.onOutput)
+            await this.logTelemetry(telemetryFile, opts.onOutput);
+          else await logTelemetryToStderr(telemetryFile);
           return {
-            text: stdout,
+            text: result,
             telemetry: createGeminiTelemetry(
               await parseGeminiTelemetry(telemetryFile),
               opts,
             ),
           };
         } finally {
-          await cleanup();
           await cleanupTelemetry();
         }
       } finally {

@@ -24,6 +24,7 @@ const tokenNames: Array<keyof TokenMeasurements> = [
 export function selectLatestHeads(records: ModelAttempt[]): {
   records: ModelAttempt[];
   diagnostics: string[];
+  conflicting_attempt_ids: string[];
 } {
   const byId = new Map<string, ModelAttempt[]>();
   for (const record of records)
@@ -32,34 +33,38 @@ export function selectLatestHeads(records: ModelAttempt[]): {
       record,
     ]);
   const diagnostics: string[] = [];
+  const conflictingAttemptIds: string[] = [];
   const heads: ModelAttempt[] = [];
   for (const [id, versions] of byId) {
     const revision = Math.max(...versions.map((item) => item.revision));
     const candidates = versions.filter((item) => item.revision === revision);
     const canonical = new Set(candidates.map((item) => canonicalizeJson(item)));
-    if (canonical.size > 1)
+    if (canonical.size > 1) {
       diagnostics.push(`conflicting_revision:${id}:${revision}`);
+      conflictingAttemptIds.push(id);
+    }
     const head = candidates[0];
     if (head) heads.push(head);
   }
   return {
     records: heads.sort((a, b) => a.attempt_id.localeCompare(b.attempt_id)),
     diagnostics,
+    conflicting_attempt_ids: conflictingAttemptIds,
   };
 }
 
 function aggregateValue(
   records: ModelAttempt[],
   field: keyof TokenMeasurements,
-  incompatible: boolean,
+  eligible: number,
+  limitation: string | null,
 ): AggregateValue {
-  const eligible = records.length;
   const values = records
     .map((item) => item.tokens[field])
     .filter((item) => item.availability === 'available');
   const value = values.reduce((total, item) => total + item.value, 0);
   const complete =
-    !incompatible &&
+    !limitation &&
     values.length === eligible &&
     records.every(
       (item) =>
@@ -77,8 +82,8 @@ function aggregateValue(
   if (values.length > 0 && complete) {
     availability = 'available';
     reason = null;
-  } else if (incompatible) {
-    reason = 'incompatible_measurement_version';
+  } else if (limitation) {
+    reason = limitation;
   } else if (values.length > 0) {
     reason = 'incomplete_coverage';
   }
@@ -104,13 +109,17 @@ export function reduceAttempts(records: ModelAttempt[]): AttemptAggregate {
     (record) =>
       record.measurement_schema_version === MEASUREMENT_SCHEMA_VERSION,
   );
-  const incompatible =
-    compatible.length !== selected.records.length ||
-    selected.diagnostics.length > 0;
+  const unambiguous = compatible.filter(
+    (record) => !selected.conflicting_attempt_ids.includes(record.attempt_id),
+  );
+  let limitation: string | null = null;
+  if (compatible.length !== selected.records.length)
+    limitation = 'incompatible_measurement_version';
+  else if (selected.diagnostics.length > 0) limitation = 'conflicting_revision';
   const tokens = Object.fromEntries(
     tokenNames.map((name) => [
       name,
-      aggregateValue(compatible, name, incompatible),
+      aggregateValue(unambiguous, name, selected.records.length, limitation),
     ]),
   ) as Record<keyof TokenMeasurements, AggregateValue>;
   const durations = compatible.map((item) =>
@@ -158,6 +167,8 @@ export function projectExport(
   context: { consumer: string; context_id: string },
 ): { protocol_version: number; records: ExportRecord[] } {
   const heads = selectLatestHeads(attempts);
+  if (heads.diagnostics.length > 0)
+    throw new Error(heads.diagnostics.join(';'));
   return {
     protocol_version: 1,
     records: heads.records.map((payload) => {
@@ -207,7 +218,7 @@ export function projectSnapshot(
     attempts: sessionHeads,
     aggregates: {
       current_invocation: reduceAttempts(currentAttempts),
-      session: reduceAttempts(sessionHeads),
+      session: reduceAttempts(sessionAttempts),
     },
   };
 }

@@ -11,6 +11,7 @@ import type {
   UnallocatedUsage,
   UsageAllocation,
 } from '../metrics/types.js';
+import { armCommandTimeout } from './process-timeout.js';
 
 /**
  * Safe evidence emitted by an adapter. The review runtime owns attempt lifecycle,
@@ -222,6 +223,8 @@ export async function runStreamingCommand(opts: {
   onOutput?: (chunk: string) => void;
   /** Raw stdout only, before human-output formatting and excluding stderr. */
   onStdout?: (chunk: string) => void;
+  /** Final bounded drain, before attempt-owned sources are cleaned up. */
+  onCollected?: (stdout: string, stderr: string) => void | Promise<void>;
   cleanup: () => Promise<void>;
   env?: NodeJS.ProcessEnv;
 }): Promise<string> {
@@ -241,13 +244,32 @@ export async function runStreamingCommand(opts: {
 
         stream.pipe(child.stdin);
 
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        if (opts.timeoutMs) {
-          timeoutId = setTimeout(() => {
-            child.kill('SIGTERM');
-            reject(new Error('Command timed out'));
-          }, opts.timeoutMs);
-        }
+        let finalizing = false;
+        const getStderr = collectStderr(child, opts.onOutput);
+        const finish = (
+          code: number | null,
+          signal?: NodeJS.Signals | null,
+          error?: Error,
+        ): void => {
+          if (finalizing) return;
+          finalizing = true;
+          timeout.clear();
+          void finalizeProcessClose({
+            code,
+            signal,
+            handle,
+            cleanup: opts.cleanup,
+            chunks,
+            getStderr,
+            resolve,
+            reject,
+            onCollected: opts.onCollected,
+            error: timeout.timedOut ? new Error('Command timed out') : error,
+          });
+        };
+        const timeout = armCommandTimeout(child, opts.timeoutMs, () =>
+          finish(null),
+        );
 
         child.stdout.on('data', (data: Buffer) => {
           const chunk = data.toString();
@@ -256,36 +278,11 @@ export async function runStreamingCommand(opts: {
           opts.onOutput?.(chunk);
         });
 
-        const getStderr = collectStderr(child, opts.onOutput);
-
         child.on('close', (code, signal) => {
-          void finalizeProcessClose({
-            code,
-            signal,
-            timeoutId,
-            handle,
-            cleanup: opts.cleanup,
-            chunks,
-            getStderr,
-            resolve,
-            reject,
-          });
+          finish(code, signal);
         });
 
-        child.on('error', async (err) => {
-          if (timeoutId) clearTimeout(timeoutId);
-          try {
-            await handle.close();
-          } catch {
-            /* ignore */
-          }
-          try {
-            await opts.cleanup();
-          } catch {
-            /* ignore */
-          }
-          reject(err);
-        });
+        child.on('error', (err) => finish(null, null, err));
       })
       .catch(async (err) => {
         try {
@@ -308,8 +305,16 @@ export async function finalizeProcessClose(opts: {
   getStderr: () => string;
   resolve: (value: string) => void;
   reject: (error: Error) => void;
+  error?: Error;
+  onCollected?: (stdout: string, stderr: string) => void | Promise<void>;
 }): Promise<void> {
   if (opts.timeoutId) clearTimeout(opts.timeoutId);
+  const stdout = opts.chunks.join('');
+  try {
+    await opts.onCollected?.(stdout, opts.getStderr());
+  } catch {
+    // Collection failure must not replace the provider's operational outcome.
+  }
   await opts.handle.close().catch(() => {});
   try {
     await opts.cleanup();
@@ -317,14 +322,14 @@ export async function finalizeProcessClose(opts: {
     /* ignore cleanup errors during finalization */
   }
 
-  if (opts.signal) {
+  if (opts.error) {
+    opts.reject(opts.error);
+  } else if (opts.signal) {
     opts.reject(new Error(`Process terminated by signal ${opts.signal}`));
   } else if (opts.code === 0) {
-    opts.resolve(opts.chunks.join(''));
+    opts.resolve(stdout);
   } else {
-    opts.reject(
-      processExitError(opts.code, opts.getStderr, () => opts.chunks.join('')),
-    );
+    opts.reject(processExitError(opts.code, opts.getStderr, () => stdout));
   }
 }
 

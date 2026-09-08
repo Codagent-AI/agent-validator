@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fromJSONSchema } from 'zod';
 import {
   canonicalizeJson,
   createDigest,
@@ -131,9 +132,12 @@ describe('RFC 8785 canonical record digests', () => {
 describe('closed measurement contracts', () => {
   test('replays pinned semantic replacement, allocation-cost and unsupported-version fixtures', async () => {
     const directory = path.resolve(import.meta.dir, '../../contracts/model-metrics/v1');
+    const publishedSchema = fromJSONSchema(JSON.parse(await readFile(path.join(directory, 'model-attempt.schema.json'), 'utf8')));
     const manifest = JSON.parse(await readFile(path.join(directory, 'fixture-manifest.json'), 'utf8'));
     expect(manifest.semantic_cases?.map((entry: { name: string }) => entry.name)).toEqual([
       'two-model-allocation-cost', 'overlapping-cost-scopes', 'prepared-terminal-replacement', 'unsupported-current-head',
+      'requested-only-partial-approximate', 'unknown-cost-currency-scope',
+      'stable-allocation-reorder', 'expanded-usage-old-cost', 'conflicting-current-revisions',
     ]);
     for (const entry of manifest.semantic_cases) {
       const fixture = JSON.parse(await readFile(path.join(directory, entry.original_json), 'utf8'));
@@ -141,11 +145,17 @@ describe('closed measurement contracts', () => {
       expect(canonicalizeJson(fixture)).toBe(canonical.trimEnd());
       expect(createDigest(fixture).value).toBe(entry.expected_digest);
       expect(fixture.records.map((record: unknown) => validateAttempt(record).success)).toEqual(fixture.expected.valid_records);
+      expect(fixture.records.map((record: unknown) => publishedSchema.safeParse(record).success)).toEqual(fixture.expected.valid_records);
       const heads = selectLatestHeads(fixture.records);
       expect(heads.records.map((record) => ({ attempt_id: record.attempt_id, revision: record.revision }))).toEqual(fixture.expected.heads);
       const aggregate = reduceAttempts(fixture.records);
       expect(aggregate.attempt_count).toBe(fixture.expected.attempt_count);
       expect(aggregate.tokens.normalized_total).toMatchObject(fixture.expected.normalized_total);
+      if (fixture.expected.diagnostics) expect(aggregate.diagnostics).toEqual(fixture.expected.diagnostics);
+      if (fixture.expected.export_error) {
+        expect(() => projectExport(fixture.records, { consumer: 'runner', context_id: 'fixture-context' })).toThrow(fixture.expected.export_error);
+      }
+      if (fixture.expected.selected_payload) expect(heads.records).toEqual([fixture.expected.selected_payload]);
       for (const record of fixture.records.filter((record: ModelAttempt) => record.measurement_schema_version === 1)) {
         const projected = projectExport([record], { consumer: 'runner', context_id: 'fixture-context' }).records[0]!;
         expect(projected.payload).toEqual(record);
@@ -199,6 +209,32 @@ describe('closed measurement contracts', () => {
 });
 
 describe('accounting and deterministic projections', () => {
+  test('conflicting current revisions cannot choose a numeric contribution by array order', () => {
+    const first = attempt();
+    const conflict = attempt({ tokens: { ...first.tokens, normalized_total: available(999) } });
+    const unrelated = attempt({ attempt_id: 'unrelated' });
+    for (const records of [[first, conflict, unrelated], [conflict, first, unrelated]]) {
+      const aggregate = reduceAttempts(records);
+      expect(aggregate.tokens.normalized_total).toMatchObject({
+        value: 130, availability: 'unavailable',
+        coverage: { eligible_attempt_count: 2, reporting_attempt_count: 1, complete: false },
+      });
+      expect(aggregate.diagnostics).toContain('conflicting_revision:attempt-1:1');
+      const snapshot = projectSnapshot('session-1', 'invocation-1', records, records, {
+        snapshot_id: 'snapshot-fixed', published_at: '2026-09-06T12:00:11.000Z',
+      });
+      expect(snapshot.aggregates.session).toEqual(aggregate);
+      expect(() => projectExport(records, { consumer: 'runner', context_id: 'fixture' })).toThrow('conflicting_revision');
+    }
+  });
+
+  test('unsupported heads remain in the explicit missing aggregate population', () => {
+    const aggregate = reduceAttempts([attempt(), attempt({ attempt_id: 'future', measurement_schema_version: 99 })]);
+    expect(aggregate.tokens.input_total.coverage).toEqual({
+      eligible_attempt_count: 2, reporting_attempt_count: 1, complete: false,
+    });
+  });
+
   test('uses caller-owned snapshot identity and time deterministically', () => {
     const publication = { snapshot_id: 'snapshot-fixed', published_at: '2026-09-06T12:00:11.000Z' };
     const first = projectSnapshot('session-1', 'invocation-1', [attempt()], [attempt()], publication);

@@ -263,6 +263,7 @@ export class ReviewGateExecutor {
       args.contextContent,
       args.changeOptions,
       args.oneShotOutputs,
+      args.metrics,
     );
   }
 

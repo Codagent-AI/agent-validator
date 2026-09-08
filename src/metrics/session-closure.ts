@@ -117,7 +117,9 @@ async function readJournal(
 
 function archiveName(value: unknown): value is string {
   return (
-    typeof value === 'string' && /^previous(?:\.(?:0|[1-9]\d*))?$/.test(value)
+    typeof value === 'string' &&
+    /^previous(?:\.[1-9]\d*)?$/.test(value) &&
+    Number.isSafeInteger(archiveIndex(value))
   );
 }
 
@@ -435,7 +437,15 @@ export async function closeMeasuredSession(
   const closeId = randomUUID();
   const staging = path.join(logDir, '.metrics', 'closures', closeId);
   const journalPath = path.join(staging, 'journal.json');
-  const archives = await archiveInventory(logDir);
+  const archives = maxPreviousLogs === 0 ? [] : await archiveInventory(logDir);
+  if (archives.some((name) => !archiveName(name)))
+    return {
+      closed: false,
+      close_id: null,
+      warnings: [
+        'noncanonical archive: preserve existing evidence and resolve archive names before rotation',
+      ],
+    };
   await ensureSafeDirectory(logDir, staging);
   const journal: ClosureJournal = {
     close_id: closeId,

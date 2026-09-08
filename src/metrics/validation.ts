@@ -122,6 +122,18 @@ const nativeUsageNames = new Set([
   'claude_otel_output',
   'claude_otel_cacheRead',
   'claude_otel_cacheCreation',
+  'opencode_inputTokens',
+  'opencode_outputTokens',
+  'opencode_reasoningTokens',
+  'opencode_cacheReadTokens',
+  'opencode_cacheWriteTokens',
+  'gemini_inputTokens',
+  'gemini_outputTokens',
+  'gemini_thoughtTokens',
+  'gemini_cacheTokens',
+  'copilot_in',
+  'copilot_out',
+  'copilot_cache',
 ]);
 const prohibitedEvidence =
   /(?:prompt|response|credential|password|api[_ -]?key|account|user|organization|email|host|machine)/i;

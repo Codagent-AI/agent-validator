@@ -155,8 +155,12 @@ describe("GitHubCopilotAdapter plugin lifecycle", () => {
 			const { GitHubCopilotAdapter } = await import(
 				"../../src/cli-adapters/github-copilot.js"
 			);
-			adapter = new GitHubCopilotAdapter();
 			mockSpawnSuccess();
+			// Resolve only the test-owned stub, including replacements made by a
+			// test. Never retain the real spawn function before spies are installed.
+			const spawnCommand = ((...args: unknown[]) => spawnSpy(...args)) as typeof childProcess.spawn;
+			adapter = new GitHubCopilotAdapter(spawnCommand);
+			expect(adapter.spawnCommand).toBe(spawnCommand);
 		});
 
 		afterEach(() => {

@@ -289,6 +289,15 @@ Result artifacts for actual model dispatches SHALL additionally reference the st
 
 ## ADDED Requirements
 
+### Requirement: Ambiguous archive names preserve evidence
+
+Historical rotation SHALL reject noncanonical numeric archive names before starting a new closure transaction or moving current logs. It SHALL surface a recovery warning rather than automatically renaming, merging, or deleting ambiguous archives. With zero retention, existing archives SHALL remain untouched and SHALL NOT prevent closure solely because of their names.
+
+#### Scenario: Legacy archive spellings could collide
+- **WHEN** rotation discovers a name such as `previous.01`, `previous.0`, or an unsafe numeric suffix
+- **THEN** current logs and existing archives remain unchanged and no new closure journal is started
+- **AND** recovery requires establishing archive ownership rather than guessing a collision resolution
+
 ### Requirement: Atomic latest-session snapshot publication
 
 Validator SHALL retain `<log_dir>/validation-metrics.json` as the latest successfully published session snapshot independently of ordinary review-log cleanup and historical retention. Each replacement SHALL be atomic so readers observe a complete prior snapshot or a complete new snapshot, never torn JSON. A later session MAY replace the fixed latest snapshot; pending evidence from an older session remains governed by acknowledgment/discard rather than that replacement.

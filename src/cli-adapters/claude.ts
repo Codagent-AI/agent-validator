@@ -1,9 +1,9 @@
 import { exec } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import {
   addMarketplace,
@@ -19,6 +19,7 @@ import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import {
   AdapterExecutionFailure,
   type AdapterExecutionResult,
+  type AdapterTelemetry,
   type CLIAdapter,
   createUnavailableTelemetry,
   runStreamingCommand,
@@ -42,6 +43,8 @@ const POST_PROCESS_BUFFER_MS = 30_000;
 
 export class ClaudeAdapter implements CLIAdapter {
   name = 'claude';
+
+  constructor(private readonly streamCommand = runStreamingCommand) {}
 
   async isAvailable(): Promise<boolean> {
     try {
@@ -169,8 +172,9 @@ export class ClaudeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): Promise<AdapterExecutionResult> {
-    const telemetry = createUnavailableTelemetry('claude', {
+    let telemetry = createUnavailableTelemetry('claude', {
       requestedModel: opts.model,
       requestedEffort: opts.thinkingBudget,
     });
@@ -178,7 +182,13 @@ export class ClaudeAdapter implements CLIAdapter {
       const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
       let timer: ReturnType<typeof setTimeout>;
       return await Promise.race([
-        this.doExecute(opts).finally(() => clearTimeout(timer)),
+        this.doExecute({
+          ...opts,
+          onTelemetry: (value) => {
+            telemetry = value;
+            opts.onTelemetry?.(value);
+          },
+        }).finally(() => clearTimeout(timer)),
         new Promise<never>((_, reject) => {
           timer = setTimeout(
             () =>
@@ -207,14 +217,15 @@ export class ClaudeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): Promise<AdapterExecutionResult> {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
     const tmpFile = path.join(
       os.tmpdir(),
-      `validator-claude-${process.pid}-${Date.now()}.txt`,
+      `validator-claude-${randomUUID()}.txt`,
     );
-    await fs.writeFile(tmpFile, fullContent);
+    await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
 
     const args = ['-p'];
     // Task is always allowed so Claude can dispatch pr-review-toolkit
@@ -254,42 +265,29 @@ export class ClaudeAdapter implements CLIAdapter {
       ...thinkingEnv,
     };
 
-    if (opts.onOutput) {
-      const raw = await runStreamingCommand({
-        command: 'claude',
-        args,
-        tmpFile,
-        timeoutMs: opts.timeoutMs,
-        cleanup,
-        env: execEnv,
-      });
-      const cleaned = safeExtractOtelMetrics(raw, opts.onOutput);
-      opts.onOutput(cleaned);
-      return {
-        text: cleaned,
-        telemetry: parseClaudeOtelTelemetry(raw, {
-          requestedModel: opts.model,
-          thinkingBudget: opts.thinkingBudget,
-        }),
-      };
-    }
-
-    try {
-      const cmd = `cat "${tmpFile}" | claude ${args.map((a) => (a === '' ? '""' : a)).join(' ')}`;
-      const { stdout } = await execAsync(cmd, {
-        timeout: opts.timeoutMs,
-        maxBuffer: MAX_BUFFER_BYTES,
-        env: execEnv,
-      });
-      return {
-        text: safeExtractOtelMetrics(stdout),
-        telemetry: parseClaudeOtelTelemetry(stdout, {
-          requestedModel: opts.model,
-          thinkingBudget: opts.thinkingBudget,
-        }),
-      };
-    } finally {
-      await cleanup();
-    }
+    const raw = await this.streamCommand({
+      command: 'claude',
+      args,
+      tmpFile,
+      timeoutMs: opts.timeoutMs,
+      cleanup,
+      env: execEnv,
+      onCollected: (stdout) =>
+        opts.onTelemetry?.(
+          parseClaudeOtelTelemetry(stdout, {
+            requestedModel: opts.model,
+            thinkingBudget: opts.thinkingBudget,
+          }),
+        ),
+    });
+    const cleaned = safeExtractOtelMetrics(raw, opts.onOutput);
+    opts.onOutput?.(cleaned);
+    return {
+      text: cleaned,
+      telemetry: parseClaudeOtelTelemetry(raw, {
+        requestedModel: opts.model,
+        thinkingBudget: opts.thinkingBudget,
+      }),
+    };
   }
 }

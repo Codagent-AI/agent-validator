@@ -3,8 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
+import { createBoundedLineCollector } from './bounded-lines.js';
 import {
   AdapterExecutionFailure,
   type AdapterTelemetry,
@@ -244,6 +244,8 @@ export function parseOpenCodeTelemetry(
 export class OpenCodeAdapter implements CLIAdapter {
   name = 'opencode';
 
+  constructor(private readonly streamCommand = runStreamingCommand) {}
+
   /** Cached resolved binary path (null = not yet resolved, empty string = not found). */
   private resolvedBin: string | null = null;
 
@@ -325,7 +327,6 @@ export class OpenCodeAdapter implements CLIAdapter {
     return args;
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: streaming protocol handling predates telemetry wrapping.
   async execute(opts: {
     prompt: string;
     diff: string;
@@ -334,8 +335,9 @@ export class OpenCodeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
-    const fallbackTelemetry = createUnavailableTelemetry('opencode', {
+    let fallbackTelemetry = createUnavailableTelemetry('opencode', {
       requestedModel: opts.model,
       requestedEffort: opts.thinkingBudget,
     });
@@ -362,39 +364,31 @@ export class OpenCodeAdapter implements CLIAdapter {
 
       const cleanup = () => fs.unlink(tmpFile).catch(() => {});
 
-      if (opts.onOutput) {
+      {
         // Buffer partial lines so we only forward parsed text content,
         // not raw JSONL protocol events.
-        let lineBuf = '';
         const streamingUsage: OpenCodeUsage = {};
-        const raw = await runStreamingCommand({
+        const lines = createBoundedLineCollector((line) => {
+          const event = parseJsonlLine(line.trim());
+          if (!event) return;
+          const text = processOpenCodeEvent(event, streamingUsage);
+          if (text !== undefined) opts.onOutput?.(text);
+        });
+        const raw = await this.streamCommand({
           command: bin,
           args,
           tmpFile,
           timeoutMs: opts.timeoutMs,
-          onOutput: (chunk: string) => {
-            lineBuf += chunk;
-            const lines = lineBuf.split('\n');
-            // Keep the last (possibly incomplete) segment in the buffer
-            lineBuf = lines.pop() ?? '';
-            for (const line of lines) {
-              const event = parseJsonlLine(line.trim());
-              if (!event) continue;
-              const text = processOpenCodeEvent(event, streamingUsage);
-              if (text !== undefined) opts.onOutput?.(text);
-            }
+          onStdout: lines.write,
+          onCollected: (stdout) => {
+            lines.flush();
+            fallbackTelemetry = parseOpenCodeTelemetry(stdout, opts);
+            opts.onTelemetry?.(fallbackTelemetry);
           },
           cleanup,
         });
 
-        // Flush any remaining buffered line
-        if (lineBuf.trim()) {
-          const event = parseJsonlLine(lineBuf.trim());
-          if (event) {
-            const text = processOpenCodeEvent(event, streamingUsage);
-            if (text !== undefined) opts.onOutput?.(text);
-          }
-        }
+        lines.flush();
 
         emitOpenCodeSummary(streamingUsage, opts.onOutput);
         const { text } = parseOpenCodeJsonl(raw, undefined, false);
@@ -402,22 +396,6 @@ export class OpenCodeAdapter implements CLIAdapter {
           text: text || raw.trimEnd(),
           telemetry: parseOpenCodeTelemetry(raw, opts),
         };
-      }
-
-      try {
-        const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, '\\$1')}"`;
-        const cmd = `cat "${tmpFile}" | ${quoteArg(bin)} ${args.map(quoteArg).join(' ')}`;
-        const { stdout } = await execAsync(cmd, {
-          timeout: opts.timeoutMs,
-          maxBuffer: MAX_BUFFER_BYTES,
-        });
-        const { text } = parseOpenCodeJsonl(stdout);
-        return {
-          text: text || stdout.trimEnd(),
-          telemetry: parseOpenCodeTelemetry(stdout, opts),
-        };
-      } finally {
-        await cleanup();
       }
     } catch (error) {
       throw new AdapterExecutionFailure(

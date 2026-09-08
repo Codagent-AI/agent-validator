@@ -19,6 +19,21 @@ async function logDirectory(): Promise<string> {
 }
 
 describe('measured session closure', () => {
+  for (const legacyName of ['previous.01', 'previous.0', 'previous.9007199254740992']) {
+    test(`preserves ambiguous archive ${legacyName} and current evidence before closure starts`, async () => {
+      const logDir = await logDirectory();
+      await mkdir(path.join(logDir, legacyName));
+      await writeFile(path.join(logDir, legacyName, 'retained.log'), 'legacy evidence');
+      await writeFile(path.join(logDir, 'current.log'), 'current evidence');
+      const result = await closeMeasuredSession(logDir, 3);
+      expect(result.close_id).toBeNull();
+      expect(result.warnings.join(' ')).toContain('noncanonical archive');
+      expect(await readFile(path.join(logDir, legacyName, 'retained.log'), 'utf8')).toBe('legacy evidence');
+      expect(await readFile(path.join(logDir, 'current.log'), 'utf8')).toBe('current evidence');
+      await expect(stat(path.join(logDir, '.metrics/closures'))).rejects.toMatchObject({code:'ENOENT'});
+    });
+  }
+
   for (const linkedComponent of ['staging', 'closures', '.metrics']) {
     test(`rejects a symlinked ${linkedComponent} root before reading or moving closure evidence`, async () => {
       const parent = await logDirectory();
