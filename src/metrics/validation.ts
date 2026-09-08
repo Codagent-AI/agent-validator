@@ -109,6 +109,7 @@ const cost = z
   .strict();
 const nativeUsageNames = new Set([
   'input_tokens',
+  'cached_input_tokens',
   'output_tokens',
   'cache_read_tokens',
   'cache_write_tokens',
@@ -117,6 +118,10 @@ const nativeUsageNames = new Set([
   'request_count',
   'provider_session_id',
   'reported_cost',
+  'claude_otel_input',
+  'claude_otel_output',
+  'claude_otel_cacheRead',
+  'claude_otel_cacheCreation',
 ]);
 const prohibitedEvidence =
   /(?:prompt|response|credential|password|api[_ -]?key|account|user|organization|email|host|machine)/i;

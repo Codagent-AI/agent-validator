@@ -160,6 +160,16 @@ Negative, non-finite, or internally inconsistent evidence SHALL NOT be silently 
 - **THEN** normalized input consumption is 100 rather than 140
 - **AND** the cache-read field records its inclusion in input total
 
+#### Scenario: Claude input categories are disjoint
+- **WHEN** Claude telemetry establishes uncached input, cache-read input, and cache-creation input for the same covered work
+- **THEN** Validator preserves the native counters and maps uncached input to `input_uncached`, deriving `input_total` as the sum of the three disjoint categories
+- **AND** duplicate metric and API-request observations of that work are not added together
+- **AND** missing input components prevent a total-input derivation rather than being treated as zero, and partial collection remains explicit
+
+#### Scenario: Supported native evidence survives publication
+- **WHEN** a supported adapter returns allowlisted native usage together with canonical measurements
+- **THEN** recording, standalone snapshots, and consumer exports preserve both representations without rejecting supported telemetry field names or rewriting native values as canonical totals
+
 #### Scenario: Reasoning is included in output
 - **WHEN** verified source semantics report output 30 including 10 reasoning tokens
 - **THEN** output contributes 30 rather than 40 to an applicable normalized total
