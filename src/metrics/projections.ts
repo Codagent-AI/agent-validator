@@ -96,16 +96,13 @@ function aggregateValue(
 }
 
 /** Reduces latest attempt heads once. It never treats allocations or revisions as additional dispatches. */
-export function reduceAttempts(
-  records: ModelAttempt[],
-  options: { compatible_measurement_versions?: number[] } = {},
-): AttemptAggregate {
+export function reduceAttempts(records: ModelAttempt[]): AttemptAggregate {
   const selected = selectLatestHeads(records);
-  const compatibleVersions = new Set(
-    options.compatible_measurement_versions ?? [MEASUREMENT_SCHEMA_VERSION],
-  );
-  const compatible = selected.records.filter((record) =>
-    compatibleVersions.has(record.measurement_schema_version),
+  // This release implements only v1 semantics. A version list is not a
+  // reviewed conversion, and callers cannot opt unknown payloads into totals.
+  const compatible = selected.records.filter(
+    (record) =>
+      record.measurement_schema_version === MEASUREMENT_SCHEMA_VERSION,
   );
   const incompatible =
     compatible.length !== selected.records.length ||
@@ -137,7 +134,8 @@ export function reduceAttempts(
       ...selected.diagnostics,
       ...selected.records
         .filter(
-          (item) => !compatibleVersions.has(item.measurement_schema_version),
+          (item) =>
+            item.measurement_schema_version !== MEASUREMENT_SCHEMA_VERSION,
         )
         .map(
           (item) =>

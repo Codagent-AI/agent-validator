@@ -245,10 +245,39 @@ describe('accounting and deterministic projections', () => {
     expect(heads.diagnostics).toContain('conflicting_revision:attempt-1:2');
   });
 
-  test('combines a future test-only version only with an explicitly reviewed mapping', () => {
+  test('a caller-supplied version list cannot enable unreviewed future aggregation', () => {
     const future = attempt({ attempt_id: 'future', measurement_schema_version: 2 as number });
-    expect(reduceAttempts([attempt(), future]).attempt_count).toBe(1);
-    expect(reduceAttempts([attempt(), future], { compatible_measurement_versions: [1, 2] }).attempt_count).toBe(2);
+    // JavaScript callers can still pass obsolete extra arguments after the
+    // typed options API is removed; those arguments must not grant compatibility.
+    const reduced = Reflect.apply(reduceAttempts, undefined, [
+      [attempt(), future], { compatible_measurement_versions: [1, 2] },
+    ]);
+    expect(reduced.attempt_count).toBe(1);
+    expect(reduced.tokens.input_total).toMatchObject({
+      value: 100, availability: 'unavailable',
+      reason: 'incompatible_measurement_version', coverage: { complete: false },
+    });
+    expect(reduced.diagnostics).toContain('incompatible_measurement_version:future:2');
+  });
+
+  test('v1 snapshots preserve unsupported latest heads without aggregating their older v1 revision', () => {
+    const older = attempt();
+    const future = attempt({ revision: 2, measurement_schema_version: 2 });
+    const original = structuredClone(future);
+    const snapshot = projectSnapshot('session-1', 'invocation-1', [older, future], [older, future], {
+      snapshot_id: 'snapshot-1', published_at: '2026-09-06T12:00:11.000Z',
+    });
+    expect(snapshot.attempts).toEqual([future]);
+    expect(future).toEqual(original);
+    expect(snapshot.aggregate_measurement_schema_version).toBe(1);
+    expect(snapshot.measurement_schema_versions).toEqual([2]);
+    for (const aggregate of [snapshot.aggregates.current_invocation, snapshot.aggregates.session]) {
+      expect(aggregate.attempt_count).toBe(0);
+      expect(aggregate.tokens.input_total).toMatchObject({
+        value: null, availability: 'unavailable', reason: 'incompatible_measurement_version',
+      });
+      expect(aggregate.diagnostics).toContain('incompatible_measurement_version:attempt-1:2');
+    }
   });
 
   test('projects partial allocation, unallocated usage, and allocation-scoped cost without pricing', () => {

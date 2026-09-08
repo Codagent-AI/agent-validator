@@ -268,11 +268,14 @@ Each aggregate token measurement SHALL carry a typed availability envelope conta
 
 Identity groupings SHALL retain unknown and unallocated attribution without guessing model membership. Replayed copies of the same record/revision SHALL not add consumption. Conflicting evidence for the same identity/revision SHALL produce a diagnostic rather than an arbitrary sum or silent choice. Legitimate newer revisions update the same attempt's derived views. Attempt work durations MAY be summarized as work duration, but summed overlapping durations MUST NOT be presented as invocation/session elapsed time.
 
-Aggregation SHALL select each attempt's latest revision once, not its latest compatible older revision. Cross-version contributors SHALL use explicitly reviewed semantic mappings with source-version provenance; incompatible or uninterpretable current heads SHALL remain visible as coverage limitations or separate semantic groups. Root aggregates SHALL identify their own measurement schema version. Preserving an older record SHALL NOT require altering that record to calculate a newer aggregate.
+Aggregation SHALL select each attempt's latest revision once, not its latest compatible older revision. This release SHALL support measurement schema v1 only and SHALL NOT enable cross-version aggregation through a caller-supplied compatibility list, configuration, or version negotiation. Unsupported or uninterpretable current heads SHALL remain visible as coverage limitations rather than contributing values to v1 totals. Root aggregates SHALL identify their own measurement schema version. Preserving an older record SHALL NOT require altering that record to calculate an aggregate.
 
-#### Scenario: Mixed versions have comparable measurements
-- **WHEN** a session has current heads in different supported measurement versions and a reviewed mapping establishes comparable input/output semantics
-- **THEN** the root aggregate combines each attempt once under its declared aggregate schema with contributing version provenance
+Support for another measurement schema version SHALL require a separately reviewed extension defining source-to-target semantic mappings, source-version provenance and compatibility fixtures before cross-version aggregation is enabled. Merely listing a version as compatible SHALL NOT constitute a reviewed mapping. That extension is outside this release's scope.
+
+#### Scenario: Unsupported version cannot be opted into v1 aggregation
+- **WHEN** current attempt heads include v1 and an unsupported measurement version, even if a caller declares both versions compatible
+- **THEN** the v1 aggregate includes only v1 contributions, retains the known subtotal, and explicitly reports incompatible coverage for the unsupported current head
+- **AND** the aggregate does not claim complete coverage or reinterpret unsupported values as v1 measurements
 
 #### Scenario: Latest revision cannot contribute to an aggregate
 - **WHEN** an attempt's latest revision cannot be semantically mapped to an aggregate but an older revision could
