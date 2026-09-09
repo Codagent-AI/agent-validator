@@ -1,4 +1,5 @@
 import { getDebugLogger } from '../utils/debug-log.js';
+import { createBoundedLineCollector } from './bounded-lines.js';
 import {
   type AdapterTelemetry,
   createUnavailableTelemetry,
@@ -339,12 +340,20 @@ export function parseClaudeOtelTelemetry(
   raw: string,
   opts: { requestedModel?: string; thinkingBudget?: string } = {},
 ): AdapterTelemetry {
+  const { usage, completeRequestInputs } = canonicalClaudeUsage(raw);
+  return createClaudeTelemetry(usage, completeRequestInputs, opts);
+}
+
+function createClaudeTelemetry(
+  usage: OtelUsage,
+  completeRequestInputs: boolean,
+  opts: { requestedModel?: string; thinkingBudget?: string },
+): AdapterTelemetry {
   const telemetry = createUnavailableTelemetry('claude', {
     requestedModel: opts.requestedModel,
     requestedEffort: opts.thinkingBudget,
     reason: 'claude_otel_not_observed',
   });
-  const { usage, completeRequestInputs } = canonicalClaudeUsage(raw);
   const source = 'provider_event' as const;
   const fields: Array<
     [
@@ -393,6 +402,66 @@ export function parseClaudeOtelTelemetry(
   };
   telemetry.provenance.adapter_mapping_version = 'claude-otel-accounting-v2';
   return telemetry;
+}
+
+/** Retain one bounded console block and safe counters, never the output history. */
+export function createClaudeTelemetryCollector(
+  opts: { requestedModel?: string; thinkingBudget?: string },
+  onTelemetry: (telemetry: AdapterTelemetry) => void,
+) {
+  const metrics: OtelUsage = {};
+  const requests: OtelUsage = {};
+  let seenMetrics = false;
+  let completeRequestInputs = true;
+  let block: string[] = [];
+  let depth = 0;
+  let length = 0;
+  let limited = false;
+  const abandon = () => {
+    limited = true;
+    block = [];
+  };
+  const observeBlock = (raw: string) => {
+    const kind = classifyBlock(raw);
+    if (kind === 'metric' && /name:\s*"claude_code\.token\.usage"/.test(raw)) {
+      seenMetrics = true;
+      Object.assign(metrics, parseTokenBlock(raw));
+    } else if (
+      kind === 'log' &&
+      raw.match(OTEL_ATTR_RE.body)?.[1] === 'claude_code.api_request'
+    ) {
+      accumulateApiRequest(raw, requests);
+      completeRequestInputs &&= [
+        OTEL_ATTR_RE.input_tokens,
+        OTEL_ATTR_RE.cache_read_tokens,
+        OTEL_ATTR_RE.cache_creation_tokens,
+      ].every((field) => field.test(raw));
+    } else return;
+    onTelemetry(
+      createClaudeTelemetry(
+        seenMetrics ? metrics : requests,
+        seenMetrics || completeRequestInputs,
+        opts,
+      ),
+    );
+  };
+  const lines = createBoundedLineCollector((line) => {
+    if (limited) return;
+    if (block.length === 0 && !isBlockStart(line)) return;
+    length += line.length + 1;
+    if (length > 1024 * 1024) {
+      abandon();
+      return;
+    }
+    block.push(line);
+    depth += countBraceChange(line);
+    if (depth > 0) return;
+    observeBlock(block.join('\n'));
+    block = [];
+    length = 0;
+    depth = 0;
+  }, abandon);
+  return lines;
 }
 
 /** Build OTel environment overrides for console export. */

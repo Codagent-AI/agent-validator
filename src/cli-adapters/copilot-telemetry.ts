@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   type AdapterTelemetry,
   createUnavailableTelemetry,
@@ -130,7 +131,7 @@ export function parseCopilotTelemetry(
     .split(',')
     .filter((item) => item !== 'unknown')) {
     telemetry.observed_identities.push({
-      identity_id: `copilot-model-${telemetry.observed_identities.length + 1}`,
+      identity_id: `copilot-model-${createHash('sha256').update(model).digest('hex')}`,
       model,
       provider: {
         availability: 'unavailable',

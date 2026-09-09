@@ -286,12 +286,7 @@ function createGeminiTelemetry(
   for (const [usageKey, tokenKey] of fields) {
     const value = usage[usageKey];
     if (typeof value !== 'number') continue;
-    telemetry.tokens[tokenKey] = observedMeasurement(
-      value,
-      source,
-      'exact',
-      tokenKey === 'cache_read' ? ['input_total'] : null,
-    );
+    telemetry.tokens[tokenKey] = observedMeasurement(value, source);
     telemetry.provider_native_usage.push({
       source,
       name: `gemini_${usageKey}`,
@@ -308,6 +303,7 @@ function createGeminiTelemetry(
     value: 'gemini-otel-json',
     reason: null,
   };
+  telemetry.provenance.adapter_mapping_version = 'gemini-accounting-v2';
   return telemetry;
 }
 
@@ -529,6 +525,27 @@ ${body.trim()}
       );
 
       const telemetryEnv = this.buildTelemetryEnv(telemetryFile);
+      const execEnv = { ...process.env, ...telemetryEnv };
+      let collectionLimit: string | null = null;
+      if (execEnv.GEMINI_TELEMETRY_ENABLED !== 'true') {
+        collectionLimit = 'gemini_telemetry_disabled';
+      } else if (
+        execEnv.GEMINI_TELEMETRY_OUTFILE !== telemetryFile ||
+        execEnv.GEMINI_TELEMETRY_TARGET !== 'local'
+      ) {
+        collectionLimit = 'gemini_telemetry_redirected';
+      }
+      const collectTelemetry = async () =>
+        collectionLimit
+          ? createUnavailableTelemetry('gemini', {
+              requestedModel: opts.model,
+              requestedEffort: opts.thinkingBudget,
+              reason: collectionLimit,
+            })
+          : createGeminiTelemetry(
+              await parseGeminiTelemetry(telemetryFile),
+              opts,
+            );
       const args = this.buildArgs(opts.allowToolUse);
       const cleanupThinking = await this.maybeApplyThinking(
         opts.thinkingBudget,
@@ -546,12 +563,9 @@ ${body.trim()}
             timeoutMs: opts.timeoutMs,
             onOutput: opts.onOutput,
             cleanup,
-            env: { ...process.env, ...telemetryEnv },
+            env: execEnv,
             onCollected: async () => {
-              fallbackTelemetry = createGeminiTelemetry(
-                await parseGeminiTelemetry(telemetryFile),
-                opts,
-              );
+              fallbackTelemetry = await collectTelemetry();
               opts.onTelemetry?.(fallbackTelemetry);
             },
           });
@@ -560,10 +574,7 @@ ${body.trim()}
           else await logTelemetryToStderr(telemetryFile);
           return {
             text: result,
-            telemetry: createGeminiTelemetry(
-              await parseGeminiTelemetry(telemetryFile),
-              opts,
-            ),
+            telemetry: await collectTelemetry(),
           };
         } finally {
           await cleanupTelemetry();

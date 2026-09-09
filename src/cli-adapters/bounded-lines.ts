@@ -3,7 +3,10 @@
 const MAX_LINE_LENGTH = 1024 * 1024;
 
 /** Consume newline-delimited records once, dropping oversized lines in full. */
-export function createBoundedLineCollector(onLine: (line: string) => void) {
+export function createBoundedLineCollector(
+  onLine: (line: string) => void,
+  onOversizedLine?: () => void,
+) {
   let fragments: string[] = [];
   let length = 0;
   let discarding = false;
@@ -15,6 +18,7 @@ export function createBoundedLineCollector(onLine: (line: string) => void) {
     if (length > MAX_LINE_LENGTH) {
       fragments = [];
       discarding = true;
+      onOversizedLine?.();
     } else {
       fragments.push(chunk.slice(start, end));
     }

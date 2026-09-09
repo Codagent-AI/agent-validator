@@ -37,6 +37,13 @@ export interface UnavailableValue {
   included_in: null;
 }
 export type MeasurementValue<T> = AvailableValue<T> | UnavailableValue;
+/** A known subtotal, not a complete measurement for this field. */
+export interface PartialTokenValue
+  extends Omit<AvailableValue<number>, 'availability' | 'reason'> {
+  availability: 'partial';
+  reason: string;
+}
+export type TokenValue = MeasurementValue<number> | PartialTokenValue;
 
 export interface IdentityValue {
   adapter: string | null;
@@ -54,14 +61,14 @@ export interface ObservedIdentity {
 }
 
 export interface TokenMeasurements {
-  input_total: MeasurementValue<number>;
-  input_uncached: MeasurementValue<number>;
-  cache_read: MeasurementValue<number>;
-  cache_write: MeasurementValue<number>;
-  output: MeasurementValue<number>;
-  reasoning: MeasurementValue<number>;
-  provider_total: MeasurementValue<number>;
-  normalized_total: MeasurementValue<number>;
+  input_total: TokenValue;
+  input_uncached: TokenValue;
+  cache_read: TokenValue;
+  cache_write: TokenValue;
+  output: TokenValue;
+  reasoning: TokenValue;
+  provider_total: TokenValue;
+  normalized_total: TokenValue;
 }
 
 export interface UsageAllocation {
@@ -177,12 +184,14 @@ export interface ExportRecord {
 }
 
 export interface AggregateValue {
-  availability: Availability;
+  availability: Availability | 'partial';
   value: number | null;
   reason: string | null;
   coverage: {
     eligible_attempt_count: number;
     reporting_attempt_count: number;
+    partial_attempt_ids: string[];
+    missing_attempt_ids: string[];
     complete: boolean;
   };
   fidelity: Precision | null;

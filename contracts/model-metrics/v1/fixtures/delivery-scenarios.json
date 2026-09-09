@@ -1,0 +1,54 @@
+{
+  "fixture_version": 1,
+  "provenance": "Synthetic protocol scenarios executed against a disposable real Validator store. Receipt labels stand for opaque runtime values, never literal receipt tokens.",
+  "record_source": "prepared-terminal-replacement.json",
+  "consumer_context": { "consumer": "fixture-client", "context_id": "original-launch" },
+  "scenarios": [
+    {
+      "name": "replay-stale-receipt-and-replacement",
+      "steps": [
+        { "operation": "commit", "revision": 1 },
+        { "operation": "export", "label": "prepared", "revisions": [1] },
+        { "operation": "export", "same_as": "prepared", "revisions": [1] },
+        { "operation": "commit", "revision": 2 },
+        { "operation": "export", "label": "overlapping", "revisions": [1, 2] },
+        { "operation": "acknowledge", "receipt": "prepared" },
+        { "operation": "export", "label": "terminal", "revisions": [2] },
+        { "operation": "acknowledge", "receipt": "prepared" },
+        { "operation": "export", "same_as": "terminal", "revisions": [2] },
+        { "operation": "acknowledge", "receipt": "overlapping" },
+        { "operation": "export", "revisions": [], "evidence_state": "previously_acknowledged" }
+      ]
+    },
+    {
+      "name": "bounded-delivery-splits-revisions",
+      "steps": [
+        { "operation": "commit", "revision": 1 },
+        { "operation": "commit", "revision": 2 },
+        { "operation": "export", "label": "first", "max_records": 1, "revisions": [1], "remaining": 1 },
+        { "operation": "acknowledge", "receipt": "first" },
+        { "operation": "export", "label": "last", "max_records": 1, "revisions": [2], "remaining": 0 },
+        { "operation": "acknowledge", "receipt": "last" },
+        { "operation": "export", "revisions": [], "evidence_state": "previously_acknowledged" }
+      ]
+    },
+    {
+      "name": "version-rejection-before-receipt",
+      "steps": [
+        { "operation": "commit", "revision": 1 },
+        { "operation": "export", "measurement_versions": [2], "error": "Unsupported measurement schema version", "required_measurement_schema_versions": [1] },
+        { "operation": "export", "label": "supported", "revisions": [1] }
+      ]
+    },
+    {
+      "name": "discard-is-a-delivery-gap",
+      "steps": [
+        { "operation": "commit", "revision": 1 },
+        { "operation": "export", "label": "discarded", "revisions": [1] },
+        { "operation": "discard", "receipt": "discarded" },
+        { "operation": "export", "revisions": [], "evidence_state": "discarded" },
+        { "operation": "acknowledge", "receipt": "discarded", "error_code": "delivery_gap" }
+      ]
+    }
+  ]
+}

@@ -62,7 +62,7 @@
       "name": "requested-only-partial-approximate",
       "original_json": "fixtures/requested-only-partial-approximate.json",
       "canonical_utf8": "fixtures/requested-only-partial-approximate.canonical.json",
-      "expected_digest": "8b9e09531cb82eb10d7526d3a92bffc0ada1b6350efc375dedbb77ac735f0c97"
+      "expected_digest": "46a0c26544e9bec1078e1bdb20ffa812e4ed870dcea98d094b915902d7b52e8d"
     },
     {
       "name": "unknown-cost-currency-scope",
@@ -87,6 +87,36 @@
       "original_json": "fixtures/conflicting-current-revisions.json",
       "canonical_utf8": "fixtures/conflicting-current-revisions.canonical.json",
       "expected_digest": "a31db5f79b3a16bbf5d07c4908973e2974d6ac9bf4fbe750a7c53e6f95d3dcbd"
+    },
+    {
+      "name": "partial-token-subtotal",
+      "original_json": "fixtures/partial-token-subtotal.json",
+      "canonical_utf8": "fixtures/partial-token-subtotal.canonical.json",
+      "expected_digest": "92675ee6c67503c99c1c3a69c680a0466683e08f6b240863607e983a8203f383"
+    }
+  ],
+  "export_cases": [
+    {
+      "name": "partial-token-export",
+      "original_json": "fixtures/partial-token-export.json",
+      "canonical_utf8": "fixtures/partial-token-export.canonical.json",
+      "expected_digest": "61fd88dca94e46129f2fe5468407ae1339b77a1184e8b8397134cae3e0d95c04",
+      "accepted": true
+    },
+    {
+      "name": "unknown-export-field",
+      "original_json": "fixtures/unknown-export-field.json",
+      "canonical_utf8": "fixtures/unknown-export-field.canonical.json",
+      "expected_digest": "ec866e07bacfbcc6c10e35bde5e1010a43dcb7af2c90d9c619423c7da6bbad54",
+      "accepted": false
+    }
+  ],
+  "protocol_cases": [
+    {
+      "name": "delivery-scenarios",
+      "original_json": "fixtures/delivery-scenarios.json",
+      "canonical_utf8": "fixtures/delivery-scenarios.canonical.json",
+      "expected_digest": "761585f43c3cd0b9762f8e90c069b2c3b0129dfdc6f372a291200a02abc5f81f"
     }
   ]
 }

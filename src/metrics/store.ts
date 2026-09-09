@@ -10,6 +10,7 @@ import {
   type ModelAttempt,
   STORAGE_VERSION,
 } from './types.js';
+import { MetricsVersionError } from './version-error.js';
 
 export type MetricRecord = Invocation | ModelAttempt;
 
@@ -394,8 +395,6 @@ export class MetricsStore {
   async exportPending(options: ExportPendingOptions): Promise<MetricsExport> {
     if (options.protocolVersion !== 1)
       throw new Error('Unsupported metrics protocol version');
-    if (!options.measurementVersions.includes(1))
-      throw new Error('Unsupported measurement schema version');
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: keeping selection and receipt persistence together avoids a stale manifest.
     // biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeping selection and receipt persistence together avoids a stale manifest.
     return this.withLock(async () => {
@@ -413,17 +412,17 @@ export class MetricsStore {
         (record) =>
           state.dispositions[this.revisionKey(record)] === 'discarded',
       );
+      const requiredVersions = [
+        ...new Set(pending.map((record) => record.measurement_schema_version)),
+      ].sort((a, b) => a - b);
       if (
-        pending.some(
-          (record) =>
-            !options.measurementVersions.includes(
-              record.measurement_schema_version,
-            ),
+        requiredVersions.some(
+          (version) =>
+            version !== 1 || !options.measurementVersions.includes(version),
         )
-      )
-        throw new Error(
-          'Unsupported measurement schema version in pending evidence',
-        );
+      ) {
+        throw new MetricsVersionError(requiredVersions);
+      }
 
       const maxRecords = options.maxRecords ?? 100;
       const maxBytes = options.maxBytes ?? 1_000_000;

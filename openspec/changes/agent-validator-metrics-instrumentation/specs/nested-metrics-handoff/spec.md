@@ -29,6 +29,8 @@ The measurement and record-envelope contracts SHALL use the closed versioned all
 
 Each revision SHALL identify its own `measurement_schema_version` and preserve it in its digest input and every delivery. Producer upgrades SHALL NOT relabel retained evidence. Before issuing an export receipt, Validator SHALL check that the selected pending scope's measurement versions are supported by both producer and caller, reporting `unsupported_version` and the required set if not. It SHALL NOT silently filter unsupported revisions from a seemingly complete scope. The response version set SHALL NOT substitute for per-record interpretation or aggregate conversion.
 
+The incompatibility error SHALL expose the sorted, distinct pending-scope versions as `error.required_measurement_schema_versions`. A caller MAY advertise additional supported versions; that declaration neither expands producer support nor prevents export when the pending scope uses only mutually supported versions.
+
 #### Scenario: Mixed-version pending evidence is exported losslessly
 - **WHEN** a pending scope includes revisions from two supported measurement versions and the consumer declares both
 - **THEN** bounded export preserves each revision's original version and digest, and reports the versions present in its returned batch

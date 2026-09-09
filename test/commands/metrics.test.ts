@@ -32,6 +32,22 @@ test('metrics capabilities is config-independent structured JSON', async () => {
   });
 });
 
+test('metrics export reports required pending versions as structured error data', async () => {
+  const root = path.resolve(import.meta.dir, '../..');
+  const project = await mkdtemp(path.join(os.tmpdir(), 'agent-validator-version-cli-'));
+  try {
+    await mkdir(path.join(project, '.validator'));
+    await writeFile(path.join(project, '.validator/config.yml'), 'log_dir: logs\n');
+    const store = await MetricsStore.open(path.join(project, 'logs'));
+    await store.commit([{...invocation(),diagnostics:[],measurement_schema_version:2}]);
+    const child = Bun.spawn({cmd:[process.execPath,path.join(root,'src/index.ts'),'metrics','export','--project',project,'--consumer','agent-runner','--context','context-a','--protocol-version','1','--measurement-version','1'],cwd:root,stdout:'pipe',stderr:'pipe'});
+    const output = await new Response(child.stdout).text();
+    expect(await child.exited).toBe(1);
+    expect(JSON.parse(output)).toMatchObject({ok:false,error:{code:'unsupported_version',required_measurement_schema_versions:[2]}});
+    expect(JSON.parse(output).receipt).toBeUndefined();
+  } finally { await rm(project,{recursive:true,force:true}); }
+});
+
 test('metrics argument failures remain one structured stdout response', async () => {
   const root = path.resolve(import.meta.dir, '../..');
   const child = Bun.spawn({
@@ -58,12 +74,13 @@ test('metrics export accepts a caller batch budget above the default', async () 
     const store = await MetricsStore.open(path.join(project, 'logs'));
     await store.commit([invocation()]);
     const child = Bun.spawn({
-      cmd: [process.execPath, path.join(root, 'src/index.ts'), 'metrics', 'export', '--project', project, '--consumer', 'agent-runner', '--context', 'context-a', '--protocol-version', '1', '--measurement-version', '1', '--max-bytes', '2000000'],
+      cmd: [process.execPath, path.join(root, 'src/index.ts'), 'metrics', 'export', '--project', project, '--consumer', 'agent-runner', '--context', 'context-a', '--protocol-version', '1', '--measurement-version', '1', '--measurement-version', '2', '--max-bytes', '2000000'],
       cwd: root, stdout: 'pipe', stderr: 'pipe',
     });
     const stdout = await new Response(child.stdout).text();
     expect(await child.exited).toBe(0);
     expect(JSON.parse(stdout).records).toHaveLength(1);
+    expect(JSON.parse(stdout).measurement_schema_versions).toEqual([1]);
   } finally {
     await rm(project, { recursive: true, force: true });
   }

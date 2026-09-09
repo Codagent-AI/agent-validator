@@ -43,6 +43,14 @@ function invocation(id: string, context: string): Invocation {
 }
 
 describe('metrics delivery receipts', () => {
+  test.each([{versions:[1]}, {versions:[1,2]}])('reports the required pending version set before any receipt when caller advertises %j', async ({versions}) => {
+    const logDir = await temporaryLogDir();
+    const store = await MetricsStore.open(logDir);
+    await store.commit([invocation('known', 'context-a'), {...invocation('future','context-a'),measurement_schema_version:2}]);
+    const before = await readFile(path.join(logDir,'.metrics/state.json'),'utf8');
+    await expect(store.exportPending({consumer:'agent-runner',context:'context-a',protocolVersion:1,measurementVersions:[...versions],maxRecords:1})).rejects.toMatchObject({code:'unsupported_version',required_measurement_schema_versions:[1,2]});
+    expect(await readFile(path.join(logDir,'.metrics/state.json'),'utf8')).toBe(before);
+  });
   test('fails closed without modifying populated pre-index development stores', async () => {
     const logDir = await temporaryLogDir();
     const store = await MetricsStore.open(logDir);

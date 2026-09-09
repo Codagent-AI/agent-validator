@@ -3,6 +3,21 @@ import { access, chmod, mkdir, mkdtemp, open, readFile, rm, writeFile } from 'no
 import os from 'node:os';
 import path from 'node:path';
 import { initGitRepo } from './helpers.js';
+import { verifyDigest } from '../../src/metrics/jcs.js';
+import type { ExportRecord, ModelAttempt } from '../../src/metrics/types.js';
+
+// A controlled client owns its imported current heads, separately from delivery history.
+function incorporate(records: ExportRecord[], heads: Record<string, ExportRecord> = {}) {
+  for (const record of records) {
+    expect(verifyDigest(record).valid).toBe(true);
+    expect(record.original_consumer_context).toEqual({consumer:'fixture-client',context_id:'original-launch'});
+    const key = `${record.record_type}:${record.record_id}`;
+    const prior = heads[key];
+    if (!prior || record.revision > prior.revision) heads[key] = record;
+    else if (record.revision === prior.revision) expect(record.digest).toEqual(prior.digest);
+  }
+  return heads;
+}
 
 const roots: string[] = [];
 const cli = path.resolve(import.meta.dir, '../../dist/index.js');
@@ -132,7 +147,11 @@ fs.writeFileSync(${JSON.stringify(ready)},'ready');process.kill(process.pid,'SIG
   expect(first.records.filter((record: {record_type:string})=>record.record_type==='model_attempt').length).toBeGreaterThan(0);
   const saved = path.join(fixture.root,'client-saved.json');
   const handle = await open(saved, 'wx');
-  await handle.writeFile(JSON.stringify(first));
+  const heads = incorporate(first.records);
+  const attempts = Object.values(heads).filter(record=>record.record_type==='model_attempt');
+  expect(attempts).toHaveLength(2);
+  expect(attempts.reduce((sum,record)=>sum+(record.payload as ModelAttempt).tokens.input_total.value!,0)).toBe(12766*2);
+  await handle.writeFile(JSON.stringify({...first, heads}));
   await handle.sync();
   await handle.close();
   const directory = await open(fixture.root, 'r');
@@ -141,6 +160,7 @@ fs.writeFileSync(${JSON.stringify(ready)},'ready');process.kill(process.pid,'SIG
   // The client crash simulation retains its saved records and outstanding receipt.
   const retained = JSON.parse(await readFile(saved,'utf8'));
   expect((await fixture.exported()).records).toEqual(retained.records);
+  expect(incorporate(retained.records, retained.heads)).toEqual(heads);
   const ackArgs = [...fixture.metricArgs('acknowledge'),'--receipt',retained.receipt];
   expect((await fixture.run(ackArgs)).code).toBe(0);
   expect((await fixture.run(ackArgs)).code).toBe(0);

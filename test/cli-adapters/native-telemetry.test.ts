@@ -1,11 +1,36 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { parseCodexTelemetry } from '../../src/cli-adapters/codex.js';
-import { parseClaudeOtelTelemetry, scanOtelBlocks } from '../../src/cli-adapters/claude-otel.js';
+import { createClaudeTelemetryCollector, parseClaudeOtelTelemetry, scanOtelBlocks } from '../../src/cli-adapters/claude-otel.js';
 
 const fixture = (name: string) => readFile(new URL(`./fixtures/native-telemetry/${name}`, import.meta.url), 'utf8');
 
 describe('recorded native telemetry accounting', () => {
+  test('Claude checkpoints prefer cumulative metrics over overlapping request events in either order', async () => {
+    const {metricBlocks, logBlocks} = scanOtelBlocks(await fixture('claude-2.1.261-cache-write.txt'));
+    for (const blocks of [[...metricBlocks,...logBlocks],[...logBlocks,...metricBlocks]]) {
+      const values: number[] = [];
+      const collector = createClaudeTelemetryCollector({}, telemetry => values.push(telemetry.tokens.input_total.value!));
+      collector.write(blocks.join('\n'));
+      collector.flush();
+      expect(values).toEqual([7511,7511]);
+      collector.write(blocks.join('\n'));
+      expect(values).toHaveLength(2);
+    }
+  });
+
+  test.each(['line', 'block'])('Claude bounds retained %s fragments and preserves preceding checkpoints', async kind => {
+    const raw = await fixture('claude-2.1.261-cache-write.txt');
+    const values: number[] = [];
+    const collector = createClaudeTelemetryCollector({}, telemetry => values.push(telemetry.tokens.input_total.value!));
+    collector.write(raw);
+    const prior = [...values];
+    expect(prior.at(-1)).toBe(7511);
+    collector.write(kind==='line' ? 'x'.repeat(1024*1024+1)+'\n' : '{\n'+('  ignored: 0,\n').repeat(100000));
+    collector.write(raw);
+    collector.flush();
+    expect(values).toEqual(prior);
+  });
   test('Codex completion includes cached input in its input total', async () => {
     const telemetry = parseCodexTelemetry(await fixture('codex-0.153.4.jsonl'));
     expect(telemetry.tokens.input_total.value).toBe(12766);

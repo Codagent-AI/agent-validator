@@ -1,5 +1,4 @@
 {
-  "provenance": "Synthetic contract evidence only; not a provider recording, pricing policy, or consumer acceptance result.",
   "records": [
     {
       "adapter": "fixture",
@@ -17,10 +16,41 @@
         "effort": null,
         "provenance": "launch_resolution"
       },
-      "observed_identities": [],
+      "observed_identities": [
+        {
+          "identity_id": "identity-A",
+          "model": "A",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        },
+        {
+          "identity_id": "identity-B",
+          "model": "B",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        }
+      ],
       "observed_identity_availability": {
-        "availability": "unavailable",
-        "reason": "not_reported"
+        "availability": "available",
+        "reason": null
       },
       "tokens": {
         "input_total": {
@@ -64,9 +94,9 @@
           "included_in": null
         },
         "output": {
-          "availability": "available",
+          "availability": "partial",
           "value": 50,
-          "reason": null,
+          "reason": "truncated_source",
           "source": "provider_usage",
           "origin": "observed",
           "precision": "exact",
@@ -94,21 +124,21 @@
           "included_in": null
         },
         "normalized_total": {
-          "availability": "available",
+          "availability": "partial",
           "value": 150,
-          "reason": null,
-          "source": "provider_display",
+          "reason": "truncated_source",
+          "source": "provider_usage",
           "origin": "observed",
-          "precision": "approximate",
+          "precision": "exact",
           "derivation": null,
           "included_in": null
         }
       },
       "provider_native_usage": [],
       "completeness": {
-        "collection": "partial",
+        "collection": "complete",
         "canonical_fields": "partial",
-        "normalized_total": "complete",
+        "normalized_total": "partial",
         "per_model_attribution": "unavailable",
         "history": "complete"
       },
@@ -148,15 +178,7 @@
         "started_at": "2026-09-06T12:00:00.000Z",
         "ended_at": "2026-09-06T12:00:01.000Z"
       },
-      "outcome": "passed",
-      "review_context": {
-        "gate": "fixture-review",
-        "slot": 2
-      },
-      "consumer_context": {
-        "consumer": "runner",
-        "context_id": "original-context"
-      }
+      "outcome": "passed"
     }
   ],
   "expected": {
@@ -173,9 +195,12 @@
     "normalized_total": {
       "availability": "partial",
       "value": 150,
-      "fidelity": "approximate",
+      "fidelity": "exact",
       "coverage": {
-        "complete": false
+        "complete": false,
+        "partial_attempt_ids": [
+          "attempt-fixture"
+        ]
       }
     },
     "selected_payload": {
@@ -194,10 +219,41 @@
         "effort": null,
         "provenance": "launch_resolution"
       },
-      "observed_identities": [],
+      "observed_identities": [
+        {
+          "identity_id": "identity-A",
+          "model": "A",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        },
+        {
+          "identity_id": "identity-B",
+          "model": "B",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        }
+      ],
       "observed_identity_availability": {
-        "availability": "unavailable",
-        "reason": "not_reported"
+        "availability": "available",
+        "reason": null
       },
       "tokens": {
         "input_total": {
@@ -241,9 +297,9 @@
           "included_in": null
         },
         "output": {
-          "availability": "available",
+          "availability": "partial",
           "value": 50,
-          "reason": null,
+          "reason": "truncated_source",
           "source": "provider_usage",
           "origin": "observed",
           "precision": "exact",
@@ -271,21 +327,21 @@
           "included_in": null
         },
         "normalized_total": {
-          "availability": "available",
+          "availability": "partial",
           "value": 150,
-          "reason": null,
-          "source": "provider_display",
+          "reason": "truncated_source",
+          "source": "provider_usage",
           "origin": "observed",
-          "precision": "approximate",
+          "precision": "exact",
           "derivation": null,
           "included_in": null
         }
       },
       "provider_native_usage": [],
       "completeness": {
-        "collection": "partial",
+        "collection": "complete",
         "canonical_fields": "partial",
-        "normalized_total": "complete",
+        "normalized_total": "partial",
         "per_model_attribution": "unavailable",
         "history": "complete"
       },
@@ -325,15 +381,7 @@
         "started_at": "2026-09-06T12:00:00.000Z",
         "ended_at": "2026-09-06T12:00:01.000Z"
       },
-      "outcome": "passed",
-      "review_context": {
-        "gate": "fixture-review",
-        "slot": 2
-      },
-      "consumer_context": {
-        "consumer": "runner",
-        "context_id": "original-context"
-      }
+      "outcome": "passed"
     }
   }
 }

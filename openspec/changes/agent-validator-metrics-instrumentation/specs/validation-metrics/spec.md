@@ -266,6 +266,14 @@ Validator SHALL derive invocation and session aggregates from distinct underlyin
 
 Each aggregate token measurement SHALL carry a typed availability envelope containing the known subtotal, applicable coverage, fidelity, and reasons for unavailable or incomplete values. Coverage SHALL make the reporting and missing attempt population explicit for that measurement. A complete total SHALL require complete applicable history and sufficiently complete values for the relevant attempts; an incomplete population SHALL retain its known subtotal without treating missing values as zero. Confirmed zero dispatch SHALL be distinguishable from an unknown population.
 
+Token fields and their aggregates SHALL distinguish `available` (complete value), `partial` (known numeric subtotal with a nonempty incompleteness reason), and `unavailable` (no known value). Partial values SHALL retain their own origin, precision, and accounting relationships independently of other fields. Aggregate coverage SHALL identify partial and missing attempt IDs, including unsupported or conflicting current heads as missing contributions. Partial subtotals SHALL survive immutable replacement persistence, snapshot publication, and consumer export without being relabeled as complete totals.
+
+#### Scenario: One token category has only a known subtotal
+- **WHEN** a source establishes complete input usage but only a partial output subtotal
+- **THEN** input remains independently available and output retains its numeric subtotal and incompleteness reason with partial availability
+- **AND** the output aggregate includes the subtotal, identifies the contributing partial attempt, and does not claim complete coverage
+- **AND** snapshot and consumer export preserve the field envelope unchanged
+
 Identity groupings SHALL retain unknown and unallocated attribution without guessing model membership. Replayed copies of the same record/revision SHALL not add consumption. Conflicting evidence for the same identity/revision SHALL produce a diagnostic rather than an arbitrary sum or silent choice. Legitimate newer revisions update the same attempt's derived views. Attempt work durations MAY be summarized as work duration, but summed overlapping durations MUST NOT be presented as invocation/session elapsed time.
 
 Aggregation SHALL select each attempt's latest revision once, not its latest compatible older revision. This release SHALL support measurement schema v1 only and SHALL NOT enable cross-version aggregation through a caller-supplied compatibility list, configuration, or version negotiation. Unsupported or uninterpretable current heads SHALL remain visible as coverage limitations rather than contributing values to v1 totals. Root aggregates SHALL identify their own measurement schema version. Preserving an older record SHALL NOT require altering that record to calculate an aggregate.

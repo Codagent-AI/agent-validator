@@ -39,6 +39,11 @@ const available = z
   .strict();
 const tokenValue = z.union([
   available.extend({ value: exactInteger }),
+  available.extend({
+    availability: z.literal('partial'),
+    value: exactInteger,
+    reason: nonEmpty,
+  }),
   unavailable,
 ]);
 const stringEvidence = z.union([
@@ -254,7 +259,7 @@ export const modelAttemptSchema = z
     }
     for (const [name, token] of Object.entries(attempt.tokens))
       if (
-        token.availability === 'available' &&
+        token.availability !== 'unavailable' &&
         token.origin === 'derived' &&
         !token.derivation
       )

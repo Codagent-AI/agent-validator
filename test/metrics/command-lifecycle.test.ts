@@ -77,12 +77,12 @@ describe('command metrics lifecycle', () => {
     const unavailable = createUnavailableTelemetry('fixture');
     const prepared = await lifecycle.prepareAttempt({ adapter: 'fixture', gate: 'review', slot: 1, telemetry: unavailable });
     const partial = createUnavailableTelemetry('fixture');
-    partial.tokens.output = observedMeasurement(7, 'provider_event');
+    partial.tokens.output = { ...observedMeasurement(7, 'provider_event'), availability: 'partial', reason: 'truncated_source' } as typeof partial.tokens.output;
     partial.completeness.collection = 'partial';
     await lifecycle.observeAttempt(prepared, partial);
     const store = await MetricsStore.openExisting(logDir);
     const intermediate = await store!.exportPending({ consumer: 'runner', context: 'partial', protocolVersion: 1, measurementVersions: [1] });
-    expect(intermediate.records.filter((record) => record.record_type === 'model_attempt').at(-1)?.payload).toMatchObject({ attempt_id: prepared.attempt_id, revision: 2, lifecycle: { state: 'running' }, tokens: { output: { value: 7 } } });
+    expect(intermediate.records.filter((record) => record.record_type === 'model_attempt').at(-1)?.payload).toMatchObject({ attempt_id: prepared.attempt_id, revision: 2, lifecycle: { state: 'running' }, tokens: { output: { availability: 'partial', value: 7, reason: 'truncated_source' } } });
     await lifecycle.finalizeAttempt(prepared, unavailable, 'error');
     partial.tokens.output = observedMeasurement(999, 'provider_event');
     await lifecycle.observeAttempt(prepared, partial);
@@ -90,6 +90,7 @@ describe('command metrics lifecycle', () => {
     const snapshot = JSON.parse(await readFile(path.join(logDir, 'validation-metrics.json'), 'utf8'));
     expect(snapshot.attempts).toHaveLength(1);
     expect(snapshot.attempts[0]).toMatchObject({ revision: 3, lifecycle: { state: 'failed' }, tokens: { output: { value: 7 } }, completeness: { collection: 'partial' } });
+    expect(snapshot.aggregates.current_invocation.tokens.output).toMatchObject({ availability: 'partial', value: 7, coverage: { partial_attempt_ids: [prepared.attempt_id], missing_attempt_ids: [], complete: false } });
   });
   test('publishes a terminal zero-dispatch invocation owned by this command', async () => {
     const logDir = await temporaryLogDir();

@@ -130,6 +130,37 @@ describe('RFC 8785 canonical record digests', () => {
 });
 
 describe('closed measurement contracts', () => {
+  test('published and runtime token envelopes reject contradictory availability and unsafe subtotals', async () => {
+    const schema = fromJSONSchema(JSON.parse(await readFile(new URL('../../contracts/model-metrics/v1/model-attempt.schema.json', import.meta.url), 'utf8')));
+    for (const value of [
+      { ...available(12), availability: 'partial', reason: null },
+      { ...available(12), availability: 'partial', reason: 'truncated', value: null },
+      { ...available(12), availability: 'partial', reason: 'truncated', value: Number.MAX_SAFE_INTEGER + 1 },
+      { ...available(12), availability: 'unavailable' },
+      { ...unavailable(), availability: 'available' },
+    ]) {
+      const record = { ...attempt(), tokens: { ...attempt().tokens, output: value } };
+      expect(validateAttempt(record).success).toBe(false);
+      expect(schema.safeParse(record).success).toBe(false);
+    }
+  });
+  test('partial token fields preserve exact known subtotals independently of collection and other fields', async () => {
+    const source = attempt();
+    const partial = { ...available(12), availability: 'partial' as const, reason: 'truncated_source' };
+    const record = { ...source, tokens: { ...source.tokens, output: partial, normalized_total: partial } };
+    expect(validateAttempt(record).success).toBe(true);
+    const schema = fromJSONSchema(JSON.parse(await readFile(new URL('../../contracts/model-metrics/v1/model-attempt.schema.json', import.meta.url), 'utf8')));
+    expect(schema.safeParse(record).success).toBe(true);
+    const aggregate = reduceAttempts([record]);
+    expect(aggregate.tokens.output).toMatchObject({
+      availability: 'partial', value: 12, fidelity: 'exact', reason: 'truncated_source',
+      coverage: { complete: false, reporting_attempt_count: 1, partial_attempt_ids: ['attempt-1'] },
+    });
+    expect(aggregate.tokens.input_total.availability).toBe('available');
+    const exported = projectExport([record], {consumer:'runner',context_id:'fixture'}).records[0]!;
+    expect(validateExportRecord(exported).success).toBe(true);
+    expect(exported.payload).toEqual(record);
+  });
   test('replays pinned semantic replacement, allocation-cost and unsupported-version fixtures', async () => {
     const directory = path.resolve(import.meta.dir, '../../contracts/model-metrics/v1');
     const publishedSchema = fromJSONSchema(JSON.parse(await readFile(path.join(directory, 'model-attempt.schema.json'), 'utf8')));
@@ -138,6 +169,7 @@ describe('closed measurement contracts', () => {
       'two-model-allocation-cost', 'overlapping-cost-scopes', 'prepared-terminal-replacement', 'unsupported-current-head',
       'requested-only-partial-approximate', 'unknown-cost-currency-scope',
       'stable-allocation-reorder', 'expanded-usage-old-cost', 'conflicting-current-revisions',
+      'partial-token-subtotal',
     ]);
     for (const entry of manifest.semantic_cases) {
       const fixture = JSON.parse(await readFile(path.join(directory, entry.original_json), 'utf8'));
@@ -161,6 +193,14 @@ describe('closed measurement contracts', () => {
         expect(projected.payload).toEqual(record);
         expect(validateExportRecord(projected).success).toBe(true);
       }
+    }
+    for (const entry of manifest.export_cases) {
+      const record = JSON.parse(await readFile(path.join(directory, entry.original_json), 'utf8'));
+      const canonical = await readFile(path.join(directory, entry.canonical_utf8), 'utf8');
+      expect(canonicalizeJson(record)).toBe(canonical.trimEnd());
+      expect(createDigest(record).value).toBe(entry.expected_digest);
+      expect(record.digest.value).toBe(entry.expected_digest);
+      expect(validateExportRecord(record).success).toBe(entry.accepted);
     }
   });
   test('ships pinned v1 schema and compatibility fixture assets', async () => {
@@ -209,6 +249,15 @@ describe('closed measurement contracts', () => {
 });
 
 describe('accounting and deterministic projections', () => {
+  test('conflicting heads cannot contribute arbitrary durations', () => {
+    const first = attempt();
+    const conflict = attempt({ lifecycle: { ...first.lifecycle, ended_at: '2026-08-01T12:00:00.000Z' } });
+    for (const records of [[first, conflict], [conflict, first]]) {
+      const aggregate = reduceAttempts(records);
+      expect(aggregate.work_duration_ms).toBe(0);
+      expect(aggregate.elapsed_time_ms).toBeNull();
+    }
+  });
   test('conflicting current revisions cannot choose a numeric contribution by array order', () => {
     const first = attempt();
     const conflict = attempt({ tokens: { ...first.tokens, normalized_total: available(999) } });
@@ -216,7 +265,7 @@ describe('accounting and deterministic projections', () => {
     for (const records of [[first, conflict, unrelated], [conflict, first, unrelated]]) {
       const aggregate = reduceAttempts(records);
       expect(aggregate.tokens.normalized_total).toMatchObject({
-        value: 130, availability: 'unavailable',
+        value: 130, availability: 'partial',
         coverage: { eligible_attempt_count: 2, reporting_attempt_count: 1, complete: false },
       });
       expect(aggregate.diagnostics).toContain('conflicting_revision:attempt-1:1');
@@ -231,6 +280,7 @@ describe('accounting and deterministic projections', () => {
   test('unsupported heads remain in the explicit missing aggregate population', () => {
     const aggregate = reduceAttempts([attempt(), attempt({ attempt_id: 'future', measurement_schema_version: 99 })]);
     expect(aggregate.tokens.input_total.coverage).toEqual({
+      partial_attempt_ids: [], missing_attempt_ids: ['future'],
       eligible_attempt_count: 2, reporting_attempt_count: 1, complete: false,
     });
   });
@@ -255,13 +305,13 @@ describe('accounting and deterministic projections', () => {
     const reduced = reduceAttempts([attempt(), attempt({ attempt_id: 'attempt-2', tokens: { ...attempt().tokens, cache_read: unavailable(), normalized_total: unavailable('overlap_unknown') } })]);
     expect(reduced.tokens.cache_read.value).toBe(40);
     expect(reduced.tokens.cache_read.coverage.complete).toBe(false);
-    expect(reduced.tokens.normalized_total.availability).toBe('unavailable');
+    expect(reduced.tokens.normalized_total.availability).toBe('partial');
   });
 
   test('does not present partial dispatch collection as a complete aggregate', () => {
     const reduced = reduceAttempts([attempt({ completeness: { ...attempt().completeness, collection: 'partial' } })]);
     expect(reduced.tokens.normalized_total.value).toBe(130);
-    expect(reduced.tokens.normalized_total.availability).toBe('unavailable');
+    expect(reduced.tokens.normalized_total.availability).toBe('partial');
     expect(reduced.tokens.normalized_total.coverage.complete).toBe(false);
   });
 
@@ -290,7 +340,7 @@ describe('accounting and deterministic projections', () => {
     ]);
     expect(reduced.attempt_count).toBe(1);
     expect(reduced.tokens.input_total).toMatchObject({
-      value: 100, availability: 'unavailable',
+      value: 100, availability: 'partial',
       reason: 'incompatible_measurement_version', coverage: { complete: false },
     });
     expect(reduced.diagnostics).toContain('incompatible_measurement_version:future:2');

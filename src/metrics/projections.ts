@@ -56,28 +56,40 @@ export function selectLatestHeads(records: ModelAttempt[]): {
 function aggregateValue(
   records: ModelAttempt[],
   field: keyof TokenMeasurements,
-  eligible: number,
+  eligible: ModelAttempt[],
   limitation: string | null,
 ): AggregateValue {
-  const values = records
+  const reporting = records.filter(
+    (item) => item.tokens[field].availability !== 'unavailable',
+  );
+  const values = reporting
     .map((item) => item.tokens[field])
-    .filter((item) => item.availability === 'available');
+    .filter((item) => item.availability !== 'unavailable');
+  const partialAttemptIds = reporting
+    .filter(
+      (item) =>
+        item.tokens[field].availability === 'partial' ||
+        item.completeness.history !== 'complete' ||
+        item.completeness.collection !== 'complete',
+    )
+    .map((item) => item.attempt_id);
+  const reportingIds = new Set(reporting.map((item) => item.attempt_id));
+  const missingAttemptIds = eligible
+    .filter((item) => !reportingIds.has(item.attempt_id))
+    .map((item) => item.attempt_id);
   const value = values.reduce((total, item) => total + item.value, 0);
   const complete =
     !limitation &&
-    values.length === eligible &&
-    records.every(
-      (item) =>
-        item.completeness.history === 'complete' &&
-        item.completeness.collection === 'complete',
-    );
+    values.length === eligible.length &&
+    partialAttemptIds.length === 0;
   let precision: AggregateValue['fidelity'] = null;
   if (values.some((item) => item.precision === 'approximate')) {
     precision = 'approximate';
   } else if (values.length > 0) {
     precision = 'exact';
   }
-  let availability: AggregateValue['availability'] = 'unavailable';
+  let availability: AggregateValue['availability'] =
+    values.length > 0 ? 'partial' : 'unavailable';
   let reason: string | null = 'unavailable_for_all_attempts';
   if (values.length > 0 && complete) {
     availability = 'available';
@@ -87,13 +99,25 @@ function aggregateValue(
   } else if (values.length > 0) {
     reason = 'incomplete_coverage';
   }
+  const partialReasons = values
+    .filter((item) => item.availability === 'partial')
+    .map((item) => item.reason);
+  if (partialReasons.length > 0) {
+    reason = [
+      ...new Set([...partialReasons, ...(limitation ? [limitation] : [])]),
+    ]
+      .sort()
+      .join(';');
+  }
   return {
     availability,
     value: values.length > 0 ? value : null,
     reason,
     coverage: {
-      eligible_attempt_count: eligible,
+      eligible_attempt_count: eligible.length,
       reporting_attempt_count: values.length,
+      partial_attempt_ids: partialAttemptIds,
+      missing_attempt_ids: missingAttemptIds,
       complete,
     },
     fidelity: precision,
@@ -119,21 +143,23 @@ export function reduceAttempts(records: ModelAttempt[]): AttemptAggregate {
   const tokens = Object.fromEntries(
     tokenNames.map((name) => [
       name,
-      aggregateValue(unambiguous, name, selected.records.length, limitation),
+      aggregateValue(unambiguous, name, selected.records, limitation),
     ]),
   ) as Record<keyof TokenMeasurements, AggregateValue>;
-  const durations = compatible.map((item) =>
+  const durations = unambiguous.map((item) =>
     item.lifecycle.started_at && item.lifecycle.ended_at
       ? Date.parse(item.lifecycle.ended_at) -
         Date.parse(item.lifecycle.started_at)
       : null,
   );
   const completeTimes =
-    compatible.length > 0 && durations.every((duration) => duration !== null);
-  const starts = compatible.map((item) =>
+    !limitation &&
+    unambiguous.length > 0 &&
+    durations.every((duration) => duration !== null);
+  const starts = unambiguous.map((item) =>
     item.lifecycle.started_at ? Date.parse(item.lifecycle.started_at) : NaN,
   );
-  const ends = compatible.map((item) =>
+  const ends = unambiguous.map((item) =>
     item.lifecycle.ended_at ? Date.parse(item.lifecycle.ended_at) : NaN,
   );
   return {

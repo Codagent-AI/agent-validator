@@ -12,6 +12,7 @@ import {
 } from '../plugin/claude-cli.js';
 import {
   buildOtelEnv,
+  createClaudeTelemetryCollector,
   parseClaudeOtelTelemetry,
   safeExtractOtelMetrics,
 } from './claude-otel.js';
@@ -265,6 +266,10 @@ export class ClaudeAdapter implements CLIAdapter {
       ...thinkingEnv,
     };
 
+    const collector = createClaudeTelemetryCollector(
+      { requestedModel: opts.model, thinkingBudget: opts.thinkingBudget },
+      (value) => opts.onTelemetry?.(value),
+    );
     const raw = await this.streamCommand({
       command: 'claude',
       args,
@@ -272,13 +277,16 @@ export class ClaudeAdapter implements CLIAdapter {
       timeoutMs: opts.timeoutMs,
       cleanup,
       env: execEnv,
-      onCollected: (stdout) =>
+      onStdout: collector.write,
+      onCollected: (stdout) => {
+        collector.flush();
         opts.onTelemetry?.(
           parseClaudeOtelTelemetry(stdout, {
             requestedModel: opts.model,
             thinkingBudget: opts.thinkingBudget,
           }),
-        ),
+        );
+      },
     });
     const cleaned = safeExtractOtelMetrics(raw, opts.onOutput);
     opts.onOutput?.(cleaned);

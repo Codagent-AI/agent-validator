@@ -6,6 +6,16 @@ Consume trustworthy workflow measurements through Agent Runner, including Valida
 
 ## Current State
 
+### Implementation checkpoint — assumption resolution, 2026-09-08
+
+The producer implementation and executable fixtures now exist. The pre-implementation status and sibling observations below are historical; independent producer acceptance and actual companion integration are still outstanding. Pin and review `contracts/model-metrics/v1/` in the Validator repository, including `fixture-manifest.json`, the semantic/export golden records, and `fixtures/delivery-scenarios.json`. The protocol scenarios use opaque receipt labels and cover replay, overlapping/stale receipts, bounded revision batches, version rejection before receipt creation, and explicit discard gaps. Validator's built-CLI regression additionally exercises interrupted closure and both client save/ack crash boundaries; this does not test the real Runner/Evals implementations.
+
+The initial unreleased v1 uses `availability: available | partial | unavailable` for token envelopes, with `value` as the complete value/known subtotal or null. Partial values retain reasons and precision. Aggregate coverage includes `partial_attempt_ids` and `missing_attempt_ids`; unsupported/conflicting heads cannot become numeric contributions. Wire field names are defined by the executable contracts rather than the conceptual design sketch. Review the exact supported payload before freezing the companion schema; do not flatten partial evidence to zero or complete totals.
+
+This producer supports measurement v1 only. Future conversion/aggregation requires a separately reviewed extension. Export checks the whole pending scope against producer and caller support before issuing a receipt; incompatibility returns `error.required_measurement_schema_versions`. A caller may advertise extra versions without enabling unsupported producer semantics. The actual batch lists only versions it contains. Recheck this targeted contract and execute its pinned fixtures during the separately authorized companion change; no unconditional interoperability signoff is claimed.
+
+### Historical definition-review context
+
 The user approved this cross-product architecture: Validator owns measurement, Runner owns workflow attribution/consolidation, Evals owns evaluation/pricing. The proposal, all four specifications, and `design.md` are written. The design now defines concrete measurement envelopes, CLI/record contracts, independent versions, and receipt/recovery semantics. Executable JSON Schemas, shared fixture files, and the producer/integrations are not implemented yet. The approved handoff uses Validator CLI export and receipt acknowledgment, replacing the earlier JSONL-sink proposal.
 
 The user approved companion contract reviews now, resolving consequential feedback with the user before editing the approved contract, and accepting integrations in the order Validator → Runner → Evals. Implementation can overlap after contracts and fixtures are agreed. This review is read-only: do not modify files in any repository. Evals code changes belong to a separately authorized companion change. Do not modify the stopped evaluation artifact or regenerate its metrics.

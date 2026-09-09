@@ -8,6 +8,7 @@ import {
   MEASUREMENT_SCHEMA_VERSION,
   PROTOCOL_VERSION,
 } from '../metrics/types.js';
+import { MetricsVersionError } from '../metrics/version-error.js';
 
 const limits = {
   default_inventory_count: 100,
@@ -242,9 +243,9 @@ function versions(values: string[] | undefined): number[] {
   const result = (values ?? []).map(Number);
   if (
     result.length === 0 ||
-    result.some((value) => value !== MEASUREMENT_SCHEMA_VERSION)
+    result.some((value) => !Number.isSafeInteger(value) || value < 1)
   )
-    throw new Error('Unsupported measurement schema version');
+    throw new Error('Invalid supported measurement schema versions');
   return result;
 }
 function bounded(
@@ -314,7 +315,17 @@ function fail(operation: string, error: unknown): void {
     operation,
     protocol_version: PROTOCOL_VERSION,
     diagnostics: [],
-    error: { code, message, retryable: code === 'store_busy' },
+    error: {
+      code,
+      message,
+      retryable: code === 'store_busy',
+      ...(error instanceof MetricsVersionError
+        ? {
+            required_measurement_schema_versions:
+              error.required_measurement_schema_versions,
+          }
+        : {}),
+    },
   });
   process.exitCode = 1;
 }

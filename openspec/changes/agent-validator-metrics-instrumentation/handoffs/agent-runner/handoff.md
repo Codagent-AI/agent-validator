@@ -6,6 +6,16 @@ Make Runner the lossless workflow-attribution and consolidation boundary for mod
 
 ## Current State
 
+### Implementation checkpoint — assumption resolution, 2026-09-08
+
+The producer implementation and executable fixtures now exist. The pre-implementation status and sibling observations below are historical; independent producer acceptance and actual companion integration are still outstanding. Pin and review `contracts/model-metrics/v1/` in the Validator repository, including `fixture-manifest.json`, the semantic/export golden records, and `fixtures/delivery-scenarios.json`. The protocol scenarios use opaque receipt labels and cover replay, overlapping/stale receipts, bounded revision batches, version rejection before receipt creation, and explicit discard gaps. Validator's built-CLI regression additionally exercises interrupted closure and both client save/ack crash boundaries; this does not test the real Runner/Evals implementations.
+
+The initial unreleased v1 uses `availability: available | partial | unavailable` for token envelopes, with `value` as the complete value/known subtotal or null. Partial values retain reasons and precision. Aggregate coverage includes `partial_attempt_ids` and `missing_attempt_ids`; unsupported/conflicting heads cannot become numeric contributions. Wire field names are defined by the executable contracts rather than the conceptual design sketch. Review the exact supported payload before freezing the companion schema; do not flatten partial evidence to zero or complete totals.
+
+This producer supports measurement v1 only. Future conversion/aggregation requires a separately reviewed extension. Export checks the whole pending scope against producer and caller support before issuing a receipt; incompatibility returns `error.required_measurement_schema_versions`. A caller may advertise extra versions without enabling unsupported producer semantics. The actual batch lists only versions it contains. Recheck this targeted contract and execute its pinned fixtures during the separately authorized companion change; no unconditional interoperability signoff is claimed.
+
+### Historical definition-review context
+
 The user approved the overall architecture, all four specification capabilities, and the technical design. `design.md` and the specifications now define concrete CLI operations, version fields, record revisions, receipt/discard semantics, and recovery boundaries. The handoff uses a Validator-owned CLI export/acknowledgment protocol replacing the earlier JSONL-sink proposal. No Validator telemetry implementation, executable JSON Schema/fixture package, or end-to-end integration is complete. This brief requests review of the written integration contract before implementation, not an assertion that the producer is ready.
 
 All planning for the current Validator change remains under `/Users/paul/codagent/agent-validator/openspec/changes/agent-validator-metrics-instrumentation/`. This review is read-only: do not modify files in any repository. Return actionable findings and recommended resolutions to the lead. Runner implementation belongs in a separately authorized companion change. Consequential review findings must be discussed with the user before revising the approved contract.

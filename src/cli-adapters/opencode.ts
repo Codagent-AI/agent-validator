@@ -192,12 +192,21 @@ export function parseOpenCodeTelemetry(
   raw: string,
   opts: { model?: string; thinkingBudget?: string } = {},
 ): AdapterTelemetry {
+  return createOpenCodeTelemetry(
+    parseOpenCodeJsonl(raw, undefined, false).usage,
+    opts,
+  );
+}
+
+function createOpenCodeTelemetry(
+  usage: OpenCodeUsage,
+  opts: { model?: string; thinkingBudget?: string },
+): AdapterTelemetry {
   const telemetry = createUnavailableTelemetry('opencode', {
     requestedModel: opts.model,
     requestedEffort: opts.thinkingBudget,
     reason: 'opencode_usage_not_observed',
   });
-  const { usage } = parseOpenCodeJsonl(raw, undefined, false);
   const source = 'provider_event' as const;
   const fields: Array<
     [
@@ -214,14 +223,7 @@ export function parseOpenCodeTelemetry(
   for (const [usageKey, tokenKey] of fields) {
     const value = usage[usageKey];
     if (typeof value !== 'number') continue;
-    telemetry.tokens[tokenKey] = observedMeasurement(
-      value,
-      source,
-      'exact',
-      tokenKey === 'cache_read' || tokenKey === 'cache_write'
-        ? ['input_total']
-        : null,
-    );
+    telemetry.tokens[tokenKey] = observedMeasurement(value, source);
     telemetry.provider_native_usage.push({
       source,
       name: `opencode_${usageKey}`,
@@ -238,6 +240,7 @@ export function parseOpenCodeTelemetry(
     value: 'opencode-jsonl-step_finish',
     reason: null,
   };
+  telemetry.provenance.adapter_mapping_version = 'opencode-accounting-v2';
   return telemetry;
 }
 
@@ -373,6 +376,10 @@ export class OpenCodeAdapter implements CLIAdapter {
           if (!event) return;
           const text = processOpenCodeEvent(event, streamingUsage);
           if (text !== undefined) opts.onOutput?.(text);
+          if (event.type === 'step_finish') {
+            fallbackTelemetry = createOpenCodeTelemetry(streamingUsage, opts);
+            opts.onTelemetry?.(fallbackTelemetry);
+          }
         });
         const raw = await this.streamCommand({
           command: bin,
