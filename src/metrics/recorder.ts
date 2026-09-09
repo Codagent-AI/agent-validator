@@ -192,7 +192,7 @@ export class MetricsRecorder {
     destination: string,
     snapshot: unknown,
   ): Promise<void> {
-    const temporary = `${destination}.${crypto.randomUUID()}.tmp`;
+    const temporary = `${destination}.${randomUUID()}.tmp`;
     await this.snapshotFilesystem.mkdir(path.dirname(destination), {
       recursive: true,
     });

@@ -97,6 +97,26 @@ describe('durable metrics recorder', () => {
     expect(snapshot.snapshot_id).toBe(publication.snapshot_id);
   });
 
+  test('publishes a snapshot without the global Web Crypto API', async () => {
+    const logDir = await temporaryLogDir();
+    const recorder = await MetricsRecorder.open(logDir);
+    const session = await recorder.createSession();
+    await recorder.recordInvocation(invocation('invocation-1', session.session_id));
+
+    const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+    Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined });
+    try {
+      const publication = await recorder.publishSnapshot(session.session_id, 'invocation-1');
+      expect(publication).toMatchObject({ state: 'published', reasons: [] });
+      const snapshot = JSON.parse(await readFile(path.join(logDir, 'validation-metrics.json'), 'utf8'));
+      expect(snapshot.snapshot_id).toBe(publication.snapshot_id);
+      expect(snapshot.current_invocation_id).toBe('invocation-1');
+    } finally {
+      if (cryptoDescriptor) Object.defineProperty(globalThis, 'crypto', cryptoDescriptor);
+      else Reflect.deleteProperty(globalThis, 'crypto');
+    }
+  });
+
   test('recovers a dead owner without inventing completion time, usage, or success', async () => {
     const logDir = await temporaryLogDir();
     const recorder = await MetricsRecorder.open(logDir);
