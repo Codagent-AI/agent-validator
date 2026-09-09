@@ -9,6 +9,7 @@ import { gitStdout, runGit } from '../utils/git.js';
 import {
   appendRecord,
   buildTrustRecord,
+  computeSnapshotTreeSha,
   computeTreeSha,
   findCommittedSnapshotBase,
   isTrusted,
@@ -95,9 +96,37 @@ async function getParents(commit: string): Promise<string[]> {
   return line.split(/\s+/).slice(1);
 }
 
-async function parentTrusted(parent: string): Promise<boolean> {
+async function trustedParentBaseline(parent: string): Promise<string | null> {
   const tree = await computeTreeSha(parent);
-  return (await isTrusted(parent, tree)).trusted;
+  if ((await isTrusted(parent, tree)).trusted) return parent;
+
+  const snapshot = await findCommittedSnapshotBase(tree);
+  if (!snapshot) return null;
+
+  // Keep the validated untracked files in the merge baseline, so their omission
+  // remains a validation delta. Attach the full snapshot to this parent to
+  // preserve merge ancestry without moving any branch or worktree state.
+  const snapshotTree = await computeSnapshotTreeSha(snapshot);
+  return gitStdout(
+    [
+      'commit-tree',
+      snapshotTree,
+      '-p',
+      parent,
+      '-m',
+      'Validator merge baseline',
+    ],
+    {
+      env: {
+        GIT_AUTHOR_NAME: 'Agent Validator',
+        GIT_AUTHOR_EMAIL: 'validator@localhost',
+        GIT_COMMITTER_NAME: 'Agent Validator',
+        GIT_COMMITTER_EMAIL: 'validator@localhost',
+        GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z',
+        GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z',
+      },
+    },
+  );
 }
 
 async function mergeTree(
@@ -202,23 +231,23 @@ async function analyzeReconciliation(): Promise<ReconciliationAnalysis> {
   }
 
   const [parent1, parent2] = parents as [string, string];
-  const [parent1Trusted, parent2Trusted] = await Promise.all([
-    parentTrusted(parent1),
-    parentTrusted(parent2),
+  const [baseline1, baseline2] = await Promise.all([
+    trustedParentBaseline(parent1),
+    trustedParentBaseline(parent2),
   ]);
 
-  if (!(parent1Trusted || parent2Trusted)) {
+  if (!(baseline1 || baseline2)) {
     return { kind: 'continue' };
   }
 
-  if (parent1Trusted !== parent2Trusted) {
+  if (!(baseline1 && baseline2)) {
     return {
       kind: 'continue',
-      changeOptions: { fixBase: parent1Trusted ? parent1 : parent2 },
+      changeOptions: { fixBase: (baseline1 ?? baseline2) as string },
     };
   }
 
-  const syntheticTree = await mergeTree(parent1, parent2);
+  const syntheticTree = await mergeTree(baseline1, baseline2);
   if (!syntheticTree) {
     return { kind: 'continue' };
   }

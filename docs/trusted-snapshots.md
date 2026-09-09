@@ -98,6 +98,13 @@ trusted:
 - If exactly one parent is trusted, validation is scoped from the trusted parent.
 - Octopus merges are not auto-promoted; they fall back to normal validation.
 
+Parent reconciliation also recognizes validated snapshots whose only differences
+from the parent are omitted untracked files. The full validated snapshot is used
+in the merge baseline, so those omissions and any merge-resolution changes stay
+in the validation diff without repeating already validated branch changes. This
+does not mark the parent trusted: changed tracked content or file modes, missing
+snapshot objects, and partial-validation records do not qualify for this reuse.
+
 This catches manual merge-resolution changes without revalidating both trusted
 parents.
 

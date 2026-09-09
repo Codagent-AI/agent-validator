@@ -267,6 +267,73 @@ describe("detect trusted snapshots", () => {
 		expect((await runDetect(worktree)).exitCode).toBe(2);
 	}, 30000);
 
+	it("reuses both merge parents while retaining omitted snapshot files and resolution changes", async () => {
+		const repo = await createRepo();
+		const worktree = await fs.mkdtemp(path.join(os.tmpdir(), "validator-linked-"));
+		tempDirs.push(worktree);
+		await git(["worktree", "add", "-b", "feature", worktree, "HEAD"], repo);
+		await fs.writeFile(path.join(repo, "dev.ts"), "export const dev = true;\n");
+		await git(["add", "dev.ts"], repo);
+		await git(["commit", "-m", "dev change"], repo);
+		expect((await runValidator(repo, ["run"])).exitCode).toBe(0);
+		await fs.writeFile(path.join(worktree, "feature.ts"), "export const feature = true;\n");
+		await fs.writeFile(path.join(worktree, "handoff.md"), "Validated notes\n");
+		expect((await runValidator(worktree, ["run"])).exitCode).toBe(0);
+		await git(["add", "feature.ts"], worktree);
+		await git(["commit", "-m", "feature change"], worktree);
+		await git(["merge", "--no-ff", "feature", "-m", "merge"], repo);
+		const ledger = path.join(repo, ".git", "agent-validator", "trusted-snapshots.jsonl");
+		const before = await fs.readFile(ledger, "utf-8");
+		const result = await runDetect(repo);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Found 1 changed files:");
+		expect(result.stdout).toContain("  - handoff.md");
+		expect(result.stdout).not.toContain("  - feature.ts");
+		expect(result.stdout).not.toContain("  - dev.ts");
+		expect(await fs.readFile(ledger, "utf-8")).toBe(before);
+
+		await fs.writeFile(path.join(repo, "resolution.ts"), "export const resolution = true;\n");
+		await git(["add", "resolution.ts"], repo);
+		await git(["commit", "--amend", "--no-edit"], repo);
+		const resolved = await runDetect(repo);
+		expect(resolved.stdout).toContain("Found 2 changed files:");
+		expect(resolved.stdout).toContain("  - handoff.md");
+		expect(resolved.stdout).toContain("  - resolution.ts");
+		const run = await runValidator(repo, ["run"]);
+		expect(run.exitCode).toBe(0);
+		expect(run.stdout).not.toContain("Trusted snapshot; baseline advanced.");
+		expect((await runDetect(repo)).exitCode).toBe(2);
+	}, 30000);
+
+	it.each(["partial validation", "changed content", "changed mode"])(
+		"does not reuse a merge parent's incomplete snapshot with %s",
+		async (reason) => {
+			const repo = await createRepo();
+			await trustHead(repo);
+			await git(["checkout", "-b", "feature"], repo);
+			await fs.writeFile(path.join(repo, "feature.ts"), "export const feature = true;\n");
+			await fs.writeFile(path.join(repo, "handoff.md"), "Validated notes\n");
+			const args = reason === "partial validation" ? ["run", "--gate", "unit"] : ["run"];
+			expect((await runValidator(repo, args)).exitCode).toBe(0);
+			if (reason === "changed content") {
+				await fs.writeFile(path.join(repo, "feature.ts"), "export const feature = false;\n");
+			}
+			await git(["add", "feature.ts"], repo);
+			if (reason === "changed mode") {
+				await git(["update-index", "--chmod=+x", "feature.ts"], repo);
+			}
+			await git(["commit", "-m", "feature"], repo);
+			const worktree = await fs.mkdtemp(path.join(os.tmpdir(), "validator-linked-"));
+			tempDirs.push(worktree);
+			await git(["worktree", "add", worktree, "main"], repo);
+			await git(["merge", "--no-ff", "feature", "-m", "merge"], worktree);
+			const result = await runDetect(worktree);
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain("  - feature.ts");
+		},
+		30000,
+	);
+
 	it("reports no changes when a new branch points at a trusted commit", async () => {
 		const repo = await createRepo();
 		await trustHead(repo);
