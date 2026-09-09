@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { cleanLogs } from '../commands/shared.js';
 import type { loadConfig } from '../config/loader.js';
+import type { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
 import { getCategoryLogger, resetLogger } from '../output/app-logger.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { ConsoleLogHandle } from '../output/console-log.js';
@@ -411,16 +412,6 @@ async function buildRunResult(
     }
   }
 
-  if (status === 'passed' || status === 'retry_limit_exceeded') {
-    const reason = status === 'passed' ? 'all_passed' : 'retry_limit_exceeded';
-    const debugLogger = getDebugLogger();
-    await debugLogger?.logClean('auto', reason);
-    await cleanLogs(
-      ctx.config.project.log_dir,
-      ctx.config.project.max_previous_logs,
-    );
-  }
-
   return {
     status,
     message: getStatusMessage(status),
@@ -440,6 +431,7 @@ export async function executeAndReport(
   passedSlotsMap: Map<string, Map<number, PassedSlot>> | undefined,
   changeOptions: ChangeOptions | undefined,
   jobs: ReturnType<JobGenerator['generateJobs']>,
+  metricsLifecycle?: CommandMetricsLifecycle,
 ): Promise<RunResult> {
   const debugLogger = getDebugLogger();
 
@@ -470,6 +462,7 @@ export async function executeAndReport(
     undefined,
     undefined,
     ctx.options.contextContent,
+    metricsLifecycle,
   );
 
   const outcome = await runner.run(jobs);
@@ -484,11 +477,20 @@ export async function executeAndReport(
 
   const result = await buildRunResult(ctx, outcome, jobs);
 
-  // Write execution state AFTER clean so the file always survives.
-  // cleanLogs should preserve persistent files, but writing after clean
-  // is the defensive ordering (matches the skip command's pattern).
-  await writeExecutionState(ctx.config.project.log_dir);
-  await appendRunTrustRecord(ctx, result.status);
-
   return result;
+}
+
+/** Run only after the invocation and all attempts have reached terminal state. */
+export async function cleanupAfterFinalization(
+  ctx: RunContext,
+  status: ValidatorStatus,
+): Promise<void> {
+  if (status === 'passed' || status === 'retry_limit_exceeded') {
+    const reason = status === 'passed' ? 'all_passed' : 'retry_limit_exceeded';
+    await getDebugLogger()?.logClean('auto', reason);
+    await cleanLogs(
+      ctx.config.project.log_dir,
+      ctx.config.project.max_previous_logs,
+    );
+  }
 }

@@ -1,4 +1,9 @@
-import type { CLIAdapter } from '../cli-adapters/index.js';
+import {
+  type AdapterExecutionResult,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+} from '../cli-adapters/shared.js';
 import type { AdapterConfig } from '../config/types.js';
 import type { ReviewConfig } from './review-types.js';
 import { REVIEW_ADAPTER_TIMEOUT_MS } from './review-types.js';
@@ -10,8 +15,12 @@ export async function invokeAdapter(
   config: ReviewConfig,
   adapterCfg: AdapterConfig | undefined,
   adapterLogger: (msg: string) => Promise<void>,
-): Promise<string> {
-  return adapter.execute({
+  collection?: {
+    attemptId: string;
+    onTelemetry: (telemetry: AdapterTelemetry) => void;
+  },
+): Promise<AdapterExecutionResult> {
+  const result = await adapter.execute({
     prompt,
     diff,
     model: adapterCfg?.model ?? config.model,
@@ -23,5 +32,11 @@ export async function invokeAdapter(
     },
     allowToolUse: adapterCfg?.allow_tool_use,
     thinkingBudget: adapterCfg?.thinking_budget,
+    ...collection,
   });
+  // Compatibility for existing injected test doubles. Production adapters use
+  // the structured contract above; this fallback never manufactures usage.
+  return typeof result === 'string'
+    ? { text: result, telemetry: createUnavailableTelemetry(adapter.name) }
+    : result;
 }

@@ -3,9 +3,16 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import { createBoundedLineCollector } from './bounded-lines.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  observedMeasurement,
+  runStreamingCommand,
+} from './shared.js';
 import { OPENCODE_VARIANT } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
@@ -181,8 +188,66 @@ function parseOpenCodeJsonl(
   return { text: textParts.join(''), usage };
 }
 
+export function parseOpenCodeTelemetry(
+  raw: string,
+  opts: { model?: string; thinkingBudget?: string } = {},
+): AdapterTelemetry {
+  return createOpenCodeTelemetry(
+    parseOpenCodeJsonl(raw, undefined, false).usage,
+    opts,
+  );
+}
+
+function createOpenCodeTelemetry(
+  usage: OpenCodeUsage,
+  opts: { model?: string; thinkingBudget?: string },
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('opencode', {
+    requestedModel: opts.model,
+    requestedEffort: opts.thinkingBudget,
+    reason: 'opencode_usage_not_observed',
+  });
+  const source = 'provider_event' as const;
+  const fields: Array<
+    [
+      keyof OpenCodeUsage,
+      'input_total' | 'output' | 'reasoning' | 'cache_read' | 'cache_write',
+    ]
+  > = [
+    ['inputTokens', 'input_total'],
+    ['outputTokens', 'output'],
+    ['reasoningTokens', 'reasoning'],
+    ['cacheReadTokens', 'cache_read'],
+    ['cacheWriteTokens', 'cache_write'],
+  ];
+  for (const [usageKey, tokenKey] of fields) {
+    const value = usage[usageKey];
+    if (typeof value !== 'number') continue;
+    telemetry.tokens[tokenKey] = observedMeasurement(value, source);
+    telemetry.provider_native_usage.push({
+      source,
+      name: `opencode_${usageKey}`,
+      value,
+    });
+  }
+  if (telemetry.provider_native_usage.length > 0) {
+    telemetry.completeness.collection = 'partial';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = ['opencode_field_inclusion_unestablished'];
+  }
+  telemetry.provenance.source_format_version = {
+    availability: 'available',
+    value: 'opencode-jsonl-step_finish',
+    reason: null,
+  };
+  telemetry.provenance.adapter_mapping_version = 'opencode-accounting-v2';
+  return telemetry;
+}
+
 export class OpenCodeAdapter implements CLIAdapter {
   name = 'opencode';
+
+  constructor(private readonly streamCommand = runStreamingCommand) {}
 
   /** Cached resolved binary path (null = not yet resolved, empty string = not found). */
   private resolvedBin: string | null = null;
@@ -273,79 +338,77 @@ export class OpenCodeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const bin = await this.getBin();
-    if (!bin) {
-      throw new Error('opencode binary not found');
-    }
-
-    const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-
-    const tmpDir = os.tmpdir();
-    const tmpFile = path.join(
-      tmpDir,
-      `validator-opencode-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
-    );
-    await fs.writeFile(tmpFile, fullContent);
-
-    const args = this.buildArgs({
-      model: opts.model,
-      allowToolUse: opts.allowToolUse,
-      thinkingBudget: opts.thinkingBudget,
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
+  }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
+    let fallbackTelemetry = createUnavailableTelemetry('opencode', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
     });
-
-    const cleanup = () => fs.unlink(tmpFile).catch(() => {});
-
-    if (opts.onOutput) {
-      // Buffer partial lines so we only forward parsed text content,
-      // not raw JSONL protocol events.
-      let lineBuf = '';
-      const streamingUsage: OpenCodeUsage = {};
-      const raw = await runStreamingCommand({
-        command: bin,
-        args,
-        tmpFile,
-        timeoutMs: opts.timeoutMs,
-        onOutput: (chunk: string) => {
-          lineBuf += chunk;
-          const lines = lineBuf.split('\n');
-          // Keep the last (possibly incomplete) segment in the buffer
-          lineBuf = lines.pop() ?? '';
-          for (const line of lines) {
-            const event = parseJsonlLine(line.trim());
-            if (!event) continue;
-            const text = processOpenCodeEvent(event, streamingUsage);
-            if (text !== undefined) opts.onOutput?.(text);
-          }
-        },
-        cleanup,
-      });
-
-      // Flush any remaining buffered line
-      if (lineBuf.trim()) {
-        const event = parseJsonlLine(lineBuf.trim());
-        if (event) {
-          const text = processOpenCodeEvent(event, streamingUsage);
-          if (text !== undefined) opts.onOutput?.(text);
-        }
+    try {
+      const bin = await this.getBin();
+      if (!bin) {
+        throw new Error('opencode binary not found');
       }
 
-      emitOpenCodeSummary(streamingUsage, opts.onOutput);
-      const { text } = parseOpenCodeJsonl(raw, undefined, false);
-      return text || raw.trimEnd();
-    }
+      const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
-    try {
-      const quoteArg = (a: string) => `"${a.replace(/(["\\$`])/g, '\\$1')}"`;
-      const cmd = `cat "${tmpFile}" | ${quoteArg(bin)} ${args.map(quoteArg).join(' ')}`;
-      const { stdout } = await execAsync(cmd, {
-        timeout: opts.timeoutMs,
-        maxBuffer: MAX_BUFFER_BYTES,
+      const tmpDir = os.tmpdir();
+      const tmpFile = path.join(
+        tmpDir,
+        `validator-opencode-${process.pid}-${Date.now()}-${_tmpCounter++}.txt`,
+      );
+      await fs.writeFile(tmpFile, fullContent);
+
+      const args = this.buildArgs({
+        model: opts.model,
+        allowToolUse: opts.allowToolUse,
+        thinkingBudget: opts.thinkingBudget,
       });
-      const { text } = parseOpenCodeJsonl(stdout);
-      return text || stdout.trimEnd();
-    } finally {
-      await cleanup();
+
+      const cleanup = () => fs.unlink(tmpFile).catch(() => {});
+
+      {
+        // Buffer partial lines so we only forward parsed text content,
+        // not raw JSONL protocol events.
+        const streamingUsage: OpenCodeUsage = {};
+        const lines = createBoundedLineCollector((line) => {
+          const event = parseJsonlLine(line.trim());
+          if (!event) return;
+          const text = processOpenCodeEvent(event, streamingUsage);
+          if (text !== undefined) opts.onOutput?.(text);
+          if (event.type === 'step_finish') {
+            fallbackTelemetry = createOpenCodeTelemetry(streamingUsage, opts);
+            opts.onTelemetry?.(fallbackTelemetry);
+          }
+        });
+        const raw = await this.streamCommand({
+          command: bin,
+          args,
+          tmpFile,
+          timeoutMs: opts.timeoutMs,
+          onStdout: lines.write,
+          onCollected: (stdout) => {
+            lines.flush();
+            fallbackTelemetry = parseOpenCodeTelemetry(stdout, opts);
+            opts.onTelemetry?.(fallbackTelemetry);
+          },
+          cleanup,
+        });
+
+        lines.flush();
+
+        emitOpenCodeSummary(streamingUsage, opts.onOutput);
+        const { text } = parseOpenCodeJsonl(raw, undefined, false);
+        return {
+          text: text || raw.trimEnd(),
+          telemetry: parseOpenCodeTelemetry(raw, opts),
+        };
+      }
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        fallbackTelemetry,
+      );
     }
   }
 }

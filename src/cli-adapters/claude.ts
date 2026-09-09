@@ -1,18 +1,30 @@
 import { exec } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getCategoryLogger } from '../output/app-logger.js';
 import {
   addMarketplace,
   installPlugin as installPluginCli,
   listPlugins,
 } from '../plugin/claude-cli.js';
-import { buildOtelEnv, safeExtractOtelMetrics } from './claude-otel.js';
+import {
+  buildOtelEnv,
+  createClaudeTelemetryCollector,
+  parseClaudeOtelTelemetry,
+  safeExtractOtelMetrics,
+} from './claude-otel.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
-import { type CLIAdapter, runStreamingCommand } from './shared.js';
+import {
+  AdapterExecutionFailure,
+  type AdapterExecutionResult,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+  runStreamingCommand,
+} from './shared.js';
 import { CLAUDE_THINKING_TOKENS } from './thinking-budget.js';
 
 const execAsync = promisify(exec);
@@ -32,6 +44,8 @@ const POST_PROCESS_BUFFER_MS = 30_000;
 
 export class ClaudeAdapter implements CLIAdapter {
   name = 'claude';
+
+  constructor(private readonly streamCommand = runStreamingCommand) {}
 
   async isAvailable(): Promise<boolean> {
     try {
@@ -159,23 +173,41 @@ export class ClaudeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
-    let timer: ReturnType<typeof setTimeout>;
-    return Promise.race([
-      this.doExecute(opts).finally(() => clearTimeout(timer)),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(
-                'Adapter execution timed out (post-processing exceeded limit)',
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
+  }): Promise<AdapterExecutionResult> {
+    let telemetry = createUnavailableTelemetry('claude', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
+    });
+    try {
+      const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
+      let timer: ReturnType<typeof setTimeout>;
+      return await Promise.race([
+        this.doExecute({
+          ...opts,
+          onTelemetry: (value) => {
+            telemetry = value;
+            opts.onTelemetry?.(value);
+          },
+        }).finally(() => clearTimeout(timer)),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'Adapter execution timed out (post-processing exceeded limit)',
+                ),
               ),
-            ),
-          totalTimeout,
-        );
-      }),
-    ]);
+            totalTimeout,
+          );
+        }),
+      ]);
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        telemetry,
+      );
+    }
   }
 
   private async doExecute(opts: {
@@ -186,14 +218,15 @@ export class ClaudeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
+  }): Promise<AdapterExecutionResult> {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
     const tmpFile = path.join(
       os.tmpdir(),
-      `validator-claude-${process.pid}-${Date.now()}.txt`,
+      `validator-claude-${randomUUID()}.txt`,
     );
-    await fs.writeFile(tmpFile, fullContent);
+    await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
 
     const args = ['-p'];
     // Task is always allowed so Claude can dispatch pr-review-toolkit
@@ -233,30 +266,36 @@ export class ClaudeAdapter implements CLIAdapter {
       ...thinkingEnv,
     };
 
-    if (opts.onOutput) {
-      const raw = await runStreamingCommand({
-        command: 'claude',
-        args,
-        tmpFile,
-        timeoutMs: opts.timeoutMs,
-        cleanup,
-        env: execEnv,
-      });
-      const cleaned = safeExtractOtelMetrics(raw, opts.onOutput);
-      opts.onOutput(cleaned);
-      return cleaned;
-    }
-
-    try {
-      const cmd = `cat "${tmpFile}" | claude ${args.map((a) => (a === '' ? '""' : a)).join(' ')}`;
-      const { stdout } = await execAsync(cmd, {
-        timeout: opts.timeoutMs,
-        maxBuffer: MAX_BUFFER_BYTES,
-        env: execEnv,
-      });
-      return safeExtractOtelMetrics(stdout);
-    } finally {
-      await cleanup();
-    }
+    const collector = createClaudeTelemetryCollector(
+      { requestedModel: opts.model, thinkingBudget: opts.thinkingBudget },
+      (value) => opts.onTelemetry?.(value),
+    );
+    const raw = await this.streamCommand({
+      command: 'claude',
+      args,
+      tmpFile,
+      timeoutMs: opts.timeoutMs,
+      cleanup,
+      env: execEnv,
+      onStdout: collector.write,
+      onCollected: (stdout) => {
+        collector.flush();
+        opts.onTelemetry?.(
+          parseClaudeOtelTelemetry(stdout, {
+            requestedModel: opts.model,
+            thinkingBudget: opts.thinkingBudget,
+          }),
+        );
+      },
+    });
+    const cleaned = safeExtractOtelMetrics(raw, opts.onOutput);
+    opts.onOutput?.(cleaned);
+    return {
+      text: cleaned,
+      telemetry: parseClaudeOtelTelemetry(raw, {
+        requestedModel: opts.model,
+        thinkingBudget: opts.thinkingBudget,
+      }),
+    };
   }
 }

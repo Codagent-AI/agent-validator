@@ -70,6 +70,7 @@ export interface ReviewOutputEntry {
     issue: string;
     result?: string | null;
   }>;
+  attempt_id?: string;
 }
 
 export interface SkippedSlotOutput {
@@ -110,4 +111,5 @@ export interface SingleReviewResult {
       result?: string | null;
     }>;
   };
+  attempt_id?: string;
 }

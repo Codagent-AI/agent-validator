@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-validator.dev/contracts/model-metrics/v1/export-record.schema.json",
+  "title": "Agent Validator measurement export record protocol v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_type", "record_id", "revision", "measurement_schema_version", "producer", "original_consumer_context", "payload", "digest"],
+  "properties": {
+    "record_type": { "enum": ["invocation", "model_attempt"] },
+    "record_id": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "measurement_schema_version": { "const": 1 },
+    "producer": { "type": "object", "additionalProperties": false, "required": ["name", "version"], "properties": { "name": { "const": "agent-validator" }, "version": { "type": "string", "minLength": 1 } } },
+    "original_consumer_context": { "type": "object", "additionalProperties": false, "required": ["consumer", "context_id"], "properties": { "consumer": { "type": "string", "minLength": 1 }, "context_id": { "type": "string", "minLength": 1 } } },
+    "payload": { "type": "object" },
+    "digest": { "type": "object", "additionalProperties": false, "required": ["algorithm", "canonicalization", "value"], "properties": { "algorithm": { "const": "sha256" }, "canonicalization": { "const": "rfc8785" }, "value": { "type": "string", "pattern": "^[a-f0-9]{64}$" } } }
+  }
+}

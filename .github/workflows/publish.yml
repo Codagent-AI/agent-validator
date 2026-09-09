@@ -56,6 +56,7 @@ jobs:
 
       - name: Publish to npm
         if: steps.check.outputs.published == 'false'
+        # TODO: Replace NPM_TOKEN with npm trusted publishing (OIDC), then remove this secret.
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -84,13 +85,15 @@ jobs:
         run: |
           VERSION="${{ steps.check.outputs.version }}"
 
-          for attempt in 1 2 3 4 5; do
+          for attempt in {1..18}; do
             TARBALL_URL=$(npm view agent-validator@"$VERSION" dist.tarball 2>/dev/null || true)
             if [ -n "$TARBALL_URL" ]; then
               break
             fi
-            echo "agent-validator@$VERSION is not visible in npm yet; retrying ($attempt/5)."
-            sleep 10
+            echo "agent-validator@$VERSION is not visible in npm yet; retrying ($attempt/18)."
+            if [ "$attempt" -lt 18 ]; then
+              sleep 10
+            fi
           done
 
           if [ -z "$TARBALL_URL" ]; then

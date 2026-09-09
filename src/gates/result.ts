@@ -34,6 +34,8 @@ export interface ReviewFullJsonOutput {
   passIteration?: number; // Only present when status is "skipped_prior_pass"
   preservedFromIteration?: number; // Only present when status is "preserved_one_shot" or preserved fail
   reviewScope?: ReviewScope; // Present for dispatched one-shot reviews so adapter errors can retry the same diff
+  /** Present only for an actual dispatch; preserved/skip outputs may retain it historically. */
+  attempt_id?: string;
 }
 
 export interface GateResult {
@@ -69,5 +71,6 @@ export interface GateResult {
       issue: string;
       result?: string | null;
     }>;
+    attempt_id?: string;
   }>;
 }

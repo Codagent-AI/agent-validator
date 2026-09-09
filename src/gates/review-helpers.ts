@@ -302,6 +302,7 @@ function toOutputEntry(res: SingleReviewResult): ReviewOutputEntry {
     reviewIndex: res.reviewIndex,
     duration: res.duration,
     ...res.evaluation,
+    attempt_id: res.attempt_id,
   };
 }
 

@@ -75,17 +75,47 @@ Run `/release` from the project root. The command will:
 2. Query all PRs merged to `main` since that tag
 3. Generate a changeset file for each PR (bump type derived from conventional commit prefix)
 4. Run `changeset version` to update `CHANGELOG.md` and bump `package.json`
-5. Sync the version to `.claude-plugin/plugin.json` (keeps plugin manifest in sync with package.json)
+5. Sync the version to the Claude and Cursor plugin manifests
 6. Create a release PR (e.g., `chore: release v1.0.0`)
+
+Before creating release changes, the command runs the unit and E2E suites and then runs the compiled checkout against itself with `node dist/index.js run`. Calling the file directly avoids picking up another `agent-validator` installation from `PATH`.
 
 ### Publishing
 
 When the release PR is merged to `main`, the publish workflow automatically:
 - Checks if the version is already published on npm
 - Publishes the new version to npm (`npm publish`)
-- Creates a GitHub release (`softprops/action-gh-release`)
+- Creates the matching GitHub release
+- Resolves the published npm tarball URL and SHA-256
+- Regenerates `Codagent-AI/homebrew-tap/agent-validator.rb`
+- Commits and pushes the formula to the Homebrew tap
 
 One merge → publish. No manual changeset creation needed.
+
+Publishing currently uses the `NPM_TOKEN` repository secret. The Homebrew update uses `HOMEBREW_TAP_GITHUB_TOKEN`, which must have write access to `Codagent-AI/homebrew-tap`. Do not edit the generated formula by hand.
+
+> TODO: Switch npm publishing from `NPM_TOKEN` to npm trusted publishing (OIDC) the next time release credentials are changed. Remove `NPM_TOKEN` after the OIDC release path has been verified.
+
+### Verify a release
+
+Replace `VERSION` and `RUN_ID` with the release values:
+
+```bash
+npm view agent-validator@VERSION version dist.tarball
+gh release view vVERSION --repo Codagent-AI/agent-validator
+gh run view RUN_ID --repo Codagent-AI/agent-validator
+gh api repos/Codagent-AI/homebrew-tap/contents/agent-validator.rb \
+  --jq .content | base64 --decode | grep -E 'url|sha256|version'
+```
+
+The npm registry may accept a publish before exposing its tarball metadata. The workflow waits just under three minutes for it to appear. If the Release workflow still fails at `Resolve npm tarball metadata`, wait until `npm view agent-validator@VERSION dist.tarball` succeeds, then rerun the same workflow:
+
+```bash
+gh run rerun RUN_ID --repo Codagent-AI/agent-validator
+gh run watch RUN_ID --repo Codagent-AI/agent-validator --exit-status
+```
+
+The rerun detects that npm already has the version, skips `npm publish`, and continues with the GitHub Release and Homebrew steps.
 
 ## Local Plugin Testing
 

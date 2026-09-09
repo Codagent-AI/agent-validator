@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["capabilities_version", "protocol_versions", "measurement_schema_versions", "limits"],
+  "properties": { "capabilities_version": { "const": 1 }, "protocol_versions": { "type": "array", "items": { "const": 1 } }, "measurement_schema_versions": { "type": "array", "items": { "const": 1 } }, "limits": { "type": "object", "additionalProperties": false, "required": ["default_inventory_count", "maximum_inventory_count", "default_export_count", "maximum_export_count", "default_export_bytes", "maximum_export_bytes", "maximum_individual_record_bytes"], "properties": { "default_inventory_count": { "type": "integer", "minimum": 1 }, "maximum_inventory_count": { "type": "integer", "minimum": 1 }, "default_export_count": { "type": "integer", "minimum": 1 }, "maximum_export_count": { "type": "integer", "minimum": 1 }, "default_export_bytes": { "type": "integer", "minimum": 1 }, "maximum_export_bytes": { "type": "integer", "minimum": 1 }, "maximum_individual_record_bytes": { "type": "integer", "minimum": 1 } } } }
+}

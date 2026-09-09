@@ -1,0 +1,501 @@
+{
+  "provenance": "Synthetic contract evidence only; not a provider recording, pricing policy, or consumer acceptance result.",
+  "records": [
+    {
+      "adapter": "fixture",
+      "requested_identity": {
+        "adapter": "fixture",
+        "model": "configured-model",
+        "provider": null,
+        "effort": null,
+        "provenance": "configuration"
+      },
+      "resolved_identity": {
+        "adapter": "fixture",
+        "model": "configured-model",
+        "provider": null,
+        "effort": null,
+        "provenance": "launch_resolution"
+      },
+      "observed_identities": [
+        {
+          "identity_id": "identity-A",
+          "model": "A",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        },
+        {
+          "identity_id": "identity-B",
+          "model": "B",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        }
+      ],
+      "observed_identity_availability": {
+        "availability": "available",
+        "reason": null
+      },
+      "tokens": {
+        "input_total": {
+          "availability": "available",
+          "value": 100,
+          "reason": null,
+          "source": "provider_usage",
+          "origin": "observed",
+          "precision": "exact",
+          "derivation": null,
+          "included_in": null
+        },
+        "input_uncached": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "cache_read": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "cache_write": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "output": {
+          "availability": "available",
+          "value": 50,
+          "reason": null,
+          "source": "provider_usage",
+          "origin": "observed",
+          "precision": "exact",
+          "derivation": null,
+          "included_in": null
+        },
+        "reasoning": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "provider_total": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "normalized_total": {
+          "availability": "available",
+          "value": 150,
+          "reason": null,
+          "source": "provider_usage",
+          "origin": "observed",
+          "precision": "exact",
+          "derivation": null,
+          "included_in": null
+        }
+      },
+      "provider_native_usage": [],
+      "completeness": {
+        "collection": "complete",
+        "canonical_fields": "partial",
+        "normalized_total": "complete",
+        "per_model_attribution": "partial",
+        "history": "complete"
+      },
+      "allocations": [
+        {
+          "allocation_id": "alloc-a",
+          "observed_identity_ref": "identity-A",
+          "usage": {
+            "normalized_total": {
+              "availability": "available",
+              "value": 100,
+              "reason": null,
+              "source": "provider_usage",
+              "origin": "observed",
+              "precision": "exact",
+              "derivation": null,
+              "included_in": null
+            }
+          }
+        }
+      ],
+      "unallocated_usage": {
+        "allocation_id": "alloc-unallocated",
+        "observed_identity_ref": {
+          "availability": "unavailable",
+          "reason": "aggregate_only"
+        },
+        "usage": {
+          "normalized_total": {
+            "availability": "available",
+            "value": 50,
+            "reason": null,
+            "source": "provider_usage",
+            "origin": "observed",
+            "precision": "exact",
+            "derivation": null,
+            "included_in": null
+          }
+        }
+      },
+      "provider_reported_costs": [
+        {
+          "cost_evidence_id": "cost-a",
+          "scope": "allocation",
+          "allocation_id": "alloc-a",
+          "amount": {
+            "availability": "available",
+            "value": 0.01,
+            "reason": null,
+            "source": "provider_usage",
+            "origin": "observed",
+            "precision": "exact",
+            "derivation": null,
+            "included_in": null
+          },
+          "currency": {
+            "availability": "available",
+            "value": "USD",
+            "reason": null
+          },
+          "coverage": "full",
+          "overlap": "unknown",
+          "source": "provider_usage"
+        }
+      ],
+      "provenance": {
+        "adapter_mapping_version": "adapter-collection-v1",
+        "cli_version": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "not_collected"
+        },
+        "source_format_version": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "not_exposed"
+        },
+        "producer_version": "fixture-only",
+        "build": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "synthetic_fixture"
+        }
+      },
+      "diagnostics": [
+        "synthetic_contract_fixture"
+      ],
+      "record_type": "model_attempt",
+      "attempt_id": "attempt-fixture",
+      "invocation_id": "invocation-fixture",
+      "session_id": "session-fixture",
+      "revision": 2,
+      "measurement_schema_version": 1,
+      "lifecycle": {
+        "state": "completed",
+        "started_at": "2026-09-06T12:00:00.000Z",
+        "ended_at": "2026-09-06T12:00:01.000Z"
+      },
+      "outcome": "passed"
+    },
+    {
+      "adapter": "fixture",
+      "requested_identity": {
+        "adapter": "fixture",
+        "model": "configured-model",
+        "provider": null,
+        "effort": null,
+        "provenance": "configuration"
+      },
+      "resolved_identity": {
+        "adapter": "fixture",
+        "model": "configured-model",
+        "provider": null,
+        "effort": null,
+        "provenance": "launch_resolution"
+      },
+      "observed_identities": [
+        {
+          "identity_id": "identity-A",
+          "model": "A",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        },
+        {
+          "identity_id": "identity-B",
+          "model": "B",
+          "provider": {
+            "availability": "available",
+            "value": "fixture-provider",
+            "reason": null
+          },
+          "effort": {
+            "availability": "unavailable",
+            "value": null,
+            "reason": "not_reported"
+          },
+          "provenance": "telemetry"
+        }
+      ],
+      "observed_identity_availability": {
+        "availability": "available",
+        "reason": null
+      },
+      "tokens": {
+        "input_total": {
+          "availability": "available",
+          "value": 100,
+          "reason": null,
+          "source": "provider_usage",
+          "origin": "observed",
+          "precision": "exact",
+          "derivation": null,
+          "included_in": null
+        },
+        "input_uncached": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "cache_read": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "cache_write": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "output": {
+          "availability": "available",
+          "value": 50,
+          "reason": null,
+          "source": "provider_usage",
+          "origin": "observed",
+          "precision": "exact",
+          "derivation": null,
+          "included_in": null
+        },
+        "reasoning": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "provider_total": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "adapter_usage_unsupported",
+          "source": null,
+          "origin": null,
+          "precision": null,
+          "derivation": null,
+          "included_in": null
+        },
+        "normalized_total": {
+          "availability": "available",
+          "value": 150,
+          "reason": null,
+          "source": "provider_usage",
+          "origin": "observed",
+          "precision": "exact",
+          "derivation": null,
+          "included_in": null
+        }
+      },
+      "provider_native_usage": [],
+      "completeness": {
+        "collection": "complete",
+        "canonical_fields": "partial",
+        "normalized_total": "complete",
+        "per_model_attribution": "partial",
+        "history": "complete"
+      },
+      "allocations": [
+        {
+          "allocation_id": "alloc-a",
+          "observed_identity_ref": "identity-A",
+          "usage": {
+            "normalized_total": {
+              "availability": "available",
+              "value": 100,
+              "reason": null,
+              "source": "provider_usage",
+              "origin": "observed",
+              "precision": "exact",
+              "derivation": null,
+              "included_in": null
+            }
+          }
+        }
+      ],
+      "unallocated_usage": {
+        "allocation_id": "alloc-unallocated",
+        "observed_identity_ref": {
+          "availability": "unavailable",
+          "reason": "aggregate_only"
+        },
+        "usage": {
+          "normalized_total": {
+            "availability": "available",
+            "value": 50,
+            "reason": null,
+            "source": "provider_usage",
+            "origin": "observed",
+            "precision": "exact",
+            "derivation": null,
+            "included_in": null
+          }
+        }
+      },
+      "provider_reported_costs": [
+        {
+          "cost_evidence_id": "cost-a",
+          "scope": "allocation",
+          "allocation_id": "alloc-a",
+          "amount": {
+            "availability": "available",
+            "value": 0.01,
+            "reason": null,
+            "source": "provider_usage",
+            "origin": "observed",
+            "precision": "exact",
+            "derivation": null,
+            "included_in": null
+          },
+          "currency": {
+            "availability": "available",
+            "value": "USD",
+            "reason": null
+          },
+          "coverage": "full",
+          "overlap": "unknown",
+          "source": "provider_usage"
+        }
+      ],
+      "provenance": {
+        "adapter_mapping_version": "adapter-collection-v1",
+        "cli_version": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "not_collected"
+        },
+        "source_format_version": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "not_exposed"
+        },
+        "producer_version": "fixture-only",
+        "build": {
+          "availability": "unavailable",
+          "value": null,
+          "reason": "synthetic_fixture"
+        }
+      },
+      "diagnostics": [
+        "synthetic_contract_fixture"
+      ],
+      "record_type": "model_attempt",
+      "attempt_id": "attempt-fixture",
+      "invocation_id": "invocation-fixture",
+      "session_id": "session-fixture",
+      "revision": 3,
+      "measurement_schema_version": 99,
+      "lifecycle": {
+        "state": "completed",
+        "started_at": "2026-09-06T12:00:00.000Z",
+        "ended_at": "2026-09-06T12:00:01.000Z"
+      },
+      "outcome": "passed"
+    }
+  ],
+  "expected": {
+    "valid_records": [
+      true,
+      false
+    ],
+    "heads": [
+      {
+        "attempt_id": "attempt-fixture",
+        "revision": 3
+      }
+    ],
+    "attempt_count": 0,
+    "normalized_total": {
+      "availability": "unavailable",
+      "value": null
+    },
+    "older_compatible_head_fallback": false
+  }
+}

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { CLIAdapter } from '../../src/cli-adapters/shared.js';
+import {
+  createUnavailableTelemetry,
+  type CLIAdapter,
+} from '../../src/cli-adapters/shared.js';
 import { installAdapterPlugin } from '../../src/commands/init-plugin.js';
 
 /** Create a minimal mock adapter with optional plugin methods. */
@@ -9,7 +12,7 @@ function createMockAdapter(
   return {
     isAvailable: async () => true,
     checkHealth: async () => ({ available: true, status: 'healthy' as const }),
-    execute: async () => '',
+    execute: async () => ({ text: '', telemetry: createUnavailableTelemetry('test-cli') }),
     getProjectCommandDir: () => null,
     getUserCommandDir: () => null,
     getProjectSkillDir: () => null,

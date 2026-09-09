@@ -40,7 +40,7 @@ entry_points:
 | `log_dir` | string | `validator_logs` | Directory for console logs, gate logs, review JSON, reports, and state |
 | `allow_parallel` | boolean | `true` | Allows independent gates to run in parallel |
 | `max_retries` | number | `3` | Retry attempts before `Retry limit exceeded` |
-| `max_previous_logs` | integer | `3` | Number of archived log sessions kept by `clean`; `0` disables archiving |
+| `max_previous_logs` | integer | `3` | Number of archived log sessions kept by `clean`; `0` removes ordinary logs without archiving and preserves latest/pending metrics evidence |
 | `rerun_new_issue_threshold` | enum | `medium` | Minimum priority for accepting new rerun violations: `critical`, `high`, `medium`, or `low` |
 | `cli` | object | required | Review CLI preference and adapter settings |
 | `entry_points` | array | required | Paths and gates to activate for changed files |

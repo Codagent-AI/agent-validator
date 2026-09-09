@@ -1,5 +1,11 @@
 # agent-validator
 
+## 1.14.0
+
+### Minor Changes
+
+- [#150](https://github.com/Codagent-AI/agent-validator/pull/150) Add versioned per-invocation model identity and usage telemetry that survives failures, retries, and cleanup, with machine-readable snapshots and a durable export/acknowledgment CLI for downstream consumers.
+
 ## 1.13.2
 
 ### Patch Changes

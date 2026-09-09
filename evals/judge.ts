@@ -26,7 +26,7 @@ export async function judgeRun(
 		typeof options === "number" ? options : (options.timeoutMs ?? 300_000);
 
 	const judgeTelemetry: string[] = [];
-	const rawOutput = await adapter.execute({
+	const execution = await adapter.execute({
 		prompt,
 		diff: "",
 		model,
@@ -37,7 +37,7 @@ export async function judgeRun(
 	});
 
 	// Parse the judge's JSON response — prefer fenced code block, fall back to brace extraction
-	const parsed = parseJudgeResponse(rawOutput);
+	const parsed = parseJudgeResponse(execution.text);
 
 	return {
 		matches: Array.isArray(parsed.matches)

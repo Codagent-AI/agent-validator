@@ -4,8 +4,24 @@ import os from 'node:os';
 import path from 'node:path';
 import { getCategoryLogger } from '../output/app-logger.js';
 import * as copilotCli from '../plugin/copilot-cli.js';
+import {
+  parseCopilotSessionSummary,
+  parseCopilotTelemetry,
+} from './copilot-telemetry.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
-import type { CLIAdapter } from './shared.js';
+import { armCommandTimeout } from './process-timeout.js';
+
+export {
+  parseCopilotSessionSummary,
+  parseCopilotTelemetry,
+} from './copilot-telemetry.js';
+
+import {
+  AdapterExecutionFailure,
+  type AdapterTelemetry,
+  type CLIAdapter,
+  createUnavailableTelemetry,
+} from './shared.js';
 
 let tmpCounter = 0;
 
@@ -13,56 +29,6 @@ const log = getCategoryLogger('github-copilot');
 
 /** Effort levels supported by `copilot --effort`. */
 const EFFORT_LEVELS = new Set(['low', 'medium', 'high']);
-
-/**
- * Parse the copilot session summary printed to stdout after the response.
- * Returns a structured telemetry line or undefined if no summary is found.
- *
- * Example summary block:
- *   Total usage est:        2 Premium requests
- *   Breakdown by AI model:
- *    gpt-5.4                  17.7k in, 45 out, 1.5k cached (Est. 1 Premium request)
- *    claude-haiku-4.5         41.4k in, 123 out, 0 cached (Est. 1 Premium request)
- */
-export function parseCopilotSessionSummary(
-  output: string,
-): { telemetryLine: string; model: string } | undefined {
-  const premiumMatch = output.match(
-    /Total usage est:\s+(\d+)\s+Premium request/i,
-  );
-  if (!premiumMatch) return undefined;
-
-  const premiumRequests = Number(premiumMatch[1]);
-
-  // Parse per-model token lines: " <model>  <N>k in, <N> out, <N>k cached"
-  const modelLines = [
-    ...output.matchAll(
-      /^\s+(\S+)\s+([\d.]+)k? in,\s*([\d.]+)k? out(?:,\s*([\d.]+)k? cached)?/gm,
-    ),
-  ];
-
-  let totalIn = 0;
-  let totalOut = 0;
-  let totalCached = 0;
-  const models: string[] = [];
-
-  for (const m of modelLines) {
-    const [fullMatch, model, inRaw, outRaw, cachedRaw] = m;
-    if (!(model && inRaw && outRaw)) continue;
-    const toTokens = (val: string) =>
-      fullMatch.includes(`${val}k`)
-        ? Math.round(Number(val) * 1000)
-        : Number(val);
-    totalIn += toTokens(inRaw);
-    totalOut += toTokens(outRaw);
-    if (cachedRaw) totalCached += toTokens(cachedRaw);
-    models.push(model);
-  }
-
-  const model = models.join(',') || 'unknown';
-  const telemetryLine = `[copilot-telemetry] model=${model} in=${totalIn} out=${totalOut} cache=${totalCached} premium_requests=${premiumRequests}`;
-  return { telemetryLine, model };
-}
 
 /**
  * Throws if a specific model was requested but the session summary shows a
@@ -121,6 +87,8 @@ function isMissingCommandError(error: unknown): boolean {
 
 export class GitHubCopilotAdapter implements CLIAdapter {
   name = 'github-copilot';
+
+  constructor(private readonly spawnCommand = spawn) {}
 
   private execCopilot(
     command: string,
@@ -240,6 +208,7 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     model?: string;
     promptFile: string;
     thinkingBudget?: string;
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): string[] {
     const args: string[] = [];
     const allowedTools = new Set<string>(['shell(cat)']);
@@ -291,40 +260,57 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
-  }): Promise<string> {
-    const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
-    const tmpDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'validator-copilot-'),
-    );
-    const tmpFile = path.join(tmpDir, `prompt-${tmpCounter++}.txt`);
-    await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
-
-    const args = this.buildArgs({
-      ...opts,
-      model: opts.model,
-      promptFile: tmpFile,
+    onTelemetry?: (telemetry: AdapterTelemetry) => void;
+  }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
+    let telemetry = createUnavailableTelemetry('github-copilot', {
+      requestedModel: opts.model,
+      requestedEffort: opts.thinkingBudget,
     });
-    const cleanup = () => fs.rm(tmpDir, { recursive: true, force: true });
-
-    log.debug(`copilot args: ${args.join(' ')}`);
-
     try {
-      const { stdout, stderr } = await this.runCopilot({
-        args,
-        timeoutMs: opts.timeoutMs,
-        onOutput: opts.onOutput,
+      const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
+      const tmpDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'validator-copilot-'),
+      );
+      const tmpFile = path.join(tmpDir, `prompt-${tmpCounter++}.txt`);
+      await fs.writeFile(tmpFile, fullContent, { flag: 'wx', mode: 0o600 });
+
+      const args = this.buildArgs({
+        ...opts,
+        model: opts.model,
+        promptFile: tmpFile,
       });
-      const summary =
-        parseCopilotSessionSummary(stdout) ??
-        parseCopilotSessionSummary(stderr);
-      if (summary) {
-        opts.onOutput?.(summary.telemetryLine);
-        log.debug(`copilot session: ${summary.telemetryLine}`);
-        verifySessionModel(summary, opts.model);
+      const cleanup = () => fs.rm(tmpDir, { recursive: true, force: true });
+
+      log.debug(`copilot args: ${args.join(' ')}`);
+
+      try {
+        const { stdout, stderr } = await this.runCopilot({
+          args,
+          timeoutMs: opts.timeoutMs,
+          onOutput: opts.onOutput,
+          onCollected: (stdout, stderr) => {
+            telemetry = parseCopilotTelemetry(`${stdout}\n${stderr}`, opts);
+            opts.onTelemetry?.(telemetry);
+          },
+        });
+        const summary =
+          parseCopilotSessionSummary(stdout) ??
+          parseCopilotSessionSummary(stderr);
+        if (summary) {
+          telemetry = parseCopilotTelemetry(`${stdout}\n${stderr}`, opts);
+          opts.onOutput?.(summary.telemetryLine);
+          log.debug(`copilot session: ${summary.telemetryLine}`);
+          verifySessionModel(summary, opts.model);
+        }
+        return { text: stdout, telemetry };
+      } finally {
+        await cleanup();
       }
-      return stdout;
-    } finally {
-      await cleanup();
+    } catch (error) {
+      throw new AdapterExecutionFailure(
+        error instanceof Error ? error : new Error(String(error)),
+        telemetry,
+      );
     }
   }
 
@@ -332,31 +318,32 @@ export class GitHubCopilotAdapter implements CLIAdapter {
     args: string[];
     timeoutMs?: number;
     onOutput?: (chunk: string) => void;
+    onCollected?: (stdout: string, stderr: string) => void;
   }): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const stdoutChunks: string[] = [];
       const stderrChunks: string[] = [];
-      const child = spawn('copilot', opts.args, {
+      const child = this.spawnCommand('copilot', opts.args, {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
       let settled = false;
-      const settle = async (
-        callback: () => void,
-        timeoutId?: ReturnType<typeof setTimeout>,
-      ) => {
+      const settle = (callback: () => void) => {
         if (settled) return;
         settled = true;
-        if (timeoutId) clearTimeout(timeoutId);
-        callback();
+        timeout.clear();
+        try {
+          opts.onCollected?.(stdoutChunks.join(''), stderrChunks.join(''));
+        } catch {
+          /* Telemetry failure cannot replace the process outcome. */
+        }
+        if (timeout.timedOut) reject(new Error('Command timed out'));
+        else callback();
       };
 
-      const timeoutId = opts.timeoutMs
-        ? setTimeout(() => {
-            child.kill('SIGTERM');
-            void settle(() => reject(new Error('Command timed out')));
-          }, opts.timeoutMs)
-        : undefined;
+      const timeout = armCommandTimeout(child, opts.timeoutMs, () =>
+        settle(() => {}),
+      );
 
       child.stdout.on('data', (data: Buffer) => {
         const chunk = data.toString();
@@ -383,10 +370,10 @@ export class GitHubCopilotAdapter implements CLIAdapter {
               ),
             );
           }
-        }, timeoutId);
+        });
       });
       child.on('error', (error) => {
-        void settle(() => reject(error), timeoutId);
+        settle(() => reject(error));
       });
     });
   }

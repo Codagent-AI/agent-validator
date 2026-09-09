@@ -11,6 +11,7 @@ import {
   registerHelpCommand,
   registerInitCommand,
   registerListCommand,
+  registerMetricsCommand,
   registerReviewAuditCommand,
   registerReviewCommand,
   registerRunCommand,
@@ -43,6 +44,7 @@ registerReviewAuditCommand(program);
 registerReviewCommand(program);
 registerDetectCommand(program);
 registerListCommand(program);
+registerMetricsCommand(program);
 registerHealthCommand(program);
 registerInitCommand(program);
 registerUpdateCommand(program);

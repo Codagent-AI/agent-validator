@@ -1,4 +1,5 @@
 import type { AdapterConfig } from '../config/types.js';
+import type { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
 import type { PreviousViolation, ReviewChangeOptions } from './result.js';
 import type { LoggerBundle, LoggerFactory } from './review-helpers.js';
 import type { ReviewConfig, ReviewOutputEntry } from './review-types.js';
@@ -24,4 +25,5 @@ export interface DispatchForDiffArgs {
   changeOptions?: ReviewChangeOptions;
   oneShotOutputs: ReviewOutputEntry[];
   runningSlotIndexes: Set<number>;
+  metrics?: CommandMetricsLifecycle;
 }

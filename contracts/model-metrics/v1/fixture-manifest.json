@@ -1,0 +1,122 @@
+{
+  "fixture_version": 1,
+  "canonicalization": "rfc8785",
+  "digest_algorithm": "sha256",
+  "provenance": "Synthetic contract-only inputs; they validate canonicalization and projections, not provider accounting semantics.",
+  "cases": [
+    {
+      "name": "fraction-unicode-signed-zero",
+      "original_json": "fixtures/fraction-unicode-signed-zero.json",
+      "canonical_utf8": "fixtures/fraction-unicode-signed-zero.canonical.json",
+      "expected_digest": "be8bd2e33a794d5023c73042b0538905b807428de7045f72245514f05416b4b1",
+      "accepted": true,
+      "semantic_projection": "canonical record excluding top-level digest"
+    },
+    {
+      "name": "duplicate-key-rejected",
+      "original_json": "fixtures/duplicate-key.json",
+      "accepted": false,
+      "reason": "duplicate_object_key"
+    },
+    {
+      "name": "invalid-token-integer-rejected",
+      "original_json": "fixtures/invalid-token-integer.json",
+      "accepted": false,
+      "reason": "invalid_exact_token_integer"
+    },
+    {
+      "name": "numeric-limits-utf16-escaping",
+      "original_json": "fixtures/numeric-limits-utf16-escaping.json",
+      "canonical_utf8": "fixtures/numeric-limits-utf16-escaping.canonical.json",
+      "expected_digest": "a36a5c92568c26c0bc45f67a14299f6a3565a2156eda751954a0376a33e5257e",
+      "accepted": true,
+      "semantic_projection": "Finite scalar JSON canonicalization only; unsafe integers are not admissible token measurements."
+    }
+  ],
+  "semantic_cases": [
+    {
+      "name": "two-model-allocation-cost",
+      "original_json": "fixtures/two-model-allocation-cost.json",
+      "canonical_utf8": "fixtures/two-model-allocation-cost.canonical.json",
+      "expected_digest": "c9175c1362f55f50bd40f5657222df122f886fdd8542527f42c74db0215fbf74"
+    },
+    {
+      "name": "overlapping-cost-scopes",
+      "original_json": "fixtures/overlapping-cost-scopes.json",
+      "canonical_utf8": "fixtures/overlapping-cost-scopes.canonical.json",
+      "expected_digest": "48cbc6b1c388db74f4546758ea2c71bed94889bbfe962f6292a1ce9ff96b6f8a"
+    },
+    {
+      "name": "prepared-terminal-replacement",
+      "original_json": "fixtures/prepared-terminal-replacement.json",
+      "canonical_utf8": "fixtures/prepared-terminal-replacement.canonical.json",
+      "expected_digest": "8e6f4c5bdbf708f9e2c237b1ff68a0dc5c0950aaab9e0153ec8da2fb6ac4db1a"
+    },
+    {
+      "name": "unsupported-current-head",
+      "original_json": "fixtures/unsupported-current-head.json",
+      "canonical_utf8": "fixtures/unsupported-current-head.canonical.json",
+      "expected_digest": "911b6a1222c010edd4a595d09ebd32b0926f760b9e50b1d611d985a806652e80"
+    },
+    {
+      "name": "requested-only-partial-approximate",
+      "original_json": "fixtures/requested-only-partial-approximate.json",
+      "canonical_utf8": "fixtures/requested-only-partial-approximate.canonical.json",
+      "expected_digest": "46a0c26544e9bec1078e1bdb20ffa812e4ed870dcea98d094b915902d7b52e8d"
+    },
+    {
+      "name": "unknown-cost-currency-scope",
+      "original_json": "fixtures/unknown-cost-currency-scope.json",
+      "canonical_utf8": "fixtures/unknown-cost-currency-scope.canonical.json",
+      "expected_digest": "84651b8cda3315ede339aa26894f434d40c2a4102e37926fd7e28a26545ee6fd"
+    },
+    {
+      "name": "stable-allocation-reorder",
+      "original_json": "fixtures/stable-allocation-reorder.json",
+      "canonical_utf8": "fixtures/stable-allocation-reorder.canonical.json",
+      "expected_digest": "6d221354a7e81109f1e85b7378c6377c1e093f66ce1e39e038a8400bd3456cec"
+    },
+    {
+      "name": "expanded-usage-old-cost",
+      "original_json": "fixtures/expanded-usage-old-cost.json",
+      "canonical_utf8": "fixtures/expanded-usage-old-cost.canonical.json",
+      "expected_digest": "94a13b97d4334e78cbafaf346044c4652f5b563302761c19df9afbac0405ac30"
+    },
+    {
+      "name": "conflicting-current-revisions",
+      "original_json": "fixtures/conflicting-current-revisions.json",
+      "canonical_utf8": "fixtures/conflicting-current-revisions.canonical.json",
+      "expected_digest": "a31db5f79b3a16bbf5d07c4908973e2974d6ac9bf4fbe750a7c53e6f95d3dcbd"
+    },
+    {
+      "name": "partial-token-subtotal",
+      "original_json": "fixtures/partial-token-subtotal.json",
+      "canonical_utf8": "fixtures/partial-token-subtotal.canonical.json",
+      "expected_digest": "92675ee6c67503c99c1c3a69c680a0466683e08f6b240863607e983a8203f383"
+    }
+  ],
+  "export_cases": [
+    {
+      "name": "partial-token-export",
+      "original_json": "fixtures/partial-token-export.json",
+      "canonical_utf8": "fixtures/partial-token-export.canonical.json",
+      "expected_digest": "61fd88dca94e46129f2fe5468407ae1339b77a1184e8b8397134cae3e0d95c04",
+      "accepted": true
+    },
+    {
+      "name": "unknown-export-field",
+      "original_json": "fixtures/unknown-export-field.json",
+      "canonical_utf8": "fixtures/unknown-export-field.canonical.json",
+      "expected_digest": "ec866e07bacfbcc6c10e35bde5e1010a43dcb7af2c90d9c619423c7da6bbad54",
+      "accepted": false
+    }
+  ],
+  "protocol_cases": [
+    {
+      "name": "delivery-scenarios",
+      "original_json": "fixtures/delivery-scenarios.json",
+      "canonical_utf8": "fixtures/delivery-scenarios.canonical.json",
+      "expected_digest": "761585f43c3cd0b9762f8e90c069b2c3b0129dfdc6f372a291200a02abc5f81f"
+    }
+  ]
+}

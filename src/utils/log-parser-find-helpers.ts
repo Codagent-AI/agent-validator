@@ -14,6 +14,8 @@ import type {
 import { parseReviewFilename } from './log-parser-helpers.js';
 
 const log = getCategoryLogger('log-parser');
+const METRICS_SNAPSHOT_FILENAME = 'validation-metrics.json';
+const METRICS_STORE_DIRECTORY = '.metrics';
 
 // ---- findPreviousFailures helpers ----
 
@@ -37,6 +39,8 @@ export function categorizeFiles(
   const checkPrefixMap = new Map<string, Map<number, Set<string>>>();
 
   for (const file of files) {
+    if (file === METRICS_SNAPSHOT_FILENAME || file === METRICS_STORE_DIRECTORY)
+      continue;
     const isLog = file.endsWith('.log');
     const isJson = file.endsWith('.json');
     if (!(isLog || isJson)) continue;

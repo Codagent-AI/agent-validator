@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import * as childProcess from "node:child_process";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -13,6 +14,7 @@ import {
 import { readExecutionState } from "../../src/utils/execution-state.js";
 import {
 	appendRecord,
+	computeSnapshotTreeSha,
 	computeTreeSha,
 	readRecords,
 	type TrustRecord,
@@ -313,6 +315,52 @@ describe("startup reconciliation", () => {
 		expect(continued.changeOptions?.fixBase).toMatch(/^[0-9a-f]{40}$/);
 		expect(continued.trustSourceOnPass).toBe("ledger-reconciled");
 	});
+
+	it.each(["write-tree", "commit-tree"])(
+		"falls back to the other trusted parent when snapshot %s fails",
+		async (failingCommand) => {
+			await git(["checkout", "-b", "feature"]);
+			await fs.writeFile(path.join(repoDir, "src/feature.ts"), "validated feature\n");
+			await git(["add", "src/feature.ts"]);
+			await fs.writeFile(path.join(repoDir, "handoff.md"), "validated notes\n");
+			await git(["stash", "push", "--include-untracked"]);
+			const snapshot = await git(["rev-parse", "stash@{0}"]);
+			await appendRecord({
+				...trustedRecord(null, await computeSnapshotTreeSha(snapshot)),
+				working_tree_ref: snapshot,
+			});
+			await git(["checkout", snapshot, "--", "src/feature.ts"]);
+			await git(["commit", "-m", "commit feature without notes"]);
+			await git(["checkout", "main"]);
+			const parent = await writeFileAndCommit("src/dev.ts", "validated dev\n", "dev");
+			await appendRecord(trustedRecord(parent, await computeTreeSha(parent)));
+			await git(["merge", "--no-ff", "feature", "-m", "merge"]);
+
+			// Fail just the materialization write through real Git, without making
+			// unrelated repository reads fail or depending on the test user's UID.
+			const blockedObjects = path.join(repoDir, ".git", "blocked-objects");
+			await fs.writeFile(blockedObjects, "not a directory");
+			const spawn = childProcess.spawn;
+			let failedWrites = 0;
+			const spy = spyOn(childProcess, "spawn").mockImplementation(((command: string, args: readonly string[] = [], options: childProcess.SpawnOptions = {}) => {
+				if (command === "git" && Array.isArray(args) && args[0] === failingCommand) {
+					failedWrites++;
+					return spawn(command, args, {
+						...options,
+						env: { ...process.env, ...options?.env, GIT_OBJECT_DIRECTORY: blockedObjects },
+					});
+				}
+				return spawn(command, args, options);
+			}) as typeof childProcess.spawn);
+			try {
+				const result = await reconcileDetect();
+				expect(failedWrites).toBe(1);
+				expect(result).toEqual({ kind: "continue", changeOptions: { fixBase: parent } });
+			} finally {
+				spy.mockRestore();
+			}
+		},
+	);
 
 	it("scopes validation to the trusted parent when exactly one merge parent is trusted", async () => {
 		const base = await git(["rev-parse", "HEAD"]);

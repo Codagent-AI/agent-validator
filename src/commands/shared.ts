@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import chalk from 'chalk';
+import { closeMeasuredSession } from '../metrics/session-closure.js';
 import {
   getDebugLogBackupFilename,
   getDebugLogFilename,
@@ -17,6 +18,8 @@ import {
 
 const LOCK_FILENAME = '.validator-run.lock';
 const SESSION_REF_FILENAME = '.session_ref';
+const METRICS_SNAPSHOT_FILENAME = 'validation-metrics.json';
+const METRICS_STORE_DIRECTORY = '.metrics';
 
 export interface AutoCleanResult {
   clean: boolean;
@@ -188,6 +191,8 @@ export async function hasExistingLogs(logDir: string): Promise<boolean> {
       (f) =>
         (f.endsWith('.log') || f.endsWith('.json')) &&
         f !== 'previous' &&
+        f !== METRICS_SNAPSHOT_FILENAME &&
+        f !== METRICS_STORE_DIRECTORY &&
         !f.startsWith('console.') &&
         !f.startsWith('.'),
     );
@@ -206,69 +211,20 @@ function getPersistentFiles(): Set<string> {
     getDebugLogBackupFilename(),
     LOCK_FILENAME,
     SESSION_REF_FILENAME, // Will be deleted, not moved
+    METRICS_SNAPSHOT_FILENAME,
+    METRICS_STORE_DIRECTORY,
   ]);
-}
-
-/**
- * Check if there are current logs to archive.
- * Returns true if there are .log or .json files in the log directory root.
- * Excludes persistent files (.execution_state, .debug.log, etc.)
- */
-async function hasCurrentLogs(logDir: string): Promise<boolean> {
-  try {
-    const files = await fs.readdir(logDir);
-    const persistentFiles = getPersistentFiles();
-    return files.some(
-      (f) =>
-        (f.endsWith('.log') || f.endsWith('.json')) &&
-        f !== 'previous' &&
-        !persistentFiles.has(f),
-    );
-  } catch {
-    return false;
-  }
 }
 
 /** Get current log files (excludes previous dirs and persistent files). */
 function getCurrentLogFiles(files: string[]): string[] {
   const persistentFiles = getPersistentFiles();
   return files.filter(
-    (file) => !(file.startsWith('previous') || persistentFiles.has(file)),
+    (file) =>
+      (file.endsWith('.log') || file.endsWith('.json')) &&
+      !file.startsWith('previous') &&
+      !persistentFiles.has(file),
   );
-}
-
-/** Delete current logs without archiving (maxPreviousLogs === 0). */
-async function deleteCurrentLogs(logDir: string): Promise<void> {
-  const files = await fs.readdir(logDir);
-  await Promise.all(
-    getCurrentLogFiles(files).map((file) =>
-      fs.rm(path.join(logDir, file), { recursive: true, force: true }),
-    ),
-  );
-}
-
-/** Rotate existing previous/ directories to make room for a new archive. */
-async function rotatePreviousDirs(
-  logDir: string,
-  maxPreviousLogs: number,
-): Promise<void> {
-  const oldestSuffix = maxPreviousLogs - 1;
-  const oldestDir =
-    oldestSuffix === 0 ? 'previous' : `previous.${oldestSuffix}`;
-  const oldestPath = path.join(logDir, oldestDir);
-  if (await exists(oldestPath)) {
-    await fs.rm(oldestPath, { recursive: true, force: true });
-  }
-
-  for (let i = oldestSuffix - 1; i >= 0; i--) {
-    const fromName = i === 0 ? 'previous' : `previous.${i}`;
-    const toName = `previous.${i + 1}`;
-    const fromPath = path.join(logDir, fromName);
-    const toPath = path.join(logDir, toName);
-    if (await exists(fromPath)) {
-      await fs.rename(fromPath, toPath);
-    }
-  }
 }
 
 export async function cleanLogs(
@@ -276,34 +232,15 @@ export async function cleanLogs(
   maxPreviousLogs = 3,
 ): Promise<void> {
   try {
-    if (!(await exists(logDir))) return;
-    if (!(await hasCurrentLogs(logDir))) return;
+    const result = await closeMeasuredSession(logDir, maxPreviousLogs);
+    if (result.warnings.length > 0) throw new Error(result.warnings.join('; '));
 
-    if (maxPreviousLogs === 0) {
-      await deleteCurrentLogs(logDir);
-      return;
-    }
-
-    await rotatePreviousDirs(logDir, maxPreviousLogs);
-
-    const previousDir = path.join(logDir, 'previous');
-    await fs.mkdir(previousDir, { recursive: true });
-
-    const files = await fs.readdir(logDir);
-    const toMove = getCurrentLogFiles(files);
-    const kept = files.filter((f) => !toMove.includes(f));
-    await getDebugLogger()?.logCleanDetails(toMove, kept);
-    await Promise.all(
-      toMove.map((file) =>
-        fs.rename(path.join(logDir, file), path.join(previousDir, file)),
-      ),
-    );
-
-    // Delete legacy .session_ref if it exists (migration cleanup)
-    try {
-      await fs.rm(path.join(logDir, SESSION_REF_FILENAME), { force: true });
-    } catch {
-      // Ignore errors
+    let kept: string[] = [];
+    if (await exists(logDir)) {
+      const files = await fs.readdir(logDir);
+      const toMove = getCurrentLogFiles(files);
+      kept = files.filter((file) => !toMove.includes(file));
+      await getDebugLogger()?.logCleanDetails(toMove, kept);
     }
 
     // Post-clean verification: warn if execution state was lost

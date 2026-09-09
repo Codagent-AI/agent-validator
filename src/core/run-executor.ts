@@ -3,11 +3,18 @@ import path from 'node:path';
 import {
   hasExistingLogs,
   performAutoClean,
+  readContextFile,
   releaseLock,
   shouldAutoClean,
 } from '../commands/shared.js';
 import { loadGlobalConfig } from '../config/global.js';
 import { loadConfig } from '../config/loader.js';
+import {
+  CommandMetricsLifecycle,
+  type CommandTelemetry,
+  validateMetricsContext,
+} from '../metrics/command-lifecycle.js';
+import { recoverPendingSessionClosures } from '../metrics/session-closure.js';
 import {
   getCategoryLogger,
   initLogger,
@@ -32,6 +39,7 @@ import { pruneIfNeeded } from '../utils/trust-ledger.js';
 import { reconcileStartup } from './reconciliation.js';
 import {
   appendRunTrustRecord,
+  cleanupAfterFinalization,
   detectAndPrepareChanges,
   executeAndReport,
   finalizeAndReturn,
@@ -54,6 +62,18 @@ export interface ExecuteRunOptions {
   report?: boolean;
   /** Content to inject into review prompts via {{CONTEXT}} placeholder */
   contextContent?: string;
+  /** Path to inject into review prompts; read after invocation allocation. */
+  contextFile?: string;
+  metricsConsumer?: string;
+  metricsContext?: string;
+}
+
+async function withTelemetry(
+  result: RunResult,
+  lifecycle: CommandMetricsLifecycle,
+): Promise<RunResult> {
+  if (result.telemetry) return result;
+  return { ...result, telemetry: await lifecycle.finalize(result.status) };
 }
 
 /** Initialize app logger and debug logger, returning a RunContext. */
@@ -129,6 +149,7 @@ async function runWithLock(
   ctx: RunContext,
   isRerun: boolean,
   logsExist: boolean,
+  metricsLifecycle?: CommandMetricsLifecycle,
 ): Promise<RunResult> {
   const logger = new Logger(ctx.config.project.log_dir);
   await logger.init();
@@ -188,7 +209,14 @@ async function runWithLock(
     passedSlotsMap,
     changeOptions,
     prepared.jobs,
+    metricsLifecycle,
   );
+  if (metricsLifecycle) {
+    result.telemetry = await metricsLifecycle.finalize(result.status);
+  }
+  await cleanupAfterFinalization(ctx, result.status);
+  await writeExecutionState(ctx.config.project.log_dir);
+  await appendRunTrustRecord(ctx, result.status);
 
   consoleLogHandle?.restore();
   if (ctx.loggerInitializedHere) {
@@ -201,39 +229,63 @@ async function runWithLock(
  * Execute the validator run logic. Returns a structured RunResult.
  * This function never calls process.exit() - the caller is responsible for that.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity lint/complexity/noExcessiveLinesPerFunction: every controlled exit finalizes the same invocation lifecycle.
 export async function executeRun(
   options: ExecuteRunOptions = {},
 ): Promise<RunResult> {
   let loggerInitializedHere = false;
+  let lifecycle: CommandMetricsLifecycle | undefined;
+  let effectiveOptions = options;
 
   try {
-    const config = await loadConfig(options.cwd);
+    lifecycle = new CommandMetricsLifecycle('run');
+    lifecycle.setContext(validateMetricsContext(effectiveOptions));
+    if (effectiveOptions.contextFile) {
+      effectiveOptions = {
+        ...effectiveOptions,
+        contextContent: await readContextFile(effectiveOptions.contextFile),
+      };
+    }
+    const config = await loadConfig(effectiveOptions.cwd);
     const lockAcquired = await tryAcquireLock(config.project.log_dir);
     if (!lockAcquired) {
-      return finalizeAndReturn(loggerInitializedHere, {
-        status: 'lock_conflict',
-        message: getStatusMessage('lock_conflict'),
-      });
+      return withTelemetry(
+        await finalizeAndReturn(loggerInitializedHere, {
+          status: 'lock_conflict',
+          message: getStatusMessage('lock_conflict'),
+        }),
+        lifecycle,
+      );
     }
 
     try {
       await pruneIfNeeded();
+      const recovery = await recoverPendingSessionClosures(
+        config.project.log_dir,
+      );
+      if (recovery.warnings.length > 0)
+        console.warn(
+          `Metrics session closure recovery is incomplete: ${recovery.warnings.join('; ')}`,
+        );
       const reconciliation = await reconcileStartup({
         command: 'run',
         config,
         logDir: config.project.log_dir,
-        report: options.report,
+        report: effectiveOptions.report,
         options: {
-          gate: options.gate,
-          enableReviews: options.enableReviews,
+          gate: effectiveOptions.gate,
+          enableReviews: effectiveOptions.enableReviews,
         },
       });
       if (reconciliation.kind === 'trusted') {
-        return reconciliation.result;
+        await lifecycle.associate(config.project.log_dir);
+        return withTelemetry(reconciliation.result, lifecycle);
       }
 
+      await lifecycle.associate(config.project.log_dir);
+
       const { ctx, loggerInitializedHere: lih } = await initRunContext(
-        options,
+        effectiveOptions,
         config,
       );
       loggerInitializedHere = lih;
@@ -243,9 +295,12 @@ export async function executeRun(
       await handleAutoClean(ctx);
 
       const logsExist = await hasExistingLogs(config.project.log_dir);
-      const isRerun = logsExist && !options.commit;
+      const isRerun = logsExist && !effectiveOptions.commit;
 
-      return await runWithLock(ctx, isRerun, logsExist);
+      return withTelemetry(
+        await runWithLock(ctx, isRerun, logsExist, lifecycle),
+        lifecycle,
+      );
     } finally {
       await releaseLock(config.project.log_dir);
     }
@@ -262,10 +317,31 @@ export async function executeRun(
       error instanceof GitIndexLockError
         ? err.message || getStatusMessage('error')
         : getStatusMessage('error');
-    return {
+    const result: RunResult = {
       status: 'error',
       message,
       errorMessage: err.message || 'unknown error',
     };
+    return lifecycle
+      ? withTelemetry(result, lifecycle)
+      : {
+          ...result,
+          telemetry: unavailableTelemetry(),
+        };
   }
+}
+
+function unavailableTelemetry(): CommandTelemetry {
+  const lifecycle = new CommandMetricsLifecycle('run');
+  return {
+    invocation_id: lifecycle.invocationId,
+    session_id: null,
+    artifact_path: null,
+    publication: {
+      state: 'unavailable',
+      snapshot_id: null,
+      owner_invocation_id: null,
+      reasons: ['invocation_initialization_failed'],
+    },
+  };
 }

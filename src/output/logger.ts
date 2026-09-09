@@ -2,6 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { sanitizeJobId } from '../utils/sanitizer.js';
 
+const METRICS_SNAPSHOT_FILENAME = 'validation-metrics.json';
+const METRICS_STORE_DIRECTORY = '.metrics';
+
 function formatTimestamp(): string {
   return new Date().toISOString();
 }
@@ -15,6 +18,11 @@ async function computeGlobalRunNumber(logDir: string): Promise<number> {
     const files = await fs.readdir(logDir);
     let max = 0;
     for (const file of files) {
+      if (
+        file === METRICS_SNAPSHOT_FILENAME ||
+        file === METRICS_STORE_DIRECTORY
+      )
+        continue;
       if (!(file.endsWith('.log') || file.endsWith('.json'))) continue;
       // Pattern: <anything>.<number>.(log|json)
       const m = file.match(/\.(\d+)\.(log|json)$/);

@@ -1,4 +1,11 @@
 import { getDebugLogger } from '../utils/debug-log.js';
+import { createBoundedLineCollector } from './bounded-lines.js';
+import {
+  type AdapterTelemetry,
+  createUnavailableTelemetry,
+  observedMeasurement,
+  unavailableMeasurement,
+} from './shared.js';
 
 // ─── OTel Usage Types ────────────────────────────────────────────────────────
 
@@ -163,10 +170,11 @@ function parseOtelMetrics(blocks: string[]): OtelUsage {
 const OTEL_ATTR_RE = {
   body: /body:\s*['"]([^'"]*)['"]/,
   tool_result_size_bytes: /tool_result_size_bytes:\s*['"]([^'"]*)['"]/,
-  input_tokens: /input_tokens:\s*['"]([^'"]*)['"]/,
-  output_tokens: /output_tokens:\s*['"]([^'"]*)['"]/,
-  cache_read_tokens: /cache_read_tokens:\s*['"]([^'"]*)['"]/,
-  cache_creation_tokens: /cache_creation_tokens:\s*['"]([^'"]*)['"]/,
+  input_tokens: /\binput_tokens:\s*["']?(\d+)["']?(?=\s*[,}\n])/,
+  output_tokens: /\boutput_tokens:\s*["']?(\d+)["']?(?=\s*[,}\n])/,
+  cache_read_tokens: /\bcache_read_tokens:\s*["']?(\d+)["']?(?=\s*[,}\n])/,
+  cache_creation_tokens:
+    /\bcache_creation_tokens:\s*["']?(\d+)["']?(?=\s*[,}\n])/,
   cost_usd: /cost_usd:\s*['"]([^'"]*)['"]/,
 } as const;
 
@@ -265,6 +273,195 @@ export function safeExtractOtelMetrics(
     process.stderr.write(`[agent-validator] OTel extraction failed: ${msg}\n`);
     return raw;
   }
+}
+
+/**
+ * Converts the allowlisted Claude OTel counters into safe partial evidence.
+ * Metric counters take precedence over API-request logs because both may
+ * describe the same work and the existing source does not establish a safe
+ * way to add them together.
+ */
+function canonicalClaudeUsage(raw: string): {
+  usage: OtelUsage;
+  completeRequestInputs: boolean;
+} {
+  const { metricBlocks, logBlocks } = scanOtelBlocks(raw);
+  const tokenMetrics = metricBlocks.filter((block) =>
+    /name:\s*"claude_code\.token\.usage"/.test(block),
+  );
+  if (tokenMetrics.length > 0) {
+    return {
+      usage: parseOtelMetrics(tokenMetrics),
+      completeRequestInputs: true,
+    };
+  }
+  const usage: OtelUsage = {};
+  let completeRequestInputs = true;
+  for (const block of logBlocks) {
+    if (block.match(OTEL_ATTR_RE.body)?.[1] !== 'claude_code.api_request')
+      continue;
+    accumulateApiRequest(block, usage);
+    completeRequestInputs &&= [
+      OTEL_ATTR_RE.input_tokens,
+      OTEL_ATTR_RE.cache_read_tokens,
+      OTEL_ATTR_RE.cache_creation_tokens,
+    ].every((field) => field.test(block));
+  }
+  return { usage, completeRequestInputs };
+}
+
+function claudeInputTotal(
+  tokens: AdapterTelemetry['tokens'],
+  completeRequestInputs: boolean,
+): AdapterTelemetry['tokens']['input_total'] {
+  const { input_uncached, cache_read, cache_write } = tokens;
+  if (
+    !completeRequestInputs ||
+    input_uncached.availability !== 'available' ||
+    cache_read.availability !== 'available' ||
+    cache_write.availability !== 'available'
+  ) {
+    return unavailableMeasurement('claude_input_breakdown_incomplete');
+  }
+  const total = observedMeasurement(
+    input_uncached.value + cache_read.value + cache_write.value,
+    'validator_derivation',
+  );
+  return total.availability === 'available'
+    ? {
+        ...total,
+        origin: 'derived',
+        derivation: 'claude_uncached_plus_cache_read_plus_cache_write',
+      }
+    : total;
+}
+
+export function parseClaudeOtelTelemetry(
+  raw: string,
+  opts: { requestedModel?: string; thinkingBudget?: string } = {},
+): AdapterTelemetry {
+  const { usage, completeRequestInputs } = canonicalClaudeUsage(raw);
+  return createClaudeTelemetry(usage, completeRequestInputs, opts);
+}
+
+function createClaudeTelemetry(
+  usage: OtelUsage,
+  completeRequestInputs: boolean,
+  opts: { requestedModel?: string; thinkingBudget?: string },
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('claude', {
+    requestedModel: opts.requestedModel,
+    requestedEffort: opts.thinkingBudget,
+    reason: 'claude_otel_not_observed',
+  });
+  const source = 'provider_event' as const;
+  const fields: Array<
+    [
+      keyof OtelUsage,
+      'input_uncached' | 'output' | 'cache_read' | 'cache_write',
+    ]
+  > = [
+    ['input', 'input_uncached'],
+    ['output', 'output'],
+    ['cacheRead', 'cache_read'],
+    ['cacheCreation', 'cache_write'],
+  ];
+  for (const [usageKey, tokenKey] of fields) {
+    const value = usage[usageKey];
+    if (typeof value !== 'number') continue;
+    telemetry.tokens[tokenKey] = observedMeasurement(
+      value,
+      source,
+      'exact',
+      tokenKey === 'output' ? null : ['input_total'],
+    );
+    telemetry.provider_native_usage.push({
+      source,
+      name: `claude_otel_${usageKey}`,
+      value,
+    });
+  }
+  // Anthropic's three input categories are disjoint. Neither a missing cache
+  // counter nor an overlapping API-request copy of a metric is an observed zero.
+  telemetry.tokens.input_total = claudeInputTotal(
+    telemetry.tokens,
+    completeRequestInputs,
+  );
+  if (telemetry.provider_native_usage.length > 0) {
+    telemetry.completeness.collection = 'partial';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = [
+      'claude_metric_request_overlap_unresolved',
+      'claude_normalized_total_not_established',
+    ];
+  }
+  telemetry.provenance.source_format_version = {
+    availability: 'available',
+    value: 'claude-otel-console',
+    reason: null,
+  };
+  telemetry.provenance.adapter_mapping_version = 'claude-otel-accounting-v2';
+  return telemetry;
+}
+
+/** Retain one bounded console block and safe counters, never the output history. */
+export function createClaudeTelemetryCollector(
+  opts: { requestedModel?: string; thinkingBudget?: string },
+  onTelemetry: (telemetry: AdapterTelemetry) => void,
+) {
+  const metrics: OtelUsage = {};
+  const requests: OtelUsage = {};
+  let seenMetrics = false;
+  let completeRequestInputs = true;
+  let block: string[] = [];
+  let depth = 0;
+  let length = 0;
+  let limited = false;
+  const abandon = () => {
+    limited = true;
+    block = [];
+  };
+  const observeBlock = (raw: string) => {
+    const kind = classifyBlock(raw);
+    if (kind === 'metric' && /name:\s*"claude_code\.token\.usage"/.test(raw)) {
+      seenMetrics = true;
+      Object.assign(metrics, parseTokenBlock(raw));
+    } else if (
+      kind === 'log' &&
+      raw.match(OTEL_ATTR_RE.body)?.[1] === 'claude_code.api_request'
+    ) {
+      accumulateApiRequest(raw, requests);
+      completeRequestInputs &&= [
+        OTEL_ATTR_RE.input_tokens,
+        OTEL_ATTR_RE.cache_read_tokens,
+        OTEL_ATTR_RE.cache_creation_tokens,
+      ].every((field) => field.test(raw));
+    } else return;
+    onTelemetry(
+      createClaudeTelemetry(
+        seenMetrics ? metrics : requests,
+        seenMetrics || completeRequestInputs,
+        opts,
+      ),
+    );
+  };
+  const lines = createBoundedLineCollector((line) => {
+    if (limited) return;
+    if (block.length === 0 && !isBlockStart(line)) return;
+    length += line.length + 1;
+    if (length > 1024 * 1024) {
+      abandon();
+      return;
+    }
+    block.push(line);
+    depth += countBraceChange(line);
+    if (depth > 0) return;
+    observeBlock(block.join('\n'));
+    block = [];
+    length = 0;
+    depth = 0;
+  }, abandon);
+  return lines;
 }
 
 /** Build OTel environment overrides for console export. */

@@ -40,6 +40,7 @@ import type {
 import { extractPrefix, parseReviewFilename } from './log-parser-helpers.js';
 
 const log = getCategoryLogger('log-parser');
+const METRICS_SNAPSHOT_FILENAME = 'validation-metrics.json';
 
 /**
  * Parses a JSON review file.
@@ -243,6 +244,7 @@ export async function findErroredReviewScopes(
   }
 
   const candidates = files
+    .filter((filename) => filename !== METRICS_SNAPSHOT_FILENAME)
     .map((filename) => ({ filename, parsed: parseReviewFilename(filename) }))
     .filter(
       (

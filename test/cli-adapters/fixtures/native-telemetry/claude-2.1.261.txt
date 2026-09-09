@@ -1,0 +1,45 @@
+{
+  descriptor: {
+    name: "claude_code.token.usage",
+  },
+  dataPointType: 3,
+  dataPoints: [
+    {
+      attributes: {
+        type: "input",
+      },
+      value: 3504,
+    }, {
+      attributes: {
+        type: "output",
+      },
+      value: 4,
+    }, {
+      attributes: {
+        type: "cacheRead",
+      },
+      value: 0,
+    }, {
+      attributes: {
+        type: "cacheCreation",
+      },
+      value: 0,
+    }
+  ],
+}
+{
+  resource: {
+    attributes: {
+    },
+  },
+  instrumentationScope: {
+  },
+  body: "claude_code.api_request",
+  attributes: {
+    input_tokens: 3504,
+    output_tokens: 4,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    cost_usd: 0.0035240000000000002,
+  },
+}
