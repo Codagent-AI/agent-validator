@@ -1,0 +1,15 @@
+name: Factory routing
+
+on:
+  issues:
+    types: [opened, reopened, edited, closed, labeled, unlabeled]
+  pull_request:
+    types: [opened, reopened, edited, closed, labeled, unlabeled]
+
+jobs:
+  route:
+    uses: Codagent-AI/agent-factory/.github/workflows/route-work.yml@9b11f3d9148ad9d3cfbefc886c08a7437914d781
+    with:
+      factory-revision: 9b11f3d9148ad9d3cfbefc886c08a7437914d781
+    secrets:
+      factory-app-private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
