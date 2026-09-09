@@ -12,4 +12,17 @@ Metadata lock acquisition is bounded. An owner that is still alive (including a 
 
 This first unreleased private storage format does not automatically migrate populated development stores that predate the committed revision index. Preserve such a store unchanged, including journals and payloads. Recover/export with a compatible producer on an isolated copy, or retain the copy for a separately reviewed migration. Scanning payload files cannot prove which revisions committed: orphan files may exist. Starting a new isolated log directory is suitable for development verification, but does not migrate or acknowledge the old evidence. Destructive reset is not required or performed automatically.
 
+### Retry limit combined with an unindexed development store
+
+If a run reports both `Retry limit exceeded` and `Unsupported unindexed metrics storage`, retry-limit cleanup could not finish. Repeating the run or increasing `max_retries` does not repair the storage incompatibility. A retry-limit exit before gate dispatch is not a fresh check or review result.
+
+To resume development validation while preserving the old evidence:
+
+1. Confirm that no validation or metrics operation is using the configured log directory. Coordinate other launchers before moving it; absence of a lock alone does not establish that all writers are stopped.
+2. Move the **entire** log directory into a uniquely named, access-restricted backup outside the active log path, preferably on the same filesystem. Keep its execution state, archives, latest snapshot, private store, and closure journals together. Record the original project/configuration, backup location, and file hashes, and verify that the move preserved the files.
+3. Keep `log_dir` configured as before. Run the current producer to create a fresh directory and actually execute the applicable gates. Do not copy the old execution state into the new directory or use `skip` to claim validation.
+4. Retain the backup for compatible-producer recovery on a separate copy or a reviewed migration. Moving it is neither delivery acknowledgment nor discard; pending historical evidence remains unresolved and is not discoverable through the new store. An empty inventory in the new store does not establish zero historical consumption.
+
+To reverse this operation, stop writers again, preserve any newly created log directory separately, and restore the complete backup to its original path. Do not merge the old and new stores. The restored unindexed store still requires a compatible producer.
+
 Historical rotation recognizes `previous` and positive, canonically written safe-integer suffixes such as `previous.1`. Ambiguous names such as `previous.01` or `previous.0` stop rotation before it stages current logs. Preserve both directories if differently spelled names coexist; do not merge them or assume they represent the same session. Operator recovery should first make a recoverable backup and establish archive ownership/order. Zero retention does not rotate or delete pre-existing archives. Metrics-only export/acknowledgment remains independent of ordinary archive recovery for supported committed storage.
