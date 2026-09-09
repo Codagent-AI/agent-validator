@@ -1,3 +1,4 @@
+import { getCategoryLogger } from '../output/app-logger.js';
 import { generateReport } from '../output/report.js';
 import type { RunResult } from '../types/validator-status.js';
 import {
@@ -106,27 +107,34 @@ async function trustedParentBaseline(parent: string): Promise<string | null> {
   // Keep the validated untracked files in the merge baseline, so their omission
   // remains a validation delta. Attach the full snapshot to this parent to
   // preserve merge ancestry without moving any branch or worktree state.
-  const snapshotTree = await computeSnapshotTreeSha(snapshot);
-  return gitStdout(
-    [
-      'commit-tree',
-      snapshotTree,
-      '-p',
-      parent,
-      '-m',
-      'Validator merge baseline',
-    ],
-    {
-      env: {
-        GIT_AUTHOR_NAME: 'Agent Validator',
-        GIT_AUTHOR_EMAIL: 'validator@localhost',
-        GIT_COMMITTER_NAME: 'Agent Validator',
-        GIT_COMMITTER_EMAIL: 'validator@localhost',
-        GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z',
-        GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z',
+  try {
+    const snapshotTree = await computeSnapshotTreeSha(snapshot);
+    return await gitStdout(
+      [
+        'commit-tree',
+        snapshotTree,
+        '-p',
+        parent,
+        '-m',
+        'Validator merge baseline',
+      ],
+      {
+        env: {
+          GIT_AUTHOR_NAME: 'Agent Validator',
+          GIT_AUTHOR_EMAIL: 'validator@localhost',
+          GIT_COMMITTER_NAME: 'Agent Validator',
+          GIT_COMMITTER_EMAIL: 'validator@localhost',
+          GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z',
+          GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z',
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    getCategoryLogger('run').debug(
+      `Cannot materialize merge snapshot ${snapshot}; falling back to validation: ${String(error)}`,
+    );
+    return null;
+  }
 }
 
 async function mergeTree(
