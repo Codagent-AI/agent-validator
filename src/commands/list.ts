@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { loadConfig } from '../config/loader.js';
-import { ReviewerOverrideError } from '../config/reviewer-override.js';
 import type { LoadedConfig } from '../config/types.js';
 
 function printCheckGates(config: LoadedConfig): void {
@@ -27,17 +26,11 @@ function printEntryPoints(config: LoadedConfig): void {
   }
 }
 
-/**
- * Only a reviewer-override failure exits nonzero. Other load failures keep the
- * exit code `list` had before the override shipped, so probes that tolerated a
- * missing or invalid config keep working.
- */
+/** Any load failure is a failure, matching `validate` and the other commands. */
 function reportLoadFailure(error: unknown): void {
-  const err = error as { message?: string };
-  console.error(chalk.red('Error:'), err.message);
-  if (error instanceof ReviewerOverrideError) {
-    process.exit(1);
-  }
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(chalk.red('Error:'), message);
+  process.exitCode = 1;
 }
 
 export function registerListCommand(program: Command): void {
