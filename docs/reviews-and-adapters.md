@@ -94,6 +94,15 @@ Gates, checks, review enablement, and `num_reviews` stay as configured. `num_rev
 
 The overlay applies only to `run`, `review`, `health`, `list`, and `detect`. `check`, `validate`, `clean`, `skip`, `update-review`, metrics operations, and CI job listing ignore these variables and use the tracked project configuration.
 
+When override mode is active, the RESULTS SUMMARY on stderr and `--report` stdout name the configured review identity after the status line:
+
+```text
+Reviewer: github-copilot (runner-reviewer-role)
+Reviewer: claude (runner-reviewer-role; effort xhigh→high)
+```
+
+That line is the requested overlay (source `runner-reviewer-role`, mapped adapter, and the `xhigh` collapse when it occurred), not telemetry-observed effective model identity. It is omitted when no override is active. A trusted short-circuit still names the identity in `--report` output; trust matching itself is unchanged.
+
 ## Built-In Review Prompts
 
 | Built-in | Covers | Notes |

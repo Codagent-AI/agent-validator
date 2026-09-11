@@ -347,4 +347,83 @@ describe('generateReport', () => {
     const report = await generateReport('passed', undefined, TEST_DIR);
     expect(report).toBe('Status: Passed');
   });
+
+  it('names configured identity after status when override is attached', async () => {
+    const previous = process.env.AGENT_VALIDATOR_REVIEWER_CLI;
+    process.env.AGENT_VALIDATOR_REVIEWER_CLI = 'claude';
+    try {
+      const report = await generateReport('passed', undefined, TEST_DIR, {
+        source: 'runner-reviewer-role',
+        adapter: 'github-copilot',
+      });
+      expect(report).toBe(
+        'Status: Passed\nReviewer: github-copilot (runner-reviewer-role)',
+      );
+    } finally {
+      if (previous === undefined) delete process.env.AGENT_VALIDATOR_REVIEWER_CLI;
+      else process.env.AGENT_VALIDATOR_REVIEWER_CLI = previous;
+    }
+  });
+
+  it('names xhigh collapse on the configured identity line', async () => {
+    const report = await generateReport('passed', undefined, TEST_DIR, {
+      source: 'runner-reviewer-role',
+      adapter: 'claude',
+      effortCollapsed: 'xhigh',
+    });
+    expect(report).toBe(
+      'Status: Passed\nReviewer: claude (runner-reviewer-role; effort xhigh→high)',
+    );
+  });
+
+  it('keeps the identity line on a trusted short-circuit report', async () => {
+    const report = await generateReport('trusted', undefined, TEST_DIR, {
+      source: 'runner-reviewer-role',
+      adapter: 'github-copilot',
+      effortCollapsed: 'xhigh',
+    });
+    expect(report).toBe(
+      'Status: Trusted\nReviewer: github-copilot (runner-reviewer-role; effort xhigh→high)',
+    );
+  });
+
+  it('keeps the identity line when all gates pass with results present', async () => {
+    const gateResults: GateResult[] = [
+      { jobId: 'check:src:lint', status: 'pass', duration: 1000 },
+    ];
+    const report = await generateReport('passed', gateResults, TEST_DIR, {
+      source: 'runner-reviewer-role',
+      adapter: 'github-copilot',
+    });
+    expect(report).toBe(
+      'Status: Passed\nReviewer: github-copilot (runner-reviewer-role)',
+    );
+  });
+
+  it('does not name a reviewer from environment when no identity is attached', async () => {
+    const previous = {
+      cli: process.env.AGENT_VALIDATOR_REVIEWER_CLI,
+      model: process.env.AGENT_VALIDATOR_REVIEWER_MODEL,
+      effort: process.env.AGENT_VALIDATOR_REVIEWER_EFFORT,
+    };
+    process.env.AGENT_VALIDATOR_REVIEWER_CLI = 'copilot';
+    process.env.AGENT_VALIDATOR_REVIEWER_MODEL = 'opus';
+    process.env.AGENT_VALIDATOR_REVIEWER_EFFORT = 'xhigh';
+    try {
+      const report = await generateReport('passed', undefined, TEST_DIR);
+      expect(report).toBe('Status: Passed');
+      expect(report).not.toContain('Reviewer:');
+      expect(report).not.toContain('runner-reviewer-role');
+      expect(report).not.toContain('project-config');
+    } finally {
+      restoreEnv('AGENT_VALIDATOR_REVIEWER_CLI', previous.cli);
+      restoreEnv('AGENT_VALIDATOR_REVIEWER_MODEL', previous.model);
+      restoreEnv('AGENT_VALIDATOR_REVIEWER_EFFORT', previous.effort);
+    }
+  });
 });
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}

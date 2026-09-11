@@ -400,6 +400,11 @@ export const capabilitiesSchema = z
     capabilities_version: z.literal(1),
     protocol_versions: z.array(z.literal(1)).min(1),
     measurement_schema_versions: z.array(z.literal(1)).min(1),
+    reviewer_override: z
+      .object({
+        supported: z.literal(true),
+      })
+      .strict(),
     limits: z
       .object({
         default_inventory_count: z.number().int().positive(),

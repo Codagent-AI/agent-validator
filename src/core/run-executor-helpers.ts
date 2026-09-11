@@ -401,6 +401,7 @@ async function buildRunResult(
       status,
       outcome.gateResults,
       ctx.config.project.log_dir,
+      ctx.config.reviewerOverride,
     );
     // Write report file as a fallback
     const reportPath = path.join(ctx.config.project.log_dir, 'report.txt');

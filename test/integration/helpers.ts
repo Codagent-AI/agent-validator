@@ -96,6 +96,85 @@ process.stdout.write(JSON.stringify({ type: "item.completed", item: { type: "age
 	};
 }
 
+export interface ReviewerOverrideStubs {
+	binDir: string;
+	copilotCaptureDir: string;
+	claudeCaptureFile: string;
+	readCopilotArgv: () => Promise<string[][]>;
+	readClaudeInvocations: () => Promise<string>;
+	cleanup: () => Promise<void>;
+}
+
+export async function createReviewerOverrideStubs(): Promise<ReviewerOverrideStubs> {
+	const rootDir = await fs.promises.mkdtemp(
+		path.join(os.tmpdir(), "reviewer-override-stubs-"),
+	);
+	const binDir = path.join(rootDir, "bin");
+	const copilotCaptureDir = path.join(rootDir, "copilot-captures");
+	const claudeCaptureFile = path.join(rootDir, "claude-invocations.txt");
+	await fs.promises.mkdir(binDir);
+	await fs.promises.mkdir(copilotCaptureDir);
+	await fs.promises.writeFile(claudeCaptureFile, "");
+
+	const copilotPath = path.join(binDir, "copilot");
+	await fs.promises.writeFile(
+		copilotPath,
+		`#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+if (args.includes("--help")) {
+  process.stdout.write("Usage: copilot\\n");
+  process.exit(0);
+}
+const captureDir = process.env.FAKE_COPILOT_CAPTURE_DIR;
+if (captureDir) {
+  const captureNumber = fs.readdirSync(captureDir).filter((file) => file.startsWith("argv-")).length + 1;
+  fs.writeFileSync(path.join(captureDir, \`argv-\${captureNumber}.json\`), JSON.stringify(args));
+}
+process.stdout.write(JSON.stringify({ status: "pass", message: "Recording adapter pass" }) + "\\n");
+`,
+	);
+	await fs.promises.chmod(copilotPath, 0o755);
+
+	const claudePath = path.join(binDir, "claude");
+	await fs.promises.writeFile(
+		claudePath,
+		`#!/usr/bin/env node
+const fs = require("node:fs");
+const captureFile = process.env.FAKE_CLAUDE_CAPTURE_FILE;
+if (captureFile) {
+  fs.appendFileSync(captureFile, process.argv.slice(2).join(" ") + "\\n");
+}
+process.stdout.write(JSON.stringify({ status: "pass", message: "Recording adapter pass" }) + "\\n");
+`,
+	);
+	await fs.promises.chmod(claudePath, 0o755);
+
+	return {
+		binDir,
+		copilotCaptureDir,
+		claudeCaptureFile,
+		readCopilotArgv: async () => {
+			const files = (await fs.promises.readdir(copilotCaptureDir)).sort((a, b) =>
+				a.localeCompare(b, undefined, { numeric: true }),
+			);
+			return Promise.all(
+				files.map(async (file) =>
+					JSON.parse(
+						await fs.promises.readFile(
+							path.join(copilotCaptureDir, file),
+							"utf8",
+						),
+					),
+				),
+			);
+		},
+		readClaudeInvocations: () => fs.promises.readFile(claudeCaptureFile, "utf8"),
+		cleanup: () => fs.promises.rm(rootDir, { recursive: true, force: true }),
+	};
+}
+
 export async function initGitRepo(dir: string): Promise<void> {
 	const proc = Bun.spawn(
 		[

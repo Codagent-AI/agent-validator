@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { formatReviewerIdentityLine } from '../config/reviewer-override.js';
+import type { ReviewerOverrideIdentity } from '../config/types.js';
 import type { ReviewFullJsonOutput } from '../gates/result.js';
 import type { ValidatorStatus } from '../types/validator-status.js';
 
@@ -187,13 +189,19 @@ function formatReviewViolation(v: NumberedViolation): string[] {
 /**
  * Generate a plain-text failure report for the --report flag.
  * The report is self-contained and agent-actionable.
+ * When a reviewer override is attached, the configured identity is named
+ * after the status line, including on trusted short-circuit reports.
  */
 export async function generateReport(
   status: ValidatorStatus,
   gateResults: ReportGateResult[] | undefined,
   logDir: string,
+  reviewerOverride?: ReviewerOverrideIdentity,
 ): Promise<string> {
   const lines: string[] = [statusLineText(status)];
+  if (reviewerOverride) {
+    lines.push(formatReviewerIdentityLine(reviewerOverride));
+  }
 
   if (!gateResults || gateResults.length === 0) {
     return lines.join('\n');

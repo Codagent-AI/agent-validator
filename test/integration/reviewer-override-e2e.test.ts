@@ -5,9 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
-	DIST_BIN,
+	createReviewerOverrideStubs,
 	initGitRepo,
 	isDistBuilt,
+	type ReviewerOverrideStubs,
 	spawnValidator,
 } from "./helpers.js";
 
@@ -79,9 +80,145 @@ async function exists(target: string): Promise<boolean> {
 	}
 }
 
-const tempDirs: string[] = [];
+function stubEnv(
+	stubs: ReviewerOverrideStubs,
+	overrides: Record<string, string> = {},
+): NodeJS.ProcessEnv {
+	const env = overrideEnv(overrides);
+	env.CI = undefined;
+	env.GITHUB_ACTIONS = undefined;
+	env.GITHUB_BASE_REF = undefined;
+	env.GITHUB_SHA = undefined;
+	env.PATH = `${stubs.binDir}:${process.env.PATH ?? ""}`;
+	env.FAKE_COPILOT_CAPTURE_DIR = stubs.copilotCaptureDir;
+	env.FAKE_CLAUDE_CAPTURE_FILE = stubs.claudeCaptureFile;
+	return env;
+}
+
+const IDENTITY_LINE =
+	"Reviewer: github-copilot (runner-reviewer-role; effort xhigh→high)";
+
+describe("E2E-001: Override reaches the reviewer subprocess", () => {
+	const dirs: string[] = [];
+	const stubs: ReviewerOverrideStubs[] = [];
+
+	afterEach(async () => {
+		for (const dir of dirs.splice(0)) {
+			await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+		}
+		await Promise.all(stubs.splice(0).map((stub) => stub.cleanup()));
+	});
+
+	it(
+		"dispatches the mapped adapter, names the identity, and leaves tracked config unchanged",
+		async () => {
+			if (!isDistBuilt()) return;
+
+			const { dir, configPath } = await createRepo();
+			dirs.push(dir);
+			const stub = await createReviewerOverrideStubs();
+			stubs.push(stub);
+			const before = await fs.readFile(configPath, "utf-8");
+			const env = stubEnv(stub, {
+				[CLI_ENV]: "copilot",
+				[MODEL_ENV]: "gpt-5",
+				[EFFORT_ENV]: "xhigh",
+			});
+
+			const result = await spawnValidator(["run", "--report"], {
+				cwd: dir,
+				env,
+				timeoutMs: TIMEOUT_MS,
+			});
+
+			expect(result.exitCode).toBe(0);
+			expect(result.stderr).toContain(IDENTITY_LINE);
+			expect(result.stdout).toContain("Status: Passed");
+			expect(result.stdout).toContain(IDENTITY_LINE);
+
+			const copilotArgv = await stub.readCopilotArgv();
+			expect(copilotArgv.length).toBeGreaterThan(0);
+			const args = copilotArgv[0] ?? [];
+			expect(args).toContain("--model");
+			expect(args[args.indexOf("--model") + 1]).toBe("gpt-5");
+			expect(args).toContain("--effort");
+			expect(args[args.indexOf("--effort") + 1]).toBe("high");
+			const allowedTools = args.flatMap((arg, index) =>
+				arg === "--allow-tool" ? [args[index + 1]] : [],
+			);
+			expect(allowedTools).toEqual(["shell(cat)"]);
+			expect(await stub.readClaudeInvocations()).toBe("");
+			expect(await fs.readFile(configPath, "utf-8")).toBe(before);
+		},
+		TIMEOUT_MS,
+	);
+});
+
+describe("E2E-003: Trusted short-circuit still names the identity", () => {
+	const dirs: string[] = [];
+	const stubs: ReviewerOverrideStubs[] = [];
+
+	afterEach(async () => {
+		for (const dir of dirs.splice(0)) {
+			await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+		}
+		await Promise.all(stubs.splice(0).map((stub) => stub.cleanup()));
+	});
+
+	it(
+		"names the configured identity on a trusted --report rerun without dispatching",
+		async () => {
+			if (!isDistBuilt()) return;
+
+			const { dir } = await createRepo();
+			dirs.push(dir);
+			const stub = await createReviewerOverrideStubs();
+			stubs.push(stub);
+			const baselineEnv = stubEnv(stub);
+
+			const first = await spawnValidator(["run", "--report"], {
+				cwd: dir,
+				env: baselineEnv,
+				timeoutMs: TIMEOUT_MS,
+			});
+			expect(first.exitCode).toBe(0);
+			expect(first.stdout).toContain("Status: Passed");
+			expect(first.stdout).not.toContain("Reviewer:");
+			expect(first.stderr).not.toContain("runner-reviewer-role");
+			expect(await stub.readClaudeInvocations()).not.toBe("");
+
+			const overrideEnvVars = stubEnv(stub, {
+				[CLI_ENV]: "copilot",
+				[MODEL_ENV]: "gpt-5",
+				[EFFORT_ENV]: "xhigh",
+			});
+			const trustedWithOverride = await spawnValidator(["run", "--report"], {
+				cwd: dir,
+				env: overrideEnvVars,
+				timeoutMs: TIMEOUT_MS,
+			});
+			expect(trustedWithOverride.exitCode).toBe(0);
+			expect(trustedWithOverride.stdout).toContain("Status: Trusted");
+			expect(trustedWithOverride.stdout).toContain(IDENTITY_LINE);
+			expect(trustedWithOverride.stderr).not.toContain("RESULTS SUMMARY");
+			expect(await stub.readCopilotArgv()).toEqual([]);
+
+			const trustedWithoutOverride = await spawnValidator(["run", "--report"], {
+				cwd: dir,
+				env: baselineEnv,
+				timeoutMs: TIMEOUT_MS,
+			});
+			expect(trustedWithoutOverride.exitCode).toBe(0);
+			expect(trustedWithoutOverride.stdout).toBe("Status: Trusted\n");
+			expect(trustedWithoutOverride.stderr).not.toContain("RESULTS SUMMARY");
+		},
+		TIMEOUT_MS,
+	);
+});
 
 describe("E2E-002: fail-closed leaves no trace and does not touch check", () => {
+	const tempDirs: string[] = [];
+
 	afterEach(async () => {
 		for (const dir of tempDirs.splice(0)) {
 			await fs.rm(dir, { recursive: true, force: true }).catch(() => {});

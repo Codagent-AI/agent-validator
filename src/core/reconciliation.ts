@@ -67,7 +67,12 @@ async function trustedResult(
     gatesRun: 0,
   };
   if (args.report) {
-    result.reportText = await generateReport('trusted', undefined, args.logDir);
+    result.reportText = await generateReport(
+      'trusted',
+      undefined,
+      args.logDir,
+      args.config.reviewerOverride,
+    );
   }
   return { kind: 'trusted', result };
 }

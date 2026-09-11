@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import chalk from 'chalk';
+import { formatReviewerIdentityLine } from '../config/reviewer-override.js';
+import type { ReviewerOverrideIdentity } from '../config/types.js';
 import type { Job } from '../core/job.js';
 import type { GateResult } from '../gates/result.js';
 import { reconstructHistory } from '../utils/log-parser.js';
@@ -359,6 +361,7 @@ export class ConsoleReporter {
     results: GateResult[],
     logDir?: string,
     statusOverride?: string,
+    reviewerOverride?: ReviewerOverrideIdentity,
   ) {
     console.error(`\n${chalk.bold(SEPARATOR)}`);
     console.error(chalk.bold('RESULTS SUMMARY'));
@@ -373,6 +376,9 @@ export class ConsoleReporter {
       statusOverride,
     );
     console.error(statusColor(`Status: ${overallStatus}`));
+    if (reviewerOverride) {
+      console.error(formatReviewerIdentityLine(reviewerOverride));
+    }
     console.error(chalk.bold(`${SEPARATOR}\n`));
   }
 

@@ -183,6 +183,7 @@ async function runWithLock(
         prepared.earlyResult.status,
         prepared.earlyResult.gateResults,
         ctx.config.project.log_dir,
+        ctx.config.reviewerOverride,
       );
       prepared.earlyResult.reportText = reportText;
       // Write report file as fallback

@@ -72,6 +72,14 @@ function isRunnerEffort(value: string): value is RunnerEffort {
   return Object.hasOwn(EFFORT_TO_BUDGET, value);
 }
 
+export function formatReviewerIdentityLine(
+  identity: ReviewerOverrideIdentity,
+): string {
+  const collapse =
+    identity.effortCollapsed === 'xhigh' ? '; effort xhigh→high' : '';
+  return `Reviewer: ${identity.adapter} (${identity.source}${collapse})`;
+}
+
 export function applyReviewerOverrideToConfig(
   project: NormalizedValidatorConfig,
   reviews: Record<string, LoadedReviewGateConfig>,
