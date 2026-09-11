@@ -42,12 +42,13 @@ afterEach(async () => {
   );
 });
 
-async function invokeCapabilities(
+async function invokeMetrics(
   cwd: string,
+  args: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const child = Bun.spawn({
-    cmd: [process.execPath, path.join(root, 'src/index.ts'), 'metrics', 'capabilities'],
+    cmd: [process.execPath, path.join(root, 'src/index.ts'), 'metrics', ...args],
     cwd,
     env,
     stdout: 'pipe',
@@ -60,6 +61,74 @@ async function invokeCapabilities(
   ]);
   return { exitCode, stdout, stderr };
 }
+
+async function invokeCapabilities(
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return invokeMetrics(cwd, ['capabilities'], env);
+}
+
+function withoutReviewerEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env[REVIEWER_CLI_ENV];
+  delete env[REVIEWER_MODEL_ENV];
+  delete env[REVIEWER_EFFORT_ENV];
+  return env;
+}
+
+/**
+ * Data operations must ignore reviewer override environment entirely and must
+ * not grow a `reviewer_override` field. The environment used here is malformed
+ * on purpose: an overlay command would fail closed on it.
+ */
+const DATA_OPERATIONS: { name: string; args: string[] }[] = [
+  {
+    name: 'pending',
+    args: ['pending', '--protocol-version', '1', '--consumer', 'runner'],
+  },
+  {
+    name: 'export',
+    args: [
+      'export',
+      '--protocol-version',
+      '1',
+      '--consumer',
+      'runner',
+      '--context',
+      'ctx-1',
+    ],
+  },
+  {
+    name: 'acknowledge',
+    args: [
+      'acknowledge',
+      '--protocol-version',
+      '1',
+      '--consumer',
+      'runner',
+      '--context',
+      'ctx-1',
+      '--receipt',
+      'token',
+    ],
+  },
+  {
+    name: 'discard',
+    args: [
+      'discard',
+      '--protocol-version',
+      '1',
+      '--consumer',
+      'runner',
+      '--context',
+      'ctx-1',
+      '--receipt',
+      'token',
+      '--confirm',
+    ],
+  },
+];
 
 describe('INT-004: Capabilities document advertises support', () => {
   test('schema file and Zod validator accept a document containing reviewer_override', async () => {
@@ -83,10 +152,7 @@ describe('INT-004: Capabilities document advertises support', () => {
     );
     temporaryDirectories.push(cwd);
 
-    const withoutEnv = { ...process.env };
-    delete withoutEnv[REVIEWER_CLI_ENV];
-    delete withoutEnv[REVIEWER_MODEL_ENV];
-    delete withoutEnv[REVIEWER_EFFORT_ENV];
+    const withoutEnv = withoutReviewerEnv();
 
     const withEnv = {
       ...withoutEnv,
@@ -114,4 +180,36 @@ describe('INT-004: Capabilities document advertises support', () => {
     const entries = await readdir(cwd);
     expect(entries).toEqual([]);
   });
+});
+
+describe('INT-004: Metrics data operations are unchanged', () => {
+  test.each(DATA_OPERATIONS)(
+    'metrics $name ignores reviewer env and omits reviewer_override',
+    async ({ args }) => {
+      const cwd = await mkdtemp(
+        path.join(os.tmpdir(), 'validator-metrics-override-'),
+      );
+      temporaryDirectories.push(cwd);
+
+      const withoutEnv = withoutReviewerEnv();
+      const withEnv = {
+        ...withoutEnv,
+        [REVIEWER_MODEL_ENV]: 'opus',
+        [REVIEWER_EFFORT_ENV]: 'not-a-real-effort',
+      };
+
+      const baseline = await invokeMetrics(cwd, args, withoutEnv);
+      const withOverride = await invokeMetrics(cwd, args, withEnv);
+
+      expect(withOverride.exitCode).toBe(baseline.exitCode);
+      expect(withOverride.stdout).toBe(baseline.stdout);
+
+      const parsed = JSON.parse(withOverride.stdout) as Record<string, unknown>;
+      expect(parsed).not.toHaveProperty('reviewer_override');
+      expect(parsed.protocol_version).toBe(1);
+
+      const entries = await readdir(cwd);
+      expect(entries).toEqual([]);
+    },
+  );
 });

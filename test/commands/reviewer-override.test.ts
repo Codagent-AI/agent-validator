@@ -256,4 +256,20 @@ describe("INT-003: overlay command selection and fail-closed wiring", () => {
 		},
 		TIMEOUT_MS,
 	);
+
+	it(
+		"list keeps its prior exit code for config errors unrelated to the override",
+		async () => {
+			const { dir, configPath } = await createRepo();
+			await fs.writeFile(configPath, "base_branch: [not-a-string]\n");
+
+			const result = await spawnCli(dir, ["list"]);
+
+			// Only a ReviewerOverrideError makes `list` fail closed. Other load
+			// failures keep the exit code they had before the override shipped.
+			expect(result.exitCode).toBe(0);
+			expect(combinedOutput(result)).toContain("Error:");
+		},
+		TIMEOUT_MS,
+	);
 });

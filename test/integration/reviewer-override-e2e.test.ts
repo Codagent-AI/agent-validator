@@ -152,6 +152,37 @@ describe("E2E-001: Override reaches the reviewer subprocess", () => {
 		},
 		TIMEOUT_MS,
 	);
+
+	it(
+		"names the identity on stderr but leaves stdout unchanged without --report",
+		async () => {
+			if (!isDistBuilt()) return;
+
+			// A fresh repo: reusing the repo above would trust HEAD and
+			// short-circuit before any RESULTS SUMMARY is printed.
+			const { dir } = await createRepo();
+			dirs.push(dir);
+			const stub = await createReviewerOverrideStubs();
+			stubs.push(stub);
+			const env = stubEnv(stub, {
+				[CLI_ENV]: "copilot",
+				[MODEL_ENV]: "gpt-5",
+				[EFFORT_ENV]: "xhigh",
+			});
+
+			const result = await spawnValidator(["run"], {
+				cwd: dir,
+				env,
+				timeoutMs: TIMEOUT_MS,
+			});
+
+			expect(result.exitCode).toBe(0);
+			expect(result.stderr).toContain(IDENTITY_LINE);
+			expect(result.stdout).not.toContain("Reviewer:");
+			expect(result.stdout).not.toContain("Status:");
+		},
+		TIMEOUT_MS,
+	);
 });
 
 describe("E2E-003: Trusted short-circuit still names the identity", () => {
