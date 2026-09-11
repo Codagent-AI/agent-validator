@@ -3,26 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import chalk from 'chalk';
 import YAML from 'yaml';
+import { ADAPTER_CONFIG } from '../config/adapter-defaults.js';
 import type { ReviewConfig } from './init-reviews.js';
-
-type AdapterCfg = {
-  allow_tool_use: boolean;
-  thinking_budget: string;
-  model?: string;
-};
-
-const ADAPTER_CONFIG: Record<string, AdapterCfg> = {
-  claude: { allow_tool_use: false, thinking_budget: 'high' },
-  codex: { allow_tool_use: false, thinking_budget: 'medium' },
-  gemini: { allow_tool_use: false, thinking_budget: 'low' },
-  cursor: { allow_tool_use: false, thinking_budget: 'low', model: 'codex' },
-  'github-copilot': {
-    allow_tool_use: false,
-    thinking_budget: 'low',
-    model: 'codex',
-  },
-  opencode: { allow_tool_use: false, thinking_budget: 'low' },
-};
 
 export function buildOptInActivationComment(name: string): string {
   if (name === 'task-compliance') {

@@ -246,7 +246,9 @@ export async function executeRun(
         contextContent: await readContextFile(effectiveOptions.contextFile),
       };
     }
-    const config = await loadConfig(effectiveOptions.cwd);
+    const config = await loadConfig(effectiveOptions.cwd, {
+      applyReviewerOverride: true,
+    });
     const lockAcquired = await tryAcquireLock(config.project.log_dir);
     if (!lockAcquired) {
       return withTelemetry(

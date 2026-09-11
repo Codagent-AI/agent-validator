@@ -79,6 +79,30 @@ Adapter fields:
 
 Supported adapter keys are `claude`, `codex`, `gemini`, `github-copilot`, `cursor`, and `opencode`.
 
+## Runner Reviewer Override
+
+Agent Runner can export a reviewer triple through inherited environment variables. Overlay commands apply that triple in memory and never rewrite `.validator/config.yml`.
+
+| Variable | Meaning |
+| --- | --- |
+| `AGENT_VALIDATOR_REVIEWER_CLI` | Required once override mode is active |
+| `AGENT_VALIDATOR_REVIEWER_MODEL` | Optional; absent means do not overlay model |
+| `AGENT_VALIDATOR_REVIEWER_EFFORT` | Optional; absent means do not overlay thinking budget |
+
+Values are trimmed; empty-after-trim cannot be used as CLI, model, or effort. Presence of any of the three variables, including a present empty value, activates override mode. A missing, empty, or unmapped CLI, or an unknown effort, fails the overlay command immediately.
+
+| Runner CLI | Validator adapter |
+| --- | --- |
+| `claude`, `codex`, `cursor`, `opencode` | Same adapter key |
+| `copilot` | `github-copilot` |
+
+| Runner effort | Overlay `thinking_budget` |
+| --- | --- |
+| `low`, `medium`, `high` | Same string |
+| `xhigh` | `high` (lossy collapse) |
+
+`allow_tool_use` is never copied from a displaced adapter. An existing `cli.adapters.<mapped>` block keeps its `allow_tool_use`; a missing block is created from init defaults (`allow_tool_use: false`). Overlay commands are `run`, `review`, `health`, `list`, and `detect`. `check`, `validate`, `clean`, `skip`, `update-review`, metrics operations, and CI job listing ignore these variables.
+
 ## Entry Points
 
 ```yaml

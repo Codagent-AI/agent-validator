@@ -115,7 +115,9 @@ async function resolveTrustedChangeOptions(
 }
 
 async function executeDetect(options: DetectCliOptions): Promise<void> {
-  const config = await loadConfig();
+  const config = await loadConfig(process.cwd(), {
+    applyReviewerOverride: true,
+  });
   const effectiveBaseBranch = resolveBaseBranch(options, config);
   const trustedChangeOptions = await resolveTrustedChangeOptions(options);
   const resolveOptions = () =>

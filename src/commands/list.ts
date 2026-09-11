@@ -8,7 +8,9 @@ export function registerListCommand(program: Command): void {
     .description('List configured gates')
     .action(async () => {
       try {
-        const config = await loadConfig();
+        const config = await loadConfig(process.cwd(), {
+          applyReviewerOverride: true,
+        });
         console.log(chalk.bold('Check Gates:'));
         for (const c of Object.values(config.checks)) {
           console.log(` - ${c.name}`);
@@ -28,6 +30,7 @@ export function registerListCommand(program: Command): void {
       } catch (error: unknown) {
         const err = error as { message?: string };
         console.error(chalk.red('Error:'), err.message);
+        process.exit(1);
       }
     });
 }

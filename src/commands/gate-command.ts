@@ -63,7 +63,9 @@ async function initializeDebugLogger(
   commandName: GateCommandName,
   options: GateCommandOptions,
 ): Promise<InitResult> {
-  const config = await loadConfig();
+  const config = await loadConfig(process.cwd(), {
+    applyReviewerOverride: commandName === 'review',
+  });
 
   const globalConfig = await loadGlobalConfig();
   const debugLogConfig = mergeDebugLogConfig(

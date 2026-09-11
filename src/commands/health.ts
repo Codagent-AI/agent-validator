@@ -7,6 +7,7 @@ import {
   getAllAdapters,
 } from '../cli-adapters/index.js';
 import { loadConfig } from '../config/loader.js';
+import { ReviewerOverrideError } from '../config/reviewer-override.js';
 import { type ValidationResult, validateConfig } from '../config/validator.js';
 
 function formatHealthResult(health: CLIAdapterHealth): string {
@@ -100,7 +101,9 @@ function reportEmptyPreferences(reviewsWithEmptyPreference: string[]): void {
 }
 
 async function checkConfiguredAgentsHealth(): Promise<void> {
-  const config = await loadConfig();
+  const config = await loadConfig(process.cwd(), {
+    applyReviewerOverride: true,
+  });
   const reviewEntries = Object.entries(config.reviews);
 
   if (reviewEntries.length === 0) {
@@ -162,7 +165,11 @@ export function registerHealthCommand(program: Command): void {
 
       try {
         await checkConfiguredAgentsHealth();
-      } catch (_error: unknown) {
+      } catch (error: unknown) {
+        if (error instanceof ReviewerOverrideError) {
+          console.error(chalk.red('Error:'), error.message);
+          process.exit(1);
+        }
         await checkAllAgentsHealth();
       }
     });
