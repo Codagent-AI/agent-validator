@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
 import chalk from 'chalk';
-import { formatReviewerIdentityLine } from '../config/reviewer-override.js';
 import type { ReviewerOverrideIdentity } from '../config/types.js';
 import type { Job } from '../core/job.js';
 import type { GateResult } from '../gates/result.js';
 import { reconstructHistory } from '../utils/log-parser.js';
+import { formatReviewerIdentityLine } from './report.js';
 
 /** Map a gate status to its chalk color and label */
 function statusStyle(status: string): {

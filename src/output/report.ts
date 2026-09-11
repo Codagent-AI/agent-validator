@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { formatReviewerIdentityLine } from '../config/reviewer-override.js';
 import type { ReviewerOverrideIdentity } from '../config/types.js';
 import type { ReviewFullJsonOutput } from '../gates/result.js';
 import type { ValidatorStatus } from '../types/validator-status.js';
@@ -131,6 +130,14 @@ export async function enumerateNewViolations(
 /**
  * Map validator status to the report status line text.
  */
+export function formatReviewerIdentityLine(
+  identity: ReviewerOverrideIdentity,
+): string {
+  const collapse =
+    identity.effortCollapsed === 'xhigh' ? '; effort xhigh→high' : '';
+  return `Reviewer: ${identity.adapter} (${identity.source}${collapse})`;
+}
+
 export function statusLineText(status: ValidatorStatus): string {
   switch (status) {
     case 'passed':

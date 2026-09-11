@@ -5,6 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+	REVIEWER_CLI_ENV as CLI_ENV,
+	REVIEWER_EFFORT_ENV as EFFORT_ENV,
+	REVIEWER_MODEL_ENV as MODEL_ENV,
+} from "../../src/config/reviewer-override.js";
+import {
 	createReviewerOverrideStubs,
 	initGitRepo,
 	isDistBuilt,
@@ -14,9 +19,6 @@ import {
 
 const execFileAsync = promisify(execFile);
 const TIMEOUT_MS = 60_000;
-const MODEL_ENV = "AGENT_VALIDATOR_REVIEWER_MODEL";
-const CLI_ENV = "AGENT_VALIDATOR_REVIEWER_CLI";
-const EFFORT_ENV = "AGENT_VALIDATOR_REVIEWER_EFFORT";
 
 async function git(args: string[], cwd: string): Promise<string> {
 	const { stdout } = await execFileAsync("git", args, { cwd });

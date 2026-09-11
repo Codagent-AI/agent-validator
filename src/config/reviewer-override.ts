@@ -32,7 +32,7 @@ const EFFORT_TO_BUDGET = {
 } as const;
 
 type RunnerEffort = keyof typeof EFFORT_TO_BUDGET;
-export type OverlayThinkingBudget = 'low' | 'medium' | 'high';
+export type OverlayThinkingBudget = AdapterInitDefaults['thinking_budget'];
 
 export class ReviewerOverrideError extends Error {
   readonly variable: string;
@@ -54,6 +54,12 @@ export type ReviewerOverrideParseResult =
       effortCollapsed?: 'xhigh';
     };
 
+/** The parse result once an override is known to be active. */
+type ActiveReviewerOverride = Extract<
+  ReviewerOverrideParseResult,
+  { active: true }
+>;
+
 function readTrimmed(
   env: NodeJS.Dict<string | undefined>,
   key: string,
@@ -72,18 +78,10 @@ function isRunnerEffort(value: string): value is RunnerEffort {
   return Object.hasOwn(EFFORT_TO_BUDGET, value);
 }
 
-export function formatReviewerIdentityLine(
-  identity: ReviewerOverrideIdentity,
-): string {
-  const collapse =
-    identity.effortCollapsed === 'xhigh' ? '; effort xhigh→high' : '';
-  return `Reviewer: ${identity.adapter} (${identity.source}${collapse})`;
-}
-
 export function applyReviewerOverrideToConfig(
   project: NormalizedValidatorConfig,
   reviews: Record<string, LoadedReviewGateConfig>,
-  parsed: Extract<ReviewerOverrideParseResult, { active: true }>,
+  parsed: ActiveReviewerOverride,
 ): ReviewerOverrideIdentity {
   const mapped = parsed.adapter;
   project.cli.default_preference = [mapped];
@@ -102,7 +100,7 @@ export function applyReviewerOverrideToConfig(
 
 function overlayAdapterBlock(
   project: NormalizedValidatorConfig,
-  parsed: Extract<ReviewerOverrideParseResult, { active: true }>,
+  parsed: ActiveReviewerOverride,
 ): void {
   const mapped = parsed.adapter;
   const adapters = { ...project.cli.adapters };
@@ -122,7 +120,7 @@ function initDefaultsFor(adapter: MappedReviewerAdapter): AdapterInitDefaults {
 
 function withRoleOverlay(
   base: AdapterConfig | AdapterInitDefaults,
-  parsed: Extract<ReviewerOverrideParseResult, { active: true }>,
+  parsed: ActiveReviewerOverride,
 ): AdapterConfig {
   return {
     allow_tool_use: base.allow_tool_use,
