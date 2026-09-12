@@ -156,6 +156,28 @@ describe("startup reconciliation", () => {
 		}
 	});
 
+	it("writes report.txt to the log dir on a trusted --report short-circuit", async () => {
+		const head = await git(["rev-parse", "HEAD"]);
+		const tree = await computeTreeSha("HEAD");
+		const logDir = path.join(repoDir, "validator_logs");
+		await appendRecord(trustedRecord(head, tree));
+
+		const result = await reconcileStartup({
+			command: "run",
+			config: testConfig(logDir),
+			logDir,
+			report: true,
+		});
+
+		expect(result.kind).toBe("trusted");
+		if (result.kind === "trusted") {
+			const { reportText } = result.result;
+			expect(reportText).toBeDefined();
+			const written = await fs.readFile(path.join(logDir, "report.txt"), "utf-8");
+			expect(written).toBe(reportText ?? "");
+		}
+	});
+
 	it("detect reconciliation reports trusted HEAD without mutating state", async () => {
 		const head = await git(["rev-parse", "HEAD"]);
 		const tree = await computeTreeSha("HEAD");

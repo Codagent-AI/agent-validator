@@ -47,7 +47,7 @@ loadConfig({ applyReviewerOverride: true })
 
 ### `src/config/reviewer-override.ts`
 
-Pure env parse + mapping. Trim whitespace; empty after trim is absent. Activation = any of `AGENT_VALIDATOR_REVIEWER_CLI`, `_MODEL`, `_EFFORT` present. Then CLI must be non-empty and in `{claude, codex, cursor, opencode, copilot}`. Effort if present must be `low` | `medium` | `high` | `xhigh`. Throw a small dedicated error type (message names the variable and the problem) so CLI wrappers keep today's nonzero config-error exit. Do not read env again at report time.
+Pure env parse + mapping. Trim whitespace; empty after trim is absent. Activation = any of `AGENT_VALIDATOR_REVIEWER_CLI`, `_MODEL`, `_EFFORT` has a non-empty trimmed value. Then CLI must be non-empty and in `{claude, codex, cursor, opencode, copilot}`. Effort if present must be `low` | `medium` | `high` | `xhigh`. Throw a small dedicated error type (message names the variable and the problem) so CLI wrappers keep today's nonzero config-error exit. Do not read env again at report time.
 
 ### `loadConfig({ applyReviewerOverride?: boolean })`
 

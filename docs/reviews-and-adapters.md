@@ -59,7 +59,7 @@ Agent Runner can inherit a `{cli, model, effort}` reviewer triple into the Valid
 | `AGENT_VALIDATOR_REVIEWER_MODEL` | Optional model overlay |
 | `AGENT_VALIDATOR_REVIEWER_EFFORT` | Optional effort overlay |
 
-Values are trimmed. A value that is empty after trimming cannot be used as CLI, model, or effort. Presence of any of the three variables — including a present empty or whitespace-only value — activates override mode. Once active, `AGENT_VALIDATOR_REVIEWER_CLI` must be present, non-empty after trim, and mapped; otherwise the overlay command fails immediately and does not fall back to the project's configured reviewers. Absent model or effort leaves those adapter fields unchanged.
+Values are trimmed; empty or whitespace-only values are treated as absent. Override mode activates when at least one of the three variables has a non-empty trimmed value. Once active, `AGENT_VALIDATOR_REVIEWER_CLI` must be present, non-empty after trim, and mapped; otherwise the overlay command fails immediately and does not fall back to the project's configured reviewers. Absent model or effort leaves those adapter fields unchanged.
 
 ### CLI mapping
 

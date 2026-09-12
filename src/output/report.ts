@@ -237,3 +237,20 @@ export async function generateReport(
 
   return lines.join('\n');
 }
+
+/**
+ * Best-effort write of the report text to `<logDir>/report.txt`.
+ * Never throws; a failed write must not fail the run.
+ */
+export async function writeReportFallback(
+  logDir: string,
+  reportText: string,
+): Promise<void> {
+  const reportPath = path.join(logDir, 'report.txt');
+  try {
+    await fs.mkdir(logDir, { recursive: true });
+    await fs.writeFile(reportPath, reportText, 'utf-8');
+  } catch (err) {
+    console.debug(`Failed to write report file ${reportPath}: ${err}`);
+  }
+}

@@ -89,7 +89,7 @@ Agent Runner can export a reviewer triple through inherited environment variable
 | `AGENT_VALIDATOR_REVIEWER_MODEL` | Optional; absent means do not overlay model |
 | `AGENT_VALIDATOR_REVIEWER_EFFORT` | Optional; absent means do not overlay thinking budget |
 
-Values are trimmed; empty-after-trim cannot be used as CLI, model, or effort. Presence of any of the three variables, including a present empty value, activates override mode. A missing, empty, or unmapped CLI, or an unknown effort, fails the overlay command immediately.
+Values are trimmed; empty or whitespace-only values are treated as absent. Override mode activates when at least one of the three variables has a non-empty trimmed value. Once active, a missing, empty, or unmapped CLI, or an unknown effort, fails the overlay command immediately.
 
 | Runner CLI | Validator adapter |
 | --- | --- |

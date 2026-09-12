@@ -1,5 +1,3 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { cleanLogs } from '../commands/shared.js';
 import type { loadConfig } from '../config/loader.js';
 import type { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
@@ -7,7 +5,7 @@ import { getCategoryLogger, resetLogger } from '../output/app-logger.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { ConsoleLogHandle } from '../output/console-log.js';
 import type { Logger } from '../output/logger.js';
-import { generateReport } from '../output/report.js';
+import { generateReport, writeReportFallback } from '../output/report.js';
 import type { RunResult, ValidatorStatus } from '../types/validator-status.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import {
@@ -403,14 +401,7 @@ async function buildRunResult(
       ctx.config.project.log_dir,
       ctx.config.reviewerOverride,
     );
-    // Write report file as a fallback
-    const reportPath = path.join(ctx.config.project.log_dir, 'report.txt');
-    try {
-      await fs.writeFile(reportPath, reportText, 'utf-8');
-    } catch (err) {
-      // Best effort — don't fail the run if we can't write the report file
-      console.debug(`Failed to write report file ${reportPath}: ${err}`);
-    }
+    await writeReportFallback(ctx.config.project.log_dir, reportText);
   }
 
   return {
