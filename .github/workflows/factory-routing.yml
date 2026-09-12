@@ -6,10 +6,13 @@ on:
   pull_request:
     types: [opened, reopened, edited, closed, labeled, unlabeled]
 
+permissions:
+  contents: read
+
 jobs:
   route:
-    uses: Codagent-AI/agent-factory/.github/workflows/route-work.yml@9b11f3d9148ad9d3cfbefc886c08a7437914d781
+    uses: Codagent-AI/agent-factory/.github/workflows/route-work.yml@0e7e5074aa7b0b57f266c1225f708b29a55481d4
     with:
-      factory-revision: 9b11f3d9148ad9d3cfbefc886c08a7437914d781
+      factory-revision: 0e7e5074aa7b0b57f266c1225f708b29a55481d4
     secrets:
       factory-app-private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
