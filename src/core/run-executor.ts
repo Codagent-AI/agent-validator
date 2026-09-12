@@ -1,5 +1,3 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import {
   hasExistingLogs,
   performAutoClean,
@@ -23,7 +21,7 @@ import {
 } from '../output/app-logger.js';
 import { startConsoleLog } from '../output/console-log.js';
 import { Logger } from '../output/logger.js';
-import { generateReport } from '../output/report.js';
+import { generateReport, writeReportFallback } from '../output/report.js';
 import type { RunResult } from '../types/validator-status.js';
 import {
   getDebugLogger,
@@ -183,16 +181,10 @@ async function runWithLock(
         prepared.earlyResult.status,
         prepared.earlyResult.gateResults,
         ctx.config.project.log_dir,
+        ctx.config.reviewerOverride,
       );
       prepared.earlyResult.reportText = reportText;
-      // Write report file as fallback
-      try {
-        const reportPath = path.join(ctx.config.project.log_dir, 'report.txt');
-        await fs.mkdir(ctx.config.project.log_dir, { recursive: true });
-        await fs.writeFile(reportPath, reportText, 'utf-8');
-      } catch {
-        // Best effort
-      }
+      await writeReportFallback(ctx.config.project.log_dir, reportText);
     }
     return finalizeAndReturn(
       ctx.loggerInitializedHere,
@@ -246,7 +238,9 @@ export async function executeRun(
         contextContent: await readContextFile(effectiveOptions.contextFile),
       };
     }
-    const config = await loadConfig(effectiveOptions.cwd);
+    const config = await loadConfig(effectiveOptions.cwd, {
+      applyReviewerOverride: true,
+    });
     const lockAcquired = await tryAcquireLock(config.project.log_dir);
     if (!lockAcquired) {
       return withTelemetry(

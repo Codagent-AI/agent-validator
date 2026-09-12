@@ -239,12 +239,29 @@ describe('closed measurement contracts', () => {
   test('requires capability limits to be typed, bounded, and internally consistent', () => {
     expect(validateCapabilities({
       capabilities_version: 1, protocol_versions: [1], measurement_schema_versions: [1],
+      reviewer_override: { supported: true },
       limits: { default_inventory_count: 10, maximum_inventory_count: 20, default_export_count: 5, maximum_export_count: 10, default_export_bytes: 1000, maximum_export_bytes: 2000, maximum_individual_record_bytes: 1500 },
     }).success).toBe(true);
     expect(validateCapabilities({
       capabilities_version: 1, protocol_versions: [1], measurement_schema_versions: [1],
+      reviewer_override: { supported: true },
       limits: { default_inventory_count: 21, maximum_inventory_count: 20, default_export_count: 5, maximum_export_count: 10, default_export_bytes: 1000, maximum_export_bytes: 2000, maximum_individual_record_bytes: 1500 },
     }).success).toBe(false);
+  });
+
+  test('requires reviewer_override.supported on the v1 capabilities document', () => {
+    const limits = {
+      default_inventory_count: 10, maximum_inventory_count: 20, default_export_count: 5,
+      maximum_export_count: 10, default_export_bytes: 1000, maximum_export_bytes: 2000,
+      maximum_individual_record_bytes: 1500,
+    };
+    expect(validateCapabilities({
+      capabilities_version: 1, protocol_versions: [1], measurement_schema_versions: [1], limits,
+    }).success).toBe(false);
+    expect(validateCapabilities({
+      capabilities_version: 1, protocol_versions: [1], measurement_schema_versions: [1],
+      reviewer_override: { supported: true }, limits,
+    }).success).toBe(true);
   });
 });
 

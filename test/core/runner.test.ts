@@ -48,9 +48,9 @@ const mockCheckExecutor = { execute: mockExecuteCheck } as any;
 // biome-ignore lint/suspicious/noExplicitAny: Mock executor for DI
 const mockReviewExecutor = { execute: mockExecuteReview } as any;
 
-function createRunner(overrides?: { logger?: Logger }) {
+function createRunner(overrides?: { logger?: Logger; config?: LoadedConfig }) {
 	return new Runner(
-		mockConfig,
+		overrides?.config ?? mockConfig,
 		overrides?.logger ?? mockLogger,
 		mockReporter,
 		undefined, // previousFailuresMap
@@ -70,6 +70,7 @@ describe("Runner", () => {
 		(mockExecuteCheck as ReturnType<typeof mock>).mockClear();
 		(mockReporter.onJobStart as ReturnType<typeof mock>).mockClear();
 		(mockReporter.onJobComplete as ReturnType<typeof mock>).mockClear();
+		(mockReporter.printSummary as ReturnType<typeof mock>).mockClear();
 	});
 
 	it("should handle synchronous errors in executeJob gracefully", async () => {
@@ -215,5 +216,25 @@ describe("Runner", () => {
 		// biome-ignore lint/suspicious/noExplicitAny: Testing mock call arguments
 		const callArgs = (mockExecuteReview as any).mock.calls[0] as unknown[];
 		expect(callArgs?.[9]).toBe("/tmp/logs");
+	});
+
+	it("passes attached reviewer override identity into the summary", async () => {
+		const identity = {
+			source: "runner-reviewer-role" as const,
+			adapter: "github-copilot",
+			effortCollapsed: "xhigh" as const,
+		};
+		const runner = createRunner({
+			config: { ...mockConfig, reviewerOverride: identity },
+		});
+
+		await runner.run([]);
+
+		expect(mockReporter.printSummary).toHaveBeenCalledWith(
+			expect.anything(),
+			"/tmp/logs",
+			undefined,
+			identity,
+		);
 	});
 });

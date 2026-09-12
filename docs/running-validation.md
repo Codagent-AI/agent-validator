@@ -74,6 +74,7 @@ agent-validate run --report
 The report includes:
 
 - a `Status:` line
+- a `Reviewer:` identity line when a reviewer override is active (source `runner-reviewer-role`, mapped adapter, and `xhigh→high` when that collapse occurred)
 - check failures with command, working directory, fix instructions, and log path
 - review violations with stable numeric IDs and JSON file paths
 

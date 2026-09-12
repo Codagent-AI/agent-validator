@@ -48,7 +48,13 @@ export function registerRunCommand(program: Command): void {
         // Use reportText from the executor, or fall back to a status-only line
         // for early-return paths (no_changes, no_applicable_gates, etc.)
         const text = result.reportText ?? statusLineText(result.status);
-        process.stdout.write(`${text}\n`);
+        // The report must stand alone, so an error carries its reason rather
+        // than leaving the reader with a bare status line.
+        const reason =
+          result.status === 'error' && result.errorMessage
+            ? `\n${result.errorMessage}`
+            : '';
+        process.stdout.write(`${text}${reason}\n`);
       } else if (result.status === 'error') {
         process.stderr.write(`${result.errorMessage ?? result.message}\n`);
       }

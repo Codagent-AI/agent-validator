@@ -1,8 +1,5 @@
-# report-flag Specification
+## MODIFIED Requirements
 
-## Purpose
-Defines the `--report` flag behavior for `agent-validate run`, enabling structured plain-text failure reports on stdout for external orchestrators. The report provides machine-readable output while preserving existing stderr behavior.
-## Requirements
 ### Requirement: Report flag writes self-contained failure report to stdout
 When `agent-validate run` is invoked with `--report`, the command SHALL write a structured, agent-actionable failure report to stdout. Stderr output SHALL remain unchanged. When no failures exist and no reviewer override is active, stdout SHALL contain only the status line. When a reviewer override is active, stdout SHALL also include the configured review identity named by the reviewer-override capability (source `runner-reviewer-role`, mapped adapter, and `xhigh` collapse when it occurred). When the command fails with an error status, stdout SHALL also carry the failure reason so the report identifies what went wrong. The report MUST be self-contained — an agent reading only the report MUST have enough information to understand what failed and begin fixing it. The report MUST also be written to a file as a fallback for environments where stdout may be lost.
 
@@ -62,35 +59,3 @@ When `agent-validate run` is invoked with `--report`, the command SHALL write a 
 - **WHEN** `agent-validate run` is invoked without `--report`
 - **THEN** stdout behavior SHALL be unchanged from current behavior
 - **AND** stderr RESULTS SUMMARY SHALL still name the configured review identity when reviewer override is active, per reviewer-override
-
-### Requirement: Report output is plain text
-The stdout report MUST NOT contain ANSI escape codes or color formatting. Stdout is reserved for machine-readable output. Human-readable colored output remains on stderr.
-
-#### Scenario: No ANSI codes in stdout
-- **WHEN** `agent-validate run --report` writes to stdout
-- **THEN** the output SHALL contain no ANSI escape sequences
-
-### Requirement: Report file fallback
-The report MUST be written to a file in the log directory in addition to stdout. This provides a fallback for environments where Bun may drop stdout (known issue with LLM review subprocesses).
-
-#### Scenario: Report file written
-- **WHEN** `agent-validate run --report` completes
-- **THEN** the report content SHALL also be written to `<log_dir>/report.txt`
-- **AND** the file content SHALL be identical to what was written to stdout
-
-#### Scenario: Report file overwritten on re-run
-- **WHEN** `agent-validate run --report` is invoked and a previous `report.txt` exists
-- **THEN** the file SHALL be overwritten with the new report
-
-### Requirement: Numeric IDs are stable within a log session
-Numeric IDs assigned to review violations MUST be deterministic and stable between the `--report` output and subsequent `update-review` invocations, as long as the log files have not been modified by a validator re-run. IDs SHALL be assigned by scanning JSON files in sorted filename order, then by violation array index within each file, numbering sequentially from 1, considering only violations with status `"new"`.
-
-#### Scenario: IDs match between report and update-review commands
-- **WHEN** `agent-validate run --report` assigns `#3` to a violation at `src/foo.ts:10`
-- **AND** `agent-validate update-review list` is run without any intervening validator re-run
-- **THEN** `#3` SHALL refer to the same violation at `src/foo.ts:10`
-
-#### Scenario: IDs are sequential with no gaps
-- **WHEN** there are 5 violations with status `"new"` across all JSON files
-- **THEN** they SHALL be numbered `#1` through `#5` with no gaps
-

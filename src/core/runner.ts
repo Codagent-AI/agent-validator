@@ -165,11 +165,7 @@ export class Runner {
 
     // If on the final allowed run and gates failed, report "Retry limit exceeded"
     if (retryLimitExceeded) {
-      await this.reporter.printSummary(
-        this.results,
-        this.config.project.log_dir,
-        'Retry limit exceeded',
-      );
+      await this.printRunSummary('Retry limit exceeded');
       return {
         allPassed: false,
         anySkipped,
@@ -180,7 +176,7 @@ export class Runner {
       };
     }
 
-    await this.reporter.printSummary(this.results, this.config.project.log_dir);
+    await this.printRunSummary();
 
     return {
       allPassed,
@@ -190,6 +186,15 @@ export class Runner {
       stats,
       gateResults: this.results,
     };
+  }
+
+  private printRunSummary(statusOverride?: string) {
+    return this.reporter.printSummary(
+      this.results,
+      this.config.project.log_dir,
+      statusOverride,
+      this.config.reviewerOverride,
+    );
   }
 
   private async executeJob(job: Job): Promise<void> {

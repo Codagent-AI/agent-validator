@@ -5,6 +5,10 @@ import YAML from 'yaml';
 import { loadCheckGates } from './load-checks.js';
 import { loadReviewGates } from './load-reviews.js';
 import { fileExists } from './loader-utils.js';
+import {
+  applyReviewerOverrideToConfig,
+  parseReviewerOverrideEnv,
+} from './reviewer-override.js';
 import { validatorConfigSchema } from './schema.js';
 import type {
   CheckGateConfig,
@@ -29,8 +33,13 @@ function resolveConfigDir(rootDir: string): string {
   return validatorPath; // default for new projects
 }
 
+export interface LoadConfigOptions {
+  applyReviewerOverride?: boolean;
+}
+
 export async function loadConfig(
   rootDir: string = process.cwd(),
+  options: LoadConfigOptions = {},
 ): Promise<LoadedConfig> {
   const configDir = resolveConfigDir(rootDir);
   const configPath = path.join(configDir, CONFIG_FILE);
@@ -68,6 +77,10 @@ export async function loadConfig(
   // 4. Load reviews (file-based + entry-point inline)
   const reviews = await loadReviewGates(configDir, inlineReviews);
 
+  const reviewerOverride = options.applyReviewerOverride
+    ? overlayReviewerIfActive(normalizedConfig, reviews)
+    : undefined;
+
   // 5. Merge default CLI preference if not specified
   mergeCliPreferences(reviews, normalizedConfig);
 
@@ -78,7 +91,17 @@ export async function loadConfig(
     project: normalizedConfig,
     checks,
     reviews,
+    ...(reviewerOverride ? { reviewerOverride } : {}),
   };
+}
+
+function overlayReviewerIfActive(
+  project: NormalizedValidatorConfig,
+  reviews: Record<string, LoadedReviewGateConfig>,
+) {
+  const parsed = parseReviewerOverrideEnv();
+  if (!parsed.active) return undefined;
+  return applyReviewerOverrideToConfig(project, reviews, parsed);
 }
 
 /**

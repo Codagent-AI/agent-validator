@@ -53,6 +53,7 @@ export function registerMetricsCommand(program: Command): void {
         protocol_versions: [PROTOCOL_VERSION],
         measurement_schema_versions: [MEASUREMENT_SCHEMA_VERSION],
         artifact_schema_versions: [ARTIFACT_SCHEMA_VERSION],
+        reviewer_override: { supported: true },
         operations: [
           'capabilities',
           'pending',

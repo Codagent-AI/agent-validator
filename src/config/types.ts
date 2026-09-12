@@ -76,9 +76,16 @@ export type NormalizedValidatorConfig = Omit<
   entry_points: NormalizedEntryPoint[];
 };
 
+export interface ReviewerOverrideIdentity {
+  source: 'runner-reviewer-role';
+  adapter: string;
+  effortCollapsed?: 'xhigh';
+}
+
 // Combined type for the fully loaded configuration
 export interface LoadedConfig {
   project: NormalizedValidatorConfig;
   checks: Record<string, LoadedCheckGateConfig>;
   reviews: Record<string, LoadedReviewGateConfig>;
+  reviewerOverride?: ReviewerOverrideIdentity;
 }

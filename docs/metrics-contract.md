@@ -9,6 +9,8 @@ description: Versioned model-measurement and standalone-artifact contracts.
 
 Agent Validator's metrics foundation uses closed, versioned JSON contracts in `contracts/`. The v1 delivery defines independent versions for measurements, standalone artifacts, the export protocol, capabilities, and private storage. A newer record version never rewrites or relabels retained evidence.
 
+The capabilities handshake is the one documented exception: `capabilities_version` remains `1`, and the envelope may grow additive bootstrap feature flags such as `reviewer_override: { "supported": true }`. That flag is not a measurement, protocol, or artifact schema change. Export, acknowledgment, discard, pending inventory, and delivery are unchanged.
+
 Every token field is available with a complete value, partial with a known numeric subtotal and reason, or unavailable with a null value and reason. Unavailable is not zero. Aggregate coverage identifies partial and missing attempts, and preserves partial-field reasons. Provider-native usage remains separate from normalized fields, and normalized totals are only produced where non-overlap is established. Cached input and reasoning included by a containing field are not counted twice.
 
 Model attempts carry requested, resolved, and observed identities separately. Allocation and cost references use stable attempt-local IDs. Costs are pass-through provider evidence with currency, coverage, and scope; Validator does not look up rates or estimate a price.

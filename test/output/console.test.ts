@@ -131,5 +131,78 @@ describe("ConsoleReporter", () => {
 			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Trusted");
 		});
+
+		it("names configured identity after status when override is attached", async () => {
+			const previous = process.env.AGENT_VALIDATOR_REVIEWER_CLI;
+			process.env.AGENT_VALIDATOR_REVIEWER_CLI = "claude";
+			const reporter = new ConsoleReporter();
+			const results: GateResult[] = [
+				{ jobId: "check:test", status: "pass", duration: 100 },
+			];
+
+			try {
+				await reporter.printSummary(results, undefined, undefined, {
+					source: "runner-reviewer-role",
+					adapter: "github-copilot",
+				});
+			} finally {
+				if (previous === undefined) {
+					delete process.env.AGENT_VALIDATOR_REVIEWER_CLI;
+				} else {
+					process.env.AGENT_VALIDATOR_REVIEWER_CLI = previous;
+				}
+			}
+
+			const output = errorOutput.join("\n");
+			expect(output).toContain("Status: Passed");
+			expect(output).toContain(
+				"Reviewer: github-copilot (runner-reviewer-role)",
+			);
+			const statusIndex = output.indexOf("Status: Passed");
+			const reviewerIndex = output.indexOf(
+				"Reviewer: github-copilot (runner-reviewer-role)",
+			);
+			expect(reviewerIndex).toBeGreaterThan(statusIndex);
+		});
+
+		it("names xhigh collapse on the configured identity line", async () => {
+			const reporter = new ConsoleReporter();
+
+			await reporter.printSummary([], undefined, undefined, {
+				source: "runner-reviewer-role",
+				adapter: "claude",
+				effortCollapsed: "xhigh",
+			});
+
+			const output = errorOutput.join("\n");
+			expect(output).toContain(
+				"Reviewer: claude (runner-reviewer-role; effort xhigh→high)",
+			);
+		});
+
+		it("does not add a reviewer identity source line when no override is attached", async () => {
+			const previous = process.env.AGENT_VALIDATOR_REVIEWER_CLI;
+			process.env.AGENT_VALIDATOR_REVIEWER_CLI = "copilot";
+			const reporter = new ConsoleReporter();
+			const results: GateResult[] = [
+				{ jobId: "check:test", status: "pass", duration: 100 },
+			];
+
+			try {
+				await reporter.printSummary(results);
+			} finally {
+				if (previous === undefined) {
+					delete process.env.AGENT_VALIDATOR_REVIEWER_CLI;
+				} else {
+					process.env.AGENT_VALIDATOR_REVIEWER_CLI = previous;
+				}
+			}
+
+			const output = errorOutput.join("");
+			expect(output).toContain("Status: Passed");
+			expect(output).not.toContain("Reviewer:");
+			expect(output).not.toContain("runner-reviewer-role");
+			expect(output).not.toContain("project-config");
+		});
 	});
 });

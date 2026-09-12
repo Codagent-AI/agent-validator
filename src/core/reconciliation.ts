@@ -1,5 +1,5 @@
 import { getCategoryLogger } from '../output/app-logger.js';
-import { generateReport } from '../output/report.js';
+import { generateReport, writeReportFallback } from '../output/report.js';
 import type { RunResult } from '../types/validator-status.js';
 import {
   getCurrentCommit,
@@ -67,7 +67,13 @@ async function trustedResult(
     gatesRun: 0,
   };
   if (args.report) {
-    result.reportText = await generateReport('trusted', undefined, args.logDir);
+    result.reportText = await generateReport(
+      'trusted',
+      undefined,
+      args.logDir,
+      args.config.reviewerOverride,
+    );
+    await writeReportFallback(args.logDir, result.reportText);
   }
   return { kind: 'trusted', result };
 }

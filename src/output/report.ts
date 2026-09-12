@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { ReviewerOverrideIdentity } from '../config/types.js';
 import type { ReviewFullJsonOutput } from '../gates/result.js';
 import type { ValidatorStatus } from '../types/validator-status.js';
 
@@ -129,6 +130,14 @@ export async function enumerateNewViolations(
 /**
  * Map validator status to the report status line text.
  */
+export function formatReviewerIdentityLine(
+  identity: ReviewerOverrideIdentity,
+): string {
+  const collapse =
+    identity.effortCollapsed === 'xhigh' ? '; effort xhigh→high' : '';
+  return `Reviewer: ${identity.adapter} (${identity.source}${collapse})`;
+}
+
 export function statusLineText(status: ValidatorStatus): string {
   switch (status) {
     case 'passed':
@@ -187,13 +196,19 @@ function formatReviewViolation(v: NumberedViolation): string[] {
 /**
  * Generate a plain-text failure report for the --report flag.
  * The report is self-contained and agent-actionable.
+ * When a reviewer override is attached, the configured identity is named
+ * after the status line, including on trusted short-circuit reports.
  */
 export async function generateReport(
   status: ValidatorStatus,
   gateResults: ReportGateResult[] | undefined,
   logDir: string,
+  reviewerOverride?: ReviewerOverrideIdentity,
 ): Promise<string> {
   const lines: string[] = [statusLineText(status)];
+  if (reviewerOverride) {
+    lines.push(formatReviewerIdentityLine(reviewerOverride));
+  }
 
   if (!gateResults || gateResults.length === 0) {
     return lines.join('\n');
@@ -221,4 +236,21 @@ export async function generateReport(
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Best-effort write of the report text to `<logDir>/report.txt`.
+ * Never throws; a failed write must not fail the run.
+ */
+export async function writeReportFallback(
+  logDir: string,
+  reportText: string,
+): Promise<void> {
+  const reportPath = path.join(logDir, 'report.txt');
+  try {
+    await fs.mkdir(logDir, { recursive: true });
+    await fs.writeFile(reportPath, reportText, 'utf-8');
+  } catch (err) {
+    console.debug(`Failed to write report file ${reportPath}: ${err}`);
+  }
 }

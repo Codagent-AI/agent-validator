@@ -127,6 +127,57 @@ describe("startup reconciliation", () => {
 		expect(state?.working_tree_ref).toBe(head);
 	});
 
+	it("names configured reviewer identity on a trusted --report short-circuit", async () => {
+		const head = await git(["rev-parse", "HEAD"]);
+		const tree = await computeTreeSha("HEAD");
+		const logDir = path.join(repoDir, "validator_logs");
+		await appendRecord(trustedRecord(head, tree));
+
+		const result = await reconcileStartup({
+			command: "run",
+			config: {
+				...testConfig(logDir),
+				reviewerOverride: {
+					source: "runner-reviewer-role",
+					adapter: "github-copilot",
+					effortCollapsed: "xhigh",
+				},
+			},
+			logDir,
+			report: true,
+		});
+
+		expect(result.kind).toBe("trusted");
+		if (result.kind === "trusted") {
+			expect(result.result.status).toBe("trusted");
+			expect(result.result.reportText).toBe(
+				"Status: Trusted\nReviewer: github-copilot (runner-reviewer-role; effort xhigh→high)",
+			);
+		}
+	});
+
+	it("writes report.txt to the log dir on a trusted --report short-circuit", async () => {
+		const head = await git(["rev-parse", "HEAD"]);
+		const tree = await computeTreeSha("HEAD");
+		const logDir = path.join(repoDir, "validator_logs");
+		await appendRecord(trustedRecord(head, tree));
+
+		const result = await reconcileStartup({
+			command: "run",
+			config: testConfig(logDir),
+			logDir,
+			report: true,
+		});
+
+		expect(result.kind).toBe("trusted");
+		if (result.kind === "trusted") {
+			const { reportText } = result.result;
+			expect(reportText).toBeDefined();
+			const written = await fs.readFile(path.join(logDir, "report.txt"), "utf-8");
+			expect(written).toBe(reportText ?? "");
+		}
+	});
+
 	it("detect reconciliation reports trusted HEAD without mutating state", async () => {
 		const head = await git(["rev-parse", "HEAD"]);
 		const tree = await computeTreeSha("HEAD");

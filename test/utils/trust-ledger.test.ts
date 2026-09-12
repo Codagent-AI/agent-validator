@@ -359,6 +359,44 @@ describe("trust ledger", () => {
 		expect(written.scope.gates).toEqual(["lint"]);
 	});
 
+	it("records the reviewer override identity in trust scope", () => {
+		const withoutOverride = buildTrustRecord({
+			config: config(),
+			command: "run",
+			source: "validated",
+			status: "passed",
+			trusted: true,
+			commit: "commit123",
+			tree: "tree123",
+		});
+		const overridden = buildTrustRecord({
+			config: {
+				...config(),
+				reviewerOverride: {
+					source: "runner-reviewer-role",
+					adapter: "github-copilot",
+					effortCollapsed: "xhigh",
+				},
+			},
+			command: "run",
+			source: "validated",
+			status: "passed",
+			trusted: true,
+			commit: "commit123",
+			tree: "tree123",
+		});
+
+		// Trust matching is unchanged, but the record must not claim the tree was
+		// validated under a reviewer configuration that was never on disk.
+		expect(withoutOverride.scope.cli_overrides).not.toHaveProperty("reviewer");
+		expect(overridden.scope.cli_overrides.reviewer).toEqual({
+			source: "runner-reviewer-role",
+			adapter: "github-copilot",
+			effortCollapsed: "xhigh",
+		});
+		expect(overridden.scope_hash).not.toBe(withoutOverride.scope_hash);
+	});
+
 	it("records command-specific gate scope metadata", () => {
 		const runRecord = buildTrustRecord({
 			config: config(),
