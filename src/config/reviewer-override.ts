@@ -129,20 +129,17 @@ function withRoleOverlay(
   };
 }
 
-function isPresent(env: NodeJS.Dict<string | undefined>, key: string): boolean {
-  return env[key] !== undefined;
-}
-
 export function parseReviewerOverrideEnv(
   env: NodeJS.Dict<string | undefined> = process.env,
 ): ReviewerOverrideParseResult {
   const cli = readTrimmed(env, REVIEWER_CLI_ENV);
   const model = readTrimmed(env, REVIEWER_MODEL_ENV);
   const effort = readTrimmed(env, REVIEWER_EFFORT_ENV);
+  // A variable that is blank after trimming counts as absent, so a caller that
+  // exports all three unconditionally and leaves them empty means "no reviewer
+  // role" rather than a malformed override.
   const active =
-    isPresent(env, REVIEWER_CLI_ENV) ||
-    isPresent(env, REVIEWER_MODEL_ENV) ||
-    isPresent(env, REVIEWER_EFFORT_ENV);
+    cli !== undefined || model !== undefined || effort !== undefined;
 
   if (!active) {
     return { active: false };

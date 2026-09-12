@@ -294,4 +294,28 @@ describe("E2E-002: fail-closed leaves no trace and does not touch check", () => 
 		},
 		TIMEOUT_MS,
 	);
+
+	it(
+		"names the rejected variable in the report when --report is passed",
+		async () => {
+			if (!isDistBuilt()) return;
+
+			const { dir } = await createRepo();
+			tempDirs.push(dir);
+			const env = overrideEnv({ [MODEL_ENV]: "opus" });
+
+			const result = await spawnValidator(["run", "--report"], {
+				cwd: dir,
+				env,
+				timeoutMs: TIMEOUT_MS,
+			});
+
+			// The report must be self-contained, so an orchestrator reading only
+			// stdout can tell a rejected reviewer role from any other failure.
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stdout).toContain("Status: error");
+			expect(result.stdout).toContain(CLI_ENV);
+		},
+		TIMEOUT_MS,
+	);
 });

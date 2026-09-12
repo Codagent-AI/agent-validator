@@ -12,12 +12,24 @@ describe("parseReviewerOverrideEnv", () => {
 		expect(parseReviewerOverrideEnv({})).toEqual({ active: false });
 	});
 
-	it("fails closed when an override variable is present but empty after trim", () => {
-		expect(() =>
+	it("is inactive when every variable is present but empty after trim", () => {
+		// Runner may export all three unconditionally and leave them blank when
+		// no reviewer role is configured. That means "no role", not a malformed
+		// override, so the project's own reviewers run.
+		expect(
 			parseReviewerOverrideEnv({
 				[REVIEWER_CLI_ENV]: "  ",
 				[REVIEWER_MODEL_ENV]: "\t",
 				[REVIEWER_EFFORT_ENV]: "\n",
+			}),
+		).toEqual({ active: false });
+	});
+
+	it("still fails closed when a blank CLI accompanies a real model", () => {
+		expect(() =>
+			parseReviewerOverrideEnv({
+				[REVIEWER_CLI_ENV]: "  ",
+				[REVIEWER_MODEL_ENV]: "opus",
 			}),
 		).toThrow(/AGENT_VALIDATOR_REVIEWER_CLI/);
 	});

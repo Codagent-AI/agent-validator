@@ -3,7 +3,9 @@
 ### Requirement: Environment-inherited reviewer override
 Validator SHALL read inherited environment variables `AGENT_VALIDATOR_REVIEWER_CLI`, `AGENT_VALIDATOR_REVIEWER_MODEL`, and `AGENT_VALIDATOR_REVIEWER_EFFORT`. Values SHALL be trimmed of surrounding whitespace; a value that is empty after trimming SHALL be treated as absent.
 
-Presence of any of the three variables SHALL activate override mode. Once override mode is active, `AGENT_VALIDATOR_REVIEWER_CLI` MUST be present, non-empty after trim, and a mapped adapter; otherwise the overlay command SHALL fail before any gates run and SHALL NOT fall back to the project's configured reviewers. Absent model or effort SHALL NOT overlay those fields. Unknown CLI or effort SHALL fail the same way as a missing CLI.
+Presence of any of the three variables with a non-empty value after trimming SHALL activate override mode. When every variable is absent or empty after trimming, override mode SHALL NOT activate and overlay commands SHALL use the project's configured reviewers. Once override mode is active, `AGENT_VALIDATOR_REVIEWER_CLI` MUST be present, non-empty after trim, and a mapped adapter; otherwise the overlay command SHALL fail before any gates run and SHALL NOT fall back to the project's configured reviewers. Absent model or effort SHALL NOT overlay those fields. Unknown CLI or effort SHALL fail the same way as a missing CLI.
+
+When override mode is active and a trust record is written, that record's scope SHALL name the configured review identity, so the ledger does not describe a reviewer configuration that was never on disk. This SHALL NOT change when a commit or tree is trusted.
 
 Override mode SHALL apply only to overlay commands: `run`, `review`, `health`, `list`, and `detect`. `check`, `validate`, `clean`, `skip`, `update-review`, metrics operations, and CI job listing SHALL ignore these variables and use the tracked project configuration. Validator SHALL NOT write `.validator/config.yml` because of the override.
 
@@ -11,6 +13,11 @@ Override mode SHALL apply only to overlay commands: `run`, `review`, `health`, `
 - **WHEN** none of the three reviewer environment variables is set
 - **THEN** overlay commands SHALL use the project's loaded review configuration
 - **AND** report output SHALL NOT add a reviewer-override identity line
+
+#### Scenario: Every variable present but empty
+- **WHEN** an overlay command is invoked with all three reviewer environment variables set to empty or whitespace-only values
+- **THEN** override mode SHALL NOT activate
+- **AND** the command SHALL use the project's configured reviewers
 
 #### Scenario: CLI-only override
 - **WHEN** `run` is invoked with `AGENT_VALIDATOR_REVIEWER_CLI` set to a mapped adapter and model and effort absent
@@ -44,6 +51,11 @@ Override mode SHALL apply only to overlay commands: `run`, `review`, `health`, `
 - **WHEN** `health`, `list`, or `detect` is invoked with override mode activated and CLI missing or unmapped
 - **THEN** the command SHALL fail immediately
 - **AND** it SHALL NOT report project reviewers as the effective overlay
+
+#### Scenario: Trust record names the override identity
+- **WHEN** a trust record is written by a command running under an active reviewer override
+- **THEN** the record's scope SHALL name the configured review identity
+- **AND** trust matching SHALL be unchanged from today
 
 #### Scenario: Tracked config is not rewritten
 - **WHEN** `run` completes successfully under an active reviewer override

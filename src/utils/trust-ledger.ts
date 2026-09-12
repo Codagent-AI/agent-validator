@@ -298,6 +298,12 @@ function scopeFor(
   if (enableReviews && enableReviews.size > 0) {
     cli_overrides.review = Array.from(enableReviews).sort();
   }
+  // A reviewer override rewrites cli config in memory, so config_hash would
+  // otherwise describe reviewers that were never on disk. Record who actually
+  // reviewed. This does not change when a tree is trusted.
+  if (config.reviewerOverride) {
+    cli_overrides.reviewer = { ...config.reviewerOverride };
+  }
 
   const checkNames = Object.keys(config.checks ?? {});
   const reviewNames = Object.keys(config.reviews ?? {});
