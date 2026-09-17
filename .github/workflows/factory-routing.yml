@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   route:
-    uses: Codagent-AI/agent-factory/.github/workflows/route-work.yml@4f332c02f01065057a0f66a2891d18b275fe6f7f
+    uses: Codagent-AI/agent-factory/.github/workflows/route-work.yml@be1081398867f0c72c27f577fba3784013d16e1a
     with:
-      factory-revision: 4f332c02f01065057a0f66a2891d18b275fe6f7f
+      factory-revision: be1081398867f0c72c27f577fba3784013d16e1a
     secrets:
       factory-app-private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
