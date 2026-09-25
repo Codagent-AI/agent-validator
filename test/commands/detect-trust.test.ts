@@ -394,6 +394,56 @@ describe("detect trusted snapshots", () => {
 		expect(result.stdout).not.toContain("app.ts");
 	});
 
+	it("check verification scopes changes to the execution-state snapshot when HEAD is trusted", async () => {
+		const repo = await createRepo();
+		await trustHead(repo);
+		await fs.writeFile(path.join(repo, "app.ts"), "export const value = 3;\n");
+		await writeDirtyExecutionState(repo);
+		await fs.writeFile(path.join(repo, "scratch.ts"), "export const added = true;\n");
+		await fs.writeFile(
+			path.join(repo, "validator_logs", "check_unit.1.log"),
+			"previous failure\n",
+		);
+
+		const result = await runValidator(repo, ["check"]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("verification mode");
+		expect(result.stdout).toContain("Found 1 changed files.");
+	});
+
+	it("run verification records the execution-state snapshot as its diff base", async () => {
+		const repo = await createRepo();
+		await fs.appendFile(
+			path.join(repo, ".validator", "config.yml"),
+			"debug_log:\n  enabled: true\n",
+		);
+		await git(["add", ".validator/config.yml"], repo);
+		await git(["commit", "-m", "enable debug log"], repo);
+		await trustHead(repo);
+		await fs.writeFile(path.join(repo, "app.ts"), "export const value = 3;\n");
+		await writeDirtyExecutionState(repo);
+		const state = JSON.parse(
+			await fs.readFile(path.join(repo, "validator_logs", ".execution_state"), "utf-8"),
+		);
+		await fs.writeFile(path.join(repo, "scratch.ts"), "export const added = true;\n");
+		await fs.writeFile(
+			path.join(repo, "validator_logs", "check_unit.1.log"),
+			"previous failure\n",
+		);
+
+		const result = await runValidator(repo, ["run"]);
+		const debugLog = await fs.readFile(
+			path.join(repo, "validator_logs", ".debug.log"),
+			"utf-8",
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(debugLog).toContain(
+			`RUN_START mode=verification base_ref=${state.working_tree_ref} files_changed=1`,
+		);
+	});
+
 	it("preserves execution-state fixBase in rerun mode when one merge parent is trusted", async () => {
 		const repo = await createRepo();
 		const base = await git(["rev-parse", "base"], repo);

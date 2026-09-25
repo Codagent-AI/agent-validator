@@ -216,7 +216,11 @@ async function resolveChangeOptions(
     };
   }
 
-  if (startupChangeOptions?.fixBase && !options.commit) {
+  if (
+    startupChangeOptions?.fixBase &&
+    !options.commit &&
+    !rerunChangeOptions?.fixBase
+  ) {
     changeOptions = {
       ...changeOptions,
       fixBase: startupChangeOptions.fixBase,
