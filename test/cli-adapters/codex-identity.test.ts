@@ -98,6 +98,13 @@ describe('Codex observed rollout identity', () => {
     expect(modelAttemptSchema.safeParse(attempt).success).toBe(true);
   });
 
+  test('keeps the launch provider when the rollout reports only a model', async () => {
+    const { telemetry } = await executeObserved({ records: [
+      { type: 'turn_context', payload: { model: 'gpt-6-sol' } },
+    ] });
+    expect(telemetry.resolved_identity).toMatchObject({ model: 'gpt-6-sol', provider: 'openai', provenance: 'telemetry' });
+  });
+
   test.each([
     ['pinned', undefined, 'gpt-6-sol'],
     ['configured', 'model = "gpt-6-sol"\n', undefined],

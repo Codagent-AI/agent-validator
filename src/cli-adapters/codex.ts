@@ -273,7 +273,8 @@ function applyCodexObservedIdentity(
     !!observed.provider && launchIdentity.provider !== observed.provider;
   if (modelMismatch || providerMismatch) {
     telemetry.resolved_identity.model = observed.model;
-    telemetry.resolved_identity.provider = observed.provider;
+    telemetry.resolved_identity.provider =
+      observed.provider ?? launchIdentity.provider;
     telemetry.resolved_identity.provenance = 'telemetry';
     telemetry.diagnostics = telemetry.diagnostics.filter(
       (reason) =>
