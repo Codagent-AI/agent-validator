@@ -164,6 +164,13 @@ When `fixBase` is provided in the change detector options and neither `commit` n
 - **THEN** the diff SHALL be computed against `fixBase` (not uncommitted-only)
 - **NOTE** `fixBase` takes priority because it provides a broader, more accurate diff that includes both committed and working-tree changes since the snapshot. The `uncommitted` flag is a narrower scope intended for explicit CLI use.
 
+#### Scenario: Verification snapshot overrides reconciliation fixBase
+
+- **GIVEN** verification mode has an execution-state `working_tree_ref`
+- **AND** reconciliation provides a trusted HEAD as `fixBase`
+- **WHEN** the run selects its change detection options
+- **THEN** `working_tree_ref` SHALL be used as `fixBase`
+
 #### Scenario: Priority order for change detection mode
 
 - **WHEN** the change detector evaluates its options

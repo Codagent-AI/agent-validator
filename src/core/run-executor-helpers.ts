@@ -209,6 +209,8 @@ export async function processRerunMode(
     changeOptions = await handleFreshRunMode(ctx);
   }
 
+  const rerunFixBase = isRerun ? changeOptions?.fixBase : undefined;
+
   if (ctx.options.commit || ctx.options.uncommitted) {
     changeOptions = {
       commit: ctx.options.commit,
@@ -217,7 +219,11 @@ export async function processRerunMode(
     };
   }
 
-  if (ctx.startupChangeOptions?.fixBase && !ctx.options.commit) {
+  if (
+    ctx.startupChangeOptions?.fixBase &&
+    !ctx.options.commit &&
+    !rerunFixBase
+  ) {
     changeOptions = {
       ...changeOptions,
       fixBase: ctx.startupChangeOptions.fixBase,
