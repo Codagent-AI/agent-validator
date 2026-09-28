@@ -83,29 +83,26 @@ function readConfig(configPath: string): {
   }
 }
 
-/** Codex loads project config only when trusted; trust is unknown here. */
-function projectConfigMayOverride(cwd: string): {
-  model: boolean;
-  providers: Array<string | null>;
-} {
+/**
+ * Codex strips model_provider, model_providers, profile, and profiles from
+ * project-local config, so only the project `model` can override the user
+ * config. It applies only when the project is trusted; trust is unknown here.
+ */
+function projectConfigMayOverride(cwd: string): { model: boolean } {
   let directory = path.resolve(cwd);
   let model = false;
-  const providers: Array<string | null> = [];
   while (true) {
     const { config, reason } = readConfig(
       path.join(directory, '.codex', 'config.toml'),
     );
     model ||=
       config.model !== undefined || reason === 'codex_config_unreadable';
-    if (config.model_provider !== undefined)
-      providers.push(config.model_provider);
-    if (reason === 'codex_config_unreadable') providers.push(null);
     if (existsSync(path.join(directory, '.git'))) break;
     const parent = path.dirname(directory);
     if (parent === directory) break;
     directory = parent;
   }
-  return { model, providers };
+  return { model };
 }
 
 function resolveProvider(configuredProvider?: string): {
@@ -193,17 +190,6 @@ export function resolveCodexLaunchIdentity({
   if (project.model && !launchModel) {
     model = null;
     reason ??= 'codex_project_config_present';
-  }
-  const projectProviderDiffers = project.providers.some(
-    (configuredProvider) => configuredProvider !== provider,
-  );
-  if (projectProviderDiffers) {
-    return {
-      model,
-      provider: null,
-      reason: 'codex_project_config_provider_present',
-      launchModel,
-    };
   }
   return {
     model,

@@ -148,28 +148,38 @@ describe('Codex launch identity', () => {
     });
   });
 
-  test('project provider can override the user provider', async () => {
+  test('project provider does not override the user provider', async () => {
     const home = await configHome('model = "gpt-5.3-codex"\nmodel_provider = "azure"\n');
     const project = await configHome();
     await mkdir(path.join(project, '.codex'));
     await writeFile(path.join(project, '.codex', 'config.toml'), 'model_provider = "other"\n');
     expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home }, cwd: project })).toEqual({
-      model: 'gpt-5.3-codex', provider: null, reason: 'codex_project_config_provider_present', launchModel: null,
+      model: 'gpt-5.3-codex', provider: 'azure', reason: null, launchModel: null,
     });
   });
 
-  test.each([false, true])('project provider can override a pinned model provider with tools-off %s', async (ignoreUserConfig) => {
+  test.each([false, true])('project provider does not change a pinned model provider with tools-off %s', async (ignoreUserConfig) => {
     const home = await configHome();
     const project = await configHome();
     await mkdir(path.join(project, '.codex'));
     await writeFile(path.join(project, '.codex', 'config.toml'), 'model_provider = "azure"\n');
-    expect(resolveCodexLaunchIdentity({ configuredModel: 'gpt-6-sol', ignoreUserConfig, env: { CODEX_HOME: home }, cwd: project })).toMatchObject({
-      model: 'gpt-6-sol', provider: null, reason: 'codex_project_config_provider_present', launchModel: 'gpt-6-sol',
+    expect(resolveCodexLaunchIdentity({ configuredModel: 'gpt-6-sol', ignoreUserConfig, env: { CODEX_HOME: home }, cwd: project })).toEqual({
+      model: 'gpt-6-sol', provider: 'openai', reason: null, launchModel: 'gpt-6-sol',
     });
   });
 
-  test('checks provider settings at every project level', async () => {
-    const home = await configHome('model = "gpt-6-sol"\n');
+  test('tools-off mode keeps the openai provider despite user and project providers', async () => {
+    const home = await configHome('model = "gpt-5.3-codex"\nmodel_provider = "other"\n');
+    const project = await configHome();
+    await mkdir(path.join(project, '.codex'));
+    await writeFile(path.join(project, '.codex', 'config.toml'), 'model_provider = "azure"\n');
+    expect(resolveCodexLaunchIdentity({ configuredModel: 'gpt-6-sol', ignoreUserConfig: true, env: { CODEX_HOME: home }, cwd: project })).toEqual({
+      model: 'gpt-6-sol', provider: 'openai', reason: null, launchModel: 'gpt-6-sol',
+    });
+  });
+
+  test('ignores provider settings at every project level', async () => {
+    const home = await configHome('model = "gpt-6-sol"\nmodel_provider = "other"\n');
     const project = await configHome();
     const nested = path.join(project, 'nested');
     await mkdir(path.join(project, '.git'));
@@ -177,8 +187,8 @@ describe('Codex launch identity', () => {
     await mkdir(path.join(nested, '.codex'), { recursive: true });
     await writeFile(path.join(project, '.codex', 'config.toml'), 'model_provider = "azure"\n');
     await writeFile(path.join(nested, '.codex', 'config.toml'), 'model_provider = "openai"\n');
-    expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home }, cwd: nested })).toMatchObject({
-      model: 'gpt-6-sol', provider: null, reason: 'codex_project_config_provider_present',
+    expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home }, cwd: nested })).toEqual({
+      model: 'gpt-6-sol', provider: 'other', reason: null, launchModel: null,
     });
   });
 
