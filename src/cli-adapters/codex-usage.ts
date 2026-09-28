@@ -18,6 +18,15 @@ function deriveUncachedInput(telemetry: AdapterTelemetry): void {
   const input = telemetry.tokens.input_total;
   const cacheRead = telemetry.tokens.cache_read;
   if (
+    input.reason === 'invalid_provider_measurement' ||
+    cacheRead.reason === 'invalid_provider_measurement'
+  ) {
+    telemetry.tokens.input_uncached = unavailableMeasurement(
+      'invalid_provider_measurement',
+    );
+    return;
+  }
+  if (
     input.availability !== 'available' ||
     cacheRead.availability !== 'available'
   )

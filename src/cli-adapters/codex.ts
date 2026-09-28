@@ -367,7 +367,7 @@ export class CodexAdapter implements CLIAdapter {
       const args = this.buildArgs(
         opts.allowToolUse,
         opts.thinkingBudget,
-        opts.model,
+        launchIdentity.launchModel ?? opts.model,
       );
 
       const cleanup = () => fs.unlink(tmpFile).catch(() => {});

@@ -28,7 +28,9 @@ const usage = '{"type":"turn.completed","usage":{"input_tokens":1000,"cached_inp
 async function execute(config?: string, options: { model?: string; allowToolUse?: boolean } = {}) {
   process.env.CODEX_HOME = await configHome(config);
   const checkpoints: AdapterTelemetry[] = [];
-  const adapter = new CodexAdapter(async ({ onStdout, cleanup }) => {
+  let launchArgs: string[] = [];
+  const adapter = new CodexAdapter(async ({ args, onStdout, cleanup }) => {
+    launchArgs = args;
     try {
       onStdout?.(usage);
       return usage;
@@ -37,7 +39,7 @@ async function execute(config?: string, options: { model?: string; allowToolUse?
     }
   });
   const result = await adapter.execute({ prompt: 'review', diff: '', ...options, onTelemetry: (telemetry) => checkpoints.push(telemetry) });
-  return { result, checkpoints };
+  return { result, checkpoints, launchArgs };
 }
 
 describe('Codex launch identity', () => {
@@ -70,23 +72,41 @@ describe('Codex launch identity', () => {
     expect(result.telemetry.diagnostics).toContain(reason);
   });
 
-  test('tools-off mode ignores user config and reports the unknown built-in model', async () => {
+  test('tools-off mode rejects a model tied to an ignored non-OpenAI provider', async () => {
     const { result } = await execute('model = "gpt-5.3-codex"\nmodel_provider = "azure"\n', { allowToolUse: false });
     expect(result.telemetry.resolved_identity).toMatchObject({ model: null, provider: 'openai' });
-    expect(result.telemetry.diagnostics).toContain('codex_default_model_unresolved_config_ignored');
+    expect(result.telemetry.diagnostics).toContain('codex_config_provider_ignored');
+  });
+
+  test('tools-off mode forwards the user model to Codex', async () => {
+    const { result, launchArgs } = await execute('model = "gpt-5.3-codex"\n', { allowToolUse: false });
+    expect(result.telemetry.resolved_identity).toMatchObject({ model: 'gpt-5.3-codex', provider: 'openai' });
+    expect(launchArgs.slice(launchArgs.indexOf('-m'), launchArgs.indexOf('-m') + 2)).toEqual(['-m', 'gpt-5.3-codex']);
+  });
+
+  test('tools-off mode forwards the active profile model', async () => {
+    const { result, launchArgs } = await execute('model = "base"\nprofile = "fast"\n[profiles.fast]\nmodel = "gpt-6-sol"\n', { allowToolUse: false });
+    expect(result.telemetry.resolved_identity).toMatchObject({ model: 'gpt-6-sol', provider: 'openai' });
+    expect(launchArgs.slice(launchArgs.indexOf('-m'), launchArgs.indexOf('-m') + 2)).toEqual(['-m', 'gpt-6-sol']);
+  });
+
+  test('tools-off mode reports a missing user config', async () => {
+    const { result } = await execute(undefined, { allowToolUse: false });
+    expect(result.telemetry.resolved_identity).toMatchObject({ model: null, provider: 'openai' });
+    expect(result.telemetry.diagnostics).toContain('codex_config_not_found');
   });
 
   test('reads a bare active profile and ignores comments and non-string values', async () => {
     const home = await configHome('profile = "fast" # active\nmodel = 123\n[profiles.fast]\nmodel = \'gpt-6-sol\' # selected\n');
     expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home } })).toEqual({
-      model: 'gpt-6-sol', provider: 'openai', reason: null,
+      model: 'gpt-6-sol', provider: 'openai', reason: null, launchModel: null,
     });
   });
 
   test('reports an invalid config model without echoing its value', async () => {
     const home = await configHome('model = "bad;model"\n');
     expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home } })).toEqual({
-      model: null, provider: 'openai', reason: 'codex_config_model_invalid',
+      model: null, provider: 'openai', reason: 'codex_config_model_invalid', launchModel: null,
     });
   });
 
@@ -105,7 +125,7 @@ describe('Codex launch identity', () => {
   ])('does not publish a private or unsafe provider id: %s', async (provider) => {
     const home = await configHome(`model = "gpt-5.3-codex"\nmodel_provider = "${provider}"\n`);
     expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home } })).toEqual({
-      model: 'gpt-5.3-codex', provider: null, reason: 'codex_config_provider_invalid',
+      model: 'gpt-5.3-codex', provider: null, reason: 'codex_config_provider_invalid', launchModel: null,
     });
   });
 
@@ -124,17 +144,41 @@ describe('Codex launch identity', () => {
     await mkdir(path.join(project, '.codex'));
     await writeFile(path.join(project, '.codex', 'config.toml'), 'model = "gpt-6-sol"\n');
     expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home }, cwd: project })).toEqual({
-      model: null, provider: 'openai', reason: 'codex_project_config_present',
+      model: null, provider: 'openai', reason: 'codex_project_config_present', launchModel: null,
     });
   });
 
-  test('project provider alone does not override the user provider', async () => {
+  test('project provider can override the user provider', async () => {
     const home = await configHome('model = "gpt-5.3-codex"\nmodel_provider = "azure"\n');
     const project = await configHome();
     await mkdir(path.join(project, '.codex'));
     await writeFile(path.join(project, '.codex', 'config.toml'), 'model_provider = "other"\n');
     expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home }, cwd: project })).toEqual({
-      model: 'gpt-5.3-codex', provider: 'azure', reason: null,
+      model: 'gpt-5.3-codex', provider: null, reason: 'codex_project_config_provider_present', launchModel: null,
+    });
+  });
+
+  test.each([false, true])('project provider can override a pinned model provider with tools-off %s', async (ignoreUserConfig) => {
+    const home = await configHome();
+    const project = await configHome();
+    await mkdir(path.join(project, '.codex'));
+    await writeFile(path.join(project, '.codex', 'config.toml'), 'model_provider = "azure"\n');
+    expect(resolveCodexLaunchIdentity({ configuredModel: 'gpt-6-sol', ignoreUserConfig, env: { CODEX_HOME: home }, cwd: project })).toMatchObject({
+      model: 'gpt-6-sol', provider: null, reason: 'codex_project_config_provider_present', launchModel: 'gpt-6-sol',
+    });
+  });
+
+  test('checks provider settings at every project level', async () => {
+    const home = await configHome('model = "gpt-6-sol"\n');
+    const project = await configHome();
+    const nested = path.join(project, 'nested');
+    await mkdir(path.join(project, '.git'));
+    await mkdir(path.join(project, '.codex'));
+    await mkdir(path.join(nested, '.codex'), { recursive: true });
+    await writeFile(path.join(project, '.codex', 'config.toml'), 'model_provider = "azure"\n');
+    await writeFile(path.join(nested, '.codex', 'config.toml'), 'model_provider = "openai"\n');
+    expect(resolveCodexLaunchIdentity({ ignoreUserConfig: false, env: { CODEX_HOME: home }, cwd: nested })).toMatchObject({
+      model: 'gpt-6-sol', provider: null, reason: 'codex_project_config_provider_present',
     });
   });
 
@@ -144,7 +188,7 @@ describe('Codex launch identity', () => {
     await mkdir(path.join(project, '.codex'));
     await writeFile(path.join(project, '.codex', 'config.toml'), 'model = "gpt-6-sol"\n');
     expect(resolveCodexLaunchIdentity({ configuredModel: 'gpt-6-astra', ignoreUserConfig: false, env: { CODEX_HOME: home }, cwd: project })).toEqual({
-      model: 'gpt-6-astra', provider: 'openai', reason: null,
+      model: 'gpt-6-astra', provider: 'openai', reason: null, launchModel: 'gpt-6-astra',
     });
   });
 
@@ -157,7 +201,7 @@ describe('Codex launch identity', () => {
 
 test('Codex derives uncached input from total minus cache read with a schema-valid measurement', () => {
   const telemetry = parseCodexTelemetry(usage, {}, {
-    model: null, provider: 'openai', reason: 'codex_default_model_unresolved_config_ignored',
+    model: null, provider: 'openai', reason: 'codex_config_not_found', launchModel: null,
   });
   expect(telemetry.tokens.input_uncached).toEqual({
     availability: 'available', value: 600, reason: null, source: 'validator_derivation',
@@ -182,4 +226,21 @@ test('Codex derives uncached input from total minus cache read with a schema-val
 test('Codex rejects cached input larger than total input', () => {
   const telemetry = parseCodexTelemetry('{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":20}}\n');
   expect(telemetry.tokens.input_uncached).toMatchObject({ availability: 'unavailable', reason: 'invalid_provider_measurement' });
+});
+
+test.each([
+  ['input_tokens', -10, 'input_total'],
+  ['cached_input_tokens', -20, 'cache_read'],
+  ['output_tokens', -5, 'output'],
+])('Codex rejects invalid %s counter', (field, value, tokenField) => {
+  const event = { type: 'turn.completed', usage: { input_tokens: 10, cached_input_tokens: 3, output_tokens: 5, [field]: value } };
+  const telemetry = parseCodexTelemetry(`${JSON.stringify(event)}\n`);
+  expect(telemetry.tokens[tokenField as keyof typeof telemetry.tokens]).toMatchObject({
+    availability: 'unavailable', reason: 'invalid_provider_measurement',
+  });
+  if (field !== 'output_tokens') {
+    expect(telemetry.tokens.input_uncached).toMatchObject({
+      availability: 'unavailable', reason: 'invalid_provider_measurement',
+    });
+  }
 });
