@@ -6,13 +6,17 @@ import { promisify } from 'node:util';
 import { MAX_BUFFER_BYTES } from '../constants.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import { createBoundedLineCollector } from './bounded-lines.js';
+import {
+  type CodexLaunchIdentity,
+  resolveCodexLaunchIdentity,
+} from './codex-config.js';
+import { type CodexUsage, codexUsageTelemetry } from './codex-usage.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import {
   AdapterExecutionFailure,
   type AdapterTelemetry,
   type CLIAdapter,
   createUnavailableTelemetry,
-  observedMeasurement,
   runStreamingCommand,
 } from './shared.js';
 import { CODEX_REASONING_EFFORT } from './thinking-budget.js';
@@ -21,14 +25,6 @@ const execAsync = promisify(exec);
 
 // Module-level counter for unique tmp file names across parallel invocations
 let _tmpCounter = 0;
-
-interface CodexUsage {
-  inputTokens?: number;
-  cachedInputTokens?: number;
-  outputTokens?: number;
-  toolCalls?: number;
-  apiRequests?: number;
-}
 
 /** Parse a single JSONL line into a typed event, or undefined on failure. */
 function parseJsonlLine(
@@ -175,91 +171,19 @@ function parseCodexJsonl(
 export function parseCodexTelemetry(
   raw: string,
   opts: { requestedModel?: string; thinkingBudget?: string } = {},
+  launchIdentity?: CodexLaunchIdentity,
 ): AdapterTelemetry {
   return codexUsageTelemetry(
     parseCodexJsonl(raw, undefined, false).usage,
     opts,
+    launchIdentity,
   );
-}
-
-function codexUsageTelemetry(
-  usage: CodexUsage,
-  opts: { requestedModel?: string; thinkingBudget?: string },
-): AdapterTelemetry {
-  const telemetry = createUnavailableTelemetry('codex', {
-    requestedModel: opts.requestedModel,
-    requestedEffort: opts.thinkingBudget,
-    reason: 'codex_usage_not_observed',
-  });
-  const source = 'provider_event' as const;
-  const input = usage.inputTokens;
-  const cacheRead = usage.cachedInputTokens;
-  const output = usage.outputTokens;
-
-  if (input !== undefined) {
-    telemetry.tokens.input_total = observedMeasurement(input, source);
-    telemetry.provider_native_usage.push({
-      source,
-      name: 'input_tokens',
-      value: input,
-    });
-  }
-  if (cacheRead !== undefined) {
-    telemetry.tokens.cache_read = observedMeasurement(
-      cacheRead,
-      source,
-      'exact',
-      ['input_total'],
-    );
-    telemetry.provider_native_usage.push({
-      source,
-      name: 'cached_input_tokens',
-      value: cacheRead,
-    });
-  }
-  if (output !== undefined) {
-    telemetry.tokens.output = observedMeasurement(output, source);
-    telemetry.provider_native_usage.push({
-      source,
-      name: 'output_tokens',
-      value: output,
-    });
-  }
-
-  if (
-    telemetry.tokens.input_total.availability === 'available' &&
-    telemetry.tokens.output.availability === 'available'
-  ) {
-    telemetry.tokens.normalized_total = {
-      availability: 'available',
-      value: telemetry.tokens.input_total.value + telemetry.tokens.output.value,
-      reason: null,
-      source: 'validator_derivation',
-      origin: 'derived',
-      precision: 'exact',
-      derivation: 'codex_input_total_plus_output',
-      included_in: null,
-    };
-    telemetry.completeness.normalized_total = 'complete';
-  }
-  if (telemetry.provider_native_usage.length > 0) {
-    telemetry.completeness.collection = 'complete';
-    telemetry.completeness.canonical_fields = 'partial';
-    telemetry.diagnostics = telemetry.diagnostics.filter(
-      (diagnostic) => diagnostic !== 'codex_usage_not_observed',
-    );
-  }
-  telemetry.provenance.source_format_version = {
-    availability: 'available',
-    value: 'codex-exec-jsonl-turn.completed',
-    reason: null,
-  };
-  return telemetry;
 }
 
 function createCodexTelemetryCollector(
   opts: { model?: string; thinkingBudget?: string },
   onTelemetry: (telemetry: AdapterTelemetry) => void,
+  launchIdentity?: CodexLaunchIdentity,
 ) {
   const usage: CodexUsage = {};
   let previous = '';
@@ -267,10 +191,14 @@ function createCodexTelemetryCollector(
     const event = parseJsonlLine(line);
     if (event?.type !== 'turn.completed') return;
     accumulateTurnUsage(event, usage);
-    const telemetry = codexUsageTelemetry(usage, {
-      requestedModel: opts.model,
-      thinkingBudget: opts.thinkingBudget,
-    });
+    const telemetry = codexUsageTelemetry(
+      usage,
+      {
+        requestedModel: opts.model,
+        thinkingBudget: opts.thinkingBudget,
+      },
+      launchIdentity,
+    );
     if (telemetry.provider_native_usage.length === 0) return;
     telemetry.completeness.collection = 'partial';
     const serialized = JSON.stringify(telemetry);
@@ -278,6 +206,40 @@ function createCodexTelemetryCollector(
     previous = serialized;
     onTelemetry(telemetry);
   });
+}
+
+function createCodexFallbackTelemetry(
+  opts: { model?: string; thinkingBudget?: string },
+  launchIdentity: CodexLaunchIdentity,
+): AdapterTelemetry {
+  const telemetry = createUnavailableTelemetry('codex', {
+    requestedModel: opts.model,
+    resolvedModel: launchIdentity.model,
+    resolvedProvider: launchIdentity.provider ?? undefined,
+    requestedEffort: opts.thinkingBudget,
+  });
+  if (launchIdentity.reason) telemetry.diagnostics.push(launchIdentity.reason);
+  return telemetry;
+}
+
+function codexExecutionResult(
+  raw: string,
+  opts: {
+    model?: string;
+    thinkingBudget?: string;
+    onOutput?: (chunk: string) => void;
+  },
+  launchIdentity: CodexLaunchIdentity,
+): { text: string; telemetry: AdapterTelemetry } {
+  const { text } = parseCodexJsonl(raw, opts.onOutput);
+  return {
+    text: text || raw.trimEnd(),
+    telemetry: parseCodexTelemetry(
+      raw,
+      { requestedModel: opts.model, thinkingBudget: opts.thinkingBudget },
+      launchIdentity,
+    ),
+  };
 }
 
 export class CodexAdapter implements CLIAdapter {
@@ -373,25 +335,22 @@ export class CodexAdapter implements CLIAdapter {
     return args;
   }
 
-  async execute(opts: {
-    prompt: string;
-    diff: string;
-    model?: string;
-    timeoutMs?: number;
-    onOutput?: (chunk: string) => void;
-    allowToolUse?: boolean;
-    thinkingBudget?: string;
-    attemptId?: string;
-    onTelemetry?: (telemetry: AdapterTelemetry) => void;
-  }): Promise<{ text: string; telemetry: AdapterTelemetry }> {
-    let fallbackTelemetry = createUnavailableTelemetry('codex', {
-      requestedModel: opts.model,
-      requestedEffort: opts.thinkingBudget,
+  async execute(
+    opts: Parameters<CLIAdapter['execute']>[0],
+  ): Promise<{ text: string; telemetry: AdapterTelemetry }> {
+    const launchIdentity = resolveCodexLaunchIdentity({
+      configuredModel: opts.model,
+      ignoreUserConfig: opts.allowToolUse === false,
     });
-    const collect = createCodexTelemetryCollector(opts, (telemetry) => {
-      fallbackTelemetry = telemetry;
-      opts.onTelemetry?.(telemetry);
-    });
+    let fallbackTelemetry = createCodexFallbackTelemetry(opts, launchIdentity);
+    const collect = createCodexTelemetryCollector(
+      opts,
+      (telemetry) => {
+        fallbackTelemetry = telemetry;
+        opts.onTelemetry?.(telemetry);
+      },
+      launchIdentity,
+    );
     try {
       const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
 
@@ -408,7 +367,7 @@ export class CodexAdapter implements CLIAdapter {
       const args = this.buildArgs(
         opts.allowToolUse,
         opts.thinkingBudget,
-        opts.model,
+        launchIdentity.launchModel ?? opts.model,
       );
 
       const cleanup = () => fs.unlink(tmpFile).catch(() => {});
@@ -427,14 +386,7 @@ export class CodexAdapter implements CLIAdapter {
           cleanup,
         });
 
-        const { text } = parseCodexJsonl(raw, opts.onOutput);
-        return {
-          text: text || raw.trimEnd(),
-          telemetry: parseCodexTelemetry(raw, {
-            requestedModel: opts.model,
-            thinkingBudget: opts.thinkingBudget,
-          }),
-        };
+        return codexExecutionResult(raw, opts, launchIdentity);
       }
 
       // Otherwise use exec for buffered output
@@ -445,14 +397,7 @@ export class CodexAdapter implements CLIAdapter {
           timeout: opts.timeoutMs,
           maxBuffer: MAX_BUFFER_BYTES,
         });
-        const { text } = parseCodexJsonl(stdout);
-        return {
-          text: text || stdout.trimEnd(),
-          telemetry: parseCodexTelemetry(stdout, {
-            requestedModel: opts.model,
-            thinkingBudget: opts.thinkingBudget,
-          }),
-        };
+        return codexExecutionResult(stdout, opts, launchIdentity);
       } finally {
         await cleanup();
       }
