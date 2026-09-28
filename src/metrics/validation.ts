@@ -276,10 +276,7 @@ export const modelAttemptSchema = z
           message: 'Provider-native evidence name is not allowlisted',
         });
     for (const diagnostic of attempt.diagnostics)
-      if (
-        diagnostic !== 'codex_default_model_unresolved_user_config_ignored' &&
-        prohibitedEvidence.test(diagnostic)
-      )
+      if (prohibitedEvidence.test(diagnostic))
         ctx.addIssue({
           code: 'custom',
           path: ['diagnostics'],

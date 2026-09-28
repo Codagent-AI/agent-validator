@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
@@ -8,6 +8,11 @@ export interface CodexLaunchIdentity {
   provider: string | null;
   reason: string | null;
 }
+
+// Provider IDs enter metrics identity, so reject values resembling private evidence.
+const PRIVATE_PROVIDER_ID =
+  /(?:prompt|response|credential|password|api[_ -]?key|account|user|organization|email|host|machine)/i;
+const SAFE_PROVIDER_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 const TABLE_HEADER = /^\s*\[\s*([^\]\n]+)\s*\]\s*(?:#.*)?$/;
 const STRING_ASSIGNMENT =
@@ -77,12 +82,41 @@ function readConfig(configPath: string): {
   }
 }
 
+/** Codex loads project model overrides only when trusted; trust is unknown here. */
+function projectModelMayOverride(cwd: string): boolean {
+  let directory = path.resolve(cwd);
+  while (true) {
+    const { config, reason } = readConfig(
+      path.join(directory, '.codex', 'config.toml'),
+    );
+    if (config.model || reason === 'codex_config_unreadable') return true;
+    if (existsSync(path.join(directory, '.git'))) return false;
+    const parent = path.dirname(directory);
+    if (parent === directory) return false;
+    directory = parent;
+  }
+}
+
+function resolveProvider(configuredProvider?: string): {
+  provider: string | null;
+  reason: string | null;
+} {
+  if (configuredProvider === undefined)
+    return { provider: 'openai', reason: null };
+  if (
+    !SAFE_PROVIDER_ID_PATTERN.test(configuredProvider) ||
+    PRIVATE_PROVIDER_ID.test(configuredProvider)
+  )
+    return { provider: null, reason: 'codex_config_provider_invalid' };
+  return { provider: configuredProvider, reason: null };
+}
+
 function ignoredConfigIdentity(configuredModel?: string): CodexLaunchIdentity {
   if (!configuredModel) {
     return {
       model: null,
       provider: 'openai',
-      reason: 'codex_default_model_unresolved_user_config_ignored',
+      reason: 'codex_default_model_unresolved_config_ignored',
     };
   }
   if (!SAFE_MODEL_ID_PATTERN.test(configuredModel)) {
@@ -114,17 +148,41 @@ export function resolveCodexLaunchIdentity({
     'config.toml',
   );
   const { config, reason: configReason } = readConfig(configPath);
-  const provider = config.model_provider || 'openai';
-  if (configuredModel) {
-    return SAFE_MODEL_ID_PATTERN.test(configuredModel)
-      ? { model: configuredModel, provider, reason: null }
-      : { model: null, provider, reason: 'codex_config_model_invalid' };
+  const { provider, reason: providerReason } = resolveProvider(
+    config.model_provider,
+  );
+  const pinned = configuredModel && SAFE_MODEL_ID_PATTERN.test(configuredModel);
+  if (pinned)
+    return { model: configuredModel, provider, reason: providerReason };
+
+  const rejectedPinReason = configuredModel
+    ? 'codex_config_model_invalid'
+    : null;
+  if (projectModelMayOverride(cwd)) {
+    return {
+      model: null,
+      provider,
+      reason: rejectedPinReason ?? 'codex_project_config_present',
+    };
   }
-  if (configReason) return { model: null, provider, reason: configReason };
+  if (configReason)
+    return { model: null, provider, reason: rejectedPinReason ?? configReason };
   if (!config.model)
-    return { model: null, provider, reason: 'codex_config_model_unset' };
+    return {
+      model: null,
+      provider,
+      reason: rejectedPinReason ?? 'codex_config_model_unset',
+    };
   if (!SAFE_MODEL_ID_PATTERN.test(config.model)) {
-    return { model: null, provider, reason: 'codex_config_model_invalid' };
+    return {
+      model: null,
+      provider,
+      reason: rejectedPinReason ?? 'codex_config_model_invalid',
+    };
   }
-  return { model: config.model, provider, reason: null };
+  return {
+    model: config.model,
+    provider,
+    reason: rejectedPinReason ?? providerReason,
+  };
 }
