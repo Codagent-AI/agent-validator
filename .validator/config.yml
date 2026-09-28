@@ -9,15 +9,11 @@ allow_parallel: true
 cli:
   default_preference:
     - codex
-    - github-copilot
   adapters:
     codex:
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       allow_tool_use: false
-      thinking_budget: low
-    github-copilot:
-      allow_tool_use: false
-      thinking_budget: low
+      thinking_budget: medium
 
 entry_points:
   - path: "."
