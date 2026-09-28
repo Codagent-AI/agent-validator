@@ -35,6 +35,7 @@ describe('recorded native telemetry accounting', () => {
     const telemetry = parseCodexTelemetry(await fixture('codex-0.153.4.jsonl'));
     expect(telemetry.tokens.input_total.value).toBe(12766);
     expect(telemetry.tokens.cache_read).toMatchObject({value: 5888, included_in: ['input_total']});
+    expect(telemetry.tokens.input_uncached).toMatchObject({value: 6878, origin: 'derived', derivation: 'codex_input_total_minus_cache_read'});
     expect(telemetry.tokens.output.value).toBe(5);
     expect(telemetry.tokens.normalized_total.value).toBe(12771);
   });
