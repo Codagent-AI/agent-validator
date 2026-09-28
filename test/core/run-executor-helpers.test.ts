@@ -8,6 +8,7 @@ import { ChangeDetector } from "../../src/core/change-detector.js";
 import {
 	detectAndPrepareChanges,
 	handleNoChanges,
+	processRerunMode,
 } from "../../src/core/run-executor-helpers.js";
 
 const noopLogger = {
@@ -112,6 +113,90 @@ describe("handleNoChanges", () => {
 		expect(result.message).toContain("2");
 		expect(result.message).toContain("violation");
 		expect(result.gatesRun).toBe(0);
+	});
+});
+
+describe("processRerunMode", () => {
+	let loggerSpy: ReturnType<typeof spyOn>;
+	let previousFailuresSpy: ReturnType<typeof spyOn>;
+	let readStateSpy: ReturnType<typeof spyOn>;
+
+	beforeEach(() => {
+		loggerSpy = spyOn(appLogger, "getCategoryLogger").mockReturnValue(
+			noopLogger,
+		);
+		previousFailuresSpy = spyOn(
+			logParser,
+			"findPreviousFailures",
+		).mockResolvedValue({ failures: [], passedSlots: undefined } as any);
+		readStateSpy = spyOn(
+			executionState,
+			"readExecutionState",
+		).mockResolvedValue({
+			last_run_completed_at: "2026-09-25T00:00:00Z",
+			branch: "feature",
+			commit: "head-sha",
+			working_tree_ref: "snapshot-ref",
+		});
+	});
+
+	afterEach(() => {
+		loggerSpy.mockRestore();
+		previousFailuresSpy.mockRestore();
+		readStateSpy.mockRestore();
+	});
+
+	it("keeps the execution-state snapshot over the trusted HEAD on rerun", async () => {
+		const ctx = makeCtx();
+		ctx.startupChangeOptions = { fixBase: "head-sha" };
+
+		const result = await processRerunMode(ctx, true, true);
+
+		expect(result.changeOptions).toEqual({
+			uncommitted: true,
+			fixBase: "snapshot-ref",
+		});
+	});
+
+	it("uses the startup fixBase when the rerun has no snapshot", async () => {
+		readStateSpy.mockResolvedValue({
+			last_run_completed_at: "2026-09-25T00:00:00Z",
+			branch: "feature",
+			commit: "head-sha",
+		});
+		const ctx = makeCtx();
+		ctx.startupChangeOptions = { fixBase: "head-sha" };
+
+		const result = await processRerunMode(ctx, true, true);
+
+		expect(result.changeOptions).toEqual({
+			uncommitted: true,
+			fixBase: "head-sha",
+		});
+	});
+
+	it("keeps the startup fixBase on a fresh run", async () => {
+		readStateSpy.mockResolvedValue(null);
+		const ctx = makeCtx();
+		ctx.startupChangeOptions = { fixBase: "head-sha" };
+
+		const result = await processRerunMode(ctx, false, false);
+
+		expect(result.changeOptions).toEqual({ fixBase: "head-sha" });
+	});
+
+	it("keeps the snapshot when uncommitted is explicitly set", async () => {
+		const ctx = makeCtx();
+		ctx.options.uncommitted = true;
+		ctx.startupChangeOptions = { fixBase: "head-sha" };
+
+		const result = await processRerunMode(ctx, true, true);
+
+		expect(result.changeOptions).toEqual({
+			commit: undefined,
+			uncommitted: true,
+			fixBase: "snapshot-ref",
+		});
 	});
 });
 
