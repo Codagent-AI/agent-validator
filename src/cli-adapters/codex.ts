@@ -1,4 +1,5 @@
 import { exec } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,11 @@ import {
   type CodexLaunchIdentity,
   resolveCodexLaunchIdentity,
 } from './codex-config.js';
+import {
+  type CodexObservedIdentity,
+  extractCodexThreadId,
+  readCodexObservedIdentity,
+} from './codex-rollout.js';
 import { type CodexUsage, codexUsageTelemetry } from './codex-usage.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 import {
@@ -222,7 +228,71 @@ function createCodexFallbackTelemetry(
   return telemetry;
 }
 
-function codexExecutionResult(
+function addCodexObservedEntry(
+  telemetry: AdapterTelemetry,
+  observed: CodexObservedIdentity & { model: string },
+): void {
+  telemetry.observed_identities.push({
+    identity_id: `codex-model-${createHash('sha256')
+      .update(`${observed.provider ?? ''}\0${observed.model}`)
+      .digest('hex')}`,
+    model: observed.model,
+    provider: observed.provider
+      ? { availability: 'available', value: observed.provider, reason: null }
+      : {
+          availability: 'unavailable',
+          value: null,
+          reason: observed.reason ?? 'not_reported',
+        },
+    effort: {
+      availability: 'unavailable',
+      value: null,
+      reason: 'not_reported',
+    },
+    provenance: 'telemetry',
+  });
+  telemetry.observed_identity_availability = {
+    availability: 'available',
+    reason: null,
+  };
+}
+
+function applyCodexObservedIdentity(
+  telemetry: AdapterTelemetry,
+  launchIdentity: CodexLaunchIdentity,
+  observed: CodexObservedIdentity,
+): AdapterTelemetry {
+  if (observed.reason) telemetry.diagnostics.push(observed.reason);
+  if (!observed.model) return telemetry;
+  addCodexObservedEntry(
+    telemetry,
+    observed as CodexObservedIdentity & { model: string },
+  );
+  const modelMismatch = launchIdentity.model !== observed.model;
+  const providerMismatch =
+    !!observed.provider && launchIdentity.provider !== observed.provider;
+  if (modelMismatch || providerMismatch) {
+    telemetry.resolved_identity.model = observed.model;
+    telemetry.resolved_identity.provider = observed.provider;
+    telemetry.resolved_identity.provenance = 'telemetry';
+    telemetry.diagnostics = telemetry.diagnostics.filter(
+      (reason) =>
+        reason !== 'codex_config_not_found' &&
+        reason !== 'codex_config_model_unset',
+    );
+    if (modelMismatch)
+      telemetry.diagnostics.push(
+        launchIdentity.model
+          ? 'codex_observed_model_mismatch'
+          : 'codex_identity_observed_from_rollout',
+      );
+    if (providerMismatch)
+      telemetry.diagnostics.push('codex_observed_provider_mismatch');
+  }
+  return telemetry;
+}
+
+async function codexExecutionResult(
   raw: string,
   opts: {
     model?: string;
@@ -230,14 +300,21 @@ function codexExecutionResult(
     onOutput?: (chunk: string) => void;
   },
   launchIdentity: CodexLaunchIdentity,
-): { text: string; telemetry: AdapterTelemetry } {
+): Promise<{ text: string; telemetry: AdapterTelemetry }> {
   const { text } = parseCodexJsonl(raw, opts.onOutput);
+  const observed = await readCodexObservedIdentity({
+    threadId: extractCodexThreadId(raw),
+  });
   return {
     text: text || raw.trimEnd(),
-    telemetry: parseCodexTelemetry(
-      raw,
-      { requestedModel: opts.model, thinkingBudget: opts.thinkingBudget },
+    telemetry: applyCodexObservedIdentity(
+      parseCodexTelemetry(
+        raw,
+        { requestedModel: opts.model, thinkingBudget: opts.thinkingBudget },
+        launchIdentity,
+      ),
       launchIdentity,
+      observed,
     ),
   };
 }
@@ -343,6 +420,10 @@ export class CodexAdapter implements CLIAdapter {
       ignoreUserConfig: opts.allowToolUse === false,
     });
     let fallbackTelemetry = createCodexFallbackTelemetry(opts, launchIdentity);
+    let streamThreadId: string | null = null;
+    const threadCollector = createBoundedLineCollector((line) => {
+      streamThreadId ??= extractCodexThreadId(line);
+    });
     const collect = createCodexTelemetryCollector(
       opts,
       (telemetry) => {
@@ -379,7 +460,10 @@ export class CodexAdapter implements CLIAdapter {
           args,
           tmpFile,
           timeoutMs: opts.timeoutMs,
-          onStdout: collect.write,
+          onStdout: (chunk) => {
+            collect.write(chunk);
+            threadCollector.write(chunk);
+          },
           onOutput: (chunk: string) => {
             opts.onOutput?.(chunk);
           },
@@ -403,6 +487,12 @@ export class CodexAdapter implements CLIAdapter {
       }
     } catch (error) {
       collect.flush();
+      threadCollector.flush();
+      fallbackTelemetry = applyCodexObservedIdentity(
+        fallbackTelemetry,
+        launchIdentity,
+        await readCodexObservedIdentity({ threadId: streamThreadId }),
+      );
       throw new AdapterExecutionFailure(
         error instanceof Error ? error : new Error(String(error)),
         fallbackTelemetry,

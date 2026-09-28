@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { CodexAdapter, parseCodexTelemetry } from '../../src/cli-adapters/codex.js';
 import { resolveCodexLaunchIdentity } from '../../src/cli-adapters/codex-config.js';
+import { AdapterExecutionFailure } from '../../src/cli-adapters/shared.js';
 import { modelAttemptSchema } from '../../src/metrics/validation.js';
 import type { AdapterTelemetry } from '../../src/cli-adapters/shared.js';
 
@@ -24,6 +25,190 @@ afterEach(async () => {
 });
 
 const usage = '{"type":"turn.completed","usage":{"input_tokens":1000,"cached_input_tokens":400,"output_tokens":50}}\n';
+const threadId = '123e4567-e89b-12d3-a456-426614174000';
+const started = `${JSON.stringify({ type: 'thread.started', thread_id: threadId })}\n`;
+
+async function writeRollout(home: string, records: object[]): Promise<void> {
+  const day = path.join(home, 'sessions', '2026', '09', '28');
+  await mkdir(day, { recursive: true });
+  await writeFile(path.join(day, `rollout-2026-09-28T12-00-00-${threadId}.jsonl`),
+    `${records.map((record) => JSON.stringify(record)).join('\n')}\n`);
+}
+
+async function executeObserved({
+  config, model, records, stream = started + usage, fail = false,
+}: {
+  config?: string;
+  model?: string;
+  records?: object[];
+  stream?: string;
+  fail?: boolean;
+} = {}) {
+  const home = await configHome(config);
+  process.env.CODEX_HOME = home;
+  await writeFile(path.join(home, 'auth.json'), '{}');
+  if (records) await writeRollout(home, records);
+  const checkpoints: AdapterTelemetry[] = [];
+  let launchArgs: string[] = [];
+  const adapter = new CodexAdapter(async ({ args, onStdout, cleanup }) => {
+    launchArgs = args;
+    try {
+      onStdout?.(stream);
+      if (fail) throw new Error('Codex failed');
+      return stream;
+    } finally {
+      await cleanup();
+    }
+  });
+  try {
+    const result = await adapter.execute({ prompt: 'review', diff: '', model, allowToolUse: false,
+      onTelemetry: (telemetry) => checkpoints.push(telemetry) });
+    return { telemetry: result.telemetry, checkpoints, launchArgs };
+  } catch (error) {
+    if (!(error instanceof AdapterExecutionFailure)) throw error;
+    return { telemetry: error.telemetry, checkpoints, launchArgs };
+  }
+}
+
+const observedRecords = [
+  { type: 'session_meta', payload: { model_provider: 'openai' } },
+  { type: 'turn_context', payload: { model: 'gpt-6-sol' } },
+];
+
+describe('Codex observed rollout identity', () => {
+  test('AC1: records the actual model and provider with only auth.json', async () => {
+    const { telemetry, checkpoints } = await executeObserved({ records: observedRecords });
+    expect(telemetry.resolved_identity).toEqual({ adapter: 'codex', model: 'gpt-6-sol',
+      provider: 'openai', effort: null, provenance: 'telemetry' });
+    expect(Object.keys(telemetry.resolved_identity).sort()).toEqual(['adapter', 'effort', 'model', 'provenance', 'provider']);
+    expect(telemetry.observed_identities).toMatchObject([{ model: 'gpt-6-sol',
+      provider: { availability: 'available', value: 'openai', reason: null }, provenance: 'telemetry' }]);
+    expect(telemetry.observed_identity_availability).toEqual({ availability: 'available', reason: null });
+    expect(telemetry.diagnostics).toContain('codex_identity_observed_from_rollout');
+    expect(telemetry.diagnostics).not.toContain('codex_config_not_found');
+    expect(checkpoints[0]?.resolved_identity.model).toBeNull();
+    const attempt = {
+      record_type: 'model_attempt', attempt_id: 'codex-observed', revision: 1, measurement_schema_version: 1,
+      session_id: 'session-1', invocation_id: 'invocation-1',
+      lifecycle: { state: 'completed', started_at: null, ended_at: null }, outcome: 'passed',
+      ...telemetry, completeness: { ...telemetry.completeness, history: 'complete' },
+      provenance: { ...telemetry.provenance, producer_version: '1.14.0',
+        build: { availability: 'unavailable', value: null, reason: 'not_injected' } },
+    };
+    expect(modelAttemptSchema.safeParse(attempt).success).toBe(true);
+  });
+
+  test.each([
+    ['pinned', undefined, 'gpt-6-sol'],
+    ['configured', 'model = "gpt-6-sol"\n', undefined],
+  ])('AC2: keeps matching %s launch resolution', async (_source, config, model) => {
+    const { telemetry, launchArgs } = await executeObserved({ config, model, records: observedRecords });
+    expect(telemetry.resolved_identity).toMatchObject({ model: 'gpt-6-sol', provider: 'openai', provenance: 'launch_resolution' });
+    expect(launchArgs.slice(launchArgs.indexOf('-m'), launchArgs.indexOf('-m') + 2)).toEqual(['-m', 'gpt-6-sol']);
+    expect(telemetry.observed_identities).toHaveLength(1);
+  });
+
+  test('AC2: keeps the pin requested while resolving a different observed model', async () => {
+    const { telemetry } = await executeObserved({ model: 'gpt-5.3-codex', records: observedRecords });
+    expect(telemetry.requested_identity.model).toBe('gpt-5.3-codex');
+    expect(telemetry.resolved_identity).toMatchObject({ model: 'gpt-6-sol', provenance: 'telemetry' });
+    expect(telemetry.diagnostics).toContain('codex_observed_model_mismatch');
+  });
+
+  test('uses the observed provider when the model matches but the provider differs', async () => {
+    const { telemetry } = await executeObserved({ model: 'gpt-6-sol', records: [
+      { type: 'session_meta', payload: { model_provider: 'azure' } },
+      { type: 'turn_context', payload: { model: 'gpt-6-sol' } },
+    ] });
+    expect(telemetry.resolved_identity).toMatchObject({ model: 'gpt-6-sol', provider: 'azure', provenance: 'telemetry' });
+    expect(telemetry.diagnostics).toContain('codex_observed_provider_mismatch');
+  });
+
+  test('keeps valid identity records before a truncated final rollout line', async () => {
+    const home = await configHome();
+    process.env.CODEX_HOME = home;
+    await writeRollout(home, observedRecords);
+    const file = path.join(home, 'sessions', '2026', '09', '28', `rollout-2026-09-28T12-00-00-${threadId}.jsonl`);
+    await writeFile(file, `${observedRecords.map((record) => JSON.stringify(record)).join('\n')}\n{"type":"turn_context","payload":`);
+    const adapter = new CodexAdapter(async ({ onStdout, cleanup }) => {
+      try { onStdout?.(started + usage); return started + usage; }
+      finally { await cleanup(); }
+    });
+    const result = await adapter.execute({ prompt: 'review', diff: '', allowToolUse: false,
+      onTelemetry: () => {} });
+    expect(result.telemetry.resolved_identity.model).toBe('gpt-6-sol');
+  });
+
+  test('keeps identity while skipping an oversized rollout record', async () => {
+    const home = await configHome();
+    process.env.CODEX_HOME = home;
+    await writeRollout(home, observedRecords);
+    const file = path.join(home, 'sessions', '2026', '09', '28', `rollout-2026-09-28T12-00-00-${threadId}.jsonl`);
+    await writeFile(file, `${observedRecords.map((record) => JSON.stringify(record)).join('\n')}\n${'x'.repeat(8 * 1024 * 1024 + 1)}\n`);
+    const adapter = new CodexAdapter(async ({ onStdout, cleanup }) => {
+      try { onStdout?.(started + usage); return started + usage; }
+      finally { await cleanup(); }
+    });
+    const result = await adapter.execute({ prompt: 'review', diff: '', allowToolUse: false,
+      onTelemetry: () => {} });
+    expect(result.telemetry.resolved_identity.model).toBe('gpt-6-sol');
+  });
+
+  test('marks a newline-terminated malformed rollout record unreadable', async () => {
+    const home = await configHome();
+    process.env.CODEX_HOME = home;
+    await writeRollout(home, observedRecords);
+    const file = path.join(home, 'sessions', '2026', '09', '28', `rollout-2026-09-28T12-00-00-${threadId}.jsonl`);
+    await writeFile(file, `${observedRecords.map((record) => JSON.stringify(record)).join('\n')}\nnot-json\n`);
+    const adapter = new CodexAdapter(async ({ onStdout, cleanup }) => {
+      try { onStdout?.(started + usage); return started + usage; }
+      finally { await cleanup(); }
+    });
+    const result = await adapter.execute({ prompt: 'review', diff: '', allowToolUse: false,
+      onTelemetry: () => {} });
+    expect(result.telemetry.resolved_identity.model).toBeNull();
+    expect(result.telemetry.diagnostics).toContain('codex_rollout_unreadable');
+  });
+
+  test.each([
+    ['missing rollout', undefined, started + usage, 'codex_rollout_not_found'],
+    ['missing model', [{ type: 'session_meta', payload: { model_provider: 'openai' } }], started + usage, 'codex_rollout_model_missing'],
+    ['missing thread', observedRecords, usage, 'codex_thread_id_missing'],
+  ])('AC3: %s leaves the model unresolved', async (_case, records, stream, reason) => {
+    const { telemetry } = await executeObserved({ records, stream });
+    expect(telemetry.resolved_identity.model).toBeNull();
+    expect(telemetry.diagnostics).toContain(reason);
+  });
+
+  test.each([
+    ['invalid model', [{ type: 'turn_context', payload: { model: 'bad;model' } }], 'codex_rollout_model_invalid'],
+    ['invalid provider', [{ type: 'session_meta', payload: { model_provider: 'account_proxy' } },
+      { type: 'turn_context', payload: { model: 'gpt-6-sol' } }], 'codex_rollout_provider_invalid'],
+  ])('rejects %s from the rollout', async (_case, records, reason) => {
+    const { telemetry } = await executeObserved({ records });
+    expect(telemetry.diagnostics).toContain(reason);
+    expect(JSON.stringify(telemetry)).not.toContain('bad;model');
+    expect(JSON.stringify(telemetry)).not.toContain('account_proxy');
+  });
+
+  test('uses the last turn model and falls back to session metadata', async () => {
+    const { telemetry } = await executeObserved({ records: [
+      { type: 'session_meta', payload: { model: 'session-model', model_provider: 'openai' } },
+      { type: 'turn_context', payload: { model: 'first-turn' } },
+      { type: 'turn_context', payload: { model: 'gpt-6-sol' } },
+    ] });
+    expect(telemetry.resolved_identity.model).toBe('gpt-6-sol');
+    const fallback = await executeObserved({ records: [
+      { type: 'session_meta', payload: { model: 'session-model', model_provider: 'openai' } },
+    ] });
+    expect(fallback.telemetry.resolved_identity.model).toBe('session-model');
+  });
+
+  test('attaches observed identity when streaming fails after thread start', async () => {
+    const { telemetry } = await executeObserved({ records: observedRecords, fail: true });
+    expect(telemetry.resolved_identity).toMatchObject({ model: 'gpt-6-sol', provider: 'openai', provenance: 'telemetry' });
+  });
+});
 
 async function execute(config?: string, options: { model?: string; allowToolUse?: boolean } = {}) {
   process.env.CODEX_HOME = await configHome(config);

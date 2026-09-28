@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import {
+  isSafeCodexProviderId,
+  resolveCodexHome,
+} from './codex-identity-utils.js';
 import { SAFE_MODEL_ID_PATTERN } from './model-resolution.js';
 
 export interface CodexLaunchIdentity {
@@ -9,11 +12,6 @@ export interface CodexLaunchIdentity {
   reason: string | null;
   launchModel: string | null;
 }
-
-// Provider IDs enter metrics identity, so reject values resembling private evidence.
-const PRIVATE_PROVIDER_ID =
-  /(?:prompt|response|credential|password|api[_ -]?key|account|user|organization|email|host|machine)/i;
-const SAFE_PROVIDER_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 const TABLE_HEADER = /^\s*\[\s*([^\]\n]+)\s*\]\s*(?:#.*)?$/;
 const STRING_ASSIGNMENT =
@@ -111,10 +109,7 @@ function resolveProvider(configuredProvider?: string): {
 } {
   if (configuredProvider === undefined)
     return { provider: 'openai', reason: null };
-  if (
-    !SAFE_PROVIDER_ID_PATTERN.test(configuredProvider) ||
-    PRIVATE_PROVIDER_ID.test(configuredProvider)
-  )
+  if (!isSafeCodexProviderId(configuredProvider))
     return { provider: null, reason: 'codex_config_provider_invalid' };
   return { provider: configuredProvider, reason: null };
 }
@@ -166,11 +161,7 @@ export function resolveCodexLaunchIdentity({
   env?: NodeJS.ProcessEnv;
   cwd?: string;
 }): CodexLaunchIdentity {
-  const configPath = path.resolve(
-    cwd,
-    env.CODEX_HOME || path.join(os.homedir(), '.codex'),
-    'config.toml',
-  );
+  const configPath = path.join(resolveCodexHome(env, cwd), 'config.toml');
   const { config, reason: configReason } = readConfig(configPath);
   const { provider, reason: providerReason } = ignoreUserConfig
     ? { provider: 'openai', reason: null }
