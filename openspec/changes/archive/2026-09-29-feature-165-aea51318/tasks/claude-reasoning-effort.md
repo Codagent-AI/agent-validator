@@ -12,7 +12,7 @@ Today, current Claude models such as Sonnet 5.5 ignore a positive `MAX_THINKING_
 
 ## Background
 
-Read these first: `openspec/changes/feature-165-aea51318/proposal.md`, `design.md`,
+Read these first: `openspec/changes/archive/2026-09-29-feature-165-aea51318/proposal.md`, `design.md`,
 `specs/review-config/spec.md`, and `test-plan.md`. `decisions.md` records why each choice was made.
 
 ### Current code
@@ -185,7 +185,7 @@ around every test that changes it.
 
 ## Done When
 
-- Every scenario in `openspec/changes/feature-165-aea51318/specs/review-config/spec.md` is satisfied.
+- Every scenario in `openspec/changes/archive/2026-09-29-feature-165-aea51318/specs/review-config/spec.md` is satisfied.
   That covers "Adapter Thinking Budget Level Mapping" (including the unchanged Codex and Gemini
   scenarios) and "Claude Launch-Resolved Effort Identity".
 - The unit tests, INT-001, E2E-001, and E2E-002 exist and pass.

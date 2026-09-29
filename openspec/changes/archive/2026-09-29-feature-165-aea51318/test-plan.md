@@ -53,8 +53,9 @@ entry point, both for configured budgets and for the reviewer-override overlay.
     for `low`, `medium`, and `high`. It is absent for `off` and for an unset budget, unless it was
     inherited, in which case it is passed through unchanged.
   - A configured `low` beats an inherited `high`.
-  - `MAX_THINKING_TOKENS` is `8000`, `16000`, `31999`, or `0` as mapped, and it is absent when the
-    budget is unset.
+  - `MAX_THINKING_TOKENS` is `8000`, `16000`, `31999`, or `0` as mapped. When the budget is unset,
+    an inherited value is passed through unchanged, and it is absent only when the parent
+    environment also omits it.
   - The argv never contains `--effort`.
   - On success, telemetry has `requested_identity.effort` equal to the configured budget (or `null`).
     It has `resolved_identity.effort` equal to the captured launch value, or `null` for `off`, for no
