@@ -20,6 +20,7 @@ import { GeminiAdapter } from './gemini.js';
 import { GitHubCopilotAdapter } from './github-copilot.js';
 import { OpenCodeAdapter } from './opencode.js';
 import type { CLIAdapter } from './shared.js';
+import type { CLIToolName } from './tool-names.js';
 
 export {
   GeminiAdapter,
@@ -31,7 +32,8 @@ export {
 };
 
 // Adapter registry: keys should use lowercase with hyphens for multi-word names
-const adapters: Record<string, CLIAdapter> = {
+// Keyed by CLIToolName so the compiler keeps this registry and VALID_CLI_TOOLS in sync.
+const adapters: Record<CLIToolName, CLIAdapter> = {
   gemini: new GeminiAdapter(),
   codex: new CodexAdapter(),
   claude: new ClaudeAdapter(),
@@ -41,7 +43,9 @@ const adapters: Record<string, CLIAdapter> = {
 };
 
 export function getAdapter(name: string): CLIAdapter | undefined {
-  return adapters[name];
+  return Object.hasOwn(adapters, name)
+    ? adapters[name as CLIToolName]
+    : undefined;
 }
 
 export function getAllAdapters(): CLIAdapter[] {
