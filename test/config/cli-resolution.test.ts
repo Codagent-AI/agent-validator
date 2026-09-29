@@ -1,6 +1,6 @@
 import { expect, it } from 'bun:test';
 import {
-  describeCliSource, inferDefaultPreference, missingCliConfigMessage,
+  checkEffectiveCli, describeCliSource, inferDefaultPreference, missingCliConfigMessage,
   resolveEffectiveCli, validateCliSemantics,
 } from '../../src/config/cli-resolution.js';
 
@@ -25,4 +25,12 @@ it('infers preference and validates every tool', () => {
   expect(validateCliSemantics({})[0]?.field).toBe('cli.default_preference');
   expect(validateCliSemantics({ default_preference: ['not-a-tool'] })[0]?.field).toBe('cli.default_preference[0]');
   expect(validateCliSemantics({ default_preference: ['codex'] })).toEqual([]);
+});
+
+it('checks the effective block with inference and semantic issues', () => {
+  expect(checkEffectiveCli({ ...paths, projectCli: undefined, globalCli: undefined })).toEqual({ status: 'missing' });
+  const inherited = checkEffectiveCli({ ...paths, projectCli: undefined, globalCli: { adapters: { codex: { allow_tool_use: true } } } });
+  expect(inherited).toMatchObject({ status: 'resolved', cli: { default_preference: ['codex'] }, issues: [] });
+  const invalid = checkEffectiveCli({ ...paths, projectCli: { default_preference: ['not-a-tool'] }, globalCli: undefined });
+  expect(invalid.status === 'resolved' && invalid.issues[0]?.field).toBe('cli.default_preference[0]');
 });

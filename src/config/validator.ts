@@ -6,13 +6,15 @@ import YAML from 'yaml';
 import { ZodError } from 'zod';
 import {
   type CliSource,
+  checkEffectiveCli,
   describeCliSource,
-  inferDefaultPreference,
   missingCliConfigMessage,
-  resolveEffectiveCli,
-  validateCliSemantics,
 } from './cli-resolution.js';
-import { getGlobalConfigPath, readGlobalConfig } from './global.js';
+import {
+  type GlobalConfigReadResult,
+  getGlobalConfigPath,
+  readGlobalConfig,
+} from './global.js';
 import {
   checkGateSchema,
   entryPointSchema,
@@ -52,6 +54,8 @@ export interface ValidationResult {
   issues: ValidationIssue[];
   filesChecked: string[];
   projectConfigFound: boolean;
+  /** The single global config read for this validation; reusable by callers. */
+  globalConfigRead: GlobalConfigReadResult;
 }
 
 interface ValidatorContext {
@@ -108,14 +112,7 @@ export async function validateConfig(
 
   if (projectConfig) {
     validateProjectLevelConfig(projectConfig, ctx);
-    validateCliConfig(
-      projectConfig,
-      global.status === 'ok' ? global.config.cli : undefined,
-      global.path,
-      reviews,
-      reviewSourceFiles,
-      ctx,
-    );
+    validateCliConfig(projectConfig, global, reviews, reviewSourceFiles, ctx);
   }
 
   const valid = ctx.issues.filter((i) => i.severity === 'error').length === 0;
@@ -124,6 +121,7 @@ export async function validateConfig(
     issues: ctx.issues,
     filesChecked: ctx.filesChecked,
     projectConfigFound: ctx.filesChecked.includes(configPath),
+    globalConfigRead: global,
   };
 }
 
@@ -478,42 +476,43 @@ function validateProjectLevelConfig(
 
 function validateCliConfig(
   projectConfig: ValidatorConfig,
-  globalCli: ValidatorConfig['cli'],
-  globalPath: string,
+  global: GlobalConfigReadResult,
   reviews: Record<string, ReviewPromptFrontmatter>,
   reviewSourceFiles: Record<string, string>,
   ctx: ValidatorContext,
 ): void {
-  const resolved = resolveEffectiveCli({
+  const effective = checkEffectiveCli({
     projectCli: projectConfig.cli,
     projectConfigPath: ctx.configPath,
-    globalCli,
-    globalConfigPath: globalPath,
+    globalCli: global.status === 'ok' ? global.config.cli : undefined,
+    globalConfigPath: global.path,
   });
-  if (!resolved) {
+  if (effective.status === 'missing') {
+    // An invalid global file is already reported; runtime loading fails on it
+    // before CLI resolution, so do not also claim the cli block is missing.
+    if (global.status === 'invalid') return;
     ctx.issues.push({
       file: ctx.configPath,
       severity: 'error',
       field: 'cli',
-      message: missingCliConfigMessage(ctx.configPath, globalPath),
+      message: missingCliConfigMessage(ctx.configPath, global.path),
     });
     return;
   }
-  const cli = inferDefaultPreference(resolved.cli);
-  for (const issue of validateCliSemantics(cli)) {
+  for (const issue of effective.issues) {
     ctx.issues.push({
-      file: resolved.source.path,
+      file: effective.source.path,
       severity: 'error',
       ...issue,
     });
   }
-  if (cli.default_preference) {
+  if (effective.cli.default_preference) {
     validateReviewPreferencesAgainstDefaults(
-      cli.default_preference,
+      effective.cli.default_preference,
       reviews,
       reviewSourceFiles,
       ctx,
-      resolved.source,
+      effective.source,
     );
   }
 }

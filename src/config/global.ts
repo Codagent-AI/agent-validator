@@ -38,22 +38,29 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   debug_log: { enabled: false, max_size_mb: 10 },
 };
 
+export interface ConfigIssue {
+  field?: string;
+  message: string;
+}
+
+/** Formats issues as "field: message; …" for single-line error messages. */
+export function formatConfigIssues(issues: ConfigIssue[]): string {
+  return issues
+    .map(({ field, message }) => (field ? `${field}: ${message}` : message))
+    .join('; ');
+}
+
 export type GlobalConfigReadResult =
   | { status: 'missing'; path: string }
   | { status: 'ok'; path: string; config: GlobalConfig }
-  | {
-      status: 'invalid';
-      path: string;
-      reason: string;
-      issues: { message: string; field?: string }[];
-    };
+  | { status: 'invalid'; path: string; issues: ConfigIssue[] };
 
 export class GlobalConfigError extends Error {
   constructor(
     readonly path: string,
-    reason: string,
+    readonly issues: ConfigIssue[],
   ) {
-    super(`Invalid global config at ${path}: ${reason}`);
+    super(`Invalid global config at ${path}: ${formatConfigIssues(issues)}`);
     this.name = 'GlobalConfigError';
   }
 }
@@ -67,17 +74,13 @@ export async function readGlobalConfig(
     const parsed = globalConfigSchema.safeParse(YAML.parse(content) ?? {});
     if (parsed.success)
       return { status: 'ok', path: absolutePath, config: parsed.data };
-    const issues = parsed.error.issues.map((issue) => ({
-      field: issue.path.join('.'),
-      message: issue.message,
-    }));
     return {
       status: 'invalid',
       path: absolutePath,
-      issues,
-      reason: issues
-        .map(({ field, message }) => (field ? `${field}: ${message}` : message))
-        .join('; '),
+      issues: parsed.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      })),
     };
   } catch (error) {
     if (
@@ -88,22 +91,28 @@ export async function readGlobalConfig(
     ) {
       return { status: 'missing', path: absolutePath };
     }
-    const reason = error instanceof Error ? error.message : String(error);
     return {
       status: 'invalid',
       path: absolutePath,
-      reason,
-      issues: [{ message: reason }],
+      issues: [
+        { message: error instanceof Error ? error.message : String(error) },
+      ],
     };
   }
+}
+
+/** Returns the usable global config from a read result, throwing when the file is invalid. */
+export function globalConfigFromReadResult(
+  result: GlobalConfigReadResult,
+): GlobalConfig {
+  if (result.status === 'missing') return DEFAULT_GLOBAL_CONFIG;
+  if (result.status === 'invalid')
+    throw new GlobalConfigError(result.path, result.issues);
+  return result.config;
 }
 
 export async function loadGlobalConfig(
   configPath = getGlobalConfigPath(),
 ): Promise<GlobalConfig> {
-  const result = await readGlobalConfig(configPath);
-  if (result.status === 'missing') return DEFAULT_GLOBAL_CONFIG;
-  if (result.status === 'invalid')
-    throw new GlobalConfigError(result.path, result.reason);
-  return result.config;
+  return globalConfigFromReadResult(await readGlobalConfig(configPath));
 }

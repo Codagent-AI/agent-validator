@@ -106,3 +106,41 @@ it('rejects an invalid global file even when project CLI is valid', async () => 
   await fs.writeFile(globalPath, 'cli: [');
   await expect(loadConfig(root, { globalConfigPath: globalPath })).rejects.toThrow(globalPath);
 });
+
+describe('invalid global config with an inherited CLI block', () => {
+  it('reports only the global error, matching runtime loading', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'validator-cli-parity-'));
+    tempDirs.push(root);
+    const globalPath = path.join(root, 'home', 'config.yml');
+    await fs.mkdir(path.join(root, '.validator'), { recursive: true });
+    await fs.writeFile(path.join(root, '.validator', 'config.yml'), 'entry_points:\n  - path: src\n');
+    await fs.mkdir(path.dirname(globalPath), { recursive: true });
+    await fs.writeFile(globalPath, 'debug_log:\n  enabled: "yes"\ncli:\n  default_preference: [codex]\n');
+
+    const validation = await validateConfig(root, { globalConfigPath: globalPath });
+    const errors = validation.issues.filter((issue) => issue.severity === 'error');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.every((issue) => issue.file === globalPath)).toBe(true);
+    expect(errors.some((issue) => issue.message.includes('No "cli" block'))).toBe(false);
+    expect(validation.globalConfigRead.status).toBe('invalid');
+    await expect(loadConfig(root, { globalConfigPath: globalPath })).rejects.toThrow(`Invalid global config at ${globalPath}`);
+  });
+});
+
+describe('reusing a global config read', () => {
+  it('loads from the supplied read result instead of reading the file again', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'validator-cli-parity-'));
+    tempDirs.push(root);
+    const globalPath = path.join(root, 'home', 'config.yml');
+    await fs.mkdir(path.join(root, '.validator'), { recursive: true });
+    await fs.writeFile(path.join(root, '.validator', 'config.yml'), 'entry_points:\n  - path: src\n');
+    await fs.mkdir(path.dirname(globalPath), { recursive: true });
+    await fs.writeFile(globalPath, 'cli:\n  default_preference: [codex]\n');
+
+    const validation = await validateConfig(root, { globalConfigPath: globalPath });
+    await fs.writeFile(globalPath, 'not: [valid');
+    const config = await loadConfig(root, { globalConfigRead: validation.globalConfigRead });
+    expect(config.project.cli.default_preference).toEqual(['codex']);
+    expect(config.cliSource).toEqual({ kind: 'global', path: globalPath });
+  });
+});

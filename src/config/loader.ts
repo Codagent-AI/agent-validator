@@ -4,14 +4,17 @@ import path from 'node:path';
 import YAML from 'yaml';
 import {
   type CliSource,
+  checkEffectiveCli,
   describeCliSource,
   InvalidCliConfigError,
-  inferDefaultPreference,
   MissingCliConfigError,
-  resolveEffectiveCli,
-  validateCliSemantics,
 } from './cli-resolution.js';
-import { getGlobalConfigPath, loadGlobalConfig } from './global.js';
+import {
+  type GlobalConfigReadResult,
+  getGlobalConfigPath,
+  globalConfigFromReadResult,
+  loadGlobalConfig,
+} from './global.js';
 import { loadCheckGates } from './load-checks.js';
 import { loadReviewGates } from './load-reviews.js';
 import { fileExists } from './loader-utils.js';
@@ -48,6 +51,8 @@ export interface LoadConfigOptions {
   applyReviewerOverride?: boolean;
   requireCli?: boolean;
   globalConfigPath?: string;
+  /** A global config already read in this invocation; avoids a second read. */
+  globalConfigRead?: GlobalConfigReadResult;
 }
 
 export class ProjectConfigNotFoundError extends Error {
@@ -79,28 +84,39 @@ export async function loadConfig(
   const projectConfigRaw = YAML.parse(configContent);
   const projectConfig = validatorConfigSchema.parse(projectConfigRaw);
 
-  const globalConfigPath = options.globalConfigPath ?? getGlobalConfigPath();
-  const globalConfig = await loadGlobalConfig(globalConfigPath);
-  const resolved = resolveEffectiveCli({
+  const globalConfigPath =
+    options.globalConfigRead?.path ??
+    options.globalConfigPath ??
+    getGlobalConfigPath();
+  const globalConfig = options.globalConfigRead
+    ? globalConfigFromReadResult(options.globalConfigRead)
+    : await loadGlobalConfig(globalConfigPath);
+  const effective = checkEffectiveCli({
     projectCli: projectConfig.cli,
     projectConfigPath: configPath,
     globalCli: globalConfig.cli,
     globalConfigPath,
   });
-  if (!resolved && options.requireCli !== false) {
+  // Only `ci list-jobs` opts out; it never uses CLI settings.
+  const requireCli = options.requireCli !== false;
+  if (requireCli && effective.status === 'missing') {
     throw new MissingCliConfigError(configPath, globalConfigPath);
   }
-  const cli = resolved ? inferDefaultPreference(resolved.cli) : {};
-  if (resolved && options.requireCli !== false) {
-    const issues = validateCliSemantics(cli);
-    if (issues.length > 0)
-      throw new InvalidCliConfigError(
-        resolved.source.path,
-        issues,
-        resolved.source,
-      );
+  if (
+    requireCli &&
+    effective.status === 'resolved' &&
+    effective.issues.length > 0
+  ) {
+    throw new InvalidCliConfigError(effective.source, effective.issues);
   }
-  const effectiveProject = { ...projectConfig, cli };
+  const cliSource =
+    effective.status === 'resolved' ? effective.source : undefined;
+  // CLI-dependent steps below run only for a required, valid CLI block.
+  const enforcedCliSource = requireCli ? cliSource : undefined;
+  const effectiveProject = {
+    ...projectConfig,
+    cli: effective.status === 'resolved' ? effective.cli : {},
+  };
 
   // 2. Extract inline gates from entry_points and normalize arrays to strings.
   const { inlineChecks, inlineReviews, normalizedEntryPoints } =
@@ -117,13 +133,13 @@ export async function loadConfig(
   const reviews = await loadReviewGates(configDir, inlineReviews);
 
   const reviewerOverride =
-    options.applyReviewerOverride && resolved && options.requireCli !== false
+    options.applyReviewerOverride && enforcedCliSource
       ? overlayReviewerIfActive(normalizedConfig, reviews)
       : undefined;
 
   // 5. Merge default CLI preference if not specified
-  if (resolved && options.requireCli !== false) {
-    mergeCliPreferences(reviews, normalizedConfig, resolved.source);
+  if (enforcedCliSource) {
+    mergeCliPreferences(reviews, normalizedConfig, enforcedCliSource);
   }
 
   // 6. Validate entry point references
@@ -132,7 +148,7 @@ export async function loadConfig(
   return {
     project: normalizedConfig,
     globalConfig,
-    cliSource: resolved?.source,
+    cliSource,
     checks,
     reviews,
     ...(reviewerOverride ? { reviewerOverride } : {}),

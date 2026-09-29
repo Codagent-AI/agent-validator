@@ -6,9 +6,8 @@ import {
   getAdapter,
   getAllAdapters,
 } from '../cli-adapters/index.js';
-import { getGlobalConfigPath } from '../config/global.js';
+import type { GlobalConfigReadResult } from '../config/global.js';
 import { isProjectConfigNotFound, loadConfig } from '../config/loader.js';
-import { ReviewerOverrideError } from '../config/reviewer-override.js';
 import { type ValidationResult, validateConfig } from '../config/validator.js';
 
 function formatHealthResult(health: CLIAdapterHealth): string {
@@ -102,9 +101,12 @@ function reportEmptyPreferences(reviewsWithEmptyPreference: string[]): void {
   console.log();
 }
 
-async function checkConfiguredAgentsHealth(): Promise<void> {
+async function checkConfiguredAgentsHealth(
+  globalConfigRead: GlobalConfigReadResult,
+): Promise<void> {
   const config = await loadConfig(process.cwd(), {
     applyReviewerOverride: true,
+    globalConfigRead,
   });
   const reviewEntries = Object.entries(config.reviews);
 
@@ -168,12 +170,9 @@ export function registerHealthCommand(program: Command): void {
       console.log(chalk.bold('CLI Tool Health Check:'));
 
       try {
-        await checkConfiguredAgentsHealth();
+        await checkConfiguredAgentsHealth(validation.globalConfigRead);
       } catch (error: unknown) {
-        if (error instanceof ReviewerOverrideError) {
-          console.error(chalk.red('Error:'), error.message);
-          loadFailed = true;
-        } else if (isProjectConfigNotFound(error)) {
+        if (isProjectConfigNotFound(error)) {
           await checkAllAgentsHealth();
         } else {
           console.error(
@@ -183,12 +182,10 @@ export function registerHealthCommand(program: Command): void {
           loadFailed = true;
         }
       }
-      const hasConfigError = validation.issues.some(
-        (issue) =>
-          issue.severity === 'error' &&
-          (validation.projectConfigFound ||
-            issue.file === getGlobalConfigPath()),
-      );
+      // Without a project config, only a broken global file fails health.
+      const hasConfigError = validation.projectConfigFound
+        ? !validation.valid
+        : validation.globalConfigRead.status === 'invalid';
       if (loadFailed || hasConfigError) process.exitCode = 1;
     });
 }
