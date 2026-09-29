@@ -74,7 +74,7 @@ Adapter fields:
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `allow_tool_use` | boolean | `true` | Whether supported adapters may enable tool use |
-| `thinking_budget` | enum | unset | `off`, `low`, `medium`, or `high` |
+| `thinking_budget` | enum | unset | `off`, `low`, `medium`, or `high`. Levels are adapter-specific settings, not calibrated equivalents. For Claude, `low`/`medium`/`high` also set the Claude Code effort level. |
 | `model` | string | unset | Adapter model override |
 
 Supported adapter keys are `claude`, `codex`, `gemini`, `github-copilot`, `cursor`, and `opencode`.
