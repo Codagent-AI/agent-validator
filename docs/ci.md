@@ -76,3 +76,5 @@ entry_points:
 ```
 
 AI reviews usually run locally in the agent loop. CI is normally best for deterministic checks.
+
+CI job discovery (`agent-validate ci list-jobs`) needs no project or global `cli` block. It still validates any global config file that exists, so a malformed file fails the command.

@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { loadGlobalConfig } from '../config/global.js';
-import { loadConfig } from '../config/loader.js';
+import { type GlobalConfig, loadGlobalConfig } from '../config/global.js';
+import { isProjectConfigNotFound, loadConfig } from '../config/loader.js';
 import {
   getDebugLogger,
   initDebugLogger,
@@ -19,12 +19,15 @@ export function registerCleanCommand(program: Command): void {
       let config: Awaited<ReturnType<typeof loadConfig>> | undefined;
       let logDir: string | undefined;
       let lockAcquired = false;
+      let globalConfig: GlobalConfig;
       try {
         try {
           config = await loadConfig();
           logDir = config.project.log_dir;
+          globalConfig = config.globalConfig;
         } catch (error) {
-          if (!isMissingConfig(error)) throw error;
+          if (!isProjectConfigNotFound(error)) throw error;
+          globalConfig = await loadGlobalConfig();
           logDir = path.resolve('validator_logs');
         }
 
@@ -34,7 +37,6 @@ export function registerCleanCommand(program: Command): void {
         }
 
         // Initialize debug logger
-        const globalConfig = await loadGlobalConfig();
         const debugLogConfig = mergeDebugLogConfig(
           config?.project.debug_log,
           globalConfig.debug_log,
@@ -62,13 +64,6 @@ export function registerCleanCommand(program: Command): void {
         process.exit(1);
       }
     });
-}
-
-function isMissingConfig(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.startsWith('Configuration file not found')
-  );
 }
 
 async function directoryExists(directory: string): Promise<boolean> {

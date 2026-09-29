@@ -1,3 +1,4 @@
+import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 import {
 	afterEach,
 	beforeEach,
@@ -79,7 +80,8 @@ function record(overrides: Partial<TrustRecord> = {}): TrustRecord {
 
 function config(overrides: Record<string, unknown> = {}): LoadedConfig {
 	return {
-		project: {
+		globalConfig: DEFAULT_GLOBAL_CONFIG,
+	project: {
 			base_branch: "origin/main",
 			log_dir: path.join(TEST_DIR, "logs"),
 			max_retries: 3,

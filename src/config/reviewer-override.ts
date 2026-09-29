@@ -4,8 +4,8 @@ import {
 } from './adapter-defaults.js';
 import type {
   AdapterConfig,
+  LoadedProjectConfig,
   LoadedReviewGateConfig,
-  NormalizedValidatorConfig,
   ReviewerOverrideIdentity,
 } from './types.js';
 
@@ -79,7 +79,7 @@ function isRunnerEffort(value: string): value is RunnerEffort {
 }
 
 export function applyReviewerOverrideToConfig(
-  project: NormalizedValidatorConfig,
+  project: LoadedProjectConfig,
   reviews: Record<string, LoadedReviewGateConfig>,
   parsed: ActiveReviewerOverride,
 ): ReviewerOverrideIdentity {
@@ -99,7 +99,7 @@ export function applyReviewerOverrideToConfig(
 }
 
 function overlayAdapterBlock(
-  project: NormalizedValidatorConfig,
+  project: LoadedProjectConfig,
   parsed: ActiveReviewerOverride,
 ): void {
   const mapped = parsed.adapter;

@@ -1,75 +1,63 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {
+  DEFAULT_GLOBAL_CONFIG, getGlobalConfigPath, GlobalConfigError,
+  loadGlobalConfig, readGlobalConfig, setGlobalConfigPathForTests,
+} from '../../src/config/global.js';
 
-// We need to test with a custom path, so we'll test the schema validation directly
-// and mock the file system for integration tests
+let dir: string;
+let preloadedPath: string;
+beforeEach(async () => {
+  preloadedPath = getGlobalConfigPath();
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'validator-global-'));
+});
+afterEach(async () => {
+  setGlobalConfigPathForTests(preloadedPath);
+  await fs.rm(dir, { recursive: true, force: true });
+});
 
-describe("Global Configuration", () => {
-	let originalHome: string | undefined;
-	let originalXdgConfigHome: string | undefined;
-	let tempDir: string;
+it('isolates the global config path for every in-process test', () => {
+  expect(getGlobalConfigPath().startsWith(os.tmpdir())).toBe(true);
+  expect(getGlobalConfigPath()).toEndWith('config.yml');
+});
 
-	beforeEach(async () => {
-		// Save original env
-		originalHome = process.env.HOME;
-		originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
+describe('global config reader', () => {
+  it('uses defaults for missing and empty files', async () => {
+    const file = path.join(dir, 'config.yml');
+    expect(await readGlobalConfig(file)).toEqual({ status: 'missing', path: file });
+    expect(await loadGlobalConfig(file)).toEqual(DEFAULT_GLOBAL_CONFIG);
+    await fs.writeFile(file, '');
+    expect(await loadGlobalConfig(file)).toEqual(DEFAULT_GLOBAL_CONFIG);
+  });
 
-		// Create a temp directory to isolate from real user config
-		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "validator-test-"));
-		process.env.HOME = tempDir;
-		// Clear XDG_CONFIG_HOME so it doesn't override HOME-based resolution
-		delete process.env.XDG_CONFIG_HOME;
-	});
+  it('loads debug log and CLI blocks', async () => {
+    const file = path.join(dir, 'config.yml');
+    await fs.writeFile(file, 'debug_log:\n  enabled: true\ncli:\n  default_preference: [codex]\n  adapters:\n    codex:\n      model: gpt-test\n');
+    const result = await readGlobalConfig(file);
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.config.debug_log.enabled).toBe(true);
+      expect(result.config.cli?.adapters?.codex?.model).toBe('gpt-test');
+    }
+  });
 
-	afterEach(async () => {
-		// Restore original env
-		if (originalHome !== undefined) {
-			process.env.HOME = originalHome;
-		} else {
-			delete process.env.HOME;
-		}
-		if (originalXdgConfigHome !== undefined) {
-			process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
-		} else {
-			delete process.env.XDG_CONFIG_HOME;
-		}
-		// Clean up temp directory
-		await fs.rm(tempDir, { recursive: true, force: true });
-	});
-
-	describe("Schema Validation", () => {
-		it("should accept valid configuration", async () => {
-			// Import the module fresh to test schema
-			const { loadGlobalConfig } = await import("../../src/config/global.js");
-			// loadGlobalConfig reads from global config path; with temp HOME it won't find any file
-			const config = await loadGlobalConfig();
-			expect(typeof config.debug_log.enabled).toBe("boolean");
-			expect(typeof config.debug_log.max_size_mb).toBe("number");
-		});
-
-		it("should have correct default values", async () => {
-			const { loadGlobalConfig, DEFAULT_GLOBAL_CONFIG } = await import(
-				"../../src/config/global.js"
-			);
-			// Test the DEFAULT_GLOBAL_CONFIG constant directly to verify defaults
-			// This avoids interference from user's actual global config file
-			expect(DEFAULT_GLOBAL_CONFIG.debug_log).toBeDefined();
-			expect(DEFAULT_GLOBAL_CONFIG.debug_log.enabled).toBe(false);
-			expect(DEFAULT_GLOBAL_CONFIG.debug_log.max_size_mb).toBe(10);
-		});
-	});
-
-	describe("getGlobalConfigPath", () => {
-		it("returns correct path in home directory", async () => {
-			const { getGlobalConfigPath } = await import(
-				"../../src/config/global.js"
-			);
-			const configPath = getGlobalConfigPath();
-			expect(configPath).toContain(".config");
-			expect(configPath).toContain("agent-validator");
-			expect(configPath).toContain("config.yml");
-		});
-	});
+  it.each(['cli: [', 'debug_log:\n  enabled: yes\n'])(
+    'reports an invalid file without falling back: %s', async (content) => {
+      const file = path.join(dir, 'config.yml');
+      await fs.writeFile(file, content);
+      const result = await readGlobalConfig(file);
+      expect(result.status).toBe('invalid');
+      expect(result.status === 'invalid' && result.issues.length).toBeGreaterThan(0);
+      try {
+        await loadGlobalConfig(file);
+        throw new Error('expected load to fail');
+      } catch (error) {
+        expect(error).toBeInstanceOf(GlobalConfigError);
+        expect((error as GlobalConfigError).path).toBe(file);
+        expect((error as Error).message).toContain(file);
+      }
+    },
+  );
 });

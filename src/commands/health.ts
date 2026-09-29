@@ -6,7 +6,8 @@ import {
   getAdapter,
   getAllAdapters,
 } from '../cli-adapters/index.js';
-import { loadConfig } from '../config/loader.js';
+import { getGlobalConfigPath } from '../config/global.js';
+import { isProjectConfigNotFound, loadConfig } from '../config/loader.js';
 import { ReviewerOverrideError } from '../config/reviewer-override.js';
 import { type ValidationResult, validateConfig } from '../config/validator.js';
 
@@ -42,13 +43,13 @@ function displayValidationIssues(validationResult: ValidationResult): void {
   }
 }
 
-async function validateAndDisplayConfig(): Promise<void> {
+async function validateAndDisplayConfig(): Promise<ValidationResult> {
   console.log(chalk.bold('Config validation:'));
   const validationResult = await validateConfig();
 
   if (validationResult.filesChecked.length === 0) {
     console.log(chalk.yellow('  No config files found'));
-    return;
+    return validationResult;
   }
 
   for (const file of validationResult.filesChecked) {
@@ -61,6 +62,7 @@ async function validateAndDisplayConfig(): Promise<void> {
   } else {
     displayValidationIssues(validationResult);
   }
+  return validationResult;
 }
 
 interface CollectedAgents {
@@ -159,7 +161,9 @@ export function registerHealthCommand(program: Command): void {
     .command('health')
     .description('Check CLI tool availability')
     .action(async () => {
-      await validateAndDisplayConfig();
+      process.exitCode = 0;
+      const validation = await validateAndDisplayConfig();
+      let loadFailed = false;
       console.log();
       console.log(chalk.bold('CLI Tool Health Check:'));
 
@@ -168,9 +172,23 @@ export function registerHealthCommand(program: Command): void {
       } catch (error: unknown) {
         if (error instanceof ReviewerOverrideError) {
           console.error(chalk.red('Error:'), error.message);
-          process.exit(1);
+          loadFailed = true;
+        } else if (isProjectConfigNotFound(error)) {
+          await checkAllAgentsHealth();
+        } else {
+          console.error(
+            chalk.red('Error:'),
+            error instanceof Error ? error.message : String(error),
+          );
+          loadFailed = true;
         }
-        await checkAllAgentsHealth();
       }
+      const hasConfigError = validation.issues.some(
+        (issue) =>
+          issue.severity === 'error' &&
+          (validation.projectConfigFound ||
+            issue.file === getGlobalConfigPath()),
+      );
+      if (loadFailed || hasConfigError) process.exitCode = 1;
     });
 }

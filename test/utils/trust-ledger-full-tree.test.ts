@@ -1,3 +1,4 @@
+import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
@@ -26,7 +27,8 @@ async function git(args: string[]): Promise<string> {
 
 function testConfig(logDir: string): LoadedConfig {
 	return {
-		project: {
+		globalConfig: DEFAULT_GLOBAL_CONFIG,
+	project: {
 			base_branch: "main",
 			log_dir: logDir,
 			max_retries: 3,

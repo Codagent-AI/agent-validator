@@ -21,7 +21,7 @@ test('built Node clean honors zero retention without touching existing archives'
   await mkdir(path.join(logDir, 'previous'), { recursive: true });
   await writeFile(
     path.join(project, '.validator', 'config.yml'),
-    'log_dir: logs\nmax_previous_logs: 0\ncli: {}\nentry_points:\n  - path: .\n',
+    'log_dir: logs\nmax_previous_logs: 0\ncli:\n  default_preference: [codex]\nentry_points:\n  - path: .\n',
   );
   await writeFile(path.join(logDir, 'current.1.log'), 'current');
   await writeFile(path.join(logDir, 'previous', 'retained.log'), 'retained');
@@ -29,6 +29,7 @@ test('built Node clean honors zero retention without touching existing archives'
   const child = Bun.spawn({
     cmd: [node!, path.join(root, 'dist', 'index.js'), 'clean'],
     cwd: project,
+    env: { ...process.env, HOME: path.join(project, 'home'), XDG_CONFIG_HOME: undefined },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -54,6 +55,7 @@ test('built Node clean uses validator_logs when no configuration exists', async 
   const child = Bun.spawn({
     cmd: [node!, path.join(root, 'dist', 'index.js'), 'clean'],
     cwd: project,
+    env: { ...process.env, HOME: path.join(project, 'home'), XDG_CONFIG_HOME: undefined },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -80,13 +82,14 @@ test('built Node clean fails rather than treating a log-directory file as cleana
   await mkdir(path.join(project, '.validator'), { recursive: true });
   await writeFile(
     path.join(project, '.validator', 'config.yml'),
-    'log_dir: logs\ncli: {}\nentry_points:\n  - path: .\n',
+    'log_dir: logs\ncli:\n  default_preference: [codex]\nentry_points:\n  - path: .\n',
   );
   await writeFile(path.join(project, 'logs'), 'not a directory');
 
   const child = Bun.spawn({
     cmd: [node!, path.join(root, 'dist', 'index.js'), 'clean'],
     cwd: project,
+    env: { ...process.env, HOME: path.join(project, 'home'), XDG_CONFIG_HOME: undefined },
     stdout: 'pipe',
     stderr: 'pipe',
   });

@@ -1,3 +1,4 @@
+import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import * as childProcess from "node:child_process";
 import { execFile } from "node:child_process";
@@ -39,7 +40,8 @@ async function writeFileAndCommit(file: string, content: string, message: string
 
 function testConfig(logDir: string): LoadedConfig {
 	return {
-		project: {
+		globalConfig: DEFAULT_GLOBAL_CONFIG,
+	project: {
 			base_branch: "main",
 			log_dir: logDir,
 			max_retries: 3,

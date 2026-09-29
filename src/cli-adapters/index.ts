@@ -64,9 +64,4 @@ export function getUserCommandAdapters(): CLIAdapter[] {
   return Object.values(adapters).filter((a) => a.getUserCommandDir() !== null);
 }
 
-/**
- * Returns all valid CLI tool names (adapter registry keys).
- */
-export function getValidCLITools(): string[] {
-  return Object.keys(adapters);
-}
+export { getValidCLITools } from './tool-names.js';

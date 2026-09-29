@@ -1,3 +1,4 @@
+import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { LoadedConfig } from "../../src/config/types";
 import type { Job } from "../../src/core/job";
@@ -22,6 +23,7 @@ const mockReporter = {
 } as unknown as ConsoleReporter;
 
 const mockConfig = {
+	globalConfig: DEFAULT_GLOBAL_CONFIG,
 	project: {
 		log_dir: "/tmp/logs",
 		allow_parallel: true,

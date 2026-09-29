@@ -61,6 +61,12 @@ Frequent mistakes:
 - setting both `fix_instructions_file` and `fix_with_skill`
 - setting both `prompt_file` and `skill_name` on one review
 
+### Global and CLI config errors
+
+`No "cli" block found` means neither the project config nor `~/.config/agent-validator/config.yml` supplies `cli`. Add a valid block to either path shown in the error. A project `cli: {}` replaces the global block and produces `Invalid cli config` at load time; add a nonempty `default_preference` or adapters. Invalid tool names also produce this error, even in a project with no reviews.
+
+`Invalid global config at ...` names a malformed YAML file or invalid field. Fix malformed YAML or schema-invalid fields even if the project supplies its own `cli` block. Semantic CLI rules are checked on the effective block. `agent-validate health` now exits nonzero for configuration errors; a missing project config alone still checks all supported agents.
+
 ## Review CLI Missing Or Unhealthy
 
 Run:

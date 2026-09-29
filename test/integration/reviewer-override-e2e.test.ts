@@ -87,6 +87,8 @@ function stubEnv(
 	overrides: Record<string, string> = {},
 ): NodeJS.ProcessEnv {
 	const env = overrideEnv(overrides);
+	env.HOME = path.join(path.dirname(stubs.binDir), "home");
+	delete env.XDG_CONFIG_HOME;
 	env.CI = undefined;
 	env.GITHUB_ACTIONS = undefined;
 	env.GITHUB_BASE_REF = undefined;
@@ -119,7 +121,7 @@ describe("Claude thinking budget reaches the built reviewer", () => {
 		const config = await fs.readFile(configPath, "utf8");
 		await fs.writeFile(configPath, config.replace(
 			"    - claude",
-			mode === "configured" ? "    - claude\n  adapters:\n    claude:\n      thinking_budget: low" : "    - copilot",
+			mode === "configured" ? "    - claude\n  adapters:\n    claude:\n      thinking_budget: low" : "    - github-copilot",
 		));
 		const env = stubEnv(stub, mode === "override" ? { [CLI_ENV]: "claude", [EFFORT_ENV]: "medium" } : {});
 		const result = await spawnValidator(["run"], { cwd: dir, env, timeoutMs: TIMEOUT_MS });

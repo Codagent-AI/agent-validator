@@ -3,13 +3,22 @@ import os from 'node:os';
 import path from 'node:path';
 import YAML from 'yaml';
 import { z } from 'zod';
+import { cliConfigSchema } from './schema.js';
 
-const GLOBAL_CONFIG_PATH = path.join(
-  os.homedir(),
-  '.config',
-  'agent-validator',
-  'config.yml',
-);
+let testConfigPath: string | undefined;
+
+export function setGlobalConfigPathForTests(
+  configPath: string | undefined,
+): void {
+  testConfigPath = configPath;
+}
+
+export function getGlobalConfigPath(): string {
+  return (
+    testConfigPath ??
+    path.join(os.homedir(), '.config', 'agent-validator', 'config.yml')
+  );
+}
 
 export const debugLogConfigSchema = z.object({
   enabled: z.boolean().default(false),
@@ -20,49 +29,81 @@ export type DebugLogConfig = z.infer<typeof debugLogConfigSchema>;
 
 const globalConfigSchema = z.object({
   debug_log: debugLogConfigSchema.default({ enabled: false, max_size_mb: 10 }),
+  cli: cliConfigSchema.optional(),
 });
 
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
-  debug_log: {
-    enabled: false,
-    max_size_mb: 10,
-  },
+  debug_log: { enabled: false, max_size_mb: 10 },
 };
 
-/**
- * Load the global agent-validator configuration.
- * Returns default values if the file doesn't exist or is invalid.
- */
-export async function loadGlobalConfig(): Promise<GlobalConfig> {
+export type GlobalConfigReadResult =
+  | { status: 'missing'; path: string }
+  | { status: 'ok'; path: string; config: GlobalConfig }
+  | {
+      status: 'invalid';
+      path: string;
+      reason: string;
+      issues: { message: string; field?: string }[];
+    };
+
+export class GlobalConfigError extends Error {
+  constructor(
+    readonly path: string,
+    reason: string,
+  ) {
+    super(`Invalid global config at ${path}: ${reason}`);
+    this.name = 'GlobalConfigError';
+  }
+}
+
+export async function readGlobalConfig(
+  configPath = getGlobalConfigPath(),
+): Promise<GlobalConfigReadResult> {
+  const absolutePath = path.resolve(configPath);
   try {
-    const content = await fs.readFile(GLOBAL_CONFIG_PATH, 'utf-8');
-    const raw = YAML.parse(content);
-    return globalConfigSchema.parse(raw);
+    const content = await fs.readFile(absolutePath, 'utf-8');
+    const parsed = globalConfigSchema.safeParse(YAML.parse(content) ?? {});
+    if (parsed.success)
+      return { status: 'ok', path: absolutePath, config: parsed.data };
+    const issues = parsed.error.issues.map((issue) => ({
+      field: issue.path.join('.'),
+      message: issue.message,
+    }));
+    return {
+      status: 'invalid',
+      path: absolutePath,
+      issues,
+      reason: issues
+        .map(({ field, message }) => (field ? `${field}: ${message}` : message))
+        .join('; '),
+    };
   } catch (error) {
-    // Check if file doesn't exist (expected case)
     if (
       typeof error === 'object' &&
       error !== null &&
       'code' in error &&
-      (error as { code: string }).code === 'ENOENT'
+      error.code === 'ENOENT'
     ) {
-      return DEFAULT_GLOBAL_CONFIG;
+      return { status: 'missing', path: absolutePath };
     }
-
-    // File exists but is invalid - log warning and use defaults
-    console.error(
-      `[agent-validator] Warning: Failed to parse global config at ${GLOBAL_CONFIG_PATH}, using defaults`,
-    );
-    return DEFAULT_GLOBAL_CONFIG;
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      status: 'invalid',
+      path: absolutePath,
+      reason,
+      issues: [{ message: reason }],
+    };
   }
 }
 
-/**
- * Get the path to the global config file.
- * Useful for debugging or documentation.
- */
-export function getGlobalConfigPath(): string {
-  return GLOBAL_CONFIG_PATH;
+export async function loadGlobalConfig(
+  configPath = getGlobalConfigPath(),
+): Promise<GlobalConfig> {
+  const result = await readGlobalConfig(configPath);
+  if (result.status === 'missing') return DEFAULT_GLOBAL_CONFIG;
+  if (result.status === 'invalid')
+    throw new GlobalConfigError(result.path, result.reason);
+  return result.config;
 }

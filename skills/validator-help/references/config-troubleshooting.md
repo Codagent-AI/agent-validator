@@ -116,11 +116,9 @@ base_branch: origin/develop
 
 ## Config Precedence
 
-Most settings come from the project config (`.validator/config.yml`) with built-in defaults as fallback. The global config (`~/.config/agent-validator/config.yml`) only applies to `debug_log` settings:
+Most settings come from `.validator/config.yml`. The global config at `~/.config/agent-validator/config.yml` supplies `debug_log` and, when the project has no `cli` block, the entire `cli` block. A project `cli` block replaces the global block without merging adapter fields.
 
-1. **Project config** (`.validator/config.yml`) — all project settings
-2. **Global config** (`~/.config/agent-validator/config.yml`) — `debug_log` only
-3. **Defaults** (built-in)
+`No "cli" block found` names both locations; add a valid block to one. `Invalid cli config` means the effective block has no preference or contains an unknown tool, and fails at load even without reviews. `Invalid global config at ...` identifies malformed YAML or invalid fields; repair malformed YAML or schema-invalid fields even when the project has a `cli` block. Semantic CLI rules apply to the effective block. `health` exits nonzero on configuration errors. Without a project config, it still checks all supported agents unless the global config is invalid.
 
 ## Init Setup Problems
 

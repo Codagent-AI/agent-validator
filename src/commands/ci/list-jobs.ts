@@ -79,7 +79,7 @@ function collectJobsForEntryPoint(
 
 export async function listJobs(): Promise<void> {
   try {
-    const config = await loadConfig();
+    const config = await loadConfig(process.cwd(), { requireCli: false });
     const ciConfig = await loadCIConfig();
     const expander = new EntryPointExpander();
     const expandedEntryPoints = await expander.expandAll(

@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { loadGlobalConfig } from '../config/global.js';
 import { loadConfig } from '../config/loader.js';
 import {
   getDebugLogger,
@@ -29,10 +28,9 @@ export function registerSkipCommand(program: Command): void {
         config = await loadConfig();
 
         // Initialize debug logger
-        const globalConfig = await loadGlobalConfig();
         const debugLogConfig = mergeDebugLogConfig(
           config.project.debug_log,
-          globalConfig.debug_log,
+          config.globalConfig.debug_log,
         );
         initDebugLogger(config.project.log_dir, debugLogConfig);
 
