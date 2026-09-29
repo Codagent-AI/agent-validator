@@ -1,3 +1,5 @@
+import type { AdapterTelemetry } from "../src/cli-adapters/shared.js";
+
 export type EvalAdapterName =
 	| "claude"
 	| "codex"
@@ -44,6 +46,39 @@ export interface TelemetrySummary {
 	apiRequests: number;
 }
 
+/**
+ * Where a run's dollar cost came from:
+ * - `reported`: the provider/CLI reported USD for the run (e.g. Claude OTel).
+ * - `list_price`: API-equivalent estimate from token counts and `evals/pricing.ts`.
+ * - `unavailable`: neither was possible; the cost is unknown, not zero.
+ */
+export type CostSource = "reported" | "list_price" | "unavailable";
+
+export interface RunCost {
+	usd: number | null;
+	source: CostSource;
+	/** Model used for pricing/identification, when known. */
+	model?: string;
+	/** Provider-declared coverage of a reported cost. */
+	coverage?: "full" | "partial" | "unknown";
+	/** Why the cost is unavailable. */
+	reason?: string;
+}
+
+export interface CostSummary {
+	/** Mean candidate cost over runs whose cost is known. */
+	meanCostUsd: number | null;
+	totalCostUsd: number | null;
+	/** Runs with a known candidate cost, out of `totalRuns`. */
+	costedRuns: number;
+	totalRuns: number;
+	sources: CostSource[];
+	/** Known candidate cost divided by true positives of those same runs. */
+	costPerTruePositiveUsd: number | null;
+	meanJudgeCostUsd: number | null;
+	totalJudgeCostUsd: number | null;
+}
+
 export interface AdapterRunResult {
 	configLabel: string;
 	adapter: EvalAdapterName;
@@ -55,6 +90,9 @@ export interface AdapterRunResult {
 	error?: string;
 	telemetry: string[];
 	telemetrySummary?: TelemetrySummary;
+	/** Structured adapter telemetry (tokens, reported cost, identity). */
+	adapterTelemetry?: AdapterTelemetry;
+	cost?: RunCost;
 }
 
 export interface JudgeMatch {
@@ -70,6 +108,8 @@ export interface JudgeResult {
 	falsePositives: number[];
 	reasoning: string;
 	telemetrySummary?: TelemetrySummary;
+	/** Judge cost, kept separate from the candidate's cost. */
+	cost?: RunCost;
 }
 
 export interface RunScore {
@@ -85,6 +125,8 @@ export interface RunScore {
 	f1: number;
 	adapterTokens?: TelemetrySummary;
 	judgeTokens?: TelemetrySummary;
+	cost?: RunCost;
+	judgeCost?: RunCost;
 }
 
 export interface ConfigAggregate {
@@ -99,6 +141,7 @@ export interface ConfigAggregate {
 	meanDurationMs: number;
 	consistency: Record<string, number>;
 	totalTokens: TelemetrySummary;
+	cost: CostSummary;
 }
 
 export interface AdapterVersionInfo {

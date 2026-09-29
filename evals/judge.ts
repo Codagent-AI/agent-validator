@@ -1,4 +1,10 @@
 import { getAdapter } from "../src/cli-adapters/index.js";
+import {
+	AdapterExecutionFailure,
+	type AdapterTelemetry,
+	type CLIAdapter,
+} from "../src/cli-adapters/shared.js";
+import { computeRunCost } from "./cost.js";
 import { buildJudgePrompt } from "./judge-prompt.js";
 import { parseTelemetry } from "./parse-telemetry.js";
 import type {
@@ -6,7 +12,23 @@ import type {
 	EvalAdapterName,
 	GroundTruthIssue,
 	JudgeResult,
+	RunCost,
 } from "./types.js";
+
+/** A failed judge call that may still have cost money. */
+export class JudgeRunError extends Error {
+	constructor(
+		message: string,
+		readonly cost: RunCost,
+	) {
+		super(message);
+		this.name = "JudgeRunError";
+	}
+}
+
+function errorMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
 
 export async function judgeRun(
 	violations: AdapterViolation[],
@@ -14,8 +36,9 @@ export async function judgeRun(
 	judgeAdapterName: EvalAdapterName,
 	thinkingBudget: string,
 	options: { model?: string; timeoutMs?: number } | number = {},
+	resolveAdapter: (name: string) => CLIAdapter | undefined = getAdapter,
 ): Promise<JudgeResult> {
-	const adapter = getAdapter(judgeAdapterName);
+	const adapter = resolveAdapter(judgeAdapterName);
 	if (!adapter) {
 		throw new Error(`Judge adapter "${judgeAdapterName}" not found`);
 	}
@@ -26,18 +49,39 @@ export async function judgeRun(
 		typeof options === "number" ? options : (options.timeoutMs ?? 300_000);
 
 	const judgeTelemetry: string[] = [];
-	const execution = await adapter.execute({
-		prompt,
-		diff: "",
-		model,
-		allowToolUse: false,
-		thinkingBudget,
-		timeoutMs,
-		onOutput: (chunk) => judgeTelemetry.push(chunk),
-	});
+	let latestTelemetry: AdapterTelemetry | undefined;
+	const costOf = (telemetry: AdapterTelemetry | undefined) =>
+		computeRunCost(telemetry, model, parseTelemetry(judgeTelemetry));
+
+	let execution: Awaited<ReturnType<typeof adapter.execute>>;
+	try {
+		execution = await adapter.execute({
+			prompt,
+			diff: "",
+			model,
+			allowToolUse: false,
+			thinkingBudget,
+			timeoutMs,
+			onOutput: (chunk) => judgeTelemetry.push(chunk),
+			onTelemetry: (value) => {
+				latestTelemetry = value;
+			},
+		});
+	} catch (err) {
+		const telemetry =
+			err instanceof AdapterExecutionFailure ? err.telemetry : latestTelemetry;
+		throw new JudgeRunError(errorMessage(err), costOf(telemetry));
+	}
+	const telemetrySummary = parseTelemetry(judgeTelemetry);
+	const cost = costOf(execution.telemetry);
 
 	// Parse the judge's JSON response — prefer fenced code block, fall back to brace extraction
-	const parsed = parseJudgeResponse(execution.text);
+	let parsed: Record<string, unknown>;
+	try {
+		parsed = parseJudgeResponse(execution.text);
+	} catch (err) {
+		throw new JudgeRunError(errorMessage(err), cost);
+	}
 
 	return {
 		matches: Array.isArray(parsed.matches)
@@ -58,7 +102,8 @@ export async function judgeRun(
 			? parsed.falsePositives.map(Number)
 			: [],
 		reasoning: String(parsed.reasoning ?? ""),
-		telemetrySummary: parseTelemetry(judgeTelemetry),
+		telemetrySummary,
+		cost,
 	};
 }
 
@@ -83,7 +128,7 @@ function parseJudgeResponse(raw: string): Record<string, unknown> {
 		return JSON.parse(braceMatch[0]);
 	} catch (err) {
 		throw new Error(
-			`Judge returned malformed JSON: ${err instanceof Error ? err.message : err}`,
+			`Judge returned malformed JSON: ${errorMessage(err)}`,
 		);
 	}
 }

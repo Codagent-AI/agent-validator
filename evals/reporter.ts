@@ -1,6 +1,8 @@
 import chalk from "chalk";
+import { PRICES_AS_OF } from "./pricing.js";
 import type {
 	ConfigAggregate,
+	CostSource,
 	EvalResults,
 	GroundTruthIssue,
 } from "./types.js";
@@ -23,6 +25,7 @@ export function printReport(
 	console.log("");
 
 	printConfigTable(results);
+	printJudgeCost(results);
 	printDetectionRates(results, groundTruth);
 
 	console.log("");
@@ -44,10 +47,13 @@ function printConfigTable(results: EvalResults): void {
 				"Out".padStart(9) +
 				"Think".padStart(9) +
 				"Total".padStart(9) +
-				"Tools".padStart(7),
+				"Tools".padStart(7) +
+				"$/run".padStart(10) +
+				"$/TP".padStart(10) +
+				"Cost src".padStart(10),
 		),
 	);
-	console.log(chalk.dim("-".repeat(100)));
+	console.log(chalk.dim("-".repeat(130)));
 
 	for (const config of sorted) {
 		console.log(formatConfigRow(config));
@@ -77,8 +83,53 @@ function formatConfigRow(config: ConfigAggregate): string {
 		formatTokenCount(t.outputTokens).padStart(9) +
 		formatTokenCount(t.thinkingTokens).padStart(9) +
 		formatTokenCount(totalTok).padStart(9) +
-		String(t.toolCalls).padStart(7)
+		String(t.toolCalls).padStart(7) +
+		formatUsd(config.cost?.meanCostUsd ?? null).padStart(10) +
+		formatUsd(config.cost?.costPerTruePositiveUsd ?? null).padStart(10) +
+		formatCostSource(config).padStart(10)
 	);
+}
+
+const SOURCE_LABELS: Record<CostSource, string> = {
+	reported: "reported",
+	list_price: "list",
+	unavailable: "n/a",
+};
+
+/** Cost source label; flags mixed sources and runs with unknown cost. */
+function formatCostSource(config: ConfigAggregate): string {
+	const cost = config.cost;
+	if (!cost) return SOURCE_LABELS.unavailable;
+	const label =
+		cost.sources.length === 1 && cost.sources[0]
+			? SOURCE_LABELS[cost.sources[0]]
+			: "mixed";
+	return cost.costedRuns < cost.totalRuns && cost.costedRuns > 0
+		? `${label}*`
+		: label;
+}
+
+function printJudgeCost(results: EvalResults): void {
+	const judgeTotals = results.configs.flatMap((c) =>
+		c.cost?.totalJudgeCostUsd != null ? [c.cost.totalJudgeCostUsd] : [],
+	);
+	if (judgeTotals.length > 0) {
+		const total = judgeTotals.reduce((s, v) => s + v, 0);
+		console.log(
+			`Judge cost (excluded from $/run): ${formatUsd(total)} total`,
+		);
+	}
+	console.log(
+		chalk.dim(
+			`Cost: "reported" = provider-reported USD; "list" = API list-price estimate (prices as of ${PRICES_AS_OF}), not subscription billing; "*" = some runs had no cost.`,
+		),
+	);
+	console.log("");
+}
+
+export function formatUsd(usd: number | null): string {
+	if (usd === null) return "n/a";
+	return `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
 }
 
 function printDetectionRates(

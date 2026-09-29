@@ -7,9 +7,9 @@ import { getAdapter } from "../src/cli-adapters/index.js";
 // Re-export JSON_SYSTEM_INSTRUCTION from review gate
 import { JSON_SYSTEM_INSTRUCTION } from "../src/gates/review.js";
 import { runAdapter } from "./adapter-runner.js";
-import { judgeRun } from "./judge.js";
-import { sumTelemetry } from "./parse-telemetry.js";
-import { printReport } from "./reporter.js";
+import { JudgeRunError, judgeRun } from "./judge.js";
+import { formatUsd, printReport } from "./reporter.js";
+import { aggregateConfig } from "./scoring.js";
 import type {
 	AdapterRunResult,
 	AdapterVersionInfo,
@@ -19,7 +19,6 @@ import type {
 	EvalResults,
 	GroundTruthIssue,
 	JudgeResult,
-	RunScore,
 } from "./types.js";
 
 interface AdapterConfig {
@@ -330,7 +329,7 @@ export async function runEval(
 			allRuns.push(result);
 
 			console.log(
-				`    Status: ${result.status}, Violations: ${result.violations.length}, Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
+				`    Status: ${result.status}, Violations: ${result.violations.length}, Duration: ${(result.durationMs / 1000).toFixed(1)}s, Cost: ${formatUsd(result.cost?.usd ?? null)} (${result.cost?.source ?? "unavailable"})`,
 			);
 
 			if (result.error) {
@@ -368,6 +367,7 @@ export async function runEval(
 						missedIssues: groundTruth.map((gt) => gt.id),
 						falsePositives: [],
 						reasoning: "Judge failed",
+						...(err instanceof JudgeRunError && { cost: err.cost }),
 					});
 				}
 			}
@@ -375,108 +375,9 @@ export async function runEval(
 	}
 
 	// Compute scores and aggregates
-	const configAggregates: ConfigAggregate[] = [];
-
-	for (const config of matrix) {
-		const configRuns = allRuns.filter((r) => r.configLabel === config.label);
-		const runScores: RunScore[] = [];
-
-		for (const run of configRuns) {
-			const judgeResult = judgeResultsByRun.get(run);
-
-			if (!judgeResult) {
-				runScores.push({
-					configLabel: config.label,
-					adapter: config.adapter,
-					runIndex: run.runIndex,
-					durationMs: run.durationMs,
-					truePositives: 0,
-					falsePositives: 0,
-					missedIssues: groundTruth.map((gt) => gt.id),
-					precision: 0,
-					recall: 0,
-					f1: 0,
-					adapterTokens: run.telemetrySummary,
-				});
-				continue;
-			}
-
-			const tp = judgeResult.matches.length;
-			const fp = judgeResult.falsePositives.length;
-			const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
-			const recall = groundTruth.length > 0 ? tp / groundTruth.length : 0;
-			const f1 =
-				precision + recall > 0
-					? (2 * precision * recall) / (precision + recall)
-					: 0;
-
-			runScores.push({
-				configLabel: config.label,
-				adapter: config.adapter,
-				runIndex: run.runIndex,
-				durationMs: run.durationMs,
-				truePositives: tp,
-				falsePositives: fp,
-				missedIssues: judgeResult.missedIssues,
-				precision,
-				recall,
-				f1,
-				adapterTokens: run.telemetrySummary,
-				judgeTokens: judgeResult.telemetrySummary,
-			});
-		}
-
-		// Compute consistency per issue
-		const consistency: Record<string, number> = {};
-		for (const gt of groundTruth) {
-			let found = 0;
-			for (const configRun of configRuns) {
-				const judgeResult = judgeResultsByRun.get(configRun);
-				if (judgeResult?.matches.some((m) => m.groundTruthId === gt.id)) {
-					found++;
-				}
-			}
-			consistency[gt.id] =
-				configRuns.length > 0 ? found / configRuns.length : 0;
-		}
-
-		const meanPrecision =
-			runScores.length > 0
-				? runScores.reduce((s, r) => s + r.precision, 0) / runScores.length
-				: 0;
-		const meanRecall =
-			runScores.length > 0
-				? runScores.reduce((s, r) => s + r.recall, 0) / runScores.length
-				: 0;
-		const meanF1 =
-			runScores.length > 0
-				? runScores.reduce((s, r) => s + r.f1, 0) / runScores.length
-				: 0;
-		const meanDurationMs =
-			runScores.length > 0
-				? runScores.reduce((s, r) => s + r.durationMs, 0) / runScores.length
-				: 0;
-
-		const allTelemetry = runScores.flatMap((r) => [
-			r.adapterTokens,
-			r.judgeTokens,
-		]);
-		const totalTokens = sumTelemetry(allTelemetry);
-
-		configAggregates.push({
-			configLabel: config.label,
-			adapter: config.adapter,
-			allowToolUse: config.allowToolUse,
-			thinkingBudget: config.thinkingBudget,
-			runs: runScores,
-			meanPrecision,
-			meanRecall,
-			meanF1,
-			meanDurationMs,
-			consistency,
-			totalTokens,
-		});
-	}
+	const configAggregates: ConfigAggregate[] = matrix.map((config) =>
+		aggregateConfig(config, allRuns, judgeResultsByRun, groundTruth),
+	);
 
 	const results: EvalResults = {
 		timestamp: new Date().toISOString(),

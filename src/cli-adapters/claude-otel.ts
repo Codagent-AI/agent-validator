@@ -1,6 +1,22 @@
 import { getDebugLogger } from '../utils/debug-log.js';
 import { createBoundedLineCollector } from './bounded-lines.js';
 import {
+  type ClaudeCost,
+  type ClaudeCostTally,
+  claudeReportedCost,
+  createClaudeCostTally,
+  isClaudeCostMetric,
+  resolveClaudeCost,
+  tallyCostMetric,
+  tallyRequestCost,
+} from './claude-otel-cost.js';
+import {
+  classifyBlock,
+  countBraceChange,
+  isBlockStart,
+  scanOtelBlocks,
+} from './claude-otel-scanner.js';
+import {
   type AdapterTelemetry,
   createUnavailableTelemetry,
   observedMeasurement,
@@ -20,120 +36,16 @@ interface OtelUsage {
   apiRequests?: number;
 }
 
-// ─── O(n) Line-Based OTel Block Scanner ──────────────────────────────────────
-// Replaces regex-based block detection to avoid catastrophic backtracking
-// on large outputs (~400KB+). Single-pass, string-aware brace tracking.
-
-export interface ScanResult {
-  metricBlocks: string[];
-  logBlocks: string[];
-  cleaned: string;
-}
-
-/** Strip backslash-escaped characters and quoted strings, then count net brace depth. */
-export function countBraceChange(line: string): number {
-  // Remove escaped characters, then quoted strings, leaving only structural chars
-  const stripped = line
-    .replace(/\\./g, '')
-    .replace(/"[^"]*"/g, '')
-    .replace(/'[^']*'/g, '');
-  let depth = 0;
-  for (const ch of stripped) {
-    if (ch === '{') depth++;
-    else if (ch === '}') depth--;
-  }
-  return depth;
-}
-
-/** Classify a captured block as metric, log, or neither. */
-export function classifyBlock(block: string): 'metric' | 'log' | 'other' {
-  if (
-    block.includes('descriptor:') &&
-    block.includes('dataPointType:') &&
-    block.includes('dataPoints:')
-  ) {
-    return 'metric';
-  }
-  if (
-    block.includes('resource:') &&
-    /body:\s*['"]claude_code\.\w+['"]/.test(block)
-  ) {
-    return 'log';
-  }
-  return 'other';
-}
-
-/** Check if a line starts a brace block (standalone `{` or `[otel] {`). */
-function isBlockStart(line: string): boolean {
-  const trimmed = line.trimStart();
-  return (
-    trimmed === '{' || (trimmed.startsWith('[otel]') && trimmed.includes('{'))
-  );
-}
-
-/** Route a completed block into the correct bucket. */
-function routeBlock(
-  blockLines: string[],
-  metricBlocks: string[],
-  logBlocks: string[],
-  cleanedLines: string[],
-): void {
-  const block = blockLines.join('\n');
-  const kind = classifyBlock(block);
-  if (kind === 'metric') metricBlocks.push(block);
-  else if (kind === 'log') logBlocks.push(block);
-  else cleanedLines.push(...blockLines);
-}
-
-/**
- * Single-pass line scanner that extracts OTel metric and log blocks from raw output.
- * Returns classified blocks and cleaned output with OTel blocks removed.
- */
-export function scanOtelBlocks(raw: string): ScanResult {
-  const lines = raw.split('\n');
-  const metricBlocks: string[] = [];
-  const logBlocks: string[] = [];
-  const cleanedLines: string[] = [];
-
-  let blockLines: string[] | null = null;
-  let depth = 0;
-
-  for (const line of lines) {
-    if (blockLines === null) {
-      if (!isBlockStart(line)) {
-        cleanedLines.push(line);
-        continue;
-      }
-      blockLines = [line];
-      depth = countBraceChange(line);
-    } else {
-      blockLines.push(line);
-      depth += countBraceChange(line);
-    }
-
-    if (depth <= 0) {
-      routeBlock(blockLines, metricBlocks, logBlocks, cleanedLines);
-      blockLines = null;
-      depth = 0;
-    }
-  }
-
-  // If block never closed, restore lines to avoid data loss
-  if (blockLines !== null) {
-    cleanedLines.push(...blockLines);
-  }
-
-  return { metricBlocks, logBlocks, cleaned: cleanedLines.join('\n') };
-}
+export {
+  classifyBlock,
+  countBraceChange,
+  type ScanResult,
+  scanOtelBlocks,
+} from './claude-otel-scanner.js';
 
 // ─── Metric Parsing (unchanged) ─────────────────────────────────────────────
 
 const TOKEN_TYPES = ['input', 'output', 'cacheRead', 'cacheCreation'] as const;
-
-function parseCostBlock(block: string): number | undefined {
-  const match = block.match(/value:\s*([\d.]+)/);
-  return match?.[1] ? Number.parseFloat(match[1]) : undefined;
-}
 
 function parseTokenBlock(block: string): Partial<OtelUsage> {
   const result: Partial<OtelUsage> = {};
@@ -155,9 +67,7 @@ function parseOtelMetrics(blocks: string[]): OtelUsage {
     const nameMatch = block.match(/name:\s*"([^"]+)"/);
     if (!nameMatch) continue;
 
-    if (nameMatch[1] === 'claude_code.cost.usage') {
-      usage.cost = parseCostBlock(block);
-    } else if (nameMatch[1] === 'claude_code.token.usage') {
+    if (nameMatch[1] === 'claude_code.token.usage') {
       Object.assign(usage, parseTokenBlock(block));
     }
   }
@@ -175,7 +85,6 @@ const OTEL_ATTR_RE = {
   cache_read_tokens: /\bcache_read_tokens:\s*["']?(\d+)["']?(?=\s*[,}\n])/,
   cache_creation_tokens:
     /\bcache_creation_tokens:\s*["']?(\d+)["']?(?=\s*[,}\n])/,
-  cost_usd: /cost_usd:\s*['"]([^'"]*)['"]/,
 } as const;
 
 /** Maps OTel api_request attribute regexes to OtelUsage fields. */
@@ -184,7 +93,6 @@ const API_REQUEST_FIELDS: Array<[RegExp, keyof OtelUsage]> = [
   [OTEL_ATTR_RE.output_tokens, 'output'],
   [OTEL_ATTR_RE.cache_read_tokens, 'cacheRead'],
   [OTEL_ATTR_RE.cache_creation_tokens, 'cacheCreation'],
-  [OTEL_ATTR_RE.cost_usd, 'cost'],
 ];
 
 /** Accumulate a tool_result log block into usage. */
@@ -205,6 +113,22 @@ function accumulateApiRequest(block: string, usage: OtelUsage): void {
       usage[field] = (usage[field] || 0) + Number(val);
     }
   }
+}
+
+/** Tallies cost evidence from classified blocks without double counting. */
+function tallyCostBlocks(
+  metricBlocks: string[],
+  logBlocks: string[],
+): ClaudeCostTally {
+  const tally = createClaudeCostTally();
+  for (const block of metricBlocks) {
+    if (isClaudeCostMetric(block)) tallyCostMetric(tally, block);
+  }
+  for (const block of logBlocks) {
+    if (block.match(OTEL_ATTR_RE.body)?.[1] === 'claude_code.api_request')
+      tallyRequestCost(tally, block);
+  }
+  return tally;
 }
 
 // ─── OTel Summary Formatting ────────────────────────────────────────────────
@@ -240,6 +164,9 @@ export function extractOtelMetrics(
   const { metricBlocks, logBlocks, cleaned } = scanOtelBlocks(raw);
 
   const usage = metricBlocks.length > 0 ? parseOtelMetrics(metricBlocks) : {};
+  usage.cost = resolveClaudeCost(
+    tallyCostBlocks(metricBlocks, logBlocks),
+  )?.amount;
 
   // Process log blocks for tool call and API request counts
   for (const block of logBlocks) {
@@ -284,8 +211,10 @@ export function safeExtractOtelMetrics(
 function canonicalClaudeUsage(raw: string): {
   usage: OtelUsage;
   completeRequestInputs: boolean;
+  cost?: ClaudeCost;
 } {
   const { metricBlocks, logBlocks } = scanOtelBlocks(raw);
+  const cost = resolveClaudeCost(tallyCostBlocks(metricBlocks, logBlocks));
   const tokenMetrics = metricBlocks.filter((block) =>
     /name:\s*"claude_code\.token\.usage"/.test(block),
   );
@@ -293,6 +222,7 @@ function canonicalClaudeUsage(raw: string): {
     return {
       usage: parseOtelMetrics(tokenMetrics),
       completeRequestInputs: true,
+      cost,
     };
   }
   const usage: OtelUsage = {};
@@ -307,7 +237,7 @@ function canonicalClaudeUsage(raw: string): {
       OTEL_ATTR_RE.cache_creation_tokens,
     ].every((field) => field.test(block));
   }
-  return { usage, completeRequestInputs };
+  return { usage, completeRequestInputs, cost };
 }
 
 function claudeInputTotal(
@@ -346,14 +276,15 @@ export function parseClaudeOtelTelemetry(
   raw: string,
   opts: ClaudeTelemetryOpts = {},
 ): AdapterTelemetry {
-  const { usage, completeRequestInputs } = canonicalClaudeUsage(raw);
-  return createClaudeTelemetry(usage, completeRequestInputs, opts);
+  const { usage, completeRequestInputs, cost } = canonicalClaudeUsage(raw);
+  return createClaudeTelemetry(usage, completeRequestInputs, opts, cost);
 }
 
 function createClaudeTelemetry(
   usage: OtelUsage,
   completeRequestInputs: boolean,
   opts: ClaudeTelemetryOpts,
+  cost?: ClaudeCost,
 ): AdapterTelemetry {
   const telemetry = createUnavailableTelemetry('claude', {
     requestedModel: opts.requestedModel,
@@ -394,6 +325,14 @@ function createClaudeTelemetry(
     telemetry.tokens,
     completeRequestInputs,
   );
+  if (cost) {
+    telemetry.provider_reported_costs.push(claudeReportedCost(cost));
+    telemetry.provider_native_usage.push({
+      source,
+      name: 'reported_cost',
+      value: cost.amount,
+    });
+  }
   if (telemetry.provider_native_usage.length > 0) {
     telemetry.completeness.collection = 'partial';
     telemetry.completeness.canonical_fields = 'partial';
@@ -407,7 +346,7 @@ function createClaudeTelemetry(
     value: 'claude-otel-console',
     reason: null,
   };
-  telemetry.provenance.adapter_mapping_version = 'claude-otel-accounting-v2';
+  telemetry.provenance.adapter_mapping_version = 'claude-otel-accounting-v3';
   return telemetry;
 }
 
@@ -418,6 +357,7 @@ export function createClaudeTelemetryCollector(
 ) {
   const metrics: OtelUsage = {};
   const requests: OtelUsage = {};
+  const costs = createClaudeCostTally();
   let seenMetrics = false;
   let completeRequestInputs = true;
   let block: string[] = [];
@@ -433,11 +373,14 @@ export function createClaudeTelemetryCollector(
     if (kind === 'metric' && /name:\s*"claude_code\.token\.usage"/.test(raw)) {
       seenMetrics = true;
       Object.assign(metrics, parseTokenBlock(raw));
+    } else if (kind === 'metric' && isClaudeCostMetric(raw)) {
+      tallyCostMetric(costs, raw);
     } else if (
       kind === 'log' &&
       raw.match(OTEL_ATTR_RE.body)?.[1] === 'claude_code.api_request'
     ) {
       accumulateApiRequest(raw, requests);
+      tallyRequestCost(costs, raw);
       completeRequestInputs &&= [
         OTEL_ATTR_RE.input_tokens,
         OTEL_ATTR_RE.cache_read_tokens,
@@ -449,6 +392,7 @@ export function createClaudeTelemetryCollector(
         seenMetrics ? metrics : requests,
         seenMetrics || completeRequestInputs,
         opts,
+        resolveClaudeCost(costs),
       ),
     );
   };
