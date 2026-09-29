@@ -118,7 +118,7 @@ describe('update-review violation mutation', () => {
     // After fix, enumerate should only show 1 violation
     const remainingViolations = await enumerateNewViolations(TEST_DIR);
     expect(remainingViolations).toHaveLength(1);
-    expect(remainingViolations[0]!.id).toBe(1); // Re-numbered from 1
+    expect(remainingViolations[0]!.id).toBe(2); // Original ID survives another decision
     expect(remainingViolations[0]!.file).toBe('src/bar.ts');
   });
 

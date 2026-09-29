@@ -57,6 +57,7 @@ The persistent `validation-metrics.json` snapshot and private telemetry lifecycl
 - **AND** no code changes have been made since the session ref
 - **WHEN** the command executes without explicit diff flags
 - **THEN** the command SHALL report "Failed" with a message indicating the number of outstanding violations (e.g. "No changes detected — 5 violation(s) still outstanding.")
+- **AND** the message SHALL include `Mark decisions with: agent-validate update-review fix|skip <id> "<reason>"`
 - **AND** the command SHALL exit with a non-zero exit code
 - **AND** log files SHALL remain in the log directory (no clean)
 - **NOTE** Without this, the system would return "No changes detected" (success exit code 0) even though violations were outstanding, causing agents to believe the run passed. This was the root cause of verification mode false positives where violations were incorrectly reported as "Fixed".
@@ -982,4 +983,3 @@ The run, check, and review executors SHALL all return non-exiting structured int
 - **WHEN** a validation command encounters a controlled context-file read error before adapter dispatch
 - **THEN** it retains its own invocation identity, known zero-dispatch state, original validation error, and explicit persistence/publication availability
 - **AND** finalization occurs before the command exits without changing the existing validation exit semantics
-

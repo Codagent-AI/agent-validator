@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { Job } from "../../src/core/job";
 import type { GateResult } from "../../src/gates/result";
 import { ConsoleReporter } from "../../src/output/console";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 describe("ConsoleReporter", () => {
 	let originalConsoleError: typeof console.error;
@@ -120,6 +122,39 @@ describe("ConsoleReporter", () => {
 			const output = errorOutput.join("");
 			expect(output).toContain("RESULTS SUMMARY");
 			expect(output).toContain("Status: Failed");
+			expect(output).not.toContain("Mark decisions with:");
+		});
+
+		it("shows the update-review hint for outstanding review violations", async () => {
+			const logDir = path.join(import.meta.dir, "../../.test-console-review-hint");
+			await fs.mkdir(logDir, { recursive: true });
+			try {
+				await fs.writeFile(path.join(logDir, "review_src_quality_claude@1.1.json"), JSON.stringify({
+					adapter: "claude", status: "fail", violations: [
+						{ file: "src/foo.ts", line: 1, issue: "Issue", status: "new" },
+					],
+				}));
+				await new ConsoleReporter().printSummary([
+					{ jobId: "review:src:quality", status: "fail", duration: 100 },
+				], logDir);
+				expect(errorOutput.join("\n")).toContain('Mark decisions with: agent-validate update-review fix|skip <id> "<reason>"');
+			} finally {
+				await fs.rm(logDir, { recursive: true, force: true });
+			}
+		});
+
+		it("keeps the failed summary visible when a review log cannot be parsed", async () => {
+			const logDir = path.join(import.meta.dir, "../../.test-console-malformed-review");
+			await fs.mkdir(logDir, { recursive: true });
+			try {
+				await fs.writeFile(path.join(logDir, "review_src_quality_claude@1.1.json"), "{invalid");
+				await new ConsoleReporter().printSummary([
+					{ jobId: "review:src:quality", status: "fail", duration: 100 },
+				], logDir);
+				expect(errorOutput.join("\n")).toContain("Status: Failed");
+			} finally {
+				await fs.rm(logDir, { recursive: true, force: true });
+			}
 		});
 
 		it("should write Trusted summary to stderr when status is overridden", async () => {
