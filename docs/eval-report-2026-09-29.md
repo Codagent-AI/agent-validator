@@ -87,6 +87,36 @@ Effort levels share names across adapters but are not calibrated equivalents; co
 - **List price** is an API-equivalent estimate from Codex token counts at OpenAI standard-tier prices as of 2026-09-29 (per 1M tokens, input / cached input / output): gpt-6-astra $10 / $1 / $50, gpt-6-sol $2 / $0.20 / $10, gpt-5.5 $5 / $0.50 / $30. It is not what a ChatGPT subscription is billed.
 - Judge cost is excluded from candidate cost: $0.34–$0.47 per judged run, $4.42 for the round. Candidate runs totalled $3.36.
 
+## Follow-up Runs: Higher Effort and Opus (1 run each)
+
+After the main round, single runs tested whether more effort makes Sol viable, whether Sonnet improves at medium, and how Opus 5.5 compares at low effort. Configs: `evals/eval-config.2026-09-effort-sweep.yml` and `evals/eval-config.2026-09-opus55-low.yml`.
+
+| Config | Recall | Precision | TP / FP | $/run | Time |
+|--------|--------|-----------|---------|-------|------|
+| codex-gpt6-sol, low (3-run mean) | 0.54 | 0.65 | — | $0.09 | 100s |
+| codex-gpt6-sol, medium | 0.70 | 0.74 | 39 / 14 | $0.15 | 207s |
+| codex-gpt6-sol, high | 0.80 | 0.76 | 45 / 14 | $0.18 | 286s |
+| **claude-sonnet5.5, low (3-run mean)** | **0.82** | **0.93** | ~46 / ~3 | $0.24 | **92s** |
+| claude-sonnet5.5, medium | 0.77 | 0.77 | 43 / 13 | $0.31 | 106s |
+| claude-opus5.5, low | 0.80 | 0.75 | 45 / 15 | $0.51 | 92s |
+
+- **Sol improves steeply with effort, but gets too slow.** High effort reaches 0.80 recall at $0.18 per run, but takes about 5 minutes per review, about 3x Sonnet low. The latency rules it out for an agent feedback loop.
+- **Sonnet at medium is no better than low.** Recall is within the low-effort range (0.75–0.88), precision is below every low-effort run (0.91–0.98), and it costs more.
+- **Opus 5.5 low does not beat Sonnet 5.5 low.** Similar recall, far more false positives, about 2x the cost.
+
+The judge is also Opus 5.5, so the Opus run was graded by the same model. Opus scored below Sonnet anyway, and its matches passed the location audit below, so self-preference does not change the conclusion.
+
+## Judge Match Audit
+
+Judge matches were checked mechanically: does the matched violation's file and line fall within the ground-truth `line_range` (±5 lines)? The harness now runs this check automatically (`evals/location-check.ts`) and reports flagged matches per run (`LocFlag`, `LowConf`). It is diagnostic only and does not change true-positive counts.
+
+- **Stale ground truth.** 20 of 56 `all-reviewers` line ranges did not match the fixture code. For example, `py-mutable-default-arg` was recorded at line 50, but the defect is at line 56, and `go-division-by-zero` was more than 100 lines off. Every Sonnet run showed the same 6–7 matches about 6 lines off. This was a fixture defect, not judge leniency. The ranges are fixed in `all-reviewers`, in `review-quality` (identical codebase), and in one `security` range.
+- **After the fix,** Sonnet runs 2 and 3, Sonnet medium, and the Opus run have no flagged matches.
+- **Genuine judge mis-matches.** Sonnet run 1 keeps 4 flags, all real mis-pairings: the judge credited a finding about a different function to `go-idor-export`, `py-sync-silent-continue`, `go-cleanup-notification-error-ignored`, and `go-process-all-report-ignored` (2 low-confidence, 2 medium). Excluding them puts that run at 0.80 recall and Sonnet's three-run mean at 0.79. The ranking in this report is unchanged.
+- **Codex runs** keep a few flags (up to 5 per run), mostly findings that cite a use site or an adjacent function rather than the defect line.
+
+Scores in this report were computed against the original ground truth; later rounds will use the corrected ranges.
+
 ## Analysis
 
 **Sonnet 5.5 low is both the most accurate and the most consistent.** Every run exceeded the best mean from any previous round (0.71, April Copilot Sonnet 4.6), precision never fell below 0.91, and no run produced more than 5 false positives. Its three-run union (0.89) also beats the previous best union on this fixture (0.77, Codex GPT-5.5 in 2026-05-02).
@@ -113,9 +143,10 @@ The two tool-use issues (`sanitize-bypass`, `auth-bypass`) were missed by every 
 - For maximum recall, run it multiple times and union the findings (0.89 union recall over three runs).
 - For a cheap smoke pass, Codex GPT-6 Sol low costs about $0.09 per run at 0.54 recall.
 - Do not use GPT-6 Astra at low effort or GPT-5.5 for this workload.
+- Do not raise Sonnet to medium effort, and do not use Opus 5.5 low or Sol at medium or high for this workload (see the follow-up runs above).
 
 ## Follow-ups
 
-- Test Sonnet 5.5 at medium effort, and Astra at medium or high effort, to see whether effort changes the ranking.
 - Re-establish a baseline under the pinned Opus 5.5 judge (for example, re-run the April Copilot Sonnet 4.6 config) so future rounds have a stable control.
+- Regenerate `codebase/src/api/handler.ts` in `all-reviewers` and `review-quality` from the diff. The checked-in file is reformatted and its line numbers drift from what reviewers see (ground truth follows the diff).
 - Consider tolerating invalid JSON escapes such as `` \` `` in the review output parser, since GPT-5.5 produced them in a live run.

@@ -1,0 +1,28 @@
+# 2026-09 effort sweep: Codex GPT-6 Sol at medium/high and Claude Sonnet 5.5 at medium,
+# compared against the low-effort results in docs/eval-report-2026-09-29.md.
+fixture: fixtures/all-reviewers
+builtin_prompt: all-reviewers
+
+adapters:
+  - name: codex
+    model: gpt-6-sol
+    alias: codex-gpt6-sol-medium
+    allow_tool_use: false
+    thinking_budget: medium
+  - name: codex
+    model: gpt-6-sol
+    alias: codex-gpt6-sol-high
+    allow_tool_use: false
+    thinking_budget: high
+  - name: claude
+    model: claude-sonnet-5-5
+    alias: claude-sonnet5.5-medium
+    allow_tool_use: false
+    thinking_budget: medium
+
+runs_per_config: 1
+timeout_ms: 600000
+judge:
+  adapter: claude
+  model: claude-opus-5-5
+  thinking_budget: high

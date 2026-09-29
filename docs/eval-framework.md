@@ -150,6 +150,12 @@ From these, standard metrics are computed: precision (True Positives / reported)
 
 The judge uses a single consistent model across all runs (Claude Code with high thinking in the default eval config) to avoid introducing scoring variance.
 
+### Location check on judge matches
+
+The judge matches on meaning, so it can pair a violation with a ground-truth issue that sits in a different file or function. After judging, `evals/location-check.ts` runs a deterministic check on every match. A match is flagged when the violation's file differs from the issue's `file` (after path normalization; a path-suffix match counts as the same file), or when its line is outside the issue's `line_range` widened by `LOCATION_LINE_TOLERANCE` (5 lines) on each side. A match that names an unknown issue id or violation index is flagged as `unresolved`.
+
+The check is diagnostic only. It does not change the judge prompt or the true-positive count. Each run score records `locationFlagCount`, `locationFlags` (ground-truth id, violation file:line, expected file and range, judge confidence, reason) and `lowConfidenceMatches`. The console table shows their totals in the `LocFlag` and `LowConf` columns, and the flagged matches are listed per run below the table. Look at flagged matches before you trust a recall number. The same offset showing up across many issues usually means `line_range` values in `ground-truth.yml` are stale. A single distant match usually means the judge was too lenient. Line numbers in `ground-truth.yml` refer to the post-diff file that reviewers see.
+
 ## Token Caching Concern
 
 Runs execute sequentially. Both Claude and OpenAI implement prompt caching with a 5-10 minute TTL. When running multiple configurations back-to-back against the same fixture, later runs may benefit from cached prompts, making their token counts and latencies appear lower than they would in isolation. This is a known confound -- results should be interpreted with this in mind, especially when comparing configurations that run adjacent to each other.
@@ -203,15 +209,15 @@ The main output is a table sorted by Recall:
 
 ```text
 Configuration Comparison (sorted by Recall):
-Config                             Prec    Rec    Time       In      Out    Think    Total  Tools     $/run      $/TP  Cost src
-----------------------------------------------------------------------------------------------------------------------------------
-claude-opus                        0.74   0.75  140.2s    31.0k    2.4k        0    33.4k      0   $0.2140   $0.0119  reported
-codex-gpt5.5                       0.61   0.63  109.1s    18.7k    3.2k        0    21.9k      0   $0.1216   $0.0081      list
-copilot-sonnet                     0.71   0.71   93.2s    25.1k    1.8k    6.2k    33.1k      0       n/a       n/a       n/a
+Config                             Prec    Rec    Time       In      Out    Think    Total  Tools     $/run      $/TP  Cost src  LocFlag  LowConf
+----------------------------------------------------------------------------------------------------------------------------------------------------
+claude-opus                        0.74   0.75  140.2s    31.0k    2.4k        0    33.4k      0   $0.2140   $0.0119  reported        0        0
+codex-gpt5.5                       0.61   0.63  109.1s    18.7k    3.2k        0    21.9k      0   $0.1216   $0.0081      list        2        1
+copilot-sonnet                     0.71   0.71   93.2s    25.1k    1.8k    6.2k    33.1k      0       n/a       n/a       n/a        1        0
 Judge cost (excluded from $/run): $0.4210 total
 ```
 
-Columns: Prec (precision), Rec (recall), Time (mean wall-clock duration), In/Out/Think/Total (token breakdown), Tools (tool call count -- always 0 in current tools-off configs), $/run (mean candidate cost per run), $/TP (candidate cost per true positive), Cost src (`reported`, `list` for list-price estimate, `n/a`, or `mixed`; a trailing `*` means some runs had no known cost). Figures above are illustrative.
+Columns: Prec (precision), Rec (recall), Time (mean wall-clock duration), In/Out/Think/Total (token breakdown), Tools (tool call count -- always 0 in current tools-off configs), $/run (mean candidate cost per run), $/TP (candidate cost per true positive), Cost src (`reported`, `list` for list-price estimate, `n/a`, or `mixed`; a trailing `*` means some runs had no known cost), LocFlag (judge matches whose location disagrees with the matched issue; see [Location check on judge matches](#location-check-on-judge-matches)), LowConf (matches the judge rated low confidence). Figures above are illustrative.
 
 ### Per-issue detection rates
 
@@ -272,4 +278,6 @@ The tradeoff is no pre-built comparison UI -- but for the current configuration 
 | **Cost per run** | `$/run` | Mean candidate dollar cost per run over runs with a known cost. Excludes judge cost. See [Dollar Cost](#dollar-cost). |
 | **Cost per true positive** | `$/TP` | Known candidate cost divided by the true positives found in those same runs. |
 | **Cost source** | `Cost src` | `reported` (provider-reported USD), `list` (API list-price estimate from tokens; not subscription billing), or `n/a` (unavailable). |
+| **Location flag** | `LocFlag` | A judge match whose violation is in a different file, or more than 5 lines outside the matched issue's `line_range`. Diagnostic only; still counted as a true positive. |
+| **Low-confidence match** | `LowConf` | A judge match rated `low` confidence. |
 | **Candidates Comparison** | -- | A JSON file (`evals/results/candidates-comparison.json`) that accumulates results across eval sessions for cross-run comparison. |

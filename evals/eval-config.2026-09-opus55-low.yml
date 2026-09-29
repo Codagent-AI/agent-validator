@@ -1,0 +1,18 @@
+# 2026-09: single Claude Opus 5.5 low-effort run, compared against Sonnet 5.5 low
+# in docs/eval-report-2026-09-29.md.
+fixture: fixtures/all-reviewers
+builtin_prompt: all-reviewers
+
+adapters:
+  - name: claude
+    model: claude-opus-5-5
+    alias: claude-opus5.5
+    allow_tool_use: false
+    thinking_budget: low
+
+runs_per_config: 1
+timeout_ms: 600000
+judge:
+  adapter: claude
+  model: claude-opus-5-5
+  thinking_budget: high

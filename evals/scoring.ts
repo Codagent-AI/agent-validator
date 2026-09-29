@@ -1,4 +1,5 @@
 import { summarizeCosts } from "./cost.js";
+import { diagnoseMatches } from "./location-check.js";
 import { sumTelemetry } from "./parse-telemetry.js";
 import type {
 	AdapterRunResult,
@@ -56,6 +57,7 @@ export function scoreRun(
 		recall,
 		f1,
 		judgeTokens: judgeResult.telemetrySummary,
+		...diagnoseMatches(judgeResult.matches, run.violations, groundTruth),
 	};
 }
 

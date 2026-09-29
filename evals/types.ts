@@ -112,7 +112,30 @@ export interface JudgeResult {
 	cost?: RunCost;
 }
 
-export interface RunScore {
+/**
+ * A judge match whose violation location disagrees with the matched
+ * ground-truth issue (see `evals/location-check.ts`). Diagnostic only.
+ */
+export interface LocationFlag {
+	groundTruthId: string;
+	violationIndex: number;
+	violationFile: string | null;
+	violationLine: number | null;
+	expectedFile: string | null;
+	expectedRange: [number, number] | null;
+	confidence: JudgeMatch["confidence"];
+	/** `file`: different file; `line`: outside range ± tolerance; `unresolved`: unknown issue id or violation index. */
+	reason: "file" | "line" | "unresolved";
+}
+
+/** Per-run diagnostics on judge matches; they do not affect TP counts. */
+export interface MatchDiagnostics {
+	locationFlagCount: number;
+	locationFlags: LocationFlag[];
+	lowConfidenceMatches: number;
+}
+
+export interface RunScore extends Partial<MatchDiagnostics> {
 	configLabel: string;
 	adapter: EvalAdapterName;
 	runIndex: number;
