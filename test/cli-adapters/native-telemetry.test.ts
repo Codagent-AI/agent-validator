@@ -50,7 +50,7 @@ describe('recorded native telemetry accounting', () => {
     expect(telemetry.tokens.input_total).toMatchObject({value: total, origin: 'derived', source: 'validator_derivation'});
     expect(telemetry.tokens.output.value).toBe(4);
     expect(telemetry.provider_native_usage).toContainEqual({source: 'provider_event', name: 'claude_otel_input', value: uncached});
-    expect(telemetry.provenance.adapter_mapping_version).toBe('claude-otel-accounting-v2');
+    expect(telemetry.provenance.adapter_mapping_version).toBe('claude-otel-accounting-v3');
     expect(telemetry.tokens.normalized_total.availability).toBe('unavailable');
   });
 
