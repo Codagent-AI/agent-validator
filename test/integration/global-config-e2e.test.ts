@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { initGitRepo, isDistBuilt, spawnValidator } from './helpers.js';
+import { initGitRepo, isDistBuilt, spawnValidator, withoutCiEnv } from './helpers.js';
 
 const execFileAsync = promisify(execFile);
 const roots: string[] = [];
@@ -22,7 +22,7 @@ async function fixture(config: string, legacy = false) {
   await fs.mkdir(project);
   await fs.mkdir(path.dirname(globalPath), { recursive: true });
   await fs.writeFile(configPath, config);
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: undefined, AGENT_VALIDATOR_REVIEWER_CLI: undefined, AGENT_VALIDATOR_REVIEWER_MODEL: undefined, AGENT_VALIDATOR_REVIEWER_EFFORT: undefined };
+  const env = withoutCiEnv({ ...process.env, HOME: home, XDG_CONFIG_HOME: undefined, AGENT_VALIDATOR_REVIEWER_CLI: undefined, AGENT_VALIDATOR_REVIEWER_MODEL: undefined, AGENT_VALIDATOR_REVIEWER_EFFORT: undefined });
   return { root, project, home, globalPath, configPath, env };
 }
 

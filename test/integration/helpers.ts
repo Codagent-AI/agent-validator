@@ -213,6 +213,21 @@ export async function initGitRepo(dir: string): Promise<void> {
 	}
 }
 
+/** CI variables that switch the validator into CI change detection. */
+const CI_ENV_KEYS = ["CI", "GITHUB_ACTIONS", "GITHUB_BASE_REF", "GITHUB_SHA"];
+
+/**
+ * Removes CI detection variables so local-workflow E2E scenarios behave the
+ * same when the suite itself runs on a CI runner such as GitHub Actions.
+ */
+export function withoutCiEnv<T extends Record<string, string | undefined>>(
+	env: T,
+): T {
+	const local: Record<string, string | undefined> = { ...env };
+	for (const key of CI_ENV_KEYS) local[key] = undefined;
+	return local as T;
+}
+
 const REAL_HOME = os.homedir();
 let isolatedHome: string | undefined;
 

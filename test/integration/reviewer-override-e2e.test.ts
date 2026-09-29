@@ -15,6 +15,7 @@ import {
 	isDistBuilt,
 	type ReviewerOverrideStubs,
 	spawnValidator,
+	withoutCiEnv,
 } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
@@ -86,13 +87,9 @@ function stubEnv(
 	stubs: ReviewerOverrideStubs,
 	overrides: Record<string, string> = {},
 ): NodeJS.ProcessEnv {
-	const env = overrideEnv(overrides);
+	const env = withoutCiEnv(overrideEnv(overrides));
 	env.HOME = path.join(path.dirname(stubs.binDir), "home");
 	delete env.XDG_CONFIG_HOME;
-	env.CI = undefined;
-	env.GITHUB_ACTIONS = undefined;
-	env.GITHUB_BASE_REF = undefined;
-	env.GITHUB_SHA = undefined;
 	env.PATH = `${stubs.binDir}:${process.env.PATH ?? ""}`;
 	env.FAKE_COPILOT_CAPTURE_DIR = stubs.copilotCaptureDir;
 	env.FAKE_CLAUDE_CAPTURE_FILE = stubs.claudeCaptureFile;
