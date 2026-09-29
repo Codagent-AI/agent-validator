@@ -44,7 +44,7 @@ cli:
 | Field | Values | Meaning |
 | --- | --- | --- |
 | `allow_tool_use` | boolean | Whether the adapter may allow model tool use when supported |
-| `thinking_budget` | `off`, `low`, `medium`, `high` | Adapter-specific reasoning/effort setting |
+| `thinking_budget` | `off`, `low`, `medium`, `high` | Adapter-specific reasoning/effort setting; levels are not calibrated equivalents across adapters. For Claude, `low`/`medium`/`high` also set the Claude Code effort level. |
 | `model` | string | Adapter model override |
 
 See [CLI Invocation Details](cli-invocation-details.md) for exact subprocess behavior.

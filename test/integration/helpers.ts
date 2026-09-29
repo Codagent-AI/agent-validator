@@ -100,8 +100,10 @@ export interface ReviewerOverrideStubs {
 	binDir: string;
 	copilotCaptureDir: string;
 	claudeCaptureFile: string;
+	claudeEnvCaptureFile: string;
 	readCopilotArgv: () => Promise<string[][]>;
 	readClaudeInvocations: () => Promise<string>;
+	readClaudeEnv: () => Promise<Array<{ argv: string[]; effort: string | null; tokens: string | null }>>;
 	cleanup: () => Promise<void>;
 }
 
@@ -112,9 +114,11 @@ export async function createReviewerOverrideStubs(): Promise<ReviewerOverrideStu
 	const binDir = path.join(rootDir, "bin");
 	const copilotCaptureDir = path.join(rootDir, "copilot-captures");
 	const claudeCaptureFile = path.join(rootDir, "claude-invocations.txt");
+	const claudeEnvCaptureFile = path.join(rootDir, "claude-env.jsonl");
 	await fs.promises.mkdir(binDir);
 	await fs.promises.mkdir(copilotCaptureDir);
 	await fs.promises.writeFile(claudeCaptureFile, "");
+	await fs.promises.writeFile(claudeEnvCaptureFile, "");
 
 	const copilotPath = path.join(binDir, "copilot");
 	await fs.promises.writeFile(
@@ -146,6 +150,14 @@ const captureFile = process.env.FAKE_CLAUDE_CAPTURE_FILE;
 if (captureFile) {
   fs.appendFileSync(captureFile, process.argv.slice(2).join(" ") + "\\n");
 }
+const envCaptureFile = process.env.FAKE_CLAUDE_ENV_CAPTURE_FILE;
+if (envCaptureFile) {
+  fs.appendFileSync(envCaptureFile, JSON.stringify({
+    argv: process.argv.slice(2),
+    effort: process.env.CLAUDE_CODE_EFFORT_LEVEL ?? null,
+    tokens: process.env.MAX_THINKING_TOKENS ?? null,
+  }) + "\\n");
+}
 process.stdout.write(JSON.stringify({ status: "pass", message: "Recording adapter pass" }) + "\\n");
 `,
 	);
@@ -155,6 +167,7 @@ process.stdout.write(JSON.stringify({ status: "pass", message: "Recording adapte
 		binDir,
 		copilotCaptureDir,
 		claudeCaptureFile,
+		claudeEnvCaptureFile,
 		readCopilotArgv: async () => {
 			const files = (await fs.promises.readdir(copilotCaptureDir)).sort((a, b) =>
 				a.localeCompare(b, undefined, { numeric: true }),
@@ -171,6 +184,8 @@ process.stdout.write(JSON.stringify({ status: "pass", message: "Recording adapte
 			);
 		},
 		readClaudeInvocations: () => fs.promises.readFile(claudeCaptureFile, "utf8"),
+		readClaudeEnv: async () => (await fs.promises.readFile(claudeEnvCaptureFile, "utf8"))
+			.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)),
 		cleanup: () => fs.promises.rm(rootDir, { recursive: true, force: true }),
 	};
 }

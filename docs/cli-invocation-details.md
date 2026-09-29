@@ -55,6 +55,11 @@ Additional behavior:
 - `Task` is always allowed so Claude can dispatch review subagents when configured.
 - `model` maps to `--model <model>`.
 - OpenTelemetry environment variables are set so token and request metrics can be extracted from CLI output.
+- `thinking_budget` sets `MAX_THINKING_TOKENS`; `low`, `medium`, and `high` also set `CLAUDE_CODE_EFFORT_LEVEL` to the corresponding level.
+- `thinking_budget: off` sets only `MAX_THINKING_TOKENS=0`. It cannot disable thinking on models that always think, such as Sonnet 5.5 and Opus 5.5.
+- An unset budget leaves inherited `CLAUDE_CODE_EFFORT_LEVEL` and `MAX_THINKING_TOKENS` untouched.
+- A managed `maxEffortLevel` can cap the applied effort.
+- Telemetry's launch-resolved effort records the level sent in the child environment. Claude does not report the applied level, so a managed cap does not become an observed effort value.
 
 ## GitHub Copilot
 

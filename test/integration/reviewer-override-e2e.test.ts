@@ -94,8 +94,42 @@ function stubEnv(
 	env.PATH = `${stubs.binDir}:${process.env.PATH ?? ""}`;
 	env.FAKE_COPILOT_CAPTURE_DIR = stubs.copilotCaptureDir;
 	env.FAKE_CLAUDE_CAPTURE_FILE = stubs.claudeCaptureFile;
+	env.FAKE_CLAUDE_ENV_CAPTURE_FILE = stubs.claudeEnvCaptureFile;
+	delete env.CLAUDE_CODE_EFFORT_LEVEL;
 	return env;
 }
+
+describe("Claude thinking budget reaches the built reviewer", () => {
+	const dirs: string[] = [];
+	const stubs: ReviewerOverrideStubs[] = [];
+	afterEach(async () => {
+		await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+		await Promise.all(stubs.splice(0).map((stub) => stub.cleanup()));
+	});
+
+	it.each([
+		["configured", "low", "8000"],
+		["override", "medium", "16000"],
+	] as const)("passes %s effort to Claude", async (mode, effort, tokens) => {
+		if (!isDistBuilt()) return;
+		const { dir, configPath } = await createRepo();
+		dirs.push(dir);
+		const stub = await createReviewerOverrideStubs();
+		stubs.push(stub);
+		const config = await fs.readFile(configPath, "utf8");
+		await fs.writeFile(configPath, config.replace(
+			"    - claude",
+			mode === "configured" ? "    - claude\n  adapters:\n    claude:\n      thinking_budget: low" : "    - copilot",
+		));
+		const env = stubEnv(stub, mode === "override" ? { [CLI_ENV]: "claude", [EFFORT_ENV]: "medium" } : {});
+		const result = await spawnValidator(["run"], { cwd: dir, env, timeoutMs: TIMEOUT_MS });
+		expect(result.exitCode).toBe(0);
+		const records = await stub.readClaudeEnv();
+		expect(records.length).toBeGreaterThan(0);
+		expect(records[0]).toMatchObject({ effort, tokens });
+		expect(records[0]?.argv).not.toContain("--effort");
+	}, TIMEOUT_MS);
+});
 
 const IDENTITY_LINE =
 	"Reviewer: github-copilot (runner-reviewer-role; effort xhigh→high)";

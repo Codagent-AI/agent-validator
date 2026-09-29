@@ -125,6 +125,7 @@ export function createUnavailableTelemetry(
     resolvedModel?: string | null;
     resolvedProvider?: string;
     requestedEffort?: string;
+    resolvedEffort?: string | null;
     reason?: string;
   } = {},
 ): AdapterTelemetry {
@@ -145,7 +146,10 @@ export function createUnavailableTelemetry(
           ? opts.resolvedModel
           : (opts.requestedModel ?? null),
       provider: opts.resolvedProvider ?? null,
-      effort: opts.requestedEffort ?? null,
+      effort:
+        opts.resolvedEffort !== undefined
+          ? opts.resolvedEffort
+          : (opts.requestedEffort ?? null),
       provenance: 'launch_resolution',
     },
     observed_identities: [],

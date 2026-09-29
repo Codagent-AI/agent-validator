@@ -1,1 +1,1 @@
-- [ ] Claude adapter reasoning effort via CLAUDE_CODE_EFFORT_LEVEL, with launch-resolved effort telemetry, tests, and docs (`tasks/claude-reasoning-effort.md`)
+- [x] Claude adapter reasoning effort via CLAUDE_CODE_EFFORT_LEVEL, with launch-resolved effort telemetry, tests, and docs (`tasks/claude-reasoning-effort.md`)

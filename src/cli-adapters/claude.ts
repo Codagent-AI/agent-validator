@@ -25,7 +25,36 @@ import {
   createUnavailableTelemetry,
   runStreamingCommand,
 } from './shared.js';
-import { CLAUDE_THINKING_TOKENS } from './thinking-budget.js';
+import {
+  CLAUDE_EFFORT_LEVEL,
+  CLAUDE_THINKING_TOKENS,
+} from './thinking-budget.js';
+
+export function resolveClaudeThinkingLaunch(
+  thinkingBudget: string | undefined,
+  parentEnv: Record<string, string | undefined>,
+): { env: Record<string, string>; resolvedEffort: string | null } {
+  const env: Record<string, string> = {};
+  if (thinkingBudget && Object.hasOwn(CLAUDE_THINKING_TOKENS, thinkingBudget)) {
+    env.MAX_THINKING_TOKENS = String(CLAUDE_THINKING_TOKENS[thinkingBudget]);
+  }
+  const mappedEffort =
+    thinkingBudget && Object.hasOwn(CLAUDE_EFFORT_LEVEL, thinkingBudget)
+      ? CLAUDE_EFFORT_LEVEL[thinkingBudget]
+      : undefined;
+  if (mappedEffort !== undefined) {
+    env.CLAUDE_CODE_EFFORT_LEVEL = mappedEffort;
+  }
+  const inherited = parentEnv.CLAUDE_CODE_EFFORT_LEVEL?.toLowerCase();
+  // Launch-resolved effort is the level sent to Claude, not the applied level.
+  // Claude may cap it via managed maxEffortLevel and does not report that result.
+  const resolvedEffort =
+    env.CLAUDE_CODE_EFFORT_LEVEL ??
+    (inherited && ['low', 'medium', 'high', 'xhigh', 'max'].includes(inherited)
+      ? inherited
+      : null);
+  return { env, resolvedEffort };
+}
 
 const execAsync = promisify(exec);
 
@@ -175,9 +204,16 @@ export class ClaudeAdapter implements CLIAdapter {
     thinkingBudget?: string;
     onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): Promise<AdapterExecutionResult> {
+    // Capture before doExecute's first await so telemetry and the child share one environment.
+    const { CLAUDECODE: _, ...parentEnv } = process.env;
+    const { env, resolvedEffort } = resolveClaudeThinkingLaunch(
+      opts.thinkingBudget,
+      parentEnv,
+    );
     let telemetry = createUnavailableTelemetry('claude', {
       requestedModel: opts.model,
       requestedEffort: opts.thinkingBudget,
+      resolvedEffort,
     });
     try {
       const totalTimeout = (opts.timeoutMs ?? 300_000) + POST_PROCESS_BUFFER_MS;
@@ -185,6 +221,9 @@ export class ClaudeAdapter implements CLIAdapter {
       return await Promise.race([
         this.doExecute({
           ...opts,
+          parentEnv,
+          env,
+          resolvedEffort,
           onTelemetry: (value) => {
             telemetry = value;
             opts.onTelemetry?.(value);
@@ -218,6 +257,9 @@ export class ClaudeAdapter implements CLIAdapter {
     onOutput?: (chunk: string) => void;
     allowToolUse?: boolean;
     thinkingBudget?: string;
+    parentEnv: Record<string, string | undefined>;
+    env: Record<string, string>;
+    resolvedEffort: string | null;
     onTelemetry?: (telemetry: AdapterTelemetry) => void;
   }): Promise<AdapterExecutionResult> {
     const fullContent = `${opts.prompt}\n\n--- DIFF ---\n${opts.diff}`;
@@ -250,24 +292,19 @@ export class ClaudeAdapter implements CLIAdapter {
     }
 
     const otelEnv = buildOtelEnv();
-    const thinkingEnv: Record<string, string> = {};
-    if (opts.thinkingBudget && opts.thinkingBudget in CLAUDE_THINKING_TOKENS) {
-      thinkingEnv.MAX_THINKING_TOKENS = String(
-        CLAUDE_THINKING_TOKENS[opts.thinkingBudget],
-      );
-    }
-
     const cleanup = () => fs.unlink(tmpFile).catch(() => {});
-    // Exclude CLAUDECODE so the child doesn't hit the nesting guard
-    const { CLAUDECODE: _, ...parentEnv } = process.env;
     const execEnv = {
-      ...parentEnv,
+      ...opts.parentEnv,
       ...otelEnv,
-      ...thinkingEnv,
+      ...opts.env,
     };
 
     const collector = createClaudeTelemetryCollector(
-      { requestedModel: opts.model, thinkingBudget: opts.thinkingBudget },
+      {
+        requestedModel: opts.model,
+        thinkingBudget: opts.thinkingBudget,
+        resolvedEffort: opts.resolvedEffort,
+      },
       (value) => opts.onTelemetry?.(value),
     );
     const raw = await this.streamCommand({
@@ -284,6 +321,7 @@ export class ClaudeAdapter implements CLIAdapter {
           parseClaudeOtelTelemetry(stdout, {
             requestedModel: opts.model,
             thinkingBudget: opts.thinkingBudget,
+            resolvedEffort: opts.resolvedEffort,
           }),
         );
       },
@@ -295,6 +333,7 @@ export class ClaudeAdapter implements CLIAdapter {
       telemetry: parseClaudeOtelTelemetry(raw, {
         requestedModel: opts.model,
         thinkingBudget: opts.thinkingBudget,
+        resolvedEffort: opts.resolvedEffort,
       }),
     };
   }

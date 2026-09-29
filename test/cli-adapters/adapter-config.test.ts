@@ -2,10 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+	CLAUDE_EFFORT_LEVEL,
 	CLAUDE_THINKING_TOKENS,
 	CODEX_REASONING_EFFORT,
 	GEMINI_THINKING_BUDGET,
 } from "../../src/cli-adapters/thinking-budget.js";
+import { resolveClaudeThinkingLaunch } from "../../src/cli-adapters/claude.js";
+import { createUnavailableTelemetry } from "../../src/cli-adapters/shared.js";
 import {
 	adapterConfigSchema,
 	cliConfigSchema,
@@ -121,6 +124,41 @@ describe("thinking budget maps", () => {
 		expect(CLAUDE_THINKING_TOKENS.low).toBe(8000);
 		expect(CLAUDE_THINKING_TOKENS.medium).toBe(16000);
 		expect(CLAUDE_THINKING_TOKENS.high).toBe(31999);
+	});
+
+	it("maps Claude effort only for low, medium, and high", () => {
+		expect(CLAUDE_EFFORT_LEVEL).toEqual({ low: "low", medium: "medium", high: "high" });
+		expect(Object.hasOwn(CLAUDE_EFFORT_LEVEL, "off")).toBe(false);
+	});
+
+	it("resolves configured Claude launch controls", () => {
+		for (const [level, tokens] of [["low", "8000"], ["medium", "16000"], ["high", "31999"]] as const) {
+			expect(resolveClaudeThinkingLaunch(level, { CLAUDE_CODE_EFFORT_LEVEL: "max" })).toEqual({
+				env: { CLAUDE_CODE_EFFORT_LEVEL: level, MAX_THINKING_TOKENS: tokens },
+				resolvedEffort: level,
+			});
+		}
+		expect(resolveClaudeThinkingLaunch("off", {})).toEqual({ env: { MAX_THINKING_TOKENS: "0" }, resolvedEffort: null });
+		expect(resolveClaudeThinkingLaunch(undefined, {})).toEqual({ env: {}, resolvedEffort: null });
+		expect(resolveClaudeThinkingLaunch("off", { CLAUDE_CODE_EFFORT_LEVEL: "high" }).resolvedEffort).toBe("high");
+	});
+
+	it("recognizes only canonical inherited Claude efforts without rewriting them", () => {
+		for (const value of ["medium", "MEDIUM", "xhigh", "max"]) {
+			const result = resolveClaudeThinkingLaunch(undefined, { CLAUDE_CODE_EFFORT_LEVEL: value });
+			expect(result).toEqual({ env: {}, resolvedEffort: value.toLowerCase() });
+		}
+		for (const value of ["", "auto", "unset", " medium ", "med", "3", "bogus"]) {
+			expect(resolveClaudeThinkingLaunch(undefined, { CLAUDE_CODE_EFFORT_LEVEL: value })).toEqual({ env: {}, resolvedEffort: null });
+		}
+		expect(resolveClaudeThinkingLaunch("constructor", {})).toEqual({ env: {}, resolvedEffort: null });
+	});
+
+	it("separates requested and explicitly resolved effort", () => {
+		const explicit = createUnavailableTelemetry("claude", { requestedEffort: "off", resolvedEffort: null });
+		expect(explicit.requested_identity.effort).toBe("off");
+		expect(explicit.resolved_identity.effort).toBeNull();
+		expect(createUnavailableTelemetry("cursor", { requestedEffort: "low" }).resolved_identity.effort).toBe("low");
 	});
 
 	it("CODEX_REASONING_EFFORT maps all levels to strings", () => {
