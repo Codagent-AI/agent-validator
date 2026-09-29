@@ -84,6 +84,12 @@ describe("locationMismatch", () => {
 		expect(locationMismatch(violation("src/a.py", 13), gt, 0)).toBe("line");
 	});
 
+	it("flags a missing line instead of treating it as line 0", () => {
+		const nearTop = issue("y", "src/a.py", [1, 2]);
+		const missing = { file: "src/a.py", line: null as unknown as number };
+		expect(locationMismatch(missing, nearTop)).toBe("line");
+	});
+
 	it("flags a different file regardless of line", () => {
 		expect(locationMismatch(violation("src/b.py", 11), gt)).toBe("file");
 	});

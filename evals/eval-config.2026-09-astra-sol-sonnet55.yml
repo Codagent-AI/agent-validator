@@ -25,7 +25,7 @@ adapters:
     allow_tool_use: false
     thinking_budget: medium
 
-runs_per_config: 1
+runs_per_config: 3
 timeout_ms: 600000
 judge:
   adapter: claude

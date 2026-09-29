@@ -73,6 +73,20 @@ describe("computeRunCost", () => {
 		});
 	});
 
+	it("does not treat a partial reported cost as the whole attempt", async () => {
+		const telemetry = parseClaudeOtelTelemetry(await fixture("claude-2.1.261-cache-write.txt"));
+		const [row] = telemetry.provider_reported_costs;
+		if (!row) throw new Error("fixture has no reported cost");
+		row.coverage = "partial";
+		const text = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cacheTokens: 0, toolCalls: 0, apiRequests: 0, cost: 0.01 };
+		expect(computeRunCost(telemetry, "claude-opus", text)).toEqual({
+			usd: null,
+			source: "unavailable",
+			reason: "reported_cost_partial",
+			model: "claude-opus",
+		});
+	});
+
 	it("estimates Codex cost from structured tokens at list price", async () => {
 		const telemetry = parseCodexTelemetry(await fixture("codex-0.153.4.jsonl"));
 		const cost = computeRunCost(telemetry, "gpt-5.5");
@@ -155,7 +169,7 @@ describe("summarizeCosts", () => {
 		expect(summary.costPerTruePositiveUsd).toBeCloseTo(0.4 / 5, 10);
 		expect(summary.costedRuns).toBe(2);
 		expect(summary.totalRuns).toBe(3);
-		expect(summary.sources).toEqual(["list_price", "unavailable"]);
+		expect(summary.sources).toEqual(["list_price"]);
 		expect(summary.meanJudgeCostUsd).toBeCloseTo(0.6, 10);
 		expect(summary.totalJudgeCostUsd).toBeCloseTo(1.2, 10);
 	});
@@ -165,6 +179,7 @@ describe("summarizeCosts", () => {
 		expect(summary.meanCostUsd).toBeNull();
 		expect(summary.costPerTruePositiveUsd).toBeNull();
 		expect(summary.meanJudgeCostUsd).toBeNull();
+		expect(summary.sources).toEqual(["unavailable"]);
 	});
 });
 

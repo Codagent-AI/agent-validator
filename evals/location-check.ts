@@ -38,6 +38,8 @@ export function locationMismatch(
 ): LocationFlag["reason"] | null {
 	if (!sameFile(violation.file ?? "", issue.file)) return "file";
 	const [start, end] = issue.line_range;
+	// Number(null) is 0, so a missing line must be rejected before conversion.
+	if (violation.line == null) return "line";
 	const line = Number(violation.line);
 	if (!Number.isFinite(line)) return "line";
 	return line < start - tolerance || line > end + tolerance ? "line" : null;

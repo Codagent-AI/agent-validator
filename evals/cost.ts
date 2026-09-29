@@ -8,7 +8,9 @@ import type { CostSummary, RunCost, RunScore, TelemetrySummary } from "./types.j
  *   1. provider-reported USD for the whole attempt (structured telemetry)
  *   2. API list-price estimate from structured token counts
  *   3. provider-reported cost scraped from text telemetry lines
- * Anything else is `unavailable` (never zero).
+ * A reported cost with partial coverage is not a whole-attempt cost: it falls
+ * back to a list-price estimate, else `unavailable`. Anything else is
+ * `unavailable` (never zero).
  */
 export function computeRunCost(
 	telemetry: AdapterTelemetry | undefined,
@@ -19,7 +21,8 @@ export function computeRunCost(
 	const modelField = model ? { model } : {};
 
 	const reported = telemetry && reportedAttemptCost(telemetry);
-	if (reported) {
+	const partial = reported?.coverage === "partial";
+	if (reported && !partial) {
 		return { usd: reported.usd, source: "reported", coverage: reported.coverage, ...modelField };
 	}
 
@@ -29,14 +32,15 @@ export function computeRunCost(
 		return { usd: listPriceCost(price, tokens), source: "list_price", ...modelField };
 	}
 
-	if (textSummary?.cost !== undefined) {
+	// Text lines use the same partial sum, so they cannot complete a partial cost.
+	if (!partial && textSummary?.cost !== undefined) {
 		return { usd: textSummary.cost, source: "reported", coverage: "unknown", ...modelField };
 	}
 
 	return {
 		usd: null,
 		source: "unavailable",
-		reason: unavailableReason(telemetry, tokens, model),
+		reason: partial ? "reported_cost_partial" : unavailableReason(telemetry, tokens, model),
 		...modelField,
 	};
 }
@@ -115,7 +119,9 @@ export function summarizeCosts(runs: RunScore[]): CostSummary {
 	const judge = costedValues(runs.map((r) => r.judgeCost));
 	const costedRuns = runs.filter((r) => r.cost && r.cost.usd !== null);
 	const truePositives = sum(costedRuns.map((r) => r.truePositives));
-	const sources = [...new Set(runs.map((r) => r.cost?.source ?? "unavailable"))];
+	// The `*` marker covers uncosted runs; list `unavailable` only when nothing is costed.
+	const known = [...new Set(costedRuns.map((r) => r.cost?.source ?? "unavailable"))];
+	const sources = known.length > 0 ? known : ["unavailable" as const];
 
 	return {
 		meanCostUsd: mean(candidate),
