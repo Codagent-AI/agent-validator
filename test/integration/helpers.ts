@@ -213,6 +213,21 @@ export async function initGitRepo(dir: string): Promise<void> {
 	}
 }
 
+const REAL_HOME = os.homedir();
+let isolatedHome: string | undefined;
+
+/**
+ * Keeps spawned validators away from the developer's real
+ * ~/.config/agent-validator/config.yml. Callers that set their own HOME keep it.
+ */
+export function withIsolatedHome(
+	env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+	if (env.HOME && env.HOME !== REAL_HOME) return env;
+	isolatedHome ??= fs.mkdtempSync(path.join(os.tmpdir(), "validator-e2e-home-"));
+	return { ...env, HOME: isolatedHome, XDG_CONFIG_HOME: undefined };
+}
+
 export async function spawnValidator(
 	args: string[],
 	opts: {
@@ -225,7 +240,7 @@ export async function spawnValidator(
 		cwd: opts.cwd,
 		stdout: "pipe",
 		stderr: "pipe",
-		env: opts.env ?? process.env,
+		env: withIsolatedHome(opts.env ?? process.env),
 	});
 
 	const timeoutMs = opts.timeoutMs ?? 30_000;
