@@ -91,6 +91,13 @@ Numeric IDs assigned to review violations MUST be deterministic and stable betwe
 - **AND** `agent-validate update-review list` is run without any intervening validator re-run
 - **THEN** `#3` SHALL refer to the same violation at `src/foo.ts:10`
 
-#### Scenario: IDs are sequential with no gaps
-- **WHEN** there are 5 violations with status `"new"` across all JSON files
+#### Scenario: IDs are sequential when all violations are new
+- **WHEN** all 5 violations across all JSON files have status `"new"`
 - **THEN** they SHALL be numbered `#1` through `#5` with no gaps
+
+#### Scenario: Resolved violations retain their IDs
+- **GIVEN** a review JSON file has a `"fixed"` violation at `#1` and a `"skipped"` violation at `#3`
+- **AND** violations at `#2` and `#4` have status `"new"`
+- **WHEN** the report or `update-review list` enumerates pending violations
+- **THEN** only `#2` and `#4` SHALL appear
+- **AND** their IDs SHALL remain unchanged until the next validator run
