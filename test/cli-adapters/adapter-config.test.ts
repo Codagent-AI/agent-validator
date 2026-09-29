@@ -134,24 +134,24 @@ describe("thinking budget maps", () => {
 	it("resolves configured Claude launch controls", () => {
 		for (const [level, tokens] of [["low", "8000"], ["medium", "16000"], ["high", "31999"]] as const) {
 			expect(resolveClaudeThinkingLaunch(level, { CLAUDE_CODE_EFFORT_LEVEL: "max" })).toEqual({
-				env: { CLAUDE_CODE_EFFORT_LEVEL: level, MAX_THINKING_TOKENS: tokens },
+				thinkingEnv: { CLAUDE_CODE_EFFORT_LEVEL: level, MAX_THINKING_TOKENS: tokens },
 				resolvedEffort: level,
 			});
 		}
-		expect(resolveClaudeThinkingLaunch("off", {})).toEqual({ env: { MAX_THINKING_TOKENS: "0" }, resolvedEffort: null });
-		expect(resolveClaudeThinkingLaunch(undefined, {})).toEqual({ env: {}, resolvedEffort: null });
+		expect(resolveClaudeThinkingLaunch("off", {})).toEqual({ thinkingEnv: { MAX_THINKING_TOKENS: "0" }, resolvedEffort: null });
+		expect(resolveClaudeThinkingLaunch(undefined, {})).toEqual({ thinkingEnv: {}, resolvedEffort: null });
 		expect(resolveClaudeThinkingLaunch("off", { CLAUDE_CODE_EFFORT_LEVEL: "high" }).resolvedEffort).toBe("high");
 	});
 
 	it("recognizes only canonical inherited Claude efforts without rewriting them", () => {
 		for (const value of ["medium", "MEDIUM", "xhigh", "max"]) {
 			const result = resolveClaudeThinkingLaunch(undefined, { CLAUDE_CODE_EFFORT_LEVEL: value });
-			expect(result).toEqual({ env: {}, resolvedEffort: value.toLowerCase() });
+			expect(result).toEqual({ thinkingEnv: {}, resolvedEffort: value.toLowerCase() });
 		}
 		for (const value of ["", "auto", "unset", " medium ", "med", "3", "bogus"]) {
-			expect(resolveClaudeThinkingLaunch(undefined, { CLAUDE_CODE_EFFORT_LEVEL: value })).toEqual({ env: {}, resolvedEffort: null });
+			expect(resolveClaudeThinkingLaunch(undefined, { CLAUDE_CODE_EFFORT_LEVEL: value })).toEqual({ thinkingEnv: {}, resolvedEffort: null });
 		}
-		expect(resolveClaudeThinkingLaunch("constructor", {})).toEqual({ env: {}, resolvedEffort: null });
+		expect(resolveClaudeThinkingLaunch("constructor", {})).toEqual({ thinkingEnv: {}, resolvedEffort: null });
 	});
 
 	it("separates requested and explicitly resolved effort", () => {

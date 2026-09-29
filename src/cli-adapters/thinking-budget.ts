@@ -13,6 +13,15 @@ export const CLAUDE_EFFORT_LEVEL: Record<string, string> = {
   high: 'high',
 };
 
+/** Effort levels Claude Code accepts in CLAUDE_CODE_EFFORT_LEVEL (canonical names only). */
+export const CLAUDE_CODE_EFFORT_LEVELS: ReadonlySet<string> = new Set([
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+
 /** Maps unified thinking budget levels to Codex model_reasoning_effort values. */
 export const CODEX_REASONING_EFFORT: Record<string, string> = {
   off: 'minimal',

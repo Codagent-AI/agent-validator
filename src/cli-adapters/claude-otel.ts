@@ -336,13 +336,15 @@ function claudeInputTotal(
     : total;
 }
 
+export type ClaudeTelemetryOpts = {
+  requestedModel?: string;
+  thinkingBudget?: string;
+  resolvedEffort?: string | null;
+};
+
 export function parseClaudeOtelTelemetry(
   raw: string,
-  opts: {
-    requestedModel?: string;
-    thinkingBudget?: string;
-    resolvedEffort?: string | null;
-  } = {},
+  opts: ClaudeTelemetryOpts = {},
 ): AdapterTelemetry {
   const { usage, completeRequestInputs } = canonicalClaudeUsage(raw);
   return createClaudeTelemetry(usage, completeRequestInputs, opts);
@@ -351,11 +353,7 @@ export function parseClaudeOtelTelemetry(
 function createClaudeTelemetry(
   usage: OtelUsage,
   completeRequestInputs: boolean,
-  opts: {
-    requestedModel?: string;
-    thinkingBudget?: string;
-    resolvedEffort?: string | null;
-  },
+  opts: ClaudeTelemetryOpts,
 ): AdapterTelemetry {
   const telemetry = createUnavailableTelemetry('claude', {
     requestedModel: opts.requestedModel,
@@ -415,11 +413,7 @@ function createClaudeTelemetry(
 
 /** Retain one bounded console block and safe counters, never the output history. */
 export function createClaudeTelemetryCollector(
-  opts: {
-    requestedModel?: string;
-    thinkingBudget?: string;
-    resolvedEffort?: string | null;
-  },
+  opts: ClaudeTelemetryOpts,
   onTelemetry: (telemetry: AdapterTelemetry) => void,
 ) {
   const metrics: OtelUsage = {};
