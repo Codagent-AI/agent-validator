@@ -76,7 +76,9 @@ describe('built binary global CLI config', () => {
     expect(first.exitCode).toBe(0);
     const firstCalls = await calls();
     expect(firstCalls.some((call) => call.tool === 'codex')).toBe(true);
-    expect(firstCalls.every((call) => call.argv.join(' ').includes('gpt-6-sol'))).toBe(true);
+    expect(firstCalls.some((call) => call.argv.join(' ').includes('gpt-6-sol'))).toBe(true);
+    expect(firstCalls.some((call) => call.argv.join(' ').includes('gpt-5.3-codex'))).toBe(true);
+    expect(firstCalls.every((call) => ['gpt-6-sol', 'gpt-5.3-codex'].some((model) => call.argv.join(' ').includes(model)))).toBe(true);
     await fs.writeFile(f.configPath, projectNoCli.replace('entry_points:', 'cli:\n  default_preference: [claude]\nentry_points:'));
     const projectValidate = await spawnValidator(['validate'], { cwd: f.root, env: f.env });
     expect(projectValidate.stdout).toContain(`${f.configPath} (project config)`);

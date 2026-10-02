@@ -160,6 +160,7 @@ entry_points:
     reviews:
       - quality:
           builtin: code-quality
+          model: review-model
 `);
 		setOverrideEnv({ [REVIEWER_CLI_ENV]: "claude" });
 
@@ -170,6 +171,7 @@ entry_points:
 			thinking_budget: "low",
 			model: "keep-me",
 		});
+		expect(config.reviews.quality?.model).toBe("review-model");
 		expect(config.reviewerOverride).toEqual({
 			source: "runner-reviewer-role",
 			adapter: "claude",
@@ -206,8 +208,7 @@ entry_points:
 		expect(adapter?.allow_tool_use).toBe(false);
 		expect(adapter?.model).toBe("role-model");
 		expect(adapter?.thinking_budget).toBe("high");
-		expect(config.reviews.quality?.model).toBe("yaml-review-model");
-		expect(adapter?.model ?? config.reviews.quality?.model).toBe("role-model");
+		expect(config.reviews.quality?.model).toBe("role-model");
 		await fs.rm(root, { recursive: true, force: true });
 	});
 

@@ -460,7 +460,7 @@ export class ReviewGateExecutor {
       gate: config.name,
       slot: reviewIndex,
       telemetry: createUnavailableTelemetry(adapter.name, {
-        requestedModel: adapterConfigs?.[toolName]?.model ?? config.model,
+        requestedModel: config.model ?? adapterConfigs?.[toolName]?.model,
       }),
     });
     let adapterResult: AdapterExecutionResult;

@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CLIAdapter } from "../../src/cli-adapters/index.js";
+import { loadConfig } from "../../src/config/loader.js";
 import type {
 	ReviewGateConfig,
 	ReviewPromptFrontmatter,
 } from "../../src/config/types.js";
 import type { ReviewGateExecutor as ReviewGateExecutorType } from "../../src/gates/review.js";
 import { Logger } from "../../src/output/logger.js";
+import type { CommandMetricsLifecycle } from "../../src/metrics/command-lifecycle.js";
 
 // ---------------------------------------------------------------------------
 // Shared mutable delegates for mock.module()
@@ -104,6 +106,42 @@ index abc123..def456 100644
 
 	afterEach(async () => {
 		await fs.rm(TEST_DIR, { recursive: true, force: true });
+	});
+
+	it.each([
+		["project", "review-model", "review-model"],
+		["global", "review-model", "review-model"],
+		["global", undefined, "adapter-model"],
+	] as const)("uses %s CLI model with review model %s", async (source, reviewModel, expected) => {
+		const configDir = path.join(TEST_DIR, ".validator");
+		await fs.mkdir(configDir, { recursive: true });
+		const cli = "cli:\n  default_preference: [codex]\n  adapters:\n    codex:\n      model: adapter-model\n";
+		await fs.writeFile(path.join(configDir, "config.yml"), `${source === "project" ? cli : ""}entry_points:\n  - path: .\n    reviews:\n      - quality:\n          builtin: code-quality\n${reviewModel ? `          model: ${reviewModel}\n` : ""}`);
+		const globalPath = path.join(TEST_DIR, "global.yml");
+		await fs.writeFile(globalPath, source === "global" ? cli : "{}");
+		const loaded = await loadConfig(TEST_DIR, { globalConfigPath: globalPath });
+		const executedModels: Array<string | undefined> = [];
+		const requestedModels: Array<string | null | undefined> = [];
+		currentExecute = async (options) => {
+			executedModels.push((options as { model?: string }).model);
+			return JSON.stringify({ status: "pass", message: "OK" });
+		};
+		const metrics = {
+			prepareAttempt: async ({ telemetry }: { telemetry: { requested_identity: { model: string | null } } }) => {
+				requestedModels.push(telemetry.requested_identity.model);
+				return undefined;
+			},
+			finalizeAttempt: async () => {},
+		} as unknown as CommandMetricsLifecycle;
+		const result = await executor.execute(
+			"review:src:quality", loaded.reviews.quality!, ".",
+			logger.createLoggerFactory("review:src:quality"), "main",
+			undefined, undefined, "high", undefined, TEST_DIR,
+			loaded.project.cli.adapters, undefined, metrics,
+		);
+		expect(result.status).toBe("pass");
+		expect(executedModels).toEqual([expected]);
+		expect(requestedModels).toEqual([expected]);
 	});
 
 	it("should only create adapter-specific logs and no generic log", async () => {

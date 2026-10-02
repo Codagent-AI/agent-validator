@@ -23,7 +23,7 @@ export async function invokeAdapter(
   const result = await adapter.execute({
     prompt,
     diff,
-    model: adapterCfg?.model ?? config.model,
+    model: config.model ?? adapterCfg?.model,
     timeoutMs: config.timeout
       ? config.timeout * 1000
       : REVIEW_ADAPTER_TIMEOUT_MS,

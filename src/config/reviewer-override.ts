@@ -87,6 +87,7 @@ export function applyReviewerOverrideToConfig(
   project.cli.default_preference = [mapped];
   for (const review of Object.values(reviews)) {
     review.cli_preference = [mapped];
+    if (parsed.model !== undefined) review.model = parsed.model;
   }
   overlayAdapterBlock(project, parsed);
   return {

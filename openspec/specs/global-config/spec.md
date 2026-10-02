@@ -195,17 +195,29 @@ Validator SHALL resolve CLI and model settings per field. Precedence is highest 
 
 A review whose `cli_preference` is not within the effective `default_preference` SHALL fail loading and validation exactly as it does against a project `cli` block.
 
-**Which model an adapter is invoked with** (existing adapter-first behavior, unchanged by this change):
-1. the reviewer environment override's model (overlay commands only; applied to the mapped adapter's block);
-2. the effective `cli.adapters.<adapter>.model` (from the project `cli` block, else the global `cli` block);
-3. the review's own `model`;
+**Which model an adapter is invoked with:**
+1. the reviewer environment override's model (overlay commands only; applied to the mapped adapter's block and each review);
+2. the review's own `model`;
+3. the effective `cli.adapters.<adapter>.model` (from the project `cli` block, else the global `cli` block);
 4. no model flag (the adapter's built-in default).
 
-`allow_tool_use` and `thinking_budget` come only from the effective adapter block (after any reviewer overlay), else the adapter's built-in defaults. A project that keeps its `cli` block SHALL see no change in the model, tool-use, or thinking settings its reviews run with.
+Review-level settings include both `cli_preference` and `model`. `allow_tool_use` and `thinking_budget` come only from the effective adapter block (after any reviewer overlay), else the adapter's built-in defaults. Reviews with a `model` pin now use that model even when the project adapter block specifies a different model.
 
-#### Scenario: Inherited global adapter model takes priority over review-level model
+#### Scenario: Review model takes priority over inherited global adapter model
 - **GIVEN** a global `cli` block with `default_preference: [codex]` and `adapters.codex.model: gpt-6-sol`
 - **AND** a project with no `cli` block and a review with `model: gpt-5.3-codex`
+- **WHEN** that review executes on Codex
+- **THEN** Codex SHALL be invoked with model `gpt-5.3-codex`
+
+#### Scenario: Review model takes priority over project adapter model
+- **GIVEN** a project `cli` block with `default_preference: [codex]` and `adapters.codex.model: gpt-6-sol`
+- **AND** a review with `model: gpt-5.3-codex`
+- **WHEN** that review executes on Codex
+- **THEN** Codex SHALL be invoked with model `gpt-5.3-codex`
+
+#### Scenario: Adapter model applies when the review has no model
+- **GIVEN** a global `cli` block with `default_preference: [codex]` and `adapters.codex.model: gpt-6-sol`
+- **AND** a project with no `cli` block and a review without `model`
 - **WHEN** that review executes on Codex
 - **THEN** Codex SHALL be invoked with model `gpt-6-sol`
 
@@ -260,4 +272,3 @@ Validator SHALL NOT create, modify, or rewrite `~/.config/agent-validator/config
 - **GIVEN** a global config with a `cli` block
 - **WHEN** `run` completes, with or without an active reviewer override
 - **THEN** the global config file SHALL be byte-for-byte unchanged
-
