@@ -1,7 +1,6 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: the shared gate executor remains co-located with its existing rerun helpers.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: command orchestration keeps lock ownership and result finalization together.
 import chalk from 'chalk';
-import { loadGlobalConfig } from '../config/global.js';
 import { loadConfig } from '../config/loader.js';
 import { ChangeDetector } from '../core/change-detector.js';
 import { EntryPointExpander } from '../core/entry-point.js';
@@ -67,10 +66,9 @@ async function initializeDebugLogger(
     applyReviewerOverride: commandName === 'review',
   });
 
-  const globalConfig = await loadGlobalConfig();
   const debugLogConfig = mergeDebugLogConfig(
     config.project.debug_log,
-    globalConfig.debug_log,
+    config.globalConfig.debug_log,
   );
   initDebugLogger(config.project.log_dir, debugLogConfig);
 

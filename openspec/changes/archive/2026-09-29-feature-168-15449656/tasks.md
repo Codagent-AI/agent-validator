@@ -1,0 +1,1 @@
+- [x] Global CLI/model defaults in the user-level config: resolution, load-time validation, single global snapshot, command updates (`validate`, `health`, `ci list-jobs`, `clean`), test isolation, tests, and docs (`tasks/global-cli-config.md`)

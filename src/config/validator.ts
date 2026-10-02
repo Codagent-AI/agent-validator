@@ -4,7 +4,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
 import { ZodError } from 'zod';
-import { getValidCLITools } from '../cli-adapters/index.js';
+import {
+  type CliSource,
+  checkEffectiveCli,
+  describeCliSource,
+  missingCliConfigMessage,
+} from './cli-resolution.js';
+import {
+  type GlobalConfigReadResult,
+  getGlobalConfigPath,
+  readGlobalConfig,
+} from './global.js';
 import {
   checkGateSchema,
   entryPointSchema,
@@ -43,6 +53,9 @@ export interface ValidationResult {
   valid: boolean;
   issues: ValidationIssue[];
   filesChecked: string[];
+  projectConfigFound: boolean;
+  /** The single global config read for this validation; reusable by callers. */
+  globalConfigRead: GlobalConfigReadResult;
 }
 
 interface ValidatorContext {
@@ -54,6 +67,7 @@ interface ValidatorContext {
 
 export async function validateConfig(
   rootDir: string = process.cwd(),
+  options: { globalConfigPath?: string } = {},
 ): Promise<ValidationResult> {
   const configDir = resolveConfigDir(rootDir);
   const configPath = path.join(configDir, CONFIG_FILE);
@@ -65,6 +79,18 @@ export async function validateConfig(
   };
 
   const projectConfig = await validateProjectConfig(ctx);
+  const global = await readGlobalConfig(
+    options.globalConfigPath ?? getGlobalConfigPath(),
+  );
+  if (global.status !== 'missing') ctx.filesChecked.push(global.path);
+  if (global.status === 'invalid') {
+    for (const issue of global.issues)
+      ctx.issues.push({
+        file: global.path,
+        severity: 'error',
+        ...issue,
+      });
+  }
   const { existingCheckNames } = await validateCheckGates(ctx);
   const { reviews, reviewSourceFiles, existingReviewNames } =
     await validateReviewGatesWrapper(ctx);
@@ -86,11 +112,17 @@ export async function validateConfig(
 
   if (projectConfig) {
     validateProjectLevelConfig(projectConfig, ctx);
-    validateCliConfig(projectConfig, reviews, reviewSourceFiles, ctx);
+    validateCliConfig(projectConfig, global, reviews, reviewSourceFiles, ctx);
   }
 
   const valid = ctx.issues.filter((i) => i.severity === 'error').length === 0;
-  return { valid, issues: ctx.issues, filesChecked: ctx.filesChecked };
+  return {
+    valid,
+    issues: ctx.issues,
+    filesChecked: ctx.filesChecked,
+    projectConfigFound: ctx.filesChecked.includes(configPath),
+    globalConfigRead: global,
+  };
 }
 
 async function validateProjectConfig(
@@ -444,54 +476,44 @@ function validateProjectLevelConfig(
 
 function validateCliConfig(
   projectConfig: ValidatorConfig,
+  global: GlobalConfigReadResult,
   reviews: Record<string, ReviewPromptFrontmatter>,
   reviewSourceFiles: Record<string, string>,
   ctx: ValidatorContext,
 ): void {
-  if (!projectConfig.cli) {
-    return;
-  }
-
-  // Infer default_preference from adapter keys when not explicitly set
-  const defaults =
-    projectConfig.cli.default_preference ??
-    (projectConfig.cli.adapters
-      ? Object.keys(projectConfig.cli.adapters)
-      : undefined);
-  if (!(defaults && Array.isArray(defaults)) || defaults.length === 0) {
+  const effective = checkEffectiveCli({
+    projectCli: projectConfig.cli,
+    projectConfigPath: ctx.configPath,
+    globalCli: global.status === 'ok' ? global.config.cli : undefined,
+    globalConfigPath: global.path,
+  });
+  if (effective.status === 'missing') {
+    // An invalid global file is already reported; runtime loading fails on it
+    // before CLI resolution, so do not also claim the cli block is missing.
+    if (global.status === 'invalid') return;
     ctx.issues.push({
       file: ctx.configPath,
       severity: 'error',
-      message:
-        'cli.default_preference is required when multiple adapters are configured (or set cli.adapters with at least one entry)',
-      field: 'cli.default_preference',
+      field: 'cli',
+      message: missingCliConfigMessage(ctx.configPath, global.path),
     });
     return;
   }
-
-  validateDefaultPreferenceTools(defaults, ctx);
-  validateReviewPreferencesAgainstDefaults(
-    defaults,
-    reviews,
-    reviewSourceFiles,
-    ctx,
-  );
-}
-
-function validateDefaultPreferenceTools(
-  defaults: string[],
-  ctx: ValidatorContext,
-): void {
-  for (let i = 0; i < defaults.length; i++) {
-    const toolName = defaults[i] as string;
-    if (!getValidCLITools().includes(toolName)) {
-      ctx.issues.push({
-        file: ctx.configPath,
-        severity: 'error',
-        message: `Invalid CLI tool "${toolName}" in default_preference. Valid options are: ${getValidCLITools().join(', ')}`,
-        field: `cli.default_preference[${i}]`,
-      });
-    }
+  for (const issue of effective.issues) {
+    ctx.issues.push({
+      file: effective.source.path,
+      severity: 'error',
+      ...issue,
+    });
+  }
+  if (effective.cli.default_preference) {
+    validateReviewPreferencesAgainstDefaults(
+      effective.cli.default_preference,
+      reviews,
+      reviewSourceFiles,
+      ctx,
+      effective.source,
+    );
   }
 }
 
@@ -500,6 +522,7 @@ function validateReviewPreferencesAgainstDefaults(
   reviews: Record<string, ReviewPromptFrontmatter>,
   reviewSourceFiles: Record<string, string>,
   ctx: ValidatorContext,
+  source: CliSource,
 ): void {
   const reviewsPath = path.join(ctx.configDir, REVIEWS_DIR);
   const allowedTools = new Set(defaults);
@@ -515,7 +538,7 @@ function validateReviewPreferencesAgainstDefaults(
           ctx.issues.push({
             file: reviewFile,
             severity: 'error',
-            message: `CLI tool "${tool}" is not in project-level default_preference. Review gates can only use tools enabled in config.yml`,
+            message: `CLI tool "${tool}" is not in default_preference in ${describeCliSource(source)}`,
             field: `cli_preference[${i}]`,
           });
         }

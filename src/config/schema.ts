@@ -187,7 +187,7 @@ export const validatorConfigSchema = z.object({
   rerun_new_issue_threshold: z
     .enum(['critical', 'high', 'medium', 'low'])
     .default('medium'),
-  cli: cliConfigSchema,
+  cli: cliConfigSchema.optional(),
   entry_points: z.array(entryPointSchema).min(1),
   debug_log: debugLogConfigSchema.optional(),
   logging: loggingConfigSchema.optional(),

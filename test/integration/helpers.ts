@@ -213,6 +213,36 @@ export async function initGitRepo(dir: string): Promise<void> {
 	}
 }
 
+/** CI variables that switch the validator into CI change detection. */
+const CI_ENV_KEYS = ["CI", "GITHUB_ACTIONS", "GITHUB_BASE_REF", "GITHUB_SHA"];
+
+/**
+ * Removes CI detection variables so local-workflow E2E scenarios behave the
+ * same when the suite itself runs on a CI runner such as GitHub Actions.
+ */
+export function withoutCiEnv<T extends Record<string, string | undefined>>(
+	env: T,
+): T {
+	const local: Record<string, string | undefined> = { ...env };
+	for (const key of CI_ENV_KEYS) local[key] = undefined;
+	return local as T;
+}
+
+const REAL_HOME = os.homedir();
+let isolatedHome: string | undefined;
+
+/**
+ * Keeps spawned validators away from the developer's real
+ * ~/.config/agent-validator/config.yml. Callers that set their own HOME keep it.
+ */
+export function withIsolatedHome(
+	env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+	if (env.HOME && env.HOME !== REAL_HOME) return env;
+	isolatedHome ??= fs.mkdtempSync(path.join(os.tmpdir(), "validator-e2e-home-"));
+	return { ...env, HOME: isolatedHome, XDG_CONFIG_HOME: undefined };
+}
+
 export async function spawnValidator(
 	args: string[],
 	opts: {
@@ -225,7 +255,7 @@ export async function spawnValidator(
 		cwd: opts.cwd,
 		stdout: "pipe",
 		stderr: "pipe",
-		env: opts.env ?? process.env,
+		env: withIsolatedHome(opts.env ?? process.env),
 	});
 
 	const timeoutMs = opts.timeoutMs ?? 30_000;

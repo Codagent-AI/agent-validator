@@ -1,3 +1,4 @@
+import { DEFAULT_GLOBAL_CONFIG } from "../../src/config/global.js";
 import { describe, expect, it } from "bun:test";
 import type {
 	LoadedCheckGateConfig,
@@ -42,7 +43,8 @@ function makeConfig(
 	reviews: Record<string, any> = {},
 ): LoadedConfig {
 	return {
-		project: {
+		globalConfig: DEFAULT_GLOBAL_CONFIG,
+	project: {
 			base_branch: "main",
 			log_dir: "validator_logs",
 			allow_parallel: true,

@@ -6,6 +6,8 @@ import type {
   runtimeConfigSchema,
   serviceConfigSchema,
 } from './ci-schema.js';
+import type { CliSource } from './cli-resolution.js';
+import type { GlobalConfig } from './global.js';
 import type {
   adapterConfigSchema,
   checkGateSchema,
@@ -83,8 +85,14 @@ export interface ReviewerOverrideIdentity {
 }
 
 // Combined type for the fully loaded configuration
+export type LoadedProjectConfig = NormalizedValidatorConfig & {
+  cli: CLIConfig;
+};
+
 export interface LoadedConfig {
-  project: NormalizedValidatorConfig;
+  project: LoadedProjectConfig;
+  globalConfig: GlobalConfig;
+  cliSource?: CliSource;
   checks: Record<string, LoadedCheckGateConfig>;
   reviews: Record<string, LoadedReviewGateConfig>;
   reviewerOverride?: ReviewerOverrideIdentity;

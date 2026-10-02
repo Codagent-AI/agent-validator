@@ -81,9 +81,9 @@ When override mode is active, Validator SHALL translate the Runner triple into V
 - **THEN** the overlaid thinking budget SHALL be `medium`
 
 ### Requirement: Preference replacement and adapter policy
-When overlaying for an overlay command, Validator SHALL replace `cli.default_preference` and every review `cli_preference` with the single mapped adapter before the check that a review CLI must appear in `default_preference`. Gates, checks, review enablement, and `num_reviews` SHALL remain as configured. A list-valued reviewer role is out of scope; `num_reviews` greater than one SHALL produce that many slots of the one mapped adapter.
+When overlaying for an overlay command, Validator SHALL apply the overlay to the effective CLI config: the project `cli` block when the project config has a `cli` key, otherwise the global `cli` block from `~/.config/agent-validator/config.yml`. The effective block SHALL be resolved before the overlay. Per-field precedence follows the global-config "CLI settings precedence" requirement. The override's adapter replaces every preference. The override's model is written into the mapped adapter's block and each review's `model`, so it takes precedence over both the effective adapter block's model and any per-review `model`. The mapped thinking budget is written into the mapped adapter's block. The override SHALL NOT remove the requirement for an effective `cli` block: when neither file provides one, overlay commands SHALL fail with the missing-CLI-config error even with override mode active. Validator SHALL replace `cli.default_preference` and every review `cli_preference` with the single mapped adapter before the check that a review CLI must appear in `default_preference`. Gates, checks, review enablement, and `num_reviews` SHALL remain as configured. A list-valued reviewer role is out of scope; `num_reviews` greater than one SHALL produce that many slots of the one mapped adapter.
 
-Per-adapter `allow_tool_use` SHALL NOT be copied from the adapter being replaced. If `cli.adapters.<mapped>` already exists, Validator SHALL keep that block's `allow_tool_use` and apply the role's model and mapped thinking budget on top. If that block does not exist, Validator SHALL create it from Validator init defaults for that adapter (`allow_tool_use: false` plus the adapter's documented init `thinking_budget` and `model` where present), then apply the role's model and mapped thinking budget. When the role supplies a model, that overlay adapter model SHALL take precedence over a per-review YAML `model`. After overlay, existing adapter availability and health skipping SHALL apply; the overlay SHALL NOT add a separate fail-if-uninstalled rule.
+Per-adapter `allow_tool_use` SHALL NOT be copied from the adapter being replaced. If `cli.adapters.<mapped>` already exists in the effective CLI config, Validator SHALL keep that block's `allow_tool_use` and apply the role's model and mapped thinking budget on top. If that block does not exist, Validator SHALL create it from Validator init defaults for that adapter (`allow_tool_use: false` plus the adapter's documented init `thinking_budget` and `model` where present), then apply the role's model and mapped thinking budget. When the role supplies a model, Validator SHALL replace each review's YAML `model` with it. When the role supplies no model, Validator SHALL leave each review's `model` unchanged. After overlay, existing adapter availability and health skipping SHALL apply; the overlay SHALL NOT add a separate fail-if-uninstalled rule.
 
 #### Scenario: Review pinned to another CLI is replaced
 - **WHEN** a review is configured with `cli_preference: [codex]` and override mode maps to `claude`
@@ -111,6 +111,26 @@ Per-adapter `allow_tool_use` SHALL NOT be copied from the adapter being replaced
 - **THEN** Validator SHALL create the Claude adapter block from init defaults
 - **AND** Claude SHALL NOT copy `allow_tool_use` from the displaced adapter
 
+#### Scenario: Override applies on top of inherited global cli
+- **GIVEN** a project config with no `cli` key
+- **AND** a global `cli` block with `default_preference: [codex]` and `adapters.claude.allow_tool_use: true`
+- **WHEN** `run` is invoked with `AGENT_VALIDATOR_REVIEWER_CLI=claude`
+- **THEN** reviews SHALL run with `claude`
+- **AND** Claude reviews SHALL keep `allow_tool_use` true from the global `adapters.claude` block
+- **AND** neither the project config nor the global config file SHALL be rewritten
+
+#### Scenario: Global adapter block ignored when project cli present
+- **GIVEN** a project `cli` block with `default_preference: [codex]` and no `adapters.claude` entry
+- **AND** a global `cli` block with `adapters.claude.allow_tool_use: true`
+- **WHEN** `run` is invoked with `AGENT_VALIDATOR_REVIEWER_CLI=claude`
+- **THEN** Validator SHALL create the Claude adapter block from init defaults (`allow_tool_use: false`)
+- **AND** it SHALL NOT use the global `adapters.claude` block
+
+#### Scenario: Override does not satisfy a missing cli block
+- **GIVEN** a project config with no `cli` key and no global `cli` block
+- **WHEN** `run` is invoked with `AGENT_VALIDATOR_REVIEWER_CLI=claude`
+- **THEN** the command SHALL fail before any gates with the error naming both config paths
+
 ### Requirement: Overlay-command configured identity
 When an overlay command runs with override mode active, its stderr RESULTS SUMMARY SHALL name the configured review identity: source `runner-reviewer-role`, the mapped adapter, and the `xhigh` → `high` collapse when that mapping occurred. That identity is the configured overlay, not telemetry-observed effective model identity. When override mode is not active, Validator SHALL NOT add a `project-config` identity line.
 
@@ -121,4 +141,3 @@ When an overlay command runs with override mode active, its stderr RESULTS SUMMA
 #### Scenario: No override leaves summary unchanged
 - **WHEN** `run` completes with no reviewer override environment
 - **THEN** stderr RESULTS SUMMARY SHALL NOT add a reviewer identity source line
-

@@ -6,8 +6,8 @@ import {
   getAdapter,
   getAllAdapters,
 } from '../cli-adapters/index.js';
-import { loadConfig } from '../config/loader.js';
-import { ReviewerOverrideError } from '../config/reviewer-override.js';
+import type { GlobalConfigReadResult } from '../config/global.js';
+import { isProjectConfigNotFound, loadConfig } from '../config/loader.js';
 import { type ValidationResult, validateConfig } from '../config/validator.js';
 
 function formatHealthResult(health: CLIAdapterHealth): string {
@@ -42,13 +42,13 @@ function displayValidationIssues(validationResult: ValidationResult): void {
   }
 }
 
-async function validateAndDisplayConfig(): Promise<void> {
+async function validateAndDisplayConfig(): Promise<ValidationResult> {
   console.log(chalk.bold('Config validation:'));
   const validationResult = await validateConfig();
 
   if (validationResult.filesChecked.length === 0) {
     console.log(chalk.yellow('  No config files found'));
-    return;
+    return validationResult;
   }
 
   for (const file of validationResult.filesChecked) {
@@ -61,6 +61,7 @@ async function validateAndDisplayConfig(): Promise<void> {
   } else {
     displayValidationIssues(validationResult);
   }
+  return validationResult;
 }
 
 interface CollectedAgents {
@@ -100,9 +101,12 @@ function reportEmptyPreferences(reviewsWithEmptyPreference: string[]): void {
   console.log();
 }
 
-async function checkConfiguredAgentsHealth(): Promise<void> {
+async function checkConfiguredAgentsHealth(
+  globalConfigRead: GlobalConfigReadResult,
+): Promise<void> {
   const config = await loadConfig(process.cwd(), {
     applyReviewerOverride: true,
+    globalConfigRead,
   });
   const reviewEntries = Object.entries(config.reviews);
 
@@ -159,18 +163,29 @@ export function registerHealthCommand(program: Command): void {
     .command('health')
     .description('Check CLI tool availability')
     .action(async () => {
-      await validateAndDisplayConfig();
+      process.exitCode = 0;
+      const validation = await validateAndDisplayConfig();
+      let loadFailed = false;
       console.log();
       console.log(chalk.bold('CLI Tool Health Check:'));
 
       try {
-        await checkConfiguredAgentsHealth();
+        await checkConfiguredAgentsHealth(validation.globalConfigRead);
       } catch (error: unknown) {
-        if (error instanceof ReviewerOverrideError) {
-          console.error(chalk.red('Error:'), error.message);
-          process.exit(1);
+        if (isProjectConfigNotFound(error)) {
+          await checkAllAgentsHealth();
+        } else {
+          console.error(
+            chalk.red('Error:'),
+            error instanceof Error ? error.message : String(error),
+          );
+          loadFailed = true;
         }
-        await checkAllAgentsHealth();
       }
+      // Without a project config, only a broken global file fails health.
+      const hasConfigError = validation.projectConfigFound
+        ? !validation.valid
+        : validation.globalConfigRead.status === 'invalid';
+      if (loadFailed || hasConfigError) process.exitCode = 1;
     });
 }

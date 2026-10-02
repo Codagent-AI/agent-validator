@@ -1,3 +1,4 @@
+import { VALID_CLI_TOOLS } from "../../src/cli-adapters/tool-names.js";
 import {
 	afterEach,
 	beforeEach,
@@ -125,7 +126,7 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 	getProjectCommandAdapters: () => mockAdapters,
 	getUserCommandAdapters: () => [],
 	getAdapter: (name: string) => mockAdapters.find((a) => a.name === name),
-	getValidCLITools: () => mockAdapters.map((a) => a.name),
+	getValidCLITools: () => [...VALID_CLI_TOOLS],
 	isUsageLimit: (output: string) => output.toLowerCase().includes("usage limit"),
 }));
 

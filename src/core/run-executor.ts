@@ -5,7 +5,6 @@ import {
   releaseLock,
   shouldAutoClean,
 } from '../commands/shared.js';
-import { loadGlobalConfig } from '../config/global.js';
 import { loadConfig } from '../config/loader.js';
 import {
   CommandMetricsLifecycle,
@@ -89,10 +88,9 @@ async function initRunContext(
     loggerInitializedHere = true;
   }
 
-  const globalConfig = await loadGlobalConfig();
   const debugLogConfig = mergeDebugLogConfig(
     config.project.debug_log,
-    globalConfig.debug_log,
+    config.globalConfig.debug_log,
   );
   initDebugLogger(config.project.log_dir, debugLogConfig);
 

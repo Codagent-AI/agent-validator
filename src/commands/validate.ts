@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import { describeCliSource } from '../config/cli-resolution.js';
 import { loadConfig } from '../config/loader.js';
 
 export function registerValidateCommand(program: Command): void {
@@ -8,8 +9,10 @@ export function registerValidateCommand(program: Command): void {
     .description('Validate config files against schemas')
     .action(async () => {
       try {
-        await loadConfig();
+        const config = await loadConfig();
         console.log(chalk.green('All config files are valid.'));
+        if (config.cliSource)
+          console.log(`CLI config: ${describeCliSource(config.cliSource)}`);
         process.exitCode = 0;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);

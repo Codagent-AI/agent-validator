@@ -2,6 +2,19 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
+import {
+  type CliSource,
+  checkEffectiveCli,
+  describeCliSource,
+  InvalidCliConfigError,
+  MissingCliConfigError,
+} from './cli-resolution.js';
+import {
+  type GlobalConfigReadResult,
+  getGlobalConfigPath,
+  globalConfigFromReadResult,
+  loadGlobalConfig,
+} from './global.js';
 import { loadCheckGates } from './load-checks.js';
 import { loadReviewGates } from './load-reviews.js';
 import { fileExists } from './loader-utils.js';
@@ -14,6 +27,7 @@ import type {
   CheckGateConfig,
   LoadedCheckGateConfig,
   LoadedConfig,
+  LoadedProjectConfig,
   LoadedReviewGateConfig,
   NormalizedEntryPoint,
   NormalizedValidatorConfig,
@@ -35,6 +49,23 @@ function resolveConfigDir(rootDir: string): string {
 
 export interface LoadConfigOptions {
   applyReviewerOverride?: boolean;
+  requireCli?: boolean;
+  globalConfigPath?: string;
+  /** A global config already read in this invocation; avoids a second read. */
+  globalConfigRead?: GlobalConfigReadResult;
+}
+
+export class ProjectConfigNotFoundError extends Error {
+  constructor(configPath: string) {
+    super(`Configuration file not found at ${configPath}`);
+    this.name = 'ProjectConfigNotFoundError';
+  }
+}
+
+export function isProjectConfigNotFound(
+  error: unknown,
+): error is ProjectConfigNotFoundError {
+  return error instanceof ProjectConfigNotFoundError;
 }
 
 export async function loadConfig(
@@ -46,28 +77,52 @@ export async function loadConfig(
 
   // 1. Load project config
   if (!(await fileExists(configPath))) {
-    throw new Error(`Configuration file not found at ${configPath}`);
+    throw new ProjectConfigNotFoundError(configPath);
   }
 
   const configContent = await fs.readFile(configPath, 'utf-8');
   const projectConfigRaw = YAML.parse(configContent);
   const projectConfig = validatorConfigSchema.parse(projectConfigRaw);
 
-  // Infer default_preference from adapter keys when not explicitly set
-  if (!projectConfig.cli.default_preference) {
-    const adapterKeys = projectConfig.cli.adapters
-      ? Object.keys(projectConfig.cli.adapters)
-      : [];
-    if (adapterKeys.length > 0) {
-      projectConfig.cli.default_preference = adapterKeys;
-    }
+  const globalConfigPath =
+    options.globalConfigRead?.path ??
+    options.globalConfigPath ??
+    getGlobalConfigPath();
+  const globalConfig = options.globalConfigRead
+    ? globalConfigFromReadResult(options.globalConfigRead)
+    : await loadGlobalConfig(globalConfigPath);
+  const effective = checkEffectiveCli({
+    projectCli: projectConfig.cli,
+    projectConfigPath: configPath,
+    globalCli: globalConfig.cli,
+    globalConfigPath,
+  });
+  // Only `ci list-jobs` opts out; it never uses CLI settings.
+  const requireCli = options.requireCli !== false;
+  if (requireCli && effective.status === 'missing') {
+    throw new MissingCliConfigError(configPath, globalConfigPath);
   }
+  if (
+    requireCli &&
+    effective.status === 'resolved' &&
+    effective.issues.length > 0
+  ) {
+    throw new InvalidCliConfigError(effective.source, effective.issues);
+  }
+  const cliSource =
+    effective.status === 'resolved' ? effective.source : undefined;
+  // CLI-dependent steps below run only for a required, valid CLI block.
+  const enforcedCliSource = requireCli ? cliSource : undefined;
+  const effectiveProject = {
+    ...projectConfig,
+    cli: effective.status === 'resolved' ? effective.cli : {},
+  };
 
   // 2. Extract inline gates from entry_points and normalize arrays to strings.
   const { inlineChecks, inlineReviews, normalizedEntryPoints } =
-    extractInlineGates(projectConfig);
-  const normalizedConfig: NormalizedValidatorConfig = {
-    ...projectConfig,
+    extractInlineGates(effectiveProject);
+  const normalizedConfig: LoadedProjectConfig = {
+    ...effectiveProject,
     entry_points: normalizedEntryPoints,
   };
 
@@ -77,18 +132,23 @@ export async function loadConfig(
   // 4. Load reviews (file-based + entry-point inline)
   const reviews = await loadReviewGates(configDir, inlineReviews);
 
-  const reviewerOverride = options.applyReviewerOverride
-    ? overlayReviewerIfActive(normalizedConfig, reviews)
-    : undefined;
+  const reviewerOverride =
+    options.applyReviewerOverride && enforcedCliSource
+      ? overlayReviewerIfActive(normalizedConfig, reviews)
+      : undefined;
 
   // 5. Merge default CLI preference if not specified
-  mergeCliPreferences(reviews, normalizedConfig);
+  if (enforcedCliSource) {
+    mergeCliPreferences(reviews, normalizedConfig, enforcedCliSource);
+  }
 
   // 6. Validate entry point references
   validateLoadedEntryPoints(normalizedConfig, checks, reviews);
 
   return {
     project: normalizedConfig,
+    globalConfig,
+    cliSource,
     checks,
     reviews,
     ...(reviewerOverride ? { reviewerOverride } : {}),
@@ -96,7 +156,7 @@ export async function loadConfig(
 }
 
 function overlayReviewerIfActive(
-  project: NormalizedValidatorConfig,
+  project: LoadedProjectConfig,
   reviews: Record<string, LoadedReviewGateConfig>,
 ) {
   const parsed = parseReviewerOverrideEnv();
@@ -164,7 +224,8 @@ function extractInlineGates(projectConfig: ValidatorConfig): {
 
 function mergeCliPreferences(
   reviews: Record<string, LoadedReviewGateConfig>,
-  projectConfig: NormalizedValidatorConfig,
+  projectConfig: LoadedProjectConfig,
+  source: CliSource,
 ): void {
   for (const [name, review] of Object.entries(reviews)) {
     if (review.cli_preference) {
@@ -172,7 +233,7 @@ function mergeCliPreferences(
       for (const tool of review.cli_preference) {
         if (!allowedTools.has(tool)) {
           throw new Error(
-            `Review "${name}" uses CLI tool "${tool}" which is not in the project-level allowed list (cli.default_preference).`,
+            `Review "${name}" uses CLI tool "${tool}" which is not in the allowed list (cli.default_preference in ${describeCliSource(source)}).`,
           );
         }
       }
