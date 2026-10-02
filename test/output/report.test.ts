@@ -94,7 +94,7 @@ describe('enumerateNewViolations', () => {
 
     const violations = await enumerateNewViolations(TEST_DIR);
     expect(violations).toHaveLength(1);
-    expect(violations[0]!.id).toBe(1);
+    expect(violations[0]!.id).toBe(2);
     expect(violations[0]!.file).toBe('src/b.ts');
   });
 
@@ -230,6 +230,7 @@ describe('generateReport', () => {
     expect(report).toContain('Fix instructions: Run `bun run lint --fix`');
     expect(report).toContain('Fix skill: lint-fixer');
     expect(report).toContain('Log: validator_logs/check_src_lint.1.log');
+    expect(report).not.toContain('Mark decisions with:');
   });
 
   it('includes review violations with numeric IDs', async () => {
@@ -268,6 +269,7 @@ describe('generateReport', () => {
     expect(report).toContain('  src/foo.ts:10 - Missing null check');
     expect(report).toContain('  Fix: Add null guard');
     expect(report).toContain('  JSON:');
+    expect(report).toContain('Mark decisions with: agent-validate update-review fix|skip <id> "<reason>"');
   });
 
   it('contains no ANSI escape codes', async () => {
@@ -336,7 +338,7 @@ describe('generateReport', () => {
 
     const report = await generateReport('failed', gateResults, TEST_DIR);
 
-    expect(report).toContain('#1');
+    expect(report).toContain('#3');
     expect(report).toContain('src/c.ts:3');
     expect(report).not.toContain('src/a.ts');
     expect(report).not.toContain('src/b.ts');

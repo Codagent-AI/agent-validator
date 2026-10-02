@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { Command } from 'commander';
-import { registerUpdateReviewCommand } from '../../src/commands/update-review.js';
+import { missingReasonUsage, registerUpdateReviewCommand } from '../../src/commands/update-review.js';
 
 describe('Update-Review Command', () => {
   let program: Command;
@@ -51,5 +51,10 @@ describe('Update-Review Command', () => {
     );
     expect(skipCmd).toBeDefined();
     expect(skipCmd?.description()).toBe('Mark a violation as skipped');
+  });
+
+  it('uses fix and skip command names in missing-reason usage', () => {
+    expect(missingReasonUsage('fixed')).toBe('Error: Missing reason. Usage: agent-validate update-review fix <id> "<reason>"');
+    expect(missingReasonUsage('skipped')).toBe('Error: Missing reason. Usage: agent-validate update-review skip <id> "<reason>"');
   });
 });

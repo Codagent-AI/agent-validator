@@ -4,7 +4,11 @@ import type { ReviewerOverrideIdentity } from '../config/types.js';
 import type { Job } from '../core/job.js';
 import type { GateResult } from '../gates/result.js';
 import { reconstructHistory } from '../utils/log-parser.js';
-import { formatReviewerIdentityLine } from './report.js';
+import {
+  enumerateNewViolations,
+  formatReviewerIdentityLine,
+  UPDATE_REVIEW_HINT,
+} from './report.js';
 
 /** Map a gate status to its chalk color and label */
 function statusStyle(status: string): {
@@ -376,6 +380,17 @@ export class ConsoleReporter {
       statusOverride,
     );
     console.error(statusColor(`Status: ${overallStatus}`));
+    if (overallStatus === 'Failed' && logDir) {
+      try {
+        if ((await enumerateNewViolations(logDir)).length > 0) {
+          console.error(chalk.dim(UPDATE_REVIEW_HINT));
+        }
+      } catch (error) {
+        console.error(
+          chalk.yellow(`Warning: Failed to read review violations: ${error}`),
+        );
+      }
+    }
     if (reviewerOverride) {
       console.error(formatReviewerIdentityLine(reviewerOverride));
     }

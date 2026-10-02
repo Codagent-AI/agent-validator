@@ -53,10 +53,11 @@ When `agent-validate run` is invoked with `--report`, the command SHALL write a 
   - `file:line - issue description`
   - Fix suggestion
   - Path to the JSON file containing the violation
+- **AND** the report SHALL include `Mark decisions with: agent-validate update-review fix|skip <id> "<reason>"` after the violations
 
 #### Scenario: Review violations with non-new status are excluded
 - **WHEN** a review gate has violations with status `"fixed"` or `"skipped"`
-- **THEN** those violations SHALL NOT appear in the report and SHALL NOT be assigned numeric IDs
+- **THEN** those violations SHALL NOT appear in the report, while their numeric IDs SHALL remain reserved
 
 #### Scenario: Report flag absent
 - **WHEN** `agent-validate run` is invoked without `--report`
@@ -83,14 +84,20 @@ The report MUST be written to a file in the log directory in addition to stdout.
 - **THEN** the file SHALL be overwritten with the new report
 
 ### Requirement: Numeric IDs are stable within a log session
-Numeric IDs assigned to review violations MUST be deterministic and stable between the `--report` output and subsequent `update-review` invocations, as long as the log files have not been modified by a validator re-run. IDs SHALL be assigned by scanning JSON files in sorted filename order, then by violation array index within each file, numbering sequentially from 1, considering only violations with status `"new"`.
+Numeric IDs assigned to review violations MUST be deterministic and stable between the `--report` output and subsequent `update-review` invocations, until the next validator run. IDs SHALL be assigned by scanning JSON files in sorted filename order, then by violation array index within each file, numbering sequentially from 1 across all violations. Only violations with status `"new"` SHALL appear in the report or `update-review list`. Updating one decision SHALL NOT renumber the remaining violations.
 
 #### Scenario: IDs match between report and update-review commands
 - **WHEN** `agent-validate run --report` assigns `#3` to a violation at `src/foo.ts:10`
 - **AND** `agent-validate update-review list` is run without any intervening validator re-run
 - **THEN** `#3` SHALL refer to the same violation at `src/foo.ts:10`
 
-#### Scenario: IDs are sequential with no gaps
-- **WHEN** there are 5 violations with status `"new"` across all JSON files
+#### Scenario: IDs are sequential when all violations are new
+- **WHEN** all 5 violations across all JSON files have status `"new"`
 - **THEN** they SHALL be numbered `#1` through `#5` with no gaps
 
+#### Scenario: Resolved violations retain their IDs
+- **GIVEN** a review JSON file has a `"fixed"` violation at `#1` and a `"skipped"` violation at `#3`
+- **AND** violations at `#2` and `#4` have status `"new"`
+- **WHEN** the report or `update-review list` enumerates pending violations
+- **THEN** only `#2` and `#4` SHALL appear
+- **AND** their IDs SHALL remain unchanged until the next validator run
