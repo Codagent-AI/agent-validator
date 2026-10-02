@@ -32,6 +32,9 @@ entry_points:
     reviews:
       - all-reviewers:
           builtin: all-reviewers
+      - task-compliance:
+          builtin: task-compliance
+          enabled: false # Opt-in: activate with `agent-validator run --enable-review task-compliance --context-file <task>`
   - path: "skills"
     reviews:
       - skill-quality
