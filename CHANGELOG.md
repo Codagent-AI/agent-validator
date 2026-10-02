@@ -1,5 +1,23 @@
 # agent-validator
 
+## 1.15.0
+
+### Minor Changes
+
+- [#154](https://github.com/Codagent-AI/agent-validator/pull/154) Accept a reviewer CLI, model, and effort override exported by Agent Runner, so the Runner profile decides who reviews without rewriting the project's tracked `.validator/config.yml`, and advertise the override on the `metrics capabilities` handshake.
+- [#166](https://github.com/Codagent-AI/agent-validator/pull/166) Apply the configured reasoning effort to Claude reviews and record the resolved effort in review telemetry, including for failed runs.
+- [#167](https://github.com/Codagent-AI/agent-validator/pull/167) Record Claude Code's reported dollar cost in review telemetry and make dollar cost a first-class eval metric, with a new 2026-09-29 eval report.
+
+### Patch Changes
+
+- [#151](https://github.com/Codagent-AI/agent-validator/pull/151) Connect repository issues to agent-factory routing.
+- [#152](https://github.com/Codagent-AI/agent-validator/pull/152) Fix issue event parsing in the factory routing deployment.
+- [#156](https://github.com/Codagent-AI/agent-validator/pull/156) Route issues retyped as Bug after creation to the factory.
+- [#158](https://github.com/Codagent-AI/agent-validator/pull/158) Scope verification reruns to the iteration's `working_tree_ref` when `HEAD` is trusted, so reviewers stop re-raising already fixed or skipped violations and exhausting the retry limit.
+- [#161](https://github.com/Codagent-AI/agent-validator/pull/161) Switch this repository's own validator reviews to Codex `gpt-6-sol` with medium thinking and drop GitHub Copilot as a reviewer.
+- [#162](https://github.com/Codagent-AI/agent-validator/pull/162) Record the model and provider Codex reviews launch with, resolved from the Codex config and active profile, and derive uncached input tokens so review attempts can be priced.
+- [#164](https://github.com/Codagent-AI/agent-validator/pull/164) Fall back to the Codex session rollout to record the model and provider a review actually used when launch resolution cannot determine them.
+
 ## 1.14.0
 
 ### Minor Changes

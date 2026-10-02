@@ -26,7 +26,7 @@ issues:
 
   - id: hardcoded-db-password
     file: src/api/handler.ts
-    line_range: [133, 133]
+    line_range: [133, 134]
     description: >
       Hardcoded database connection string with plaintext credentials
       (admin:password123) exposed in source code. Database credentials should

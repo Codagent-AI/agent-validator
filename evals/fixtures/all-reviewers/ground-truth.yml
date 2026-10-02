@@ -121,7 +121,7 @@ issues:
 
   - id: off-by-one-pagination
     file: src/api/batch.ts
-    line_range: [44, 44]
+    line_range: [42, 42]
     description: >
       The slice end index is start + pageSize + 1, which returns one extra item
       per page. Array.slice(start, end) already excludes the end index, so
@@ -136,7 +136,7 @@ issues:
 
   - id: n-plus-one-batch-lookup
     file: src/api/batch.ts
-    line_range: [67, 70]
+    line_range: [66, 69]
     description: >
       handleBatchLookup fetches users one-by-one in a sequential loop, issuing
       a separate database query per user ID. For a request with N user IDs, this
@@ -150,7 +150,7 @@ issues:
 
   - id: wrong-filter-logic
     file: src/api/batch.ts
-    line_range: [89, 90]
+    line_range: [86, 88]
     description: >
       The filter for inactive users uses || (OR) instead of && (AND). The
       function is documented as finding "active users who have NOT logged in
@@ -181,7 +181,7 @@ issues:
 
   - id: event-listener-leak
     file: src/api/batch.ts
-    line_range: [115, 121]
+    line_range: [115, 126]
     description: >
       setupNotifications is called per WebSocket client connection. Each call
       adds a new handler to eventSource and pushes it to the module-level
@@ -199,10 +199,10 @@ issues:
 
   - id: py-mutable-default-arg
     file: src/batch_processor.py
-    line_range: [50, 50]
+    line_range: [56, 56]
     description: >
       Mutable default argument default_tags=[] is shared across all calls to
-      build_email_index. The function also mutates this list via append on line 63,
+      build_email_index. The function also mutates this list via append on line 69,
       so each invocation accumulates tags from previous calls, corrupting results
       for all subsequent callers.
     category: bug
@@ -213,7 +213,7 @@ issues:
 
   - id: py-late-binding-closure
     file: src/batch_processor.py
-    line_range: [75, 76]
+    line_range: [81, 82]
     description: >
       The lambda inside the loop captures the variable uid by reference, not by
       value. All generated closures will use the final value of uid after the loop
@@ -226,7 +226,7 @@ issues:
 
   - id: py-file-handle-leak
     file: src/batch_processor.py
-    line_range: [92, 92]
+    line_range: [98, 98]
     description: >
       The file opened with open() is never closed. If a database error occurs
       during CSV processing (e.g., on cursor.execute or conn.commit), the file
@@ -240,7 +240,7 @@ issues:
 
   - id: py-off-by-one-pagination
     file: src/batch_processor.py
-    line_range: [142, 142]
+    line_range: [140, 140]
     description: >
       The offset calculation uses page * page_size, but the docstring states pages
       are 1-indexed. For page=1 the offset is page_size (skipping the first page
@@ -254,7 +254,7 @@ issues:
 
   - id: py-race-condition-counter
     file: src/batch_processor.py
-    line_range: [189, 189]
+    line_range: [187, 187]
     description: >
       _send_count is incremented from multiple threads without synchronization.
       A threading.Lock (_count_lock) is defined at module scope but never acquired
@@ -268,7 +268,7 @@ issues:
 
   - id: py-silent-exception-swallow
     file: src/batch_processor.py
-    line_range: [190, 191]
+    line_range: [188, 189]
     description: >
       The bare except Exception with pass silently swallows all database errors
       during notification dispatch. Failed inserts are never logged or reported,
@@ -282,7 +282,7 @@ issues:
 
   - id: py-dict-mutation-during-iteration
     file: src/batch_processor.py
-    line_range: [118, 120]
+    line_range: [124, 127]
     description: >
       cleanup_inactive_users iterates over users.items() and deletes keys from
       the dict inside the loop body with del users[uid]. In Python, mutating a
@@ -296,7 +296,7 @@ issues:
 
   - id: py-unvalidated-int-cast
     file: src/batch_processor.py
-    line_range: [36, 36]
+    line_range: [42, 42]
     description: >
       int(record["age"]) will raise ValueError if the age field contains a
       non-numeric string (e.g., "N/A", "", or "twenty-five") from the external
@@ -312,7 +312,7 @@ issues:
 
   - id: go-mutex-missing-read
     file: src/batch_handler.go
-    line_range: [53, 55]
+    line_range: [56, 58]
     description: >
       JobStore.Get() reads the jobs map without holding the mutex, while Add()
       and List() both lock before accessing the map. Concurrent calls to Get()
@@ -326,7 +326,7 @@ issues:
 
   - id: go-http-body-leak
     file: src/batch_handler.go
-    line_range: [155, 161]
+    line_range: [156, 165]
     description: >
       notifyWebhook never closes the HTTP response body. Every call leaks a
       network connection (the underlying TCP socket stays open until the OS
@@ -340,7 +340,7 @@ issues:
 
   - id: go-defer-in-loop
     file: src/batch_handler.go
-    line_range: [174, 174]
+    line_range: [177, 177]
     description: >
       defer resp.Body.Close() is called inside a for loop. Deferred calls do
       not execute at the end of each iteration — they pile up until the
@@ -354,7 +354,7 @@ issues:
 
   - id: go-loop-var-capture
     file: src/batch_handler.go
-    line_range: [195, 200]
+    line_range: [198, 203]
     description: >
       The goroutine closure captures loop variables i and job by reference.
       By the time each goroutine executes, the loop has advanced and all
@@ -369,7 +369,7 @@ issues:
 
   - id: go-goroutine-leak
     file: src/batch_handler.go
-    line_range: [219, 246]
+    line_range: [222, 250]
     description: >
       CollectResults spawns goroutines to fetch from worker nodes but returns
       immediately without waiting for them to finish. The caller always
@@ -385,7 +385,7 @@ issues:
 
   - id: go-inverted-error-check
     file: src/batch_handler.go
-    line_range: [252, 253]
+    line_range: [254, 256]
     description: >
       FetchJobResult checks err == nil (no error) but enters the error-handling
       branch, returning an error on success and proceeding to read the response
@@ -400,7 +400,7 @@ issues:
 
   - id: go-slice-bounds-panic
     file: src/batch_handler.go
-    line_range: [290, 292]
+    line_range: [293, 299]
     description: >
       ParseJobPage calculates end = start + pageSize but never clamps it to
       len(jobs). When the last page is a partial page (fewer items than
@@ -414,7 +414,7 @@ issues:
 
   - id: go-division-by-zero
     file: src/batch_handler.go
-    line_range: [321, 323]
+    line_range: [441, 443]
     description: >
       FormatJobSummary divides by total to compute the success rate, but
       total is zero when the input slice is empty or contains only jobs

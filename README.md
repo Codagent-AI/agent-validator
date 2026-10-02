@@ -47,7 +47,12 @@ After init, run `/validator-setup` from your coding agent to discover project to
 ```yaml
 cli:
   default_preference:
-    - codex
+    - claude
+  adapters:
+    claude:
+      allow_tool_use: false
+      thinking_budget: low
+      model: claude-sonnet-5-5
 
 entry_points:
   - path: "."
@@ -62,10 +67,9 @@ entry_points:
     reviews:
       - all-reviewers:
           builtin: all-reviewers
-          cli_preference:
-            - codex
-          model: gpt-5.3-codex
 ```
+
+This uses the preferred reviewer from the latest review eval. See [Recommended Reviewer Configurations](docs/reviews-and-adapters.md#recommended-reviewer-configurations) for Codex options.
 
 Inline checks and reviews are defined inside `entry_points`. File-based gates are also supported under `.validator/checks/` and `.validator/reviews/`.
 

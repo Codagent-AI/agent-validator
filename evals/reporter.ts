@@ -1,8 +1,15 @@
 import chalk from "chalk";
+import {
+	formatLocationFlag,
+	LOCATION_LINE_TOLERANCE,
+} from "./location-check.js";
+import { PRICES_AS_OF } from "./pricing.js";
 import type {
 	ConfigAggregate,
+	CostSource,
 	EvalResults,
 	GroundTruthIssue,
+	RunScore,
 } from "./types.js";
 
 export function printReport(
@@ -23,6 +30,8 @@ export function printReport(
 	console.log("");
 
 	printConfigTable(results);
+	printJudgeCost(results);
+	printLocationFlags(results);
 	printDetectionRates(results, groundTruth);
 
 	console.log("");
@@ -44,10 +53,15 @@ function printConfigTable(results: EvalResults): void {
 				"Out".padStart(9) +
 				"Think".padStart(9) +
 				"Total".padStart(9) +
-				"Tools".padStart(7),
+				"Tools".padStart(7) +
+				"$/run".padStart(10) +
+				"$/TP".padStart(10) +
+				"Cost src".padStart(10) +
+				"LocFlag".padStart(9) +
+				"LowConf".padStart(9),
 		),
 	);
-	console.log(chalk.dim("-".repeat(100)));
+	console.log(chalk.dim("-".repeat(148)));
 
 	for (const config of sorted) {
 		console.log(formatConfigRow(config));
@@ -77,8 +91,84 @@ function formatConfigRow(config: ConfigAggregate): string {
 		formatTokenCount(t.outputTokens).padStart(9) +
 		formatTokenCount(t.thinkingTokens).padStart(9) +
 		formatTokenCount(totalTok).padStart(9) +
-		String(t.toolCalls).padStart(7)
+		String(t.toolCalls).padStart(7) +
+		formatUsd(config.cost?.meanCostUsd ?? null).padStart(10) +
+		formatUsd(config.cost?.costPerTruePositiveUsd ?? null).padStart(10) +
+		formatCostSource(config).padStart(10) +
+		formatRunTotal(config, (r) => r.locationFlagCount).padStart(9) +
+		formatRunTotal(config, (r) => r.lowConfidenceMatches).padStart(9)
 	);
+}
+
+/** Sums a per-run diagnostic over judged runs; `n/a` when no run has it. */
+function formatRunTotal(
+	config: ConfigAggregate,
+	pick: (run: RunScore) => number | undefined,
+): string {
+	const values = config.runs.flatMap((r) => pick(r) ?? []);
+	return values.length > 0 ? String(values.reduce((s, v) => s + v, 0)) : "n/a";
+}
+
+/** Lists judge matches whose location disagrees with the matched ground truth. */
+function printLocationFlags(results: EvalResults): void {
+	const flagged = results.configs.flatMap((c) =>
+		c.runs.filter((r) => (r.locationFlagCount ?? 0) > 0),
+	);
+	if (flagged.length === 0) return;
+	console.log(
+		chalk.bold(
+			`Location-flagged matches (different file, or line outside range ±${LOCATION_LINE_TOLERANCE}; diagnostic only, still counted as TP):`,
+		),
+	);
+	for (const run of flagged) {
+		console.log(`  ${run.configLabel} [run ${run.runIndex + 1}]:`);
+		for (const flag of run.locationFlags ?? []) {
+			console.log(chalk.yellow(`    ${formatLocationFlag(flag)}`));
+		}
+	}
+	console.log("");
+}
+
+const SOURCE_LABELS: Record<CostSource, string> = {
+	reported: "reported",
+	list_price: "list",
+	unavailable: "n/a",
+};
+
+/** Cost source label; flags mixed sources and runs with unknown cost. */
+function formatCostSource(config: ConfigAggregate): string {
+	const cost = config.cost;
+	if (!cost) return SOURCE_LABELS.unavailable;
+	const label =
+		cost.sources.length === 1 && cost.sources[0]
+			? SOURCE_LABELS[cost.sources[0]]
+			: "mixed";
+	return cost.costedRuns < cost.totalRuns && cost.costedRuns > 0
+		? `${label}*`
+		: label;
+}
+
+function printJudgeCost(results: EvalResults): void {
+	const judgeTotals = results.configs.flatMap((c) =>
+		c.cost?.totalJudgeCostUsd != null ? [c.cost.totalJudgeCostUsd] : [],
+	);
+	if (judgeTotals.length > 0) {
+		const total = judgeTotals.reduce((s, v) => s + v, 0);
+		console.log(
+			`Judge cost (excluded from $/run): ${formatUsd(total)} total`,
+		);
+	}
+	console.log(
+		chalk.dim(
+			`Cost: "reported" = provider-reported USD; "list" = API list-price estimate (prices as of ${PRICES_AS_OF}), not subscription billing; "*" = some runs had no cost.`,
+		),
+	);
+	console.log("");
+}
+
+export function formatUsd(usd: number | null): string {
+	if (usd === null) return "n/a";
+	return `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
 }
 
 function printDetectionRates(

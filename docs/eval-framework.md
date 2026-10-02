@@ -16,7 +16,7 @@ Agent Validator supports multiple code review adapters (Claude Code, Codex CLI, 
 Build an evaluation framework that answers three questions:
 
 1. **Quality** -- Which adapter+model combination finds the most real issues with the fewest false positives?
-2. **Cost** -- How many tokens does each configuration consume?
+2. **Cost** -- How many tokens and dollars does each configuration consume?
 3. **Time** -- How long does each configuration take?
 
 The framework benchmarks adapters across configurations to find optimal settings that balance these three dimensions.
@@ -150,9 +150,26 @@ From these, standard metrics are computed: precision (True Positives / reported)
 
 The judge uses a single consistent model across all runs (Claude Code with high thinking in the default eval config) to avoid introducing scoring variance.
 
+### Location check on judge matches
+
+The judge matches on meaning, so it can pair a violation with a ground-truth issue that sits in a different file or function. After judging, `evals/location-check.ts` runs a deterministic check on every match. A match is flagged when the violation's file differs from the issue's `file` (after path normalization; a path-suffix match counts as the same file), or when its line is outside the issue's `line_range` widened by `LOCATION_LINE_TOLERANCE` (5 lines) on each side. A match that names an unknown issue id or violation index is flagged as `unresolved`.
+
+The check is diagnostic only. It does not change the judge prompt or the true-positive count. Each run score records `locationFlagCount`, `locationFlags` (ground-truth id, violation file:line, expected file and range, judge confidence, reason) and `lowConfidenceMatches`. The console table shows their totals in the `LocFlag` and `LowConf` columns, and the flagged matches are listed per run below the table. Look at flagged matches before you trust a recall number. The same offset showing up across many issues usually means `line_range` values in `ground-truth.yml` are stale. A single distant match usually means the judge was too lenient. Line numbers in `ground-truth.yml` refer to the post-diff file that reviewers see.
+
 ## Token Caching Concern
 
 Runs execute sequentially. Both Claude and OpenAI implement prompt caching with a 5-10 minute TTL. When running multiple configurations back-to-back against the same fixture, later runs may benefit from cached prompts, making their token counts and latencies appear lower than they would in isolation. This is a known confound -- results should be interpreted with this in mind, especially when comparing configurations that run adjacent to each other.
+
+## Dollar Cost
+
+Every candidate run and every judge call records a dollar cost (`cost` on each raw run and judge result, `cost` / `judgeCost` on each run score). The harness reads the adapter's structured telemetry (`AdapterExecutionResult.telemetry`, or the last `onTelemetry` update / `AdapterExecutionFailure.telemetry` when a run fails) and picks the first source that applies:
+
+1. **`reported`** -- USD the provider reported for the whole attempt (`provider_reported_costs`, scope `attempt`). Claude Code reports its own estimate through OTel (`claude_code.cost.usage`, or summed `cost_usd` on API-request events).
+2. **`list_price`** -- an API-equivalent estimate from structured token counts and the price table in `evals/pricing.ts`: `(input - cached) * input_price + cached * cached_price + output * output_price`. Codex reports tokens only, so Codex runs use this. Its `output_tokens` already include reasoning tokens and `cached_input_tokens` are a subset of `input_tokens`, so neither is counted twice. **This is what the same tokens would cost on the standard API tier, not what a ChatGPT (or Copilot) subscription is actually charged.**
+3. Provider-reported cost scraped from `[otel]`-style text lines, only when structured telemetry is unusable.
+4. Otherwise **`unavailable`** -- for example a model missing from the price table, or a token breakdown without cached-input counts. Unavailable cost is never treated as zero.
+
+Judge cost is tracked separately and never included in a candidate's cost. Each config aggregate carries a `cost` summary: mean cost per run, total, cost per true positive (known cost divided by the true positives of the same runs), the set of cost sources, how many runs had a known cost, and mean/total judge cost. To price a new model, add it to `MODEL_PRICES` in `evals/pricing.ts` and update `PRICES_AS_OF`.
 
 ## Running the Eval
 
@@ -192,16 +209,15 @@ The main output is a table sorted by Recall:
 
 ```text
 Configuration Comparison (sorted by Recall):
-Config                             Prec    Rec    Time       In      Out    Think    Total  Tools
-----------------------------------------------------------------------------------------------------
-copilot-sonnet/tools-off-low       0.71   0.71   93.2s    25.1k    1.8k    6.2k    33.1k      0
-copilot-sonnet/tools-off-medium    0.68   0.67   95.4s    25.3k    2.1k    8.4k    35.8k      0
-codex-gpt5.3/tools-off-medium     0.58   0.63  109.1s    18.7k    3.2k    0.0k    21.9k      0
-codex-gpt5.3/tools-off-low        0.52   0.46   97.3s    18.5k    2.8k    0.0k    21.3k      0
-codex-gpt5.4/tools-off-medium     0.45   0.38  112.5s    19.1k    3.5k    0.0k    22.6k      0
+Config                             Prec    Rec    Time       In      Out    Think    Total  Tools     $/run      $/TP  Cost src  LocFlag  LowConf
+----------------------------------------------------------------------------------------------------------------------------------------------------
+claude-opus                        0.74   0.75  140.2s    31.0k    2.4k        0    33.4k      0   $0.2140   $0.0119  reported        0        0
+codex-gpt5.5                       0.61   0.63  109.1s    18.7k    3.2k        0    21.9k      0   $0.1216   $0.0081      list        2        1
+copilot-sonnet                     0.71   0.71   93.2s    25.1k    1.8k    6.2k    33.1k      0       n/a       n/a       n/a        1        0
+Judge cost (excluded from $/run): $0.4210 total
 ```
 
-Columns: Prec (precision), Rec (recall), Time (mean wall-clock duration), In/Out/Think/Total (token breakdown), Tools (tool call count -- always 0 in current tools-off configs).
+Columns: Prec (precision), Rec (recall), Time (mean wall-clock duration), In/Out/Think/Total (token breakdown), Tools (tool call count -- always 0 in current tools-off configs), $/run (mean candidate cost per run), $/TP (candidate cost per true positive), Cost src (`reported`, `list` for list-price estimate, `n/a`, or `mixed`; a trailing `*` means some runs had no known cost), LocFlag (judge matches whose location disagrees with the matched issue; see [Location check on judge matches](#location-check-on-judge-matches)), LowConf (matches the judge rated low confidence). Figures above are illustrative.
 
 ### Per-issue detection rates
 
@@ -258,5 +274,10 @@ The tradeoff is no pre-built comparison UI -- but for the current configuration 
 | **Ground Truth** | -- | The set of known, seeded issues in the test fixture, each with an ID, file, line range, difficulty, and category. |
 | **Judge** | -- | An LLM (default: Claude Code with high thinking) that evaluates whether adapter violations match ground truth issues. Provides semantic matching rather than brittle keyword matching. |
 | **Fixture** | -- | A per-reviewer test directory containing a codebase, diff.patch, and ground-truth.yml. Each fixture isolates bugs for a single reviewer type. |
-| **Telemetry** | -- | Token usage and cost data emitted by adapter CLIs during execution. Parsed from `[otel]`, `[codex-telemetry]`, or `[telemetry]` output lines. |
+| **Telemetry** | -- | Token usage and cost data emitted by adapter CLIs during execution. Structured adapter telemetry is used for cost; token columns are parsed from `[otel]`, `[codex-telemetry]`, or `[telemetry]` output lines. |
+| **Cost per run** | `$/run` | Mean candidate dollar cost per run over runs with a known cost. Excludes judge cost. See [Dollar Cost](#dollar-cost). |
+| **Cost per true positive** | `$/TP` | Known candidate cost divided by the true positives found in those same runs. |
+| **Cost source** | `Cost src` | `reported` (provider-reported USD), `list` (API list-price estimate from tokens; not subscription billing), or `n/a` (unavailable). |
+| **Location flag** | `LocFlag` | A judge match whose violation is in a different file, or more than 5 lines outside the matched issue's `line_range`. Diagnostic only; still counted as a true positive. |
+| **Low-confidence match** | `LowConf` | A judge match rated `low` confidence. |
 | **Candidates Comparison** | -- | A JSON file (`evals/results/candidates-comparison.json`) that accumulates results across eval sessions for cross-run comparison. |

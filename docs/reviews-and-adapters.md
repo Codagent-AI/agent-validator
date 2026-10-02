@@ -117,6 +117,42 @@ That line is the requested overlay (source `runner-reviewer-role`, mapped adapte
 
 ## Recommended Defaults
 
+### Recommended Reviewer Configurations
+
+Based on the [2026-09-29 review eval](eval-report-2026-09-29.md) (`all-reviewers` fixture, 56 seeded issues, 3 runs for Claude low-effort and Codex low-effort configs, 1 run for the medium-effort config):
+
+| Option | Adapter | Model | `thinking_budget` | Recall | Precision | Cost / review | Time |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Preferred** | `claude` | `claude-sonnet-5-5` | `low` | 0.82 | 0.93 | ~$0.24 | ~1.5 min |
+| Codex, higher recall | `codex` | `gpt-6-sol` | `medium` | 0.70 | 0.74 | ~$0.15 | ~3.5 min |
+| Codex, fast | `codex` | `gpt-6-sol` | `low` | 0.54 | 0.65 | ~$0.09 | ~1.5 min |
+
+Use a single `all-reviewers` pass with the preferred Claude configuration:
+
+```yaml
+cli:
+  default_preference:
+    - claude
+  adapters:
+    claude:
+      allow_tool_use: false
+      thinking_budget: low
+      model: claude-sonnet-5-5
+
+entry_points:
+  - path: "."
+    reviews:
+      - all-reviewers:
+          builtin: all-reviewers
+```
+
+For Codex-only setups, set `cli.adapters.codex` to `model: gpt-6-sol` with `thinking_budget: medium` for better coverage, or `low` for a fast, cheap smoke pass.
+
+- Claude cost is what Claude Code reports; Codex cost is an OpenAI API list-price estimate, not subscription billing.
+- Raising Sonnet 5.5 to `medium`, or using Opus 5.5 at `low`, did not improve results. GPT-6 Astra cost more and scored lower than Sol at `low`. Sol at `high` reached 0.80 recall but took about 5 minutes per review.
+
+### Init-Generated Config
+
 The current init recommendation logic is:
 
 | Detected review CLI | Generated review config |
@@ -124,6 +160,8 @@ The current init recommendation logic is:
 | `github-copilot` available | Two-pass hybrid: `code-quality` via Sonnet and `security-and-errors` via GPT |
 | `codex` available, Copilot unavailable | Single `all-reviewers` pass with GPT Codex |
 | Neither available | Single `all-reviewers` pass without adapter-specific model overrides |
+
+Init does not yet generate the recommended configurations above; edit `.validator/config.yml` to adopt them.
 
 The review evaluation harness is documented in [Review Eval Framework](eval-framework.md). Dated eval reports live in this repository for historical detail.
 

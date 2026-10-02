@@ -29,6 +29,7 @@ test('recorded Claude accounting survives snapshot and consumer export without c
   expect(attempt.tokens.input_uncached.value).toBe(3);
   expect(attempt.tokens.output.value).toBe(4);
   expect(attempt.provider_native_usage).toContainEqual({source: 'provider_event', name: 'claude_otel_input', value: 3});
+  expect(attempt.provider_reported_costs).toMatchObject([{scope: 'attempt', amount: {value: 0.015039}, currency: {value: 'USD'}}]);
   const store = await MetricsStore.openExisting(directory);
   const exported = await store!.exportPending({consumer: 'runner', context: 'native-fixture', protocolVersion: 1, measurementVersions: [1]});
   const head = exported.records.filter(record => record.record_type === 'model_attempt').at(-1);
