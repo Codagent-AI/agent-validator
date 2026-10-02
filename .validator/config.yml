@@ -6,15 +6,6 @@ debug_log:
   max_size_mb: 10
 allow_parallel: true
 
-cli:
-  default_preference:
-    - codex
-  adapters:
-    codex:
-      model: gpt-6-sol
-      allow_tool_use: false
-      thinking_budget: low
-
 entry_points:
   - path: "."
     exclude:
