@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { mkdtemp, open, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { CommandMetricsLifecycle } from '../../src/metrics/command-lifecycle.js';
 import { createUnavailableTelemetry, observedMeasurement } from '../../src/cli-adapters/shared.js';
-import { MetricsStore } from '../../src/metrics/store.js';
+import { MetricsStore, type StoreFilesystem } from '../../src/metrics/store.js';
 import { CodexAdapter } from '../../src/cli-adapters/codex.js';
 import { AdapterExecutionFailure, type runStreamingCommand } from '../../src/cli-adapters/shared.js';
 import { invokeAdapter } from '../../src/gates/review-runtime-helpers.js';
@@ -25,6 +25,36 @@ async function temporaryLogDir(): Promise<string> {
   );
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function storeFilesystem(beforeFileSync: () => Promise<void>): StoreFilesystem {
+  return {
+    async syncFile(handle) {
+      await beforeFileSync();
+      await handle.sync();
+    },
+    async syncDirectory(directory) {
+      const handle = await open(directory, 'r');
+      try { await handle.sync(); } finally { await handle.close(); }
+    },
+  };
+}
+
+/** Every commit flushes two files, so each commit costs about twice this delay. */
+function slowStoreFilesystem(delayMs: number): StoreFilesystem {
+  return storeFilesystem(() => new Promise((resolve) => setTimeout(resolve, delayMs)));
+}
+
+function outputTelemetry(output: number) {
+  const telemetry = createUnavailableTelemetry('claude');
+  telemetry.tokens.output = observedMeasurement(output, 'provider_event');
+  telemetry.completeness.collection = 'partial';
+  return telemetry;
+}
+
+async function committedAttempts(logDir: string, sessionId: string | null) {
+  const store = await MetricsStore.openExisting(logDir);
+  return (await store.readCommittedSession(sessionId ?? '')).attempts;
 }
 
 describe('command metrics lifecycle', () => {
@@ -193,5 +223,106 @@ describe('command metrics lifecycle', () => {
       zero_dispatch: false,
       diagnostics: ['attempt_persistence_failed'],
     });
+  });
+
+  test('parallel finalization keeps a terminal attempt while a sibling bursts live progress on slow storage', async () => {
+    const logDir = await temporaryLogDir();
+    const lifecycle = new CommandMetricsLifecycle('review', null, { filesystem: slowStoreFilesystem(150) });
+    await lifecycle.associate(logDir);
+    const bursting = await lifecycle.prepareAttempt({ adapter: 'claude', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('claude') });
+    const quiet = await lifecycle.prepareAttempt({ adapter: 'claude', gate: 'review', slot: 2, telemetry: createUnavailableTelemetry('claude') });
+    for (let output = 1; output <= 10; output += 1) void lifecycle.observeAttempt(bursting, outputTelemetry(output));
+    // The sibling's burst already holds the store when the quiet review finishes.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await Promise.all([
+      lifecycle.finalizeAttempt(bursting, outputTelemetry(11), 'passed'),
+      lifecycle.finalizeAttempt(quiet, outputTelemetry(5), 'passed'),
+    ]);
+    const telemetry = await lifecycle.finalize('passed');
+
+    const attempts = await committedAttempts(logDir, telemetry.session_id);
+    const terminal = (attemptId: string) => attempts.find((item) => item.attempt_id === attemptId);
+    expect(terminal(quiet.attempt_id)).toMatchObject({ lifecycle: { state: 'completed' }, outcome: 'passed', tokens: { output: { value: 5 } } });
+    expect(terminal(bursting.attempt_id)).toMatchObject({ lifecycle: { state: 'completed' }, outcome: 'passed', tokens: { output: { value: 11 } } });
+    expect(telemetry.publication).toMatchObject({ state: 'published', reasons: [] });
+  }, 20_000);
+
+  test('coalesces queued live progress and lets the terminal write supersede it', async () => {
+    const logDir = await temporaryLogDir();
+    const lifecycle = new CommandMetricsLifecycle('review');
+    await lifecycle.associate(logDir);
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'claude', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('claude') });
+    const progress = Array.from({ length: 10 }, (_, index) => lifecycle.observeAttempt(prepared, outputTelemetry(index + 1)));
+
+    await lifecycle.finalizeAttempt(prepared, outputTelemetry(20), 'passed');
+    await Promise.all(progress);
+    const telemetry = await lifecycle.finalize('passed');
+
+    const [attempt] = await committedAttempts(logDir, telemetry.session_id);
+    expect(attempt).toMatchObject({ revision: 2, lifecycle: { state: 'completed' }, tokens: { output: { value: 20 } } });
+  });
+
+  test('a terminal failure without evidence keeps the partial evidence of the progress it superseded', async () => {
+    const logDir = await temporaryLogDir();
+    const lifecycle = new CommandMetricsLifecycle('review');
+    await lifecycle.associate(logDir);
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'claude', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('claude') });
+    void lifecycle.observeAttempt(prepared, outputTelemetry(7));
+
+    await lifecycle.finalizeAttempt(prepared, createUnavailableTelemetry('claude'), 'error');
+    const telemetry = await lifecycle.finalize('error');
+
+    const [attempt] = await committedAttempts(logDir, telemetry.session_id);
+    expect(attempt).toMatchObject({ lifecycle: { state: 'failed' }, tokens: { output: { value: 7 } }, completeness: { collection: 'partial' } });
+  });
+
+  test('retries a transiently failing terminal write before publishing', async () => {
+    const logDir = await temporaryLogDir();
+    let failures = 0;
+    const lifecycle = new CommandMetricsLifecycle('review', null, {
+      filesystem: storeFilesystem(async () => {
+        if (failures === 0) return;
+        failures -= 1;
+        throw new Error('injected transient flush failure');
+      }),
+      finalWriteRetryDelaysMs: [1, 1],
+    });
+    await lifecycle.associate(logDir);
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'claude', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('claude') });
+    failures = 1;
+
+    await lifecycle.finalizeAttempt(prepared, outputTelemetry(3), 'passed');
+    const telemetry = await lifecycle.finalize('passed');
+
+    expect(telemetry.publication).toMatchObject({ state: 'published', reasons: [] });
+    const [attempt] = await committedAttempts(logDir, telemetry.session_id);
+    expect(attempt).toMatchObject({ lifecycle: { state: 'completed' }, tokens: { output: { value: 3 } } });
+  });
+
+  test('warns with the saved reasons when the terminal write keeps failing', async () => {
+    const logDir = await temporaryLogDir();
+    let failing = false;
+    const lifecycle = new CommandMetricsLifecycle('review', null, {
+      filesystem: storeFilesystem(async () => {
+        if (failing) throw new Error('injected persistent flush failure');
+      }),
+      finalWriteRetryDelaysMs: [1, 1],
+    });
+    await lifecycle.associate(logDir);
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'claude', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('claude') });
+    failing = true;
+    await lifecycle.finalizeAttempt(prepared, outputTelemetry(3), 'passed');
+    failing = false;
+    const warn = spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const telemetry = await lifecycle.finalize('passed');
+
+      expect(telemetry.publication).toMatchObject({ state: 'degraded', reasons: ['attempt_persistence_failed'] });
+      const warnings = warn.mock.calls.map((call) => String(call[0]));
+      expect(warnings).toEqual([expect.stringContaining('injected persistent flush failure')]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

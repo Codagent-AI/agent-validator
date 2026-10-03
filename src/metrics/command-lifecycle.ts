@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AdapterTelemetry } from '../cli-adapters/shared.js';
 import { MetricsRecorder, type PublicationResult } from './recorder.js';
 import { recoverPendingSessionClosures } from './session-closure.js';
+import type { StoreFilesystem } from './store.js';
 import {
   type Invocation,
   MEASUREMENT_SCHEMA_VERSION,
@@ -47,6 +48,22 @@ export function validateMetricsContext(options: {
   };
 }
 
+export interface CommandMetricsOptions {
+  /** Storage durability hooks; tests inject slow or failing flushes here. */
+  filesystem?: StoreFilesystem;
+  /** Backoff before each retry of a failed terminal attempt write. */
+  finalWriteRetryDelaysMs?: readonly number[];
+}
+
+const DEFAULT_FINAL_WRITE_RETRY_DELAYS_MS = [100, 400, 1_600] as const;
+
+/** Per-attempt write chain. Live progress keeps only its newest unwritten snapshot. */
+interface AttemptWriteQueue {
+  tail: Promise<void>;
+  progress: AdapterTelemetry | null;
+  progressWrite: Promise<void> | null;
+}
+
 export interface PreparedAttempt {
   attempt_id: string;
   record: ModelAttempt | null;
@@ -63,12 +80,13 @@ export class CommandMetricsLifecycle {
   private record: Invocation | null = null;
   private unavailableReasons: string[] = [];
   private attemptPersistenceFailed = false;
-  private attemptWrites = new Map<string, Promise<void>>();
+  private attemptWrites = new Map<string, AttemptWriteQueue>();
   private terminalAttempts = new Set<string>();
 
   constructor(
     private readonly command: ValidationCommand,
     private context: { consumer: string; context_id: string } | null = null,
+    private readonly options: CommandMetricsOptions = {},
   ) {}
 
   setContext(context: { consumer: string; context_id: string } | null): void {
@@ -80,7 +98,10 @@ export class CommandMetricsLifecycle {
       const recovery = await recoverPendingSessionClosures(logDir);
       if (recovery.warnings.length > 0)
         throw new Error(recovery.warnings.join('; '));
-      this.recorder = await MetricsRecorder.open(logDir);
+      this.recorder = await MetricsRecorder.open(
+        logDir,
+        this.options.filesystem,
+      );
       const session = await this.recorder.openOrCreateActiveSession();
       this.sessionId = session.session_id;
       this.record = {
@@ -124,6 +145,15 @@ export class CommandMetricsLifecycle {
       });
     }
 
+    // Live-progress writes are fire-and-forget; settle them before the
+    // invocation's terminal revision and publication read the store.
+    await Promise.all(
+      [...this.attemptWrites.values()].map((queue) => queue.tail),
+    );
+    if (this.attemptPersistenceFailed)
+      console.warn(
+        `Metrics attempt telemetry was not fully persisted: ${[...new Set(this.unavailableReasons)].join('; ')}`,
+      );
     try {
       const committed = await this.recorder.readCommittedSession(
         this.sessionId,
@@ -247,7 +277,19 @@ export class CommandMetricsLifecycle {
   ): Promise<void> {
     if (this.terminalAttempts.has(prepared.attempt_id))
       return Promise.resolve();
-    return this.queueAttempt(prepared, telemetry, 'unknown', false);
+    const queue = this.attemptQueue(prepared.attempt_id);
+    queue.progress = structuredClone(telemetry);
+    if (queue.progressWrite) return queue.progressWrite;
+    const write = queue.tail.then(() => {
+      const evidence = queue.progress;
+      queue.progress = null;
+      queue.progressWrite = null;
+      if (!evidence) return;
+      return this.persistAttempt(prepared, evidence, 'unknown', false, null);
+    });
+    queue.progressWrite = write;
+    queue.tail = write;
+    return write;
   }
 
   finalizeAttempt(
@@ -255,24 +297,27 @@ export class CommandMetricsLifecycle {
     telemetry: AdapterTelemetry,
     outcome: 'passed' | 'failed' | 'error',
   ): Promise<void> {
-    if (this.terminalAttempts.has(prepared.attempt_id))
-      return this.attemptWrites.get(prepared.attempt_id) ?? Promise.resolve();
+    const queue = this.attemptQueue(prepared.attempt_id);
+    if (this.terminalAttempts.has(prepared.attempt_id)) return queue.tail;
     this.terminalAttempts.add(prepared.attempt_id);
-    return this.queueAttempt(prepared, telemetry, outcome, true);
+    // The terminal revision supersedes an unwritten progress snapshot; the
+    // snapshot is kept only as fallback evidence for an evidence-free failure.
+    const superseded = queue.progress;
+    queue.progress = null;
+    const evidence = structuredClone(telemetry);
+    queue.tail = queue.tail.then(() =>
+      this.persistAttempt(prepared, evidence, outcome, true, superseded),
+    );
+    return queue.tail;
   }
 
-  private queueAttempt(
-    prepared: PreparedAttempt,
-    telemetry: AdapterTelemetry,
-    outcome: ModelAttempt['outcome'],
-    terminal: boolean,
-  ): Promise<void> {
-    const evidence = structuredClone(telemetry);
-    const pending = (
-      this.attemptWrites.get(prepared.attempt_id) ?? Promise.resolve()
-    ).then(() => this.persistAttempt(prepared, evidence, outcome, terminal));
-    this.attemptWrites.set(prepared.attempt_id, pending);
-    return pending;
+  private attemptQueue(attemptId: string): AttemptWriteQueue {
+    let queue = this.attemptWrites.get(attemptId);
+    if (!queue) {
+      queue = { tail: Promise.resolve(), progress: null, progressWrite: null };
+      this.attemptWrites.set(attemptId, queue);
+    }
+    return queue;
   }
 
   private async persistAttempt(
@@ -280,22 +325,30 @@ export class CommandMetricsLifecycle {
     evidence: AdapterTelemetry,
     outcome: ModelAttempt['outcome'],
     terminal: boolean,
+    superseded: AdapterTelemetry | null,
   ): Promise<void> {
     if (!(prepared.record && this.recorder)) return;
+    const recorder = this.recorder;
     const current = prepared.record;
     let telemetry = evidence;
-    // An operational failure without new evidence cannot erase a previously
-    // committed partial measurement. It still cannot establish a complete total.
+    // An operational failure without new evidence cannot erase previously
+    // observed partial measurement, whether committed or still queued. It
+    // still cannot establish a complete total.
+    const previous = [superseded, current].find(
+      (candidate): candidate is AdapterTelemetry =>
+        candidate !== null &&
+        candidate.completeness.collection !== 'unavailable',
+    );
     if (
       outcome === 'error' &&
       telemetry.completeness.collection === 'unavailable' &&
-      current.completeness.collection !== 'unavailable'
+      previous
     ) {
       telemetry = {
-        ...current,
-        completeness: { ...current.completeness, collection: 'partial' },
+        ...previous,
+        completeness: { ...previous.completeness, collection: 'partial' },
         diagnostics: [
-          ...new Set([...current.diagnostics, ...telemetry.diagnostics]),
+          ...new Set([...previous.diagnostics, ...telemetry.diagnostics]),
         ],
       };
     }
@@ -327,7 +380,14 @@ export class CommandMetricsLifecycle {
     try {
       if (!validateAttempt(record).success)
         throw new Error('invalid_adapter_telemetry');
-      await this.recorder.updateAttempt(record);
+      // Progress is best effort and superseded by later evidence; the terminal
+      // revision is the attempt's only durable outcome, so it rides out
+      // transient storage or lock failures before giving up.
+      const retryDelays = terminal
+        ? (this.options.finalWriteRetryDelaysMs ??
+          DEFAULT_FINAL_WRITE_RETRY_DELAYS_MS)
+        : [];
+      await withRetries(() => recorder.updateAttempt(record), retryDelays);
       prepared.record = record;
     } catch (error) {
       this.attemptPersistenceFailed = true;
@@ -348,6 +408,20 @@ export class CommandMetricsLifecycle {
       },
     };
   }
+}
+
+async function withRetries(
+  action: () => Promise<void>,
+  delaysMs: readonly number[],
+): Promise<void> {
+  for (const delayMs of delaysMs) {
+    try {
+      return await action();
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return action();
 }
 
 function errorMessage(error: unknown): string {
