@@ -79,6 +79,7 @@
     "zod": "^4.3.5"
   },
   "overrides": {
+    "braces": "github:FSDevelop/braces#28d440b5dd449dbf1fe6f3506cf94ecca4d02660",
     "js-yaml": "3.15.2",
     "picomatch": "^4.0.4"
   }
