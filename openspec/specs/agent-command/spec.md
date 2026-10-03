@@ -26,27 +26,27 @@ The command template SHALL instruct the agent to infer the log directory from co
 - **AND** pass the inferred directory to subagents rather than hardcoding a log directory path
 
 ### Requirement: Issue Status Updates
-The command template SHALL instruct the agent to delegate status updates in review JSON files to an UPDATE subagent, passing fix/skip decisions as input.
+The command template SHALL instruct the agent to record review decisions with the `agent-validate update-review` command. The agent SHALL first run `agent-validate update-review list` to obtain violation IDs, then record each decision with `agent-validate update-review fix <id> "<what changed>"` or `agent-validate update-review skip <id> "<why>"`. The template SHALL instruct the agent not to edit files in the log directory directly.
 
 #### Scenario: Agent fixes an issue
 - **GIVEN** the EXTRACT subagent has returned a violation summary
 - **WHEN** the agent successfully fixes a reported violation
-- **THEN** the agent passes the decision (status `"fixed"` and a brief result description) to an UPDATE subagent
-- **AND** the UPDATE subagent updates the violation's `status` and `result` fields in the JSON file
+- **THEN** the agent runs `agent-validate update-review fix <id> "<what changed>"` with the violation's ID from `agent-validate update-review list`
+- **AND** the violation's `status` becomes `"fixed"` with the description as its `result`
 
 #### Scenario: Agent skips an issue
 - **GIVEN** the EXTRACT subagent has returned a violation summary
 - **WHEN** the agent decides to skip a reported violation
-- **THEN** the agent passes the decision (status `"skipped"` and a brief reason) to an UPDATE subagent
-- **AND** the UPDATE subagent updates the violation's `status` and `result` fields in the JSON file
+- **THEN** the agent runs `agent-validate update-review skip <id> "<why>"` with the violation's ID from `agent-validate update-review list`
+- **AND** the violation's `status` becomes `"skipped"` with the reason as its `result`
 
-#### Scenario: Agent preserves other attributes
-- **GIVEN** the agent has passed fix/skip decisions to the UPDATE subagent
-- **WHEN** the UPDATE subagent updates a violation's status in the JSON file
-- **THEN** it SHALL NOT modify other attributes such as `file`, `line`, `issue`, `fix`, or `priority`
+#### Scenario: Agent does not edit log files directly
+- **GIVEN** the agent has fix/skip decisions to record
+- **WHEN** the agent reads the template instructions
+- **THEN** the template SHALL prohibit editing review JSON files or other files in the log directory directly
 
 ### Requirement: Subagent Delegation Pattern
-The validator-run skill SHALL use a two-phase subagent delegation pattern to keep the main agent's context window free of log and JSON file contents. All log and JSON file access SHALL be performed via subagent Task calls.
+The validator-run skill SHALL use an EXTRACT subagent to keep the main agent's context window free of log and JSON file contents. Log and JSON file reads SHALL be performed via the EXTRACT subagent; review decisions SHALL be recorded with `agent-validate update-review`.
 
 #### Scenario: EXTRACT subagent reads failures
 - **GIVEN** the validator run command has exited with a non-zero code
@@ -64,12 +64,6 @@ The validator-run skill SHALL use a two-phase subagent delegation pattern to kee
 - **WHEN** the EXTRACT subagent reads the review gate JSON file
 - **THEN** it SHALL extract violations with status `"new"` and return each violation's file, line, issue summary, priority, and fix suggestion
 
-#### Scenario: UPDATE subagent writes decisions
-- **GIVEN** the agent has completed fixing code and determined fix/skip decisions for review violations
-- **WHEN** the agent is ready to record its decisions
-- **THEN** the agent SHALL spawn a synchronous UPDATE subagent (Task tool, general-purpose, cost-optimized model) with the log directory path and the list of decisions
-- **AND** the UPDATE subagent SHALL match violations by exact equality on `file` and `line` fields and by prefix match on the `issue` field, then update `status` and `result` fields
-
 ### Requirement: Subagent Safety Constraint
 The validator-run skill SHALL explicitly prohibit background subagent execution to prevent context pollution from the TaskOutput truncation bug.
 
@@ -85,12 +79,12 @@ The validator-run skill SHALL include separate prompt template files for each su
 #### Scenario: Prompt files generated during init
 - **GIVEN** a user runs `agent-validator init`
 - **WHEN** the init command generates the validator-run skill
-- **THEN** it SHALL create three files: `SKILL.md`, `extract-prompt.md`, and `update-prompt.md` in the validator-run skill directory
+- **THEN** it SHALL create two files: `SKILL.md` and `extract-prompt.md` in the validator-run skill directory
 
 #### Scenario: SKILL.md references prompt templates
 - **GIVEN** the validator-run skill has been installed
 - **WHEN** the agent reads the validator-run SKILL.md
-- **THEN** it SHALL find instructions to read `extract-prompt.md` and `update-prompt.md` from the same directory and use their content as subagent prompts
+- **THEN** it SHALL find instructions to read `extract-prompt.md` from the same directory and use its content as the subagent prompt
 
 ### Requirement: Agent Validator-Run Skill Allowed Tools
 The validator-run skill SHALL declare both `Bash` and `Task` in its `allowed-tools` frontmatter to enable subagent delegation.
