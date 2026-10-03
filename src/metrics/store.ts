@@ -152,8 +152,17 @@ const realFilesystem: StoreFilesystem = {
 };
 
 const LOCK_OWNER_FILENAME = 'owner.json';
+const LOCK_ACQUISITION_TIMEOUT_MS = 2_000;
 const INCOMPLETE_LOCK_STALE_MS = 30_000;
 const MAXIMUM_INDIVIDUAL_RECORD_BYTES = 3_000_000;
+
+/**
+ * Same-process writers wait their turn here instead of spinning on the
+ * filesystem lock, which is unfair and would let one writer's burst exhaust a
+ * sibling's acquisition deadline. The deadline then bounds only cross-process
+ * contention. Keyed by lock path so every store instance on one root shares it.
+ */
+const processWriteQueues = new Map<string, Promise<unknown>>();
 
 function recordId(record: MetricRecord): string {
   return record.record_type === 'invocation'
@@ -661,7 +670,7 @@ export class MetricsStore {
   ): Promise<void> {
     const id = recordId(record);
     const current = state.heads[id];
-    if (current && record.revision <= current.revision)
+    if (current && record.revision < current.revision)
       throw new Error(`Metrics revision must increase: ${id}`);
     const envelope: StoredMetricRecord = {
       record_type: record.record_type,
@@ -685,6 +694,15 @@ export class MetricsStore {
       MAXIMUM_INDIVIDUAL_RECORD_BYTES
     )
       throw new Error('Metrics record exceeds individual record byte limit');
+    if (current?.revision === record.revision) {
+      // A retry after the earlier state rename landed but its durability
+      // barrier failed. Only identical content is the same revision; the
+      // caller's state commit then repeats that barrier.
+      const existing = await this.readRecord(id, record.revision);
+      if (existing.digest.value !== envelope.digest.value)
+        throw new Error(`Metrics revision must increase: ${id}`);
+      return;
+    }
     const destination = path.join(
       this.recordsPath,
       id,
@@ -934,9 +952,21 @@ export class MetricsStore {
     return null;
   }
 
-  private async withLock<T>(action: () => Promise<T>): Promise<T> {
+  private withLock<T>(action: () => Promise<T>): Promise<T> {
+    const previous = processWriteQueues.get(this.lockPath) ?? Promise.resolve();
+    const result = previous.then(() => this.withProcessLock(action));
+    const tail = result.catch(() => undefined);
+    processWriteQueues.set(this.lockPath, tail);
+    void tail.then(() => {
+      if (processWriteQueues.get(this.lockPath) === tail)
+        processWriteQueues.delete(this.lockPath);
+    });
+    return result;
+  }
+
+  private async withProcessLock<T>(action: () => Promise<T>): Promise<T> {
     const nonce = randomUUID();
-    const deadline = Date.now() + 2_000;
+    const deadline = Date.now() + LOCK_ACQUISITION_TIMEOUT_MS;
     for (;;) {
       try {
         await fs.mkdir(this.lockPath);

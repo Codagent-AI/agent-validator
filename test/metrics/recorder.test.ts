@@ -164,6 +164,27 @@ describe('durable metrics recorder', () => {
     expect(records.invocations[0]?.attempt_ids).toEqual([]);
   });
 
+  test('serializes same-process commits so slow storage never exhausts the cross-process lock deadline', async () => {
+    const logDir = await temporaryLogDir();
+    const recorder = await MetricsRecorder.open(logDir, {
+      async syncFile(handle) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        await handle.sync();
+      },
+      async syncDirectory(directory) {
+        const handle = await open(directory, 'r');
+        try { await handle.sync(); } finally { await handle.close(); }
+      },
+    });
+    const session = await recorder.createSession();
+
+    const ids = Array.from({ length: 10 }, (_, index) => `invocation-${index}`);
+    await Promise.all(ids.map((id) => recorder.recordInvocation(invocation(id, session.session_id))));
+
+    const records = await recorder.readCommittedSession(session.session_id);
+    expect(records.invocations.map((item) => item.invocation_id).sort()).toEqual([...ids].sort());
+  }, 20_000);
+
   test('will not join or dispatch into a closed session', async () => {
     const logDir = await temporaryLogDir();
     const recorder = await MetricsRecorder.open(logDir);
