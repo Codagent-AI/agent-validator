@@ -335,7 +335,11 @@ export class ClaudeAdapter implements CLIAdapter {
     opts.onOutput?.(cleaned);
     return {
       text: cleaned,
-      telemetry: parseClaudeOtelTelemetry(raw, opts.telemetryOpts),
+      // Reached only after a successful exit, so the final export is present.
+      telemetry: parseClaudeOtelTelemetry(raw, {
+        ...opts.telemetryOpts,
+        processCompleted: true,
+      }),
     };
   }
 }

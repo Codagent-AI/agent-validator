@@ -6,6 +6,57 @@ import { createClaudeTelemetryCollector, parseClaudeOtelTelemetry, scanOtelBlock
 const fixture = (name: string) => readFile(new URL(`./fixtures/native-telemetry/${name}`, import.meta.url), 'utf8');
 
 describe('recorded native telemetry accounting', () => {
+  // Recorded from Claude Code 2.1.288 with a subagent and a 1 s export interval:
+  // 14 cumulative metric exports, each carrying one series per thread and model,
+  // with the metric descriptor's own `type: "COUNTER"` ahead of the data points.
+  // Its five api_request events sum to exactly the final export's series.
+  const SUBAGENT_FIXTURE = 'claude-2.1.288-subagent-cumulative.txt';
+  const SUBAGENT_TOTALS = {input: 10, output: 1319, cacheRead: 76346, cacheCreation: 51329};
+
+  test('Claude sums every thread series of the latest cumulative export', async () => {
+    const telemetry = parseClaudeOtelTelemetry(await fixture(SUBAGENT_FIXTURE));
+    expect(telemetry.tokens.input_uncached.value).toBe(SUBAGENT_TOTALS.input);
+    expect(telemetry.tokens.output.value).toBe(SUBAGENT_TOTALS.output);
+    expect(telemetry.tokens.cache_read.value).toBe(SUBAGENT_TOTALS.cacheRead);
+    expect(telemetry.tokens.cache_write.value).toBe(SUBAGENT_TOTALS.cacheCreation);
+    expect(telemetry.tokens.input_total.value).toBe(127685);
+    // A process that has not been seen to finish may still have unexported work.
+    expect(telemetry.tokens.normalized_total.availability).toBe('unavailable');
+    expect(telemetry.completeness.collection).toBe('partial');
+  });
+
+  test('Claude establishes the total once the process completed its final export', async () => {
+    const telemetry = parseClaudeOtelTelemetry(await fixture(SUBAGENT_FIXTURE), {processCompleted: true});
+    expect(telemetry.tokens.input_total.value).toBe(127685);
+    expect(telemetry.tokens.normalized_total).toMatchObject({
+      availability: 'available', value: 129004, origin: 'derived', source: 'validator_derivation',
+    });
+    expect(telemetry.completeness.collection).toBe('complete');
+    expect(telemetry.completeness.normalized_total).toBe('complete');
+    expect(telemetry.diagnostics).toEqual([]);
+  });
+
+  test('Claude streaming checkpoints end at the same thread totals', async () => {
+    const values: number[] = [];
+    const collector = createClaudeTelemetryCollector({}, telemetry => values.push(telemetry.tokens.input_total.value!));
+    collector.write(await fixture(SUBAGENT_FIXTURE));
+    collector.flush();
+    expect(values.at(-1)).toBe(127685);
+  });
+
+  test('Claude never establishes a total from request events or an incomplete input breakdown', async () => {
+    const {logBlocks, metricBlocks} = scanOtelBlocks(await fixture(SUBAGENT_FIXTURE));
+    const fromLogs = parseClaudeOtelTelemetry(logBlocks.join('\n'), {processCompleted: true});
+    expect(fromLogs.tokens.normalized_total.availability).toBe('unavailable');
+    expect(fromLogs.completeness.collection).toBe('partial');
+    const lastExport = metricBlocks.filter(block => block.includes('claude_code.token.usage')).at(-1)!;
+    const withoutCacheWrite = lastExport.replace(/type: "cacheCreation"/g, 'type: "somethingElse"');
+    const partial = parseClaudeOtelTelemetry(withoutCacheWrite, {processCompleted: true});
+    expect(partial.tokens.input_total.availability).toBe('unavailable');
+    expect(partial.tokens.normalized_total.availability).toBe('unavailable');
+    expect(partial.completeness.collection).toBe('partial');
+  });
+
   test('Claude checkpoints prefer cumulative metrics over overlapping request events in either order', async () => {
     const {metricBlocks, logBlocks} = scanOtelBlocks(await fixture('claude-2.1.261-cache-write.txt'));
     for (const blocks of [[...metricBlocks,...logBlocks],[...logBlocks,...metricBlocks]]) {
@@ -50,7 +101,7 @@ describe('recorded native telemetry accounting', () => {
     expect(telemetry.tokens.input_total).toMatchObject({value: total, origin: 'derived', source: 'validator_derivation'});
     expect(telemetry.tokens.output.value).toBe(4);
     expect(telemetry.provider_native_usage).toContainEqual({source: 'provider_event', name: 'claude_otel_input', value: uncached});
-    expect(telemetry.provenance.adapter_mapping_version).toBe('claude-otel-accounting-v3');
+    expect(telemetry.provenance.adapter_mapping_version).toBe('claude-otel-series-v4');
     expect(telemetry.tokens.normalized_total.availability).toBe('unavailable');
   });
 

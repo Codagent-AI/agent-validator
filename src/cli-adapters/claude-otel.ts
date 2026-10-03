@@ -43,35 +43,54 @@ export {
   scanOtelBlocks,
 } from './claude-otel-scanner.js';
 
-// ─── Metric Parsing (unchanged) ─────────────────────────────────────────────
+// ─── Metric Parsing ─────────────────────────────────────────────────────────
 
 const TOKEN_TYPES = ['input', 'output', 'cacheRead', 'cacheCreation'] as const;
+type TokenType = (typeof TOKEN_TYPES)[number];
 
-function parseTokenBlock(block: string): Partial<OtelUsage> {
-  const result: Partial<OtelUsage> = {};
-  const re = /type:\s*"(\w+)"[\s\S]*?value:\s*(\d+)(?:,|\s*\})/g;
-  for (const match of block.matchAll(re)) {
-    const type = match[1] as (typeof TOKEN_TYPES)[number] | undefined;
-    const value = match[2];
-    if (!(type && value)) continue;
-    if (TOKEN_TYPES.includes(type)) {
-      result[type] = Number.parseInt(value, 10);
-    }
+/**
+ * Latest value of each token counter series, keyed by its attribute set.
+ * Claude exports cumulative counters, one series per thread (`query_source`),
+ * model, and token type, and re-exports every series on each interval. The
+ * latest value of each series is its total; the attempt's usage is their sum.
+ */
+type TokenSeries = Map<string, { type: TokenType; value: number }>;
+
+// A data point's attributes are matched as a unit, and its value must follow
+// them before any other attribute set, so the metric descriptor's own
+// `type: "COUNTER"` can never pair with a data point's value.
+const TOKEN_POINT_RE =
+  /attributes:\s*\{([^{}]*)\}(?:(?!attributes:)[\s\S])*?\bvalue:\s*(\d+)(?=\s*[,}\n])/g;
+
+function recordTokenSeries(block: string, series: TokenSeries): void {
+  for (const match of block.matchAll(TOKEN_POINT_RE)) {
+    const attributes = match[1] ?? '';
+    const type = attributes.match(/\btype:\s*"(\w+)"/)?.[1];
+    if (!(type && (TOKEN_TYPES as readonly string[]).includes(type))) continue;
+    series.set(attributes.replace(/\s+/g, ' ').trim(), {
+      type: type as TokenType,
+      value: Number.parseInt(match[2] ?? '', 10),
+    });
   }
-  return result;
+}
+
+function sumTokenSeries(series: TokenSeries): Partial<OtelUsage> {
+  const usage: Partial<OtelUsage> = {};
+  for (const { type, value } of series.values()) {
+    usage[type] = (usage[type] ?? 0) + value;
+  }
+  return usage;
 }
 
 function parseOtelMetrics(blocks: string[]): OtelUsage {
-  const usage: OtelUsage = {};
+  const series: TokenSeries = new Map();
   for (const block of blocks) {
     const nameMatch = block.match(/name:\s*"([^"]+)"/);
-    if (!nameMatch) continue;
-
-    if (nameMatch[1] === 'claude_code.token.usage') {
-      Object.assign(usage, parseTokenBlock(block));
+    if (nameMatch?.[1] === 'claude_code.token.usage') {
+      recordTokenSeries(block, series);
     }
   }
-  return usage;
+  return sumTokenSeries(series);
 }
 
 // ─── Log Event Parsing ──────────────────────────────────────────────────────
@@ -211,6 +230,7 @@ export function safeExtractOtelMetrics(
 function canonicalClaudeUsage(raw: string): {
   usage: OtelUsage;
   completeRequestInputs: boolean;
+  fromMetrics: boolean;
   cost?: ClaudeCost;
 } {
   const { metricBlocks, logBlocks } = scanOtelBlocks(raw);
@@ -222,6 +242,7 @@ function canonicalClaudeUsage(raw: string): {
     return {
       usage: parseOtelMetrics(tokenMetrics),
       completeRequestInputs: true,
+      fromMetrics: true,
       cost,
     };
   }
@@ -237,7 +258,7 @@ function canonicalClaudeUsage(raw: string): {
       OTEL_ATTR_RE.cache_creation_tokens,
     ].every((field) => field.test(block));
   }
-  return { usage, completeRequestInputs, cost };
+  return { usage, completeRequestInputs, fromMetrics: false, cost };
 }
 
 function claudeInputTotal(
@@ -270,14 +291,66 @@ export type ClaudeTelemetryOpts = {
   requestedModel?: string;
   thinkingBudget?: string;
   resolvedEffort?: string | null;
+  /**
+   * The Claude process exited successfully, so its final cumulative metric
+   * export was written. Only then can the counters stand as complete totals.
+   */
+  processCompleted?: boolean;
 };
 
 export function parseClaudeOtelTelemetry(
   raw: string,
   opts: ClaudeTelemetryOpts = {},
 ): AdapterTelemetry {
-  const { usage, completeRequestInputs, cost } = canonicalClaudeUsage(raw);
-  return createClaudeTelemetry(usage, completeRequestInputs, opts, cost);
+  const { usage, completeRequestInputs, fromMetrics, cost } =
+    canonicalClaudeUsage(raw);
+  return createClaudeTelemetry(
+    usage,
+    completeRequestInputs,
+    opts,
+    cost,
+    fromMetrics,
+  );
+}
+
+/**
+ * The metric counters cover every thread and take precedence over the
+ * overlapping request events, which are never added to them. Once the process
+ * has exited successfully its final export holds the whole run, so a complete
+ * input breakdown plus output is the attempt's total.
+ */
+function labelClaudeCompleteness(
+  telemetry: AdapterTelemetry,
+  finalMetricExport: boolean,
+): void {
+  const { input_total, output } = telemetry.tokens;
+  if (
+    finalMetricExport &&
+    input_total.availability === 'available' &&
+    output.availability === 'available'
+  ) {
+    telemetry.tokens.normalized_total = {
+      availability: 'available',
+      value: input_total.value + output.value,
+      reason: null,
+      source: 'validator_derivation',
+      origin: 'derived',
+      precision: 'exact',
+      derivation: 'claude_input_total_plus_output',
+      included_in: null,
+    };
+    telemetry.completeness.normalized_total = 'complete';
+    telemetry.completeness.collection = 'complete';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = [];
+  } else if (telemetry.provider_native_usage.length > 0) {
+    telemetry.completeness.collection = 'partial';
+    telemetry.completeness.canonical_fields = 'partial';
+    telemetry.diagnostics = [
+      'claude_metric_request_overlap_unresolved',
+      'claude_normalized_total_not_established',
+    ];
+  }
 }
 
 function createClaudeTelemetry(
@@ -285,6 +358,7 @@ function createClaudeTelemetry(
   completeRequestInputs: boolean,
   opts: ClaudeTelemetryOpts,
   cost?: ClaudeCost,
+  fromMetrics = false,
 ): AdapterTelemetry {
   const telemetry = createUnavailableTelemetry('claude', {
     requestedModel: opts.requestedModel,
@@ -333,20 +407,16 @@ function createClaudeTelemetry(
       value: cost.amount,
     });
   }
-  if (telemetry.provider_native_usage.length > 0) {
-    telemetry.completeness.collection = 'partial';
-    telemetry.completeness.canonical_fields = 'partial';
-    telemetry.diagnostics = [
-      'claude_metric_request_overlap_unresolved',
-      'claude_normalized_total_not_established',
-    ];
-  }
+  labelClaudeCompleteness(
+    telemetry,
+    opts.processCompleted === true && fromMetrics,
+  );
   telemetry.provenance.source_format_version = {
     availability: 'available',
     value: 'claude-otel-console',
     reason: null,
   };
-  telemetry.provenance.adapter_mapping_version = 'claude-otel-accounting-v3';
+  telemetry.provenance.adapter_mapping_version = 'claude-otel-series-v4';
   return telemetry;
 }
 
@@ -355,7 +425,7 @@ export function createClaudeTelemetryCollector(
   opts: ClaudeTelemetryOpts,
   onTelemetry: (telemetry: AdapterTelemetry) => void,
 ) {
-  const metrics: OtelUsage = {};
+  const series: TokenSeries = new Map();
   const requests: OtelUsage = {};
   const costs = createClaudeCostTally();
   let seenMetrics = false;
@@ -372,7 +442,7 @@ export function createClaudeTelemetryCollector(
     const kind = classifyBlock(raw);
     if (kind === 'metric' && /name:\s*"claude_code\.token\.usage"/.test(raw)) {
       seenMetrics = true;
-      Object.assign(metrics, parseTokenBlock(raw));
+      recordTokenSeries(raw, series);
     } else if (kind === 'metric' && isClaudeCostMetric(raw)) {
       tallyCostMetric(costs, raw);
     } else if (
@@ -389,7 +459,7 @@ export function createClaudeTelemetryCollector(
     } else return;
     onTelemetry(
       createClaudeTelemetry(
-        seenMetrics ? metrics : requests,
+        seenMetrics ? sumTokenSeries(series) : requests,
         seenMetrics || completeRequestInputs,
         opts,
         resolveClaudeCost(costs),
