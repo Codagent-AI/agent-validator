@@ -670,7 +670,7 @@ export class MetricsStore {
   ): Promise<void> {
     const id = recordId(record);
     const current = state.heads[id];
-    if (current && record.revision <= current.revision)
+    if (current && record.revision < current.revision)
       throw new Error(`Metrics revision must increase: ${id}`);
     const envelope: StoredMetricRecord = {
       record_type: record.record_type,
@@ -694,6 +694,15 @@ export class MetricsStore {
       MAXIMUM_INDIVIDUAL_RECORD_BYTES
     )
       throw new Error('Metrics record exceeds individual record byte limit');
+    if (current?.revision === record.revision) {
+      // A retry after the earlier state rename landed but its durability
+      // barrier failed. Only identical content is the same revision; the
+      // caller's state commit then repeats that barrier.
+      const existing = await this.readRecord(id, record.revision);
+      if (existing.digest.value !== envelope.digest.value)
+        throw new Error(`Metrics revision must increase: ${id}`);
+      return;
+    }
     const destination = path.join(
       this.recordsPath,
       id,

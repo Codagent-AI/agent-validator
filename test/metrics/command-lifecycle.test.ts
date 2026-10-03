@@ -300,6 +300,35 @@ describe('command metrics lifecycle', () => {
     expect(attempt).toMatchObject({ lifecycle: { state: 'completed' }, tokens: { output: { value: 3 } } });
   });
 
+  test('a retried terminal write whose state landed before its directory sync failed is not reported lost', async () => {
+    const logDir = await temporaryLogDir();
+    let stateSyncFailures = 0;
+    const lifecycle = new CommandMetricsLifecycle('review', null, {
+      filesystem: {
+        syncFile: (handle) => handle.sync(),
+        async syncDirectory(directory) {
+          if (directory === path.join(logDir, '.metrics') && stateSyncFailures > 0) {
+            stateSyncFailures -= 1;
+            throw new Error('injected state directory sync failure');
+          }
+          const handle = await open(directory, 'r');
+          try { await handle.sync(); } finally { await handle.close(); }
+        },
+      },
+      finalWriteRetryDelaysMs: [1, 1],
+    });
+    await lifecycle.associate(logDir);
+    const prepared = await lifecycle.prepareAttempt({ adapter: 'claude', gate: 'review', slot: 1, telemetry: createUnavailableTelemetry('claude') });
+    stateSyncFailures = 1;
+
+    await lifecycle.finalizeAttempt(prepared, outputTelemetry(3), 'passed');
+    const telemetry = await lifecycle.finalize('passed');
+
+    expect(telemetry.publication).toMatchObject({ state: 'published', reasons: [] });
+    const [attempt] = await committedAttempts(logDir, telemetry.session_id);
+    expect(attempt).toMatchObject({ revision: 2, lifecycle: { state: 'completed' }, tokens: { output: { value: 3 } } });
+  });
+
   test('warns with the saved reasons when the terminal write keeps failing', async () => {
     const logDir = await temporaryLogDir();
     let failing = false;
