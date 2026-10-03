@@ -4,38 +4,44 @@
 Specifies the agent-facing skill templates and workflows for interacting with Agent Validator.
 
 ## Requirements
-### Requirement: Issue Output Path Instructions
-The command template SHALL instruct the agent to infer the log directory from console output paths and delegate file reading to a subagent, rather than reading log and JSON files directly.
+### Requirement: Failed Run Details
+When a run fails, the validator-run skill SHALL obtain pending review violations from `agent-validate update-review list`, including each violation's ID, priority, gate, file and line, issue, and suggested fix. For failed checks, it SHALL use the command, fix instructions or fix skill, and log path reported by the run's console output or `--report` CHECK FAILURES section. To inspect check errors, the agent SHALL read only the named check log file or re-run the reported command. It SHALL NOT infer, list, or scan the log directory or read review JSON files.
 
-#### Scenario: Check failure output
-- **GIVEN** the validator run command has exited with a non-zero code
-- **WHEN** a check gate failure appears in the console output
-- **THEN** the console output includes the log file path
-- **AND** the template instructs the agent to pass the log directory path to an EXTRACT subagent that reads the log file and returns a compact error summary
+#### Scenario: Review violations after a failed run
+- **GIVEN** the validator run reports `Status: Failed`
+- **WHEN** the agent collects pending review violations
+- **THEN** it SHALL run `agent-validate update-review list`
+- **AND** it SHALL report the listed IDs, priorities, gates, file and line, issues, and suggested fixes
 
-#### Scenario: Review failure output
-- **GIVEN** the validator run command has exited with a non-zero code
-- **WHEN** a review gate failure appears in the console output
-- **THEN** the console output includes the JSON result file path
-- **AND** the template instructs the agent to pass the log directory path to an EXTRACT subagent that reads the JSON file and returns a compact violation summary
+#### Scenario: Check failure from a reported log
+- **GIVEN** a failed check appears in the run output with a log path
+- **WHEN** the agent needs the error output
+- **THEN** it SHALL read only that named log file
+- **AND** it SHALL use the run's reported command and fix instructions or fix skill
 
-#### Scenario: Log directory inference
-- **GIVEN** the validator run command has produced console output
-- **WHEN** the output contains file paths referencing log or JSON files
-- **THEN** the agent SHALL infer the log directory from the path prefix of any referenced log or JSON file
-- **AND** pass the inferred directory to subagents rather than hardcoding a log directory path
+#### Scenario: Check failure from a reported command
+- **GIVEN** a failed check appears in the run output with a command
+- **WHEN** the agent needs to reproduce the error output
+- **THEN** it MAY re-run that command in its reported working directory
+- **AND** it SHALL NOT infer, list, or scan the log directory
+
+#### Scenario: Review details without JSON reads
+- **GIVEN** the run reports a review failure
+- **WHEN** the agent collects its violations
+- **THEN** it SHALL use `agent-validate update-review list`
+- **AND** it SHALL NOT read review JSON files directly
 
 ### Requirement: Issue Status Updates
 The command template SHALL instruct the agent to record review decisions with the `agent-validate update-review` command. The agent SHALL first run `agent-validate update-review list` to obtain violation IDs, then record each decision with `agent-validate update-review fix <id> "<what changed>"` or `agent-validate update-review skip <id> "<why>"`. The template SHALL instruct the agent not to edit files in the log directory directly.
 
 #### Scenario: Agent fixes an issue
-- **GIVEN** the EXTRACT subagent has returned a violation summary
+- **GIVEN** `agent-validate update-review list` has returned the violation and its ID
 - **WHEN** the agent successfully fixes a reported violation
 - **THEN** the agent runs `agent-validate update-review fix <id> "<what changed>"` with the violation's ID from `agent-validate update-review list`
 - **AND** the violation's `status` becomes `"fixed"` with the description as its `result`
 
 #### Scenario: Agent skips an issue
-- **GIVEN** the EXTRACT subagent has returned a violation summary
+- **GIVEN** `agent-validate update-review list` has returned the violation and its ID
 - **WHEN** the agent decides to skip a reported violation
 - **THEN** the agent runs `agent-validate update-review skip <id> "<why>"` with the violation's ID from `agent-validate update-review list`
 - **AND** the violation's `status` becomes `"skipped"` with the reason as its `result`
@@ -45,54 +51,13 @@ The command template SHALL instruct the agent to record review decisions with th
 - **WHEN** the agent reads the template instructions
 - **THEN** the template SHALL prohibit editing review JSON files or other files in the log directory directly
 
-### Requirement: Subagent Delegation Pattern
-The validator-run skill SHALL use an EXTRACT subagent to keep the main agent's context window free of log and JSON file contents. Log and JSON file reads SHALL be performed via the EXTRACT subagent; review decisions SHALL be recorded with `agent-validate update-review`.
-
-#### Scenario: EXTRACT subagent reads failures
-- **GIVEN** the validator run command has exited with a non-zero code
-- **WHEN** the agent detects the failure
-- **THEN** the agent SHALL spawn a synchronous EXTRACT subagent (Task tool, general-purpose, cost-optimized model) with the log directory path
-- **AND** the EXTRACT subagent SHALL find the highest-numbered `console.N.log`, identify `[FAIL]` lines, read the referenced log and JSON files, and return a compact plain-text summary
-
-#### Scenario: EXTRACT subagent extracts check errors
-- **GIVEN** the EXTRACT subagent has identified a failed check gate from the console log
-- **WHEN** the EXTRACT subagent reads the check gate log file
-- **THEN** it SHALL extract error output, any `--- Fix Instructions ---` section content, and any `--- Fix Skill: <name> ---` section references
-
-#### Scenario: EXTRACT subagent extracts review violations
-- **GIVEN** the EXTRACT subagent has identified a failed review gate from the console log
-- **WHEN** the EXTRACT subagent reads the review gate JSON file
-- **THEN** it SHALL extract violations with status `"new"` and return each violation's file, line, issue summary, priority, and fix suggestion
-
-### Requirement: Subagent Safety Constraint
-The validator-run skill SHALL explicitly prohibit background subagent execution to prevent context pollution from the TaskOutput truncation bug.
-
-#### Scenario: Synchronous subagent calls only
-- **GIVEN** the validator-run skill template contains subagent dispatch instructions
-- **WHEN** the agent reads the skill instructions
-- **THEN** the template SHALL include an explicit warning that `run_in_background: true` MUST NOT be used
-- **AND** all subagent Task calls SHALL be synchronous (blocking)
-
-### Requirement: Subagent Prompt Template Files
-The validator-run skill SHALL include separate prompt template files for each subagent role, generated alongside SKILL.md during init.
-
-#### Scenario: Prompt files generated during init
-- **GIVEN** a user runs `agent-validator init`
-- **WHEN** the init command generates the validator-run skill
-- **THEN** it SHALL create two files: `SKILL.md` and `extract-prompt.md` in the validator-run skill directory
-
-#### Scenario: SKILL.md references prompt templates
-- **GIVEN** the validator-run skill has been installed
-- **WHEN** the agent reads the validator-run SKILL.md
-- **THEN** it SHALL find instructions to read `extract-prompt.md` from the same directory and use its content as the subagent prompt
-
 ### Requirement: Agent Validator-Run Skill Allowed Tools
-The validator-run skill SHALL declare both `Bash` and `Task` in its `allowed-tools` frontmatter to enable subagent delegation.
+The validator-run skill SHALL declare `Bash` only in its `allowed-tools` frontmatter.
 
-#### Scenario: Allowed tools include Task
+#### Scenario: Allowed tools include Bash only
 - **GIVEN** `agent-validator init` generates the validator-run skill
 - **WHEN** the skill frontmatter is written
-- **THEN** the `allowed-tools` field SHALL include both `Bash` and `Task`
+- **THEN** the `allowed-tools` field SHALL be `Bash`
 
 ### Requirement: Retry Termination
 The command template SHALL NOT include a hardcoded retry limit. Instead, the template SHALL instruct the agent to repeat the run/fix cycle until the script reports a terminal status. The termination conditions SHALL be: "Passed", "Passed with warnings", or "Retry limit exceeded". When "Retry limit exceeded" is reported, the template SHALL instruct the agent to run `agent-validate clean` to archive logs and include any unverified fixes in the session summary.
