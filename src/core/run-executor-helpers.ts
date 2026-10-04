@@ -5,7 +5,11 @@ import { getCategoryLogger, resetLogger } from '../output/app-logger.js';
 import { ConsoleReporter } from '../output/console.js';
 import type { ConsoleLogHandle } from '../output/console-log.js';
 import type { Logger } from '../output/logger.js';
-import { generateReport, writeReportFallback } from '../output/report.js';
+import {
+  generateReport,
+  UPDATE_REVIEW_HINT,
+  writeReportFallback,
+} from '../output/report.js';
 import type { RunResult, ValidatorStatus } from '../types/validator-status.js';
 import { getDebugLogger } from '../utils/debug-log.js';
 import {
@@ -271,7 +275,7 @@ export async function handleNoChanges(
         totalViolations += violations.length;
       }
     }
-    const message = `No changes detected — ${totalViolations} violation(s) still outstanding.`;
+    const message = `No changes detected — ${totalViolations} violation(s) still outstanding. ${UPDATE_REVIEW_HINT}`;
     log.warn(message);
     return { status: 'failed', message, gatesRun: 0 };
   }

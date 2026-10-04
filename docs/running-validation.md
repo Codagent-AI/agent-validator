@@ -79,6 +79,7 @@ The report includes:
 - review violations with stable numeric IDs and JSON file paths
 
 Use `agent-validate update-review` to mark reported review violations as fixed or skipped before rerunning.
+Run `agent-validate update-review list` to find IDs, then use `fix <id> "<what changed>"` or `skip <id> "<why>"`. Record all decisions before rerunning; do not edit the log JSON directly.
 
 ## Status Values
 

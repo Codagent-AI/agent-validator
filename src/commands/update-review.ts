@@ -83,6 +83,11 @@ export function registerUpdateReviewCommand(program: Command): void {
     });
 }
 
+export function missingReasonUsage(newStatus: 'fixed' | 'skipped'): string {
+  const command = newStatus === 'fixed' ? 'fix' : 'skip';
+  return `Error: Missing reason. Usage: agent-validate update-review ${command} <id> "<reason>"`;
+}
+
 async function updateViolation(
   idStr: string,
   reason: string | undefined,
@@ -90,9 +95,7 @@ async function updateViolation(
 ): Promise<void> {
   try {
     if (!reason) {
-      console.error(
-        `Error: Missing reason. Usage: agent-validate update-review ${newStatus} <id> "<reason>"`,
-      );
+      console.error(missingReasonUsage(newStatus));
       process.exit(1);
     }
 

@@ -112,6 +112,7 @@ describe("handleNoChanges", () => {
 		expect(result.status).toBe("failed");
 		expect(result.message).toContain("2");
 		expect(result.message).toContain("violation");
+		expect(result.message).toContain('Mark decisions with: agent-validate update-review fix|skip <id> "<reason>"');
 		expect(result.gatesRun).toBe(0);
 	});
 });

@@ -4,6 +4,9 @@ import type { ReviewerOverrideIdentity } from '../config/types.js';
 import type { ReviewFullJsonOutput } from '../gates/result.js';
 import type { ValidatorStatus } from '../types/validator-status.js';
 
+export const UPDATE_REVIEW_HINT =
+  'Mark decisions with: agent-validate update-review fix|skip <id> "<reason>"';
+
 /**
  * A numbered review violation with metadata for report and update-review.
  */
@@ -51,19 +54,19 @@ async function collectViolationsFromFile(
   jsonPath: string,
   filename: string,
   startId: number,
-): Promise<NumberedViolation[]> {
+): Promise<{ violations: NumberedViolation[]; count: number }> {
   const content = await fs.readFile(jsonPath, 'utf-8');
   // Intentional: ReviewFullJsonOutput is an internal format produced by review-agg.ts.
   // Type assertion is sufficient here; Zod validation is not needed for stable internal data.
   const data: ReviewFullJsonOutput = JSON.parse(content);
 
-  if (!(data.violations && Array.isArray(data.violations))) return [];
+  if (!(data.violations && Array.isArray(data.violations)))
+    return { violations: [], count: 0 };
 
   const parsed = parseReviewJsonFilename(filename);
-  if (!parsed) return [];
+  if (!parsed) return { violations: [], count: 0 };
 
   const violations: NumberedViolation[] = [];
-  let nextId = startId;
 
   for (let i = 0; i < data.violations.length; i++) {
     const v = data.violations[i];
@@ -72,7 +75,7 @@ async function collectViolationsFromFile(
     if (status !== 'new') continue;
 
     violations.push({
-      id: nextId++,
+      id: startId + i,
       gateLabel: parsed.jobId,
       adapterSuffix: `${data.adapter}@${parsed.reviewIndex}`,
       file: v.file,
@@ -85,12 +88,12 @@ async function collectViolationsFromFile(
     });
   }
 
-  return violations;
+  return { violations, count: data.violations.length };
 }
 
 /**
  * Enumerate all violations with status "new" from review JSON files in sorted
- * filename order, assigning sequential numeric IDs. This shared function is
+ * filename order, assigning stable numeric IDs. This shared function is
  * used by both the report generator and the update-review command to ensure
  * ID stability.
  */
@@ -110,15 +113,17 @@ export async function enumerateNewViolations(
     .filter((f) => f.endsWith('.json') && parseReviewJsonFilename(f) !== null)
     .sort();
   const allViolations: NumberedViolation[] = [];
+  let nextId = 1;
 
   for (const file of reviewFiles) {
     try {
-      const fileViolations = await collectViolationsFromFile(
+      const { violations, count } = await collectViolationsFromFile(
         path.join(logDir, file),
         file,
-        allViolations.length + 1,
+        nextId,
       );
-      allViolations.push(...fileViolations);
+      allViolations.push(...violations);
+      nextId += count;
     } catch (err) {
       throw new Error(`Failed to read review JSON ${file}: ${err}`);
     }
@@ -233,6 +238,7 @@ export async function generateReport(
     for (const v of reviewViolations) {
       lines.push(...formatReviewViolation(v));
     }
+    lines.push(UPDATE_REVIEW_HINT);
   }
 
   return lines.join('\n');
