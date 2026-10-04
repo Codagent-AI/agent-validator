@@ -35,7 +35,9 @@ entry_points:
       - security-code:
           command: semgrep scan --config auto --error src
       - security-deps:
-          command: bun audit --audit-level=moderate
+          # GHSA-vfj7-8cjw-p6xm (braces <=3.0.3) has no patched npm release yet and is reached only
+          # through the dev dependency @changesets/cli. Remove the ignore once braces ships a fix.
+          command: bun audit --audit-level=moderate --ignore=GHSA-vfj7-8cjw-p6xm
       - schema-validate:
           command: bun run src/index.ts validate
     reviews:
