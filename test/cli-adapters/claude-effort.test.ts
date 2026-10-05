@@ -95,6 +95,17 @@ process.stdout.write(JSON.stringify({ status: 'pass' }) + '\\n');
     expect(result.telemetry.resolved_identity.effort).toBe('low');
   });
 
+  it.each([true, false])('disallows findings tools with allowToolUse=%s', async (allowToolUse) => {
+    await new ClaudeAdapter().execute({ prompt: 'Review', diff: 'change', allowToolUse });
+    const { argv } = await capture();
+    const deniedIndex = argv.indexOf('--disallowedTools');
+    expect(deniedIndex).toBeGreaterThanOrEqual(0);
+    expect(argv[deniedIndex + 1]?.split(',')).toContain('ReportFindings');
+    expect(argv[argv.indexOf('--allowedTools') + 1]).toBe(
+      allowToolUse ? 'Read,Glob,Grep,Task' : 'Task',
+    );
+  });
+
   it('retains launch effort on process failure', async () => {
     process.env.FAKE_CLAUDE_FAIL = '1';
     try {

@@ -55,6 +55,8 @@ export function logInputStats(
 /** Max size for heuristic JSON probing — larger outputs skip tryParseLastJson/First. */
 const MAX_OUTPUT_SIZE_FOR_JSON_PROBE = 100_000;
 
+export const NO_JSON_FOUND_MESSAGE = 'No valid JSON object found in output';
+
 export function evaluateOutput(
   output: string,
   diff?: string,
@@ -85,7 +87,7 @@ export function evaluateOutput(
       message:
         output.length > MAX_OUTPUT_SIZE_FOR_JSON_PROBE
           ? `Output too large (${output.length} bytes) and no JSON found`
-          : 'No valid JSON object found in output',
+          : NO_JSON_FOUND_MESSAGE,
     };
   } catch (error: unknown) {
     const err = error as { message?: string };

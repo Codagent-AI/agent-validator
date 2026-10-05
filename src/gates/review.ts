@@ -4,11 +4,6 @@ import {
   getAdapter,
   isUsageLimit,
 } from '../cli-adapters/index.js';
-import {
-  AdapterExecutionFailure,
-  type AdapterExecutionResult,
-  createUnavailableTelemetry,
-} from '../cli-adapters/shared.js';
 import type { AdapterConfig } from '../config/types.js';
 import type { CommandMetricsLifecycle } from '../metrics/command-lifecycle.js';
 import { getCategoryLogger } from '../output/app-logger.js';
@@ -34,6 +29,7 @@ import {
   handleUsageLimit,
   logDiffStats,
   logInputStats,
+  NO_JSON_FOUND_MESSAGE,
 } from './review-eval.js';
 import {
   applyPassedSlotSkips,
@@ -51,13 +47,14 @@ import {
   persistOneShotReviewScope,
   prepareOneShotPreservation,
 } from './review-one-shot.js';
-import { invokeAdapter } from './review-runtime-helpers.js';
+import { executeReviewAttempt } from './review-runtime-helpers.js';
 import type {
   EvaluationResult,
   ReviewConfig,
   ReviewOutputEntry,
   SingleReviewResult,
 } from './review-types.js';
+import { JSON_SYSTEM_INSTRUCTION } from './review-types.js';
 
 export { JSON_SYSTEM_INSTRUCTION } from './review-types.js';
 
@@ -455,58 +452,34 @@ export class ReviewGateExecutor {
     logInputStats(finalPrompt, diff, adapterLogger);
     await adapterLogger(`[diff]\n${diff}\n`);
 
-    const preparedAttempt = await metrics?.prepareAttempt({
-      adapter: adapter.name,
-      gate: config.name,
-      slot: reviewIndex,
-      telemetry: createUnavailableTelemetry(adapter.name, {
-        requestedModel: config.model ?? adapterConfigs?.[toolName]?.model,
-      }),
+    const attemptOptions = {
+      adapter,
+      reviewIndex,
+      diff,
+      config,
+      adapterConfig: adapterConfigs?.[toolName],
+      adapterLogger,
+      metrics,
+    };
+    let attempt = await executeReviewAttempt({
+      ...attemptOptions,
+      prompt: finalPrompt,
     });
-    let adapterResult: AdapterExecutionResult;
-    try {
-      adapterResult = await invokeAdapter(
-        adapter,
-        finalPrompt,
-        diff,
-        config,
-        adapterConfigs?.[toolName],
-        adapterLogger,
-        preparedAttempt && metrics
-          ? {
-              attemptId: preparedAttempt.attempt_id,
-              onTelemetry: (telemetry) => {
-                void metrics.observeAttempt(preparedAttempt, telemetry);
-              },
-            }
-          : undefined,
+    if (
+      attempt.evaluation.status === 'error' &&
+      attempt.evaluation.message === NO_JSON_FOUND_MESSAGE &&
+      !isUsageLimit(attempt.output)
+    ) {
+      await adapterLogger(
+        'No JSON object in review output; retrying once with output schema reminder\n',
       );
-    } catch (error) {
-      await metrics?.finalizeAttempt(
-        preparedAttempt ?? { attempt_id: '', record: null },
-        error instanceof AdapterExecutionFailure
-          ? error.telemetry
-          : createUnavailableTelemetry(adapter.name, {
-              reason: 'adapter_execution_failed',
-            }),
-        'error',
-      );
-      throw error;
+      attempt = await executeReviewAttempt({
+        ...attemptOptions,
+        prompt: `${finalPrompt}\n\nYour previous reply did not contain the required JSON object. Do not report findings through any tool. Respond with ONLY the JSON object described below.\n${JSON_SYSTEM_INSTRUCTION}`,
+        retry: true,
+      });
     }
-    // Review interpretation continues to consume text only. The structured
-    // telemetry remains available to the dispatch lifecycle/recorder boundary.
-    const output = adapterResult.text;
-    await adapterLogger(
-      `\n--- Review Output (${adapter.name}) ---\n${output}\n`,
-    );
-
-    const evaluation = evaluateOutput(output, diff);
-    const attemptOutcome = reviewOutcome(evaluation.status);
-    await metrics?.finalizeAttempt(
-      preparedAttempt ?? { attempt_id: '', record: null },
-      adapterResult.telemetry,
-      attemptOutcome,
-    );
+    const { output, evaluation, attemptId } = attempt;
     if (evaluation.status === 'error' && isUsageLimit(output)) {
       await handleUsageLimit(adapter, logDir, mainLogger);
       return {
@@ -533,7 +506,7 @@ export class ReviewGateExecutor {
       mainLogger,
       logDir,
       reviewScope,
-      preparedAttempt?.attempt_id,
+      attemptId,
     );
     return {
       adapter: adapter.name,
@@ -545,7 +518,7 @@ export class ReviewGateExecutor {
         json: evaluation.json,
         skipped,
       },
-      attempt_id: preparedAttempt?.attempt_id,
+      attempt_id: attemptId,
     };
   }
 
@@ -554,12 +527,4 @@ export class ReviewGateExecutor {
   }
 
   private getDiff = getDiff;
-}
-
-function reviewOutcome(
-  status: EvaluationResult['status'],
-): 'passed' | 'failed' | 'error' {
-  if (status === 'pass') return 'passed';
-  if (status === 'fail') return 'failed';
-  return 'error';
 }

@@ -77,6 +77,10 @@ export {
   scanOtelBlocks,
 } from './claude-otel.js';
 
+// Claude Code's built-in findings tool takes findings out of the final message,
+// so the validator never sees the JSON.
+const CLAUDE_DISALLOWED_TOOLS = ['ReportFindings'];
+
 const POST_PROCESS_BUFFER_MS = 30_000;
 
 export class ClaudeAdapter implements CLIAdapter {
@@ -293,6 +297,7 @@ export class ClaudeAdapter implements CLIAdapter {
     } else {
       args.push('--allowedTools', 'Read,Glob,Grep,Task');
     }
+    args.push('--disallowedTools', CLAUDE_DISALLOWED_TOOLS.join(','));
     args.push('--max-turns', '25');
 
     // Claude CLI natively resolves model aliases (e.g. "sonnet" → latest sonnet).
