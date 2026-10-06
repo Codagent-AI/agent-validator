@@ -108,6 +108,75 @@ index abc123..def456 100644
 		await fs.rm(TEST_DIR, { recursive: true, force: true });
 	});
 
+	it.each(["claude", "codex", "gemini", "github-copilot", "cursor", "opencode"])("retries missing JSON once for %s and preserves findings and metrics", async (adapter) => {
+		const prose = "I found one problem and reported it through a tool.";
+		const violation = { file: "src/test.ts", line: 1, issue: "Unsafe change", fix: "Validate input", priority: "high", status: "new" };
+		const retryOutput = JSON.stringify({ status: "fail", violations: [violation] });
+		const calls: Array<{ prompt: string; diff: string; attemptId?: string }> = [];
+		currentExecute = async (options) => {
+			calls.push(options as typeof calls[number]);
+			return calls.length === 1 ? prose : retryOutput;
+		};
+		const attempts: string[] = [];
+		const outcomes: Array<[string, string]> = [];
+		const metrics = {
+			prepareAttempt: async () => {
+				const attempt_id = `attempt-${attempts.length + 1}`;
+				attempts.push(attempt_id);
+				return { attempt_id, record: null };
+			},
+			finalizeAttempt: async (attempt: { attempt_id: string }, _telemetry: unknown, outcome: string) => {
+				outcomes.push([attempt.attempt_id, outcome]);
+			},
+		} as unknown as CommandMetricsLifecycle;
+		const config = { name: "quality", prompt: "Review the code", cli_preference: [adapter], num_reviews: 1 } as ReviewGateConfig & ReviewPromptFrontmatter;
+		const result = await executor.execute(
+			"review:src:quality", config, "src/", logger.createLoggerFactory("review:src:quality"), "main",
+			undefined, undefined, "high", undefined, TEST_DIR, undefined, undefined, metrics,
+		);
+		expect(calls).toHaveLength(2);
+		expect(calls[1]?.prompt).toContain(calls[0]!.prompt);
+		expect(calls[1]?.prompt).toContain("Your previous reply did not contain the required JSON object.");
+		expect(calls[1]?.prompt).toContain("Do not report findings through any tool.");
+		expect(calls[1]?.prompt).toContain('"violations"');
+		expect(calls[1]?.diff).toBe(calls[0]?.diff);
+		expect(calls.map((call) => call.attemptId)).toEqual(attempts);
+		expect(outcomes).toEqual([["attempt-1", "error"], ["attempt-2", "failed"]]);
+		expect(result.status).toBe("fail");
+		expect(result.subResults?.[0]?.attempt_id).toBe("attempt-2");
+		const jsonPath = result.subResults![0]!.logPath!;
+		const saved = JSON.parse(await fs.readFile(jsonPath, "utf8"));
+		expect(saved.violations).toEqual([violation]);
+		expect(saved.rawOutput).toBe(retryOutput);
+		expect(saved.attempt_id).toBe("attempt-2");
+		const log = await fs.readFile(jsonPath.replace(/\.json$/, ".log"), "utf8");
+		expect(log).toContain(prose);
+		expect(log).toContain(`--- Review Output (${adapter}, retry) ---`);
+	});
+
+	it("returns the existing parse error after one unsuccessful schema retry", async () => {
+		let calls = 0;
+		currentExecute = async () => { calls++; return "I reported the findings."; };
+		const config = { name: "quality", prompt: "Review", cli_preference: ["codex"], num_reviews: 1 } as ReviewGateConfig & ReviewPromptFrontmatter;
+		const result = await executor.execute("review:src:quality", config, "src/", logger.createLoggerFactory("review:src:quality"), "main");
+		expect(calls).toBe(2);
+		expect(result.status).toBe("error");
+		expect(result.subResults?.[0]?.message).toBe("No valid JSON object found in output");
+	});
+
+	it.each([
+		["valid JSON", JSON.stringify({ status: "pass" }), "pass"],
+		["usage limit", "You've hit your usage limit.", "error"],
+		["invalid schema", JSON.stringify({ status: "unknown" }), "error"],
+	] as const)("does not retry %s", async (_name, output, status) => {
+		let calls = 0;
+		currentExecute = async () => { calls++; return output; };
+		const config = { name: "quality", prompt: "Review", cli_preference: ["codex"], num_reviews: 1 } as ReviewGateConfig & ReviewPromptFrontmatter;
+		const result = await executor.execute("review:src:quality", config, "src/", logger.createLoggerFactory("review:src:quality"), "main", undefined, undefined, "high", undefined, TEST_DIR);
+		expect(calls).toBe(1);
+		expect(result.status).toBe(status);
+	});
+
 	it.each([
 		["project", "review-model", "review-model"],
 		["global", "review-model", "review-model"],

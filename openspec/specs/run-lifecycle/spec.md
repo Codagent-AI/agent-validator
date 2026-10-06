@@ -619,6 +619,31 @@ The execution state file MUST persist across all clean operations (manual and au
 - **AND** the execution state SHALL be preserved
 - **NOTE** This scenario previously caused a false positive: `working_tree_ref === commit` made the tree appear clean. The fix uses `git status --porcelain` instead of the `working_tree_ref` proxy.
 
+### Requirement: Single Schema Reminder Retry
+
+When a review adapter returns no valid JSON object, the system SHALL retry that adapter once with the same diff and original prompt plus a reminder to return only the required JSON object and avoid reporting findings through tools. The system SHALL retain both raw outputs in the adapter log and record each dispatch as a separate metrics attempt. Subsequent result handling SHALL use the retry output and attempt reference.
+
+#### Scenario: Missing JSON repaired by reminder
+- **GIVEN** any review adapter returns prose with no valid JSON object and no usage-limit message
+- **WHEN** the system evaluates that output
+- **THEN** it SHALL finalize the first metrics attempt as an error and invoke the adapter once more with the schema reminder
+- **AND** a valid JSON violation returned by the retry SHALL produce a failed review with that violation
+- **AND** the first raw output SHALL remain in the adapter log
+- **AND** the saved result SHALL contain the retry output and reference the retry metrics attempt
+
+#### Scenario: Retry also contains no JSON
+- **GIVEN** both the initial reply and the schema-reminder retry contain no valid JSON object
+- **THEN** the system SHALL return an error with message "No valid JSON object found in output"
+- **AND** it SHALL NOT dispatch a third attempt
+
+#### Scenario: Usage limit does not trigger schema retry
+- **GIVEN** the initial reply contains a usage-limit message
+- **THEN** the system SHALL apply the usage-limit handling without a schema-reminder retry
+
+#### Scenario: JSON response does not trigger schema retry
+- **GIVEN** the initial reply contains a JSON review response
+- **THEN** the system SHALL evaluate it without a schema-reminder retry, including when the JSON has an invalid status
+
 ### Requirement: Runtime Usage Limit Detection
 This requirement MUST record unhealthy adapters in the global unhealthy adapter state file rather than `.execution_state`.
 
