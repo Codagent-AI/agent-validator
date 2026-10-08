@@ -28,7 +28,10 @@ entry_points:
       - security-deps:
           # GHSA-vfj7-8cjw-p6xm (braces <=3.0.3) has no patched npm release yet and is reached only
           # through the dev dependency @changesets/cli. Remove the ignore once braces ships a fix.
-          command: bun audit --audit-level=moderate --ignore=GHSA-vfj7-8cjw-p6xm
+          # GHSA-hp3w-g68c-fv3c (sprintf-js <=1.1.3) has no patched release yet and is reached only
+          # through argparse, which js-yaml 3 uses for its CLI binary and never loads from the library
+          # that gray-matter imports. Remove the ignore once sprintf-js ships a fix.
+          command: bun audit --audit-level=moderate --ignore=GHSA-vfj7-8cjw-p6xm --ignore=GHSA-hp3w-g68c-fv3c
       - schema-validate:
           command: bun run src/index.ts validate
     reviews:
