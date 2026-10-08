@@ -17,7 +17,7 @@ it('uses the published braces package and ignores only its unpatched advisory', 
   );
 
   expect(securityDeps?.['security-deps'].command).toBe(
-    'bun audit --audit-level=moderate --ignore=GHSA-vfj7-8cjw-p6xm',
+    'bun audit --audit-level=moderate --ignore=GHSA-vfj7-8cjw-p6xm --ignore=GHSA-hp3w-g68c-fv3c',
   );
   expect(packageJson.overrides).not.toHaveProperty('braces');
   expect(lockfile.overrides).not.toHaveProperty('braces');
