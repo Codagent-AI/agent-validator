@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ReviewFullJsonOutput } from '../../src/gates/result.js';
-import { enumerateNewViolations } from '../../src/output/report.js';
+import {
+  enumerateNewViolations,
+  type NumberedViolation,
+} from '../../src/output/report.js';
 
 const TEST_DIR = path.join(import.meta.dir, '../../.test-update-review');
 
@@ -15,7 +18,108 @@ afterEach(async () => {
   await fs.rm(TEST_DIR, { recursive: true, force: true });
 });
 
+async function writeFiveViolations() {
+  // Write in reverse order to ensure IDs follow sorted filenames.
+  for (const [filename, ids] of [
+    ['review_b_claude@1.1.json', [4, 5]],
+    ['review_a_claude@1.1.json', [1, 2, 3]],
+  ] as const) {
+    const data: ReviewFullJsonOutput = {
+      adapter: 'claude',
+      timestamp: '2024-01-01T00:00:00Z',
+      status: 'fail',
+      rawOutput: '',
+      violations: ids.map((id) => ({
+        file: `src/issue-${id}.ts`,
+        line: id * 10,
+        issue: `Issue ${id}`,
+        status: 'new',
+      })),
+    };
+    await fs.writeFile(path.join(TEST_DIR, filename), JSON.stringify(data));
+  }
+  const original = await enumerateNewViolations(TEST_DIR);
+  expect(original.map((violation) => violation.id)).toEqual([1, 2, 3, 4, 5]);
+  expect(original.map((violation) => violation.issue)).toEqual([
+    'Issue 1',
+    'Issue 2',
+    'Issue 3',
+    'Issue 4',
+    'Issue 5',
+  ]);
+  return original;
+}
+
+async function markReportedViolation(
+  original: NumberedViolation,
+  status: 'fixed' | 'skipped',
+) {
+  const current = await enumerateNewViolations(TEST_DIR);
+  const target = current.find((violation) => violation.id === original.id);
+  expect(target).toEqual(original);
+  if (!target) throw new Error(`Violation #${original.id} not found`);
+
+  const data: ReviewFullJsonOutput = JSON.parse(
+    await fs.readFile(target.jsonPath, 'utf-8'),
+  );
+  const violation = data.violations[target.violationIndex]!;
+  expect(violation.issue).toBe(original.issue);
+  violation.status = status;
+  violation.result = `Reason for ${original.issue}`;
+  await fs.writeFile(target.jsonPath, JSON.stringify(data, null, 2));
+
+  const updated: ReviewFullJsonOutput = JSON.parse(
+    await fs.readFile(original.jsonPath, 'utf-8'),
+  );
+  expect(
+    updated.violations.find((entry) => entry.issue === original.issue),
+  ).toMatchObject({ status, result: `Reason for ${original.issue}` });
+}
+
 describe('update-review violation mutation', () => {
+  it('preserves reported IDs when resolving violations in order 3, 5, 1, 2, 4', async () => {
+    const original = await writeFiveViolations();
+    const marked = new Set<number>();
+
+    for (const id of [3, 5, 1, 2, 4]) {
+      await markReportedViolation(
+        original[id - 1]!,
+        id === 3 ? 'skipped' : 'fixed',
+      );
+      marked.add(id);
+      const remaining = await enumerateNewViolations(TEST_DIR);
+      expect(remaining).toEqual(
+        original.filter((entry) => !marked.has(entry.id)),
+      );
+      if (id === 3) {
+        expect(remaining.find((entry) => entry.id === 5)).toEqual(original[4]);
+      }
+    }
+  });
+
+  it('reserves the first file IDs after all its violations are marked', async () => {
+    const original = await writeFiveViolations();
+    const marked = new Set<number>();
+
+    for (const id of [1, 2, 3]) {
+      await markReportedViolation(
+        original[id - 1]!,
+        id === 3 ? 'skipped' : 'fixed',
+      );
+      marked.add(id);
+      const remaining = await enumerateNewViolations(TEST_DIR);
+      expect(remaining).toEqual(
+        original.filter((entry) => !marked.has(entry.id)),
+      );
+      expect(
+        remaining.filter((entry) => entry.jsonPath === original[3]!.jsonPath),
+      ).toEqual(original.slice(3));
+    }
+    expect(
+      (await enumerateNewViolations(TEST_DIR)).map((entry) => entry.id),
+    ).toEqual([4, 5]);
+  });
+
   it('enumerateNewViolations produces IDs matching between calls', async () => {
     const jsonPath = path.join(
       TEST_DIR,
