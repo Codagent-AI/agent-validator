@@ -49,3 +49,5 @@ Agent Validator runs quality gates for changed code and gives coding agents a re
 - [Review Eval Report - 2026-04-05](eval-report-2026-04-05.md)
 - [Review Eval Report - Cursor + Composer 2 - 2026-04-25](eval-report-2026-04-25.md)
 - [Review Eval Report - 2026-05-02](eval-report-2026-05-02.md)
+- [Review Eval Report - 2026-09-29](eval-report-2026-09-29.md)
+- [Review Eval Report - Haiku 5.5 - 2026-10-14](eval-report-2026-10-14.md)
