@@ -69,7 +69,15 @@ entry_points:
           builtin: all-reviewers
 ```
 
-This uses the preferred reviewer from the latest review eval. See [Recommended Reviewer Configurations](docs/reviews-and-adapters.md#recommended-reviewer-configurations) for Codex options.
+This uses the preferred reviewer from the latest review evals. Measured on the `all-reviewers` eval fixture (56 seeded issues):
+
+| Option | Adapter | Model | `thinking_budget` | Recall | Precision | Cost / review |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Preferred** | `claude` | `claude-sonnet-5-5` | `low` | 0.82 | 0.93 | ~$0.24 |
+| Claude, budget | `claude` | `claude-haiku-5-5` | `low` | 0.80 | 0.78 | ~$0.02 |
+| Codex | `codex` | `gpt-6-sol` | `medium` | 0.70 | 0.74 | ~$0.15 |
+
+See [Recommended Reviewer Configurations](docs/reviews-and-adapters.md#recommended-reviewer-configurations) for details and the [2026-10-14 eval report](docs/eval-report-2026-10-14.md) for the Haiku 5.5 results.
 
 Inline checks and reviews are defined inside `entry_points`. File-based gates are also supported under `.validator/checks/` and `.validator/reviews/`.
 
