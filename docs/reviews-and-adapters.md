@@ -124,7 +124,6 @@ Based on the [2026-09-29](eval-report-2026-09-29.md) and [2026-10-14](eval-repor
 | Option | Adapter | Model | `thinking_budget` | Recall | Precision | Cost / review | Time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Preferred** | `claude` | `claude-sonnet-5-5` | `low` | 0.82 | 0.93 | ~$0.24 | ~1.5 min |
-| Claude, budget | `claude` | `claude-haiku-5-5` | `low` | 0.80 | 0.78 | ~$0.02 | ~2 min |
 | Codex, higher recall | `codex` | `gpt-6-sol` | `medium` | 0.70 | 0.74 | ~$0.15 | ~3.5 min |
 | Codex, fast | `codex` | `gpt-6-sol` | `low` | 0.54 | 0.65 | ~$0.09 | ~1.5 min |
 
@@ -147,7 +146,7 @@ entry_points:
           builtin: all-reviewers
 ```
 
-For a cheaper Claude setup, use `model: claude-haiku-5-5` with the same `thinking_budget: low`. It finds about as many issues as Sonnet at roughly a tenth of the cost, but it reports more false positives and its recall varies more between runs (0.71–0.89).
+Haiku 5.5 is not recommended, although it matches Sonnet's recall at about a tenth of the review cost. In the [2026-10-15 end-to-end eval](eval-report-2026-10-15-e2e.md), where a coding agent fixes what the validator reports, Haiku's false positives and duplicates doubled the findings the agent handled. The loop took about 60% longer, fixed fewer seeded issues and broke more working code, and any saving was small or reversed depending on the agent's model. Splitting Haiku into three separate reviews raises its recall but not its precision.
 
 For Codex-only setups, set `cli.adapters.codex` to `model: gpt-6-sol` with `thinking_budget: medium` for better coverage, or `low` for a fast, cheap smoke pass.
 

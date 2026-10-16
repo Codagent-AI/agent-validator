@@ -1,0 +1,26 @@
+# 2026-10: 2 separate review passes (code-quality + security-and-errors) on the all-reviewers fixture,
+# run in parallel, merged, and judged once. Compared against single-pass
+# all-reviewers in docs/eval-report-2026-10-14.md.
+fixture: fixtures/all-reviewers
+prompts:
+  - code-quality
+  - security-and-errors
+
+adapters:
+  - name: claude
+    model: claude-sonnet-5-5
+    alias: claude-sonnet5.5-low-2pass
+    allow_tool_use: false
+    thinking_budget: low
+  - name: claude
+    model: claude-haiku-5-5
+    alias: claude-haiku5.5-low-2pass
+    allow_tool_use: false
+    thinking_budget: low
+
+runs_per_config: 3
+timeout_ms: 600000
+judge:
+  adapter: claude
+  model: claude-opus-5-5
+  thinking_budget: high

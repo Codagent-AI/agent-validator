@@ -1,0 +1,27 @@
+# End-to-end pilot with a Sonnet lead: does a noisier, cheaper reviewer cost more
+# agent's triage and fixing are counted? Same lead agent, two reviewer setups.
+fixture: fixtures/all-reviewers
+runs_per_config: 2
+
+lead:
+  model: claude-sonnet-5-5
+  timeout_ms: 3600000
+  max_budget_usd: 25
+
+judge:
+  adapter: claude
+  model: claude-opus-5-5
+  thinking_budget: high
+
+configs:
+  - label: sonnet55-low-1review
+    adapter: claude
+    model: claude-sonnet-5-5
+    thinking_budget: low
+    reviews: [all-reviewers]
+
+  - label: haiku55-low-3review
+    adapter: claude
+    model: claude-haiku-5-5
+    thinking_budget: low
+    reviews: [code-quality, security, error-handling]

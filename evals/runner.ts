@@ -8,6 +8,7 @@ import { getAdapter } from "../src/cli-adapters/index.js";
 import { JSON_SYSTEM_INSTRUCTION } from "../src/gates/review.js";
 import { runAdapter } from "./adapter-runner.js";
 import { JudgeRunError, judgeRun } from "./judge.js";
+import { mergePassResults } from "./multi-pass.js";
 import { formatUsd, printReport } from "./reporter.js";
 import { aggregateConfig } from "./scoring.js";
 import type {
@@ -21,6 +22,11 @@ import type {
 	JudgeResult,
 } from "./types.js";
 
+interface ReviewPass {
+	name: string;
+	prompt: string;
+}
+
 interface AdapterConfig {
 	name: EvalAdapterName;
 	model?: string;
@@ -33,6 +39,12 @@ export interface EvalConfig {
 	fixture: string;
 	/** When set, load prompt via `loadBuiltInReview` (combined built-ins: `all-reviewers`, `security-and-errors`, …). */
 	builtin_prompt?: string;
+	/**
+	 * Built-in prompts to run as separate passes on the same diff (e.g.
+	 * `[code-quality, security-and-errors]`). Passes run in parallel and their
+	 * violations are merged and judged once. Mutually exclusive with `builtin_prompt`.
+	 */
+	prompts?: string[];
 	reviewer?: string;
 	adapters: (EvalAdapterName | AdapterConfig)[];
 	runs_per_config: number;
@@ -108,6 +120,51 @@ export function loadReviewPrompt(
 				`Underlying error: ${underlying}`,
 		);
 	}
+}
+
+/** One pass per configured prompt; a single pass for `builtin_prompt`/`reviewer` configs. */
+export function loadReviewPasses(
+	evalsDir: string,
+	evalConfig: EvalConfig,
+): ReviewPass[] {
+	const withInstruction = (content: string) => `${content}\n${JSON_SYSTEM_INSTRUCTION}`;
+	if (!evalConfig.prompts) {
+		const name = evalConfig.builtin_prompt ?? evalConfig.reviewer ?? evalConfig.fixture;
+		return [{ name, prompt: withInstruction(loadReviewPrompt(evalsDir, evalConfig)) }];
+	}
+	if (evalConfig.builtin_prompt) {
+		throw new Error(`Set either "builtin_prompt" or "prompts", not both.`);
+	}
+	if (evalConfig.prompts.length === 0) {
+		throw new Error(`"prompts" must list at least one built-in review.`);
+	}
+	return evalConfig.prompts.map((name) => ({
+		name,
+		prompt: withInstruction(
+			loadReviewPrompt(evalsDir, { ...evalConfig, builtin_prompt: name }),
+		),
+	}));
+}
+
+/** Runs every pass in parallel (as the validator runs review gates) and merges them. */
+async function runPasses(
+	config: EvalConfiguration,
+	passes: ReviewPass[],
+	diff: string,
+	timeoutMs: number,
+): Promise<AdapterRunResult> {
+	const [only] = passes;
+	if (only && passes.length === 1) {
+		return runAdapter(config, only.prompt, diff, timeoutMs);
+	}
+	const start = Date.now();
+	const results = await Promise.all(
+		passes.map(async (p) => ({
+			prompt: p.name,
+			result: await runAdapter(config, p.prompt, diff, timeoutMs),
+		})),
+	);
+	return mergePassResults(config, results, Date.now() - start);
 }
 
 /** CLI commands to retrieve the version string for each adapter. */
@@ -202,8 +259,10 @@ export async function runEval(
 		);
 	}
 
-	const promptContent = loadReviewPrompt(evalsDir, evalConfig);
-	const fullPrompt = `${promptContent}\n${JSON_SYSTEM_INSTRUCTION}`;
+	const reviewPasses = loadReviewPasses(evalsDir, evalConfig);
+	if (reviewPasses.length > 1) {
+		console.log(`Review passes: ${reviewPasses.map((p) => p.name).join(", ")}`);
+	}
 
 	// Generate eval matrix — one entry per adapter config (no cross-product)
 	let matrix: EvalConfiguration[] = [];
@@ -315,12 +374,7 @@ export async function runEval(
 			let result: AdapterRunResult;
 			try {
 				process.chdir(codebasePath);
-				result = await runAdapter(
-					config,
-					fullPrompt,
-					diff,
-					evalConfig.timeout_ms,
-				);
+				result = await runPasses(config, reviewPasses, diff, evalConfig.timeout_ms);
 			} finally {
 				process.chdir(originalCwd);
 			}
@@ -328,13 +382,18 @@ export async function runEval(
 			result.runIndex = run;
 			allRuns.push(result);
 
+			for (const pass of result.passes ?? []) {
+				console.log(
+					`    Pass ${pass.prompt}: ${pass.status}, Violations: ${pass.violations}, Duration: ${(pass.durationMs / 1000).toFixed(1)}s, Cost: ${formatUsd(pass.cost?.usd ?? null)}`,
+				);
+			}
 			console.log(
 				`    Status: ${result.status}, Violations: ${result.violations.length}, Duration: ${(result.durationMs / 1000).toFixed(1)}s, Cost: ${formatUsd(result.cost?.usd ?? null)} (${result.cost?.source ?? "unavailable"})`,
 			);
 
 			if (result.error) {
 				console.log(`    Error: ${result.error}`);
-				if (result.error === "Usage limit reached") {
+				if (result.error?.includes("Usage limit reached")) {
 					skippedAdapters.add(config.adapter);
 					break;
 				}
@@ -356,7 +415,7 @@ export async function runEval(
 					);
 					judgeResultsByRun.set(result, judgeResult);
 					console.log(
-						`    Matches: ${judgeResult.matches.length}, Missed: ${judgeResult.missedIssues.length}, FP: ${judgeResult.falsePositives.length}`,
+						`    Matches: ${judgeResult.matches.length} (${new Set(judgeResult.matches.map((m) => m.groundTruthId)).size} distinct issues), Missed: ${judgeResult.missedIssues.length}, FP: ${judgeResult.falsePositives.length}`,
 					);
 				} catch (err) {
 					console.log(

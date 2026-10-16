@@ -127,6 +127,18 @@ judge:
   # model: optional; passed to the judge adapter when set
 ```
 
+### Separate reviews
+
+By default a run uses one prompt: the fixture's, or the built-in named by `builtin_prompt`. To measure several review gates on the same diff, as the validator runs them, list built-in reviews under `prompts` instead:
+
+```yaml
+prompts: [code-quality, security, error-handling]
+```
+
+Each run then executes one pass per prompt in parallel and merges them like the validator's report: every finding is kept, including duplicates across passes, cost is the sum of the passes, and time is wall-clock. `prompts` and `builtin_prompt` cannot be combined.
+
+Recall counts distinct seeded issues, so a second finding of the same issue is reported in the `Dup` column instead of raising recall. A duplicate of a real issue is not a false positive.
+
 ## Scoring Approach
 
 ### Why LLM-as-judge (not purely deterministic)
