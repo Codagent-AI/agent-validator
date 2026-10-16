@@ -93,6 +93,22 @@ export interface AdapterRunResult {
 	/** Structured adapter telemetry (tokens, reported cost, identity). */
 	adapterTelemetry?: AdapterTelemetry;
 	cost?: RunCost;
+	/** Per-pass breakdown when the eval config runs several review prompts. */
+	passes?: PassSummary[];
+}
+
+/** One review prompt's raw result within a multi-pass run. */
+export interface PassResult {
+	prompt: string;
+	result: AdapterRunResult;
+}
+
+export interface PassSummary {
+	prompt: string;
+	status: AdapterRunResult["status"];
+	violations: number;
+	durationMs: number;
+	cost?: RunCost;
 }
 
 export interface JudgeMatch {
@@ -140,7 +156,10 @@ export interface RunScore extends Partial<MatchDiagnostics> {
 	adapter: EvalAdapterName;
 	runIndex: number;
 	durationMs: number;
+	/** Distinct ground-truth issues found. */
 	truePositives: number;
+	/** Extra findings matched to an issue already counted (e.g. found by two passes). */
+	duplicateMatches?: number;
 	falsePositives: number;
 	missedIssues: string[];
 	precision: number;

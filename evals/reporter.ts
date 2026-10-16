@@ -58,10 +58,11 @@ function printConfigTable(results: EvalResults): void {
 				"$/TP".padStart(10) +
 				"Cost src".padStart(10) +
 				"LocFlag".padStart(9) +
-				"LowConf".padStart(9),
+				"LowConf".padStart(9) +
+				"Dup".padStart(6),
 		),
 	);
-	console.log(chalk.dim("-".repeat(148)));
+	console.log(chalk.dim("-".repeat(154)));
 
 	for (const config of sorted) {
 		console.log(formatConfigRow(config));
@@ -96,7 +97,8 @@ function formatConfigRow(config: ConfigAggregate): string {
 		formatUsd(config.cost?.costPerTruePositiveUsd ?? null).padStart(10) +
 		formatCostSource(config).padStart(10) +
 		formatRunTotal(config, (r) => r.locationFlagCount).padStart(9) +
-		formatRunTotal(config, (r) => r.lowConfidenceMatches).padStart(9)
+		formatRunTotal(config, (r) => r.lowConfidenceMatches).padStart(9) +
+		formatRunTotal(config, (r) => r.duplicateMatches).padStart(6)
 	);
 }
 

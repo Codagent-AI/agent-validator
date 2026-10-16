@@ -207,7 +207,7 @@ describe("location diagnostics in scoring and reporting", () => {
 		}
 		const output = lines.join("\n");
 		expect(output).toContain("LocFlag");
-		expect(output).toMatch(/claude-test.*\s1\s+1$/m);
+		expect(output).toMatch(/claude-test.*\s1\s+1\s+0$/m);
 		expect(output).toContain("claude-test [run 1]:");
 		expect(output).toContain(
 			"go-leak: src/api/other.ts:230 vs src/batch_handler.go:[222-250] (file, low)",

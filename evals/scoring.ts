@@ -39,9 +39,14 @@ export function scoreRun(
 		};
 	}
 
-	const tp = judgeResult.matches.length;
+	// Recall counts distinct issues: several findings (e.g. from different review
+	// passes) can match the same issue. Precision is the share of findings that
+	// are real, so a duplicate of a real issue is not a false positive.
+	const matchedFindings = judgeResult.matches.length;
+	const tp = new Set(judgeResult.matches.map((m) => m.groundTruthId)).size;
 	const fp = judgeResult.falsePositives.length;
-	const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+	const precision =
+		matchedFindings + fp > 0 ? matchedFindings / (matchedFindings + fp) : 0;
 	const recall = groundTruth.length > 0 ? tp / groundTruth.length : 0;
 	const f1 =
 		precision + recall > 0
@@ -51,6 +56,7 @@ export function scoreRun(
 	return {
 		...base,
 		truePositives: tp,
+		duplicateMatches: matchedFindings - tp,
 		falsePositives: fp,
 		missedIssues: judgeResult.missedIssues,
 		precision,
