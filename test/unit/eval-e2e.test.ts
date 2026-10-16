@@ -1,6 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
@@ -13,6 +13,18 @@ import { scoreE2ERun, summarizeE2E } from "../../evals/e2e/scoring.js";
 import type { E2ERunResult } from "../../evals/e2e/types.js";
 import { collectValidatorEvidence } from "../../evals/e2e/validator-evidence.js";
 import { createWorkspace, diffTrees, snapshotTree } from "../../evals/e2e/workspace.js";
+
+/** Temporary directories created by a test, removed after it even when it fails. */
+const tempDirs: string[] = [];
+afterEach(() => {
+	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+function tempDir(prefix: string): string {
+	const dir = mkdtempSync(join(tmpdir(), prefix));
+	tempDirs.push(dir);
+	return dir;
+}
 
 const reviewer = {
 	label: "haiku-3review",
@@ -141,7 +153,7 @@ function attempt(id: string, revision: number, usd: number | null) {
 
 describe("collectValidatorEvidence", () => {
 	function logDir() {
-		const dir = mkdtempSync(join(tmpdir(), "e2e-evidence-"));
+		const dir = tempDir("e2e-evidence-");
 		mkdirSync(join(dir, "previous"));
 		// The archived snapshot and the current one both hold attempt a1.
 		writeFileSync(
@@ -187,7 +199,7 @@ describe("collectValidatorEvidence", () => {
 	});
 
 	it("leaves reviewer cost unknown when an attempt has no reported cost", () => {
-		const dir = mkdtempSync(join(tmpdir(), "e2e-evidence-"));
+		const dir = tempDir("e2e-evidence-");
 		writeFileSync(
 			join(dir, "validation-metrics.json"),
 			JSON.stringify({ attempts: [attempt("a1", 1, 0.02), attempt("a2", 1, null)] }),
@@ -298,6 +310,7 @@ describe("createWorkspace", () => {
 
 	it("commits base, config and skills to main and leaves the feature uncommitted", () => {
 		const workspace = createWorkspace({ fixtureDir, validatorRoot, reviewer });
+		tempDirs.push(workspace.root);
 		const git = (...args: string[]) =>
 			execFileSync("git", args, { cwd: workspace.repo, encoding: "utf-8" });
 

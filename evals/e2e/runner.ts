@@ -106,6 +106,7 @@ export async function runE2E(options: RunE2EOptions): Promise<E2ERunResult[]> {
 	}
 	const groundTruth: GroundTruthIssue[] = YAML.parse(readFileSync(join(fixtureDir, "ground-truth.yml"), "utf-8")).issues;
 	const reviewers = evalConfig.configs.filter((c) => !options.configFilter || c.label === options.configFilter);
+	if (reviewers.length === 0) throw new Error(`No config labeled "${options.configFilter}"`);
 	const runs = options.runs ?? evalConfig.runs_per_config;
 
 	console.log(`Fixture: ${evalConfig.fixture} (${groundTruth.length} seeded issues)`);
