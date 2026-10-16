@@ -107,7 +107,7 @@ export async function judgeRun(
 	};
 }
 
-function parseJudgeResponse(raw: string): Record<string, unknown> {
+export function parseJudgeResponse(raw: string): Record<string, unknown> {
 	// Prefer fenced JSON code block
 	const fenced = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
 	if (fenced?.[1]) {

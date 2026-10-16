@@ -74,10 +74,9 @@ This uses the preferred reviewer from the latest review evals. Measured on the `
 | Option | Adapter | Model | `thinking_budget` | Recall | Precision | Cost / review |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Preferred** | `claude` | `claude-sonnet-5-5` | `low` | 0.82 | 0.93 | ~$0.24 |
-| Claude, budget | `claude` | `claude-haiku-5-5` | `low` | 0.80 | 0.78 | ~$0.02 |
 | Codex | `codex` | `gpt-6-sol` | `medium` | 0.70 | 0.74 | ~$0.15 |
 
-See [Recommended Reviewer Configurations](docs/reviews-and-adapters.md#recommended-reviewer-configurations) for details and the [2026-10-14 eval report](docs/eval-report-2026-10-14.md) for the Haiku 5.5 results.
+See [Recommended Reviewer Configurations](docs/reviews-and-adapters.md#recommended-reviewer-configurations) for details. The [2026-10-15 end-to-end eval](docs/eval-report-2026-10-15-e2e.md) explains why the cheaper Haiku 5.5 is not recommended: its extra false positives cost more in fixing time and broken code than it saves on review.
 
 Inline checks and reviews are defined inside `entry_points`. File-based gates are also supported under `.validator/checks/` and `.validator/reviews/`.
 

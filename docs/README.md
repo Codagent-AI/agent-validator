@@ -41,6 +41,7 @@ Agent Validator runs quality gates for changed code and gives coding agents a re
 | [Skills Guide](skills-guide.md) | Agent-facing skill behavior |
 | [Feature Comparison](feature-comparison.md) | How Agent Validator differs from related tools |
 | [Eval Framework](eval-framework.md) | Review benchmark harness |
+| [End-to-End Eval](end-to-end-eval.md) | Lead agent + validator loop: fixes, regressions and total cost per reviewer setup |
 | [Eval Results](eval-results.md) | Historical adapter benchmark results |
 | [Development](development.md) | Local development and release workflow |
 
@@ -51,3 +52,4 @@ Agent Validator runs quality gates for changed code and gives coding agents a re
 - [Review Eval Report - 2026-05-02](eval-report-2026-05-02.md)
 - [Review Eval Report - 2026-09-29](eval-report-2026-09-29.md)
 - [Review Eval Report - Haiku 5.5 - 2026-10-14](eval-report-2026-10-14.md)
+- [End-to-End Eval Report - Sonnet 5.5 vs Haiku 5.5 - 2026-10-15](eval-report-2026-10-15-e2e.md)

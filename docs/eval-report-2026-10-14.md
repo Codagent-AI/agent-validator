@@ -7,6 +7,8 @@ description: Review benchmark of Claude Haiku 5.5 at low and high effort, compar
 
 # Review Eval Report — 2026-10-14
 
+> **Superseded recommendation:** the [2026-10-15 end-to-end eval](eval-report-2026-10-15-e2e.md) found that Haiku 5.5's extra false positives cost more in the fixing loop than it saves on review. Haiku 5.5 is no longer recommended as a budget reviewer.
+
 ## Summary
 
 Evaluated Claude Code + Haiku 5.5, which was released after the [2026-09-29 round](eval-report-2026-09-29.md), on the same all-reviewers fixture:
