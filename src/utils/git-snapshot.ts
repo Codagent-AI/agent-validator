@@ -17,6 +17,11 @@ const runGit = (
         maxBuffer: 256 * 1024 * 1024,
         env: {
           ...process.env,
+          // Synthetic snapshot commits must also work in unconfigured CI repos.
+          GIT_AUTHOR_NAME: 'validator-snapshot',
+          GIT_AUTHOR_EMAIL: 'validator@snapshot',
+          GIT_COMMITTER_NAME: 'validator-snapshot',
+          GIT_COMMITTER_EMAIL: 'validator@snapshot',
           GIT_OPTIONAL_LOCKS: '0',
           ...(indexFile ? { GIT_INDEX_FILE: indexFile } : {}),
         },

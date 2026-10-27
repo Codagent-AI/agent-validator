@@ -329,7 +329,7 @@ describe("working-tree-ref E2E", () => {
 });
 
 // Run source in an isolated process so cwd and mocks cannot affect other tests.
-async function snapshot(dir: string): Promise<string> {
+async function snapshot(dir: string, env = process.env): Promise<string> {
 	const source = path.join(VALIDATOR_ROOT, "src/utils/execution-state.ts");
 	const { stdout } = await execFileAsync(
 		process.execPath,
@@ -337,7 +337,7 @@ async function snapshot(dir: string): Promise<string> {
 			"-e",
 			`const { createWorkingTreeRef } = await import(${JSON.stringify(source)}); console.log(await createWorkingTreeRef());`,
 		],
-		{ cwd: dir },
+		{ cwd: dir, env },
 	);
 	return stdout.trim();
 }
@@ -379,6 +379,38 @@ describe("non-mutating working-tree snapshots", () => {
 			).toBe(before.stdout);
 		});
 	}
+
+	it("creates a three-parent snapshot without configured Git identity", async () => {
+		const dir = await createTestRepo();
+		tempDirs.push(dir);
+		await fs.writeFile(path.join(dir, "hello.ts"), "tracked edit\n");
+		await fs.writeFile(path.join(dir, "untracked.txt"), "untracked content\n");
+		await git(["config", "--unset", "user.name"], dir);
+		await git(["config", "--unset", "user.email"], dir);
+		await git(["config", "user.useConfigOnly", "true"], dir);
+		const configBefore = await fs.readFile(path.join(dir, ".git/config"));
+		const ref = await snapshot(dir, {
+			...process.env,
+			GIT_CONFIG_GLOBAL: os.devNull,
+			GIT_CONFIG_NOSYSTEM: "1",
+			GIT_CONFIG_COUNT: "0",
+			GIT_AUTHOR_NAME: undefined,
+			GIT_AUTHOR_EMAIL: undefined,
+			GIT_COMMITTER_NAME: undefined,
+			GIT_COMMITTER_EMAIL: undefined,
+		});
+		expect(ref).not.toBe(await git(["rev-parse", "HEAD"], dir));
+		expect(
+			(await git(["rev-list", "--parents", "-n", "1", ref], dir)).split(" "),
+		).toHaveLength(4);
+		expect(await git(["show", `${ref}:hello.ts`], dir)).toBe("tracked edit");
+		expect(await git(["show", `${ref}^3:untracked.txt`], dir)).toBe(
+			"untracked content",
+		);
+		expect(await fs.readFile(path.join(dir, ".git/config"))).toEqual(
+			configBefore,
+		);
+	});
 
 	it("captures changes with a missing real index without recreating it", async () => {
 		const dir = await createTestRepo();
