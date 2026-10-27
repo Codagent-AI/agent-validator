@@ -30,9 +30,10 @@ async function makeStub(root: string, env: NodeJS.ProcessEnv) {
   const bin = path.join(root, 'bin');
   const calls = path.join(root, 'calls.jsonl');
   await fs.mkdir(bin);
+  // Drain review prompts before exiting so the adapter cannot hit EPIPE on stdin.
   for (const name of ['codex', 'claude']) {
     const file = path.join(bin, name);
-    await fs.writeFile(file, `#!/usr/bin/env node\nconst fs = require('node:fs');\nfs.appendFileSync(process.env.STUB_CALLS, JSON.stringify({tool:'${name}', argv:process.argv.slice(2)})+'\\n');\nprocess.stdout.write('${name}' === 'claude' ? JSON.stringify({status:'pass'})+'\\n' : JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({status:'pass'})}})+'\\n');\n`);
+    await fs.writeFile(file, `#!/usr/bin/env node\nconst fs = require('node:fs');\nif ('${name}' === 'codex' && process.argv.includes('exec')) fs.readFileSync(0);\nfs.appendFileSync(process.env.STUB_CALLS, JSON.stringify({tool:'${name}', argv:process.argv.slice(2)})+'\\n');\nprocess.stdout.write('${name}' === 'claude' ? JSON.stringify({status:'pass'})+'\\n' : JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({status:'pass'})}})+'\\n');\n`);
     await fs.chmod(file, 0o755);
   }
   env.PATH = `${bin}:${process.env.PATH ?? ''}`;
