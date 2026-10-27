@@ -327,3 +327,198 @@ describe("working-tree-ref E2E", () => {
 			{ timeout: TIMEOUT_MS * 2 },
 		);
 });
+
+// Run source in an isolated process so cwd and mocks cannot affect other tests.
+async function snapshot(dir: string, env = process.env): Promise<string> {
+	const source = path.join(VALIDATOR_ROOT, "src/utils/execution-state.ts");
+	const { stdout } = await execFileAsync(
+		process.execPath,
+		[
+			"-e",
+			`const { createWorkingTreeRef } = await import(${JSON.stringify(source)}); console.log(await createWorkingTreeRef());`,
+		],
+		{ cwd: dir, env },
+	);
+	return stdout.trim();
+}
+
+describe("non-mutating working-tree snapshots", () => {
+	for (const [operation, stateFile] of [
+		["merge", "MERGE_HEAD"],
+		["cherry-pick", "CHERRY_PICK_HEAD"],
+		["revert", "REVERT_HEAD"],
+	]) {
+		it(`preserves a resolved and staged ${operation} and its exact status`, async () => {
+			const dir = await createTestRepo();
+			tempDirs.push(dir);
+			await git(["checkout", "-b", "other", "base"], dir);
+			await fs.writeFile(path.join(dir, "hello.ts"), "other branch\n");
+			await git(["add", "hello.ts"], dir);
+			await git(["commit", "-m", "other"], dir);
+			await git(["checkout", "main"], dir);
+			await expect(git([operation, "other"], dir)).rejects.toThrow();
+			await fs.writeFile(path.join(dir, "hello.ts"), "resolved\n");
+			await git(["add", "hello.ts"], dir);
+			const before = await execFileAsync("git", ["status", "--porcelain"], {
+				cwd: dir,
+			});
+			const operationHead = await fs.readFile(
+				path.join(dir, `.git/${stateFile}`),
+				"utf8",
+			);
+			await snapshot(dir);
+			expect(await fs.readFile(path.join(dir, `.git/${stateFile}`), "utf8")).toBe(
+				operationHead,
+			);
+			expect(await git(["diff", "--cached", "--name-only"], dir)).toBe(
+				"hello.ts",
+			);
+			expect(
+				(await execFileAsync("git", ["status", "--porcelain"], { cwd: dir }))
+					.stdout,
+			).toBe(before.stdout);
+		});
+	}
+
+	it("captures same-size edits when file metadata matches the cached index entry", async () => {
+		const dir = await createTestRepo();
+		tempDirs.push(dir);
+		await git(["config", "core.trustctime", "false"], dir);
+		await git(["config", "core.checkStat", "minimal"], dir);
+		const file = path.join(dir, "hello.ts");
+		const index = path.join(dir, ".git/index");
+		const timestamp = new Date("2000-01-01T00:00:00Z");
+		await fs.utimes(file, timestamp, timestamp);
+		await git(["update-index", "--refresh"], dir);
+		// Model a racily clean index: Git must hash the file even when stat data matches.
+		await fs.utimes(index, timestamp, timestamp);
+		await fs.writeFile(file, "export const x = 9;\n");
+		await fs.utimes(file, timestamp, timestamp);
+		const indexBefore = await fs.readFile(index);
+		const ref = await snapshot(dir);
+		expect(await git(["show", `${ref}:hello.ts`], dir)).toBe("export const x = 9;");
+		expect(await git(["show", `${ref}^2:hello.ts`], dir)).toBe("export const x = 0;");
+		expect(await fs.readFile(index)).toEqual(indexBefore);
+	});
+
+	it("creates a three-parent snapshot without configured Git identity", async () => {
+		const dir = await createTestRepo();
+		tempDirs.push(dir);
+		await fs.writeFile(path.join(dir, "hello.ts"), "tracked edit\n");
+		await fs.writeFile(path.join(dir, "untracked.txt"), "untracked content\n");
+		await git(["config", "--unset", "user.name"], dir);
+		await git(["config", "--unset", "user.email"], dir);
+		await git(["config", "user.useConfigOnly", "true"], dir);
+		const configBefore = await fs.readFile(path.join(dir, ".git/config"));
+		const ref = await snapshot(dir, {
+			...process.env,
+			GIT_CONFIG_GLOBAL: os.devNull,
+			GIT_CONFIG_NOSYSTEM: "1",
+			GIT_CONFIG_COUNT: "0",
+			GIT_AUTHOR_NAME: undefined,
+			GIT_AUTHOR_EMAIL: undefined,
+			GIT_COMMITTER_NAME: undefined,
+			GIT_COMMITTER_EMAIL: undefined,
+		});
+		expect(ref).not.toBe(await git(["rev-parse", "HEAD"], dir));
+		expect(
+			(await git(["rev-list", "--parents", "-n", "1", ref], dir)).split(" "),
+		).toHaveLength(4);
+		expect(await git(["show", `${ref}:hello.ts`], dir)).toBe("tracked edit");
+		expect(await git(["show", `${ref}^3:untracked.txt`], dir)).toBe(
+			"untracked content",
+		);
+		expect(await fs.readFile(path.join(dir, ".git/config"))).toEqual(
+			configBefore,
+		);
+	});
+
+	it("captures changes with a missing real index without recreating it", async () => {
+		const dir = await createTestRepo();
+		tempDirs.push(dir);
+		await fs.rm(path.join(dir, ".git/index"));
+		const head = await git(["rev-parse", "HEAD"], dir);
+		const ref = await snapshot(dir);
+		expect(ref).not.toBe(head);
+		expect(
+			(await git(["rev-list", "--parents", "-n", "1", ref], dir)).split(" "),
+		).toHaveLength(4);
+		expect(await git(["ls-tree", "-r", "--name-only", `${ref}^2`], dir)).toBe("");
+		expect(await git(["show", `${ref}^3:hello.ts`], dir)).toBe(
+			"export const x = 0;",
+		);
+		expect(
+			await fs.access(path.join(dir, ".git/index")).then(
+				() => true,
+				() => false,
+			),
+		).toBe(false);
+	});
+
+	it("captures staged, unstaged and untracked content without changing the index or user stash", async () => {
+		const dir = await createTestRepo();
+		tempDirs.push(dir);
+		await fs.writeFile(path.join(dir, "hello.ts"), "user stash\n");
+		await git(["stash", "push", "-m", "user stash"], dir);
+		const stashBefore = await git(["stash", "list"], dir);
+		const stashRef = await git(["rev-parse", "refs/stash"], dir);
+		await fs.writeFile(path.join(dir, "hello.ts"), "staged\n");
+		await git(["add", "hello.ts"], dir);
+		await fs.writeFile(path.join(dir, "hello.ts"), "unstaged\n");
+		const filename = " untracked\nfile.txt ";
+		await fs.writeFile(path.join(dir, filename), "untracked\n");
+		const indexTree = await git(["write-tree"], dir);
+		const indexBefore = await fs.readFile(path.join(dir, ".git/index"));
+		const statusBefore = await git(["status", "--porcelain"], dir);
+		const ref = await snapshot(dir);
+		expect(
+			(await git(["rev-list", "--parents", "-n", "1", ref], dir)).split(" "),
+		).toHaveLength(4);
+		expect(await git(["rev-parse", `${ref}^2^{tree}`], dir)).toBe(indexTree);
+		expect(await git(["show", `${ref}:hello.ts`], dir)).toBe("unstaged");
+		expect(await git(["show", `${ref}^2:hello.ts`], dir)).toBe("staged");
+		expect(await git(["show", `${ref}^3:${filename}`], dir)).toBe("untracked");
+		expect(await fs.readFile(path.join(dir, ".git/index"))).toEqual(
+			indexBefore,
+		);
+		expect(await git(["status", "--porcelain"], dir)).toBe(statusBefore);
+		expect(await fs.readFile(path.join(dir, "hello.ts"), "utf8")).toBe(
+			"unstaged\n",
+		);
+		expect(await fs.readFile(path.join(dir, filename), "utf8")).toBe(
+			"untracked\n",
+		);
+		expect(await git(["stash", "list"], dir)).toBe(stashBefore);
+		expect(await git(["rev-parse", "refs/stash"], dir)).toBe(stashRef);
+	});
+
+	for (const kind of ["tracked", "untracked"]) {
+		it(`keeps three parents and produces no fix-base diff for ${kind}-only changes`, async () => {
+			const dir = await createTestRepo();
+			tempDirs.push(dir);
+			await fs.writeFile(
+				path.join(dir, kind === "tracked" ? "hello.ts" : "new.ts"),
+				"snapshot content\n",
+			);
+			const ref = await snapshot(dir);
+			expect(
+				(await git(["rev-list", "--parents", "-n", "1", ref], dir)).split(" "),
+			).toHaveLength(4);
+			const { stdout } = await execFileAsync(
+				process.execPath,
+				[
+					"-e",
+					`
+    const { getDiff } = await import(${JSON.stringify(path.join(VALIDATOR_ROOT, "src/gates/review-diff.ts"))});
+    const { computeDiffStats } = await import(${JSON.stringify(path.join(VALIDATOR_ROOT, "src/core/diff-stats.ts"))});
+    console.log(JSON.stringify({diff: await getDiff(".", "base", {fixBase: ${JSON.stringify(ref)}}), stats: await computeDiffStats("base", {fixBase: ${JSON.stringify(ref)}})}));
+   `,
+				],
+				{ cwd: dir },
+			);
+			const result = JSON.parse(stdout);
+			expect(result.diff).toBe("");
+			expect(result.stats.total).toBe(0);
+		});
+	}
+});

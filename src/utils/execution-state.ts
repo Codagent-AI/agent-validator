@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { getDebugLogger } from './debug-log.js';
+import { captureWorkingTree } from './git-snapshot.js';
 
 const EXECUTION_STATE_FILENAME = '.execution_state';
 const SESSION_REF_FILENAME = '.session_ref';
@@ -19,6 +20,7 @@ function spawnGit(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
     });
 
     // StringDecoder correctly handles multi-byte UTF-8 characters split across
@@ -193,81 +195,31 @@ async function throwIfGitIndexLocked(): Promise<void> {
 }
 
 /**
- * Create a stash SHA that captures the current working tree state.
- * Uses `git stash push --include-untracked` which creates a proper 3-parent stash,
- * then immediately pops it to restore the working tree.
- * Returns the stash SHA, or HEAD SHA if working tree is clean.
+ * Capture a 3-parent stash-format commit using temporary indexes and git plumbing.
+ * Leaves the index, working tree, stash list, and in-progress operations untouched.
+ * Returns HEAD when there are no working-tree changes or snapshotting fails.
  * Throws a clear error when Git cannot write the index because index.lock exists.
  */
 export async function createWorkingTreeRef(): Promise<string> {
-  const hasChanges = await hasWorkingTreeChanges();
-  if (!hasChanges) {
-    return getCurrentCommit();
-  }
-
+  if (!(await hasWorkingTreeChanges())) return getCurrentCommit();
   await throwIfGitIndexLocked();
 
-  // Returns trimmed stdout, or rejects on git error.
-  const runGit = (args: string[]) =>
-    new Promise<string>((resolve, reject) => {
-      execFile('git', args, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr || error.message));
-        } else {
-          resolve(stdout.trim());
-        }
-      });
-    });
-
-  // Snapshot the pre-push stash top (empty string = no stash).
-  // If stash@{0} is unchanged after push, git stashed nothing and we must
-  // NOT pop — that would silently discard the user's pre-existing stash entry.
-  const prevTop = await runGit(['rev-parse', '--verify', 'stash@{0}']).catch(
-    () => '',
-  );
-
   try {
-    await runGit([
-      'stash',
-      'push',
-      '--include-untracked',
-      '-m',
-      'validator-snapshot',
-    ]);
+    return await captureWorkingTree(await getCurrentBranch());
   } catch (error) {
     const lockPath = await getGitIndexLockPath().catch(() => undefined);
-    const lockExists = lockPath ? await hasGitIndexLock(lockPath) : false;
-    if (lockExists && isIndexLockError(error)) {
+    if (
+      lockPath &&
+      (await hasGitIndexLock(lockPath)) &&
+      isIndexLockError(error)
+    ) {
       throw new GitIndexLockError(lockPath);
     }
-    return getCurrentCommit();
-  }
-
-  const newTop = await runGit(['rev-parse', 'stash@{0}']).catch(() => '');
-  // A new stash was created if newTop is non-empty and differs from prevTop.
-  const createdStash = !!newTop && newTop !== prevTop;
-
-  if (!createdStash) {
-    // Push was a no-op or post-push rev-parse failed unexpectedly. If there was
-    // a pre-existing stash (prevTop) but newTop is missing, we can't confirm the
-    // push state — avoid destructive pop of an unrelated user stash.
-    if (prevTop && !newTop) {
-      console.error(
-        'validator: unable to verify stash snapshot; leaving stash untouched. Run `git stash pop` manually if needed.',
-      );
-    }
-    return getCurrentCommit();
-  }
-
-  try {
-    await runGit(['stash', 'pop']);
-  } catch {
     console.error(
-      'validator: stash pop failed — run `git stash pop` manually to restore your working tree',
+      `validator: unable to capture working-tree snapshot; falling back to HEAD: ${error instanceof Error ? error.message : String(error)}`,
     );
+    return getCurrentCommit();
   }
-
-  return newTop;
 }
 
 /**
@@ -277,8 +229,7 @@ export async function createWorkingTreeRef(): Promise<string> {
  */
 export async function writeExecutionState(logDir: string): Promise<void> {
   const statePath = getStatePath(logDir);
-  // createWorkingTreeRef runs first (sequentially) to avoid git index lock
-  // contention between stash push/pop and the parallel rev-parse calls below.
+  // Capture the snapshot before recording the branch and commit in the state.
   const workingTreeRef = await createWorkingTreeRef();
   const [branch, commit, rawState] = await Promise.all([
     getCurrentBranch(),

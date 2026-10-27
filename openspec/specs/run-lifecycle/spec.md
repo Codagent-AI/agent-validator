@@ -243,7 +243,7 @@ When computing the diff against a stash-based `working_tree_ref`, the system MUS
 - **AND** one or more review gates report violations
 - **WHEN** the run finishes writing log files
 - **THEN** the system SHALL write `working_tree_ref` to `.execution_state` in the log directory
-- **AND** the `working_tree_ref` SHALL contain a git stash SHA (from `git stash push --include-untracked`) representing the full working tree state (tracked and untracked files) at that moment
+- **AND** the `working_tree_ref` SHALL contain a 3-parent stash-format commit SHA captured without modifying the index, working tree, stash list, or in-progress merge/cherry-pick/revert state representing the full working tree state (tracked and untracked files) at that moment
 - **AND** no separate `.session_ref` file SHALL be created
 
 #### Scenario: Session ref not created when all gates pass
@@ -487,14 +487,14 @@ The execution state file (`.execution_state`) MUST include a `working_tree_ref` 
 #### Scenario: Working tree ref creation with tracked changes
 - **GIVEN** the working tree has staged or unstaged changes to tracked files
 - **WHEN** a run completes (success or failure)
-- **THEN** the system SHALL execute `git stash push --include-untracked` and immediately pop to restore
+- **THEN** the system SHALL capture a 3-parent stash-format commit without modifying the index, working tree, stash list, or in-progress merge/cherry-pick/revert state
 - **AND** the stash SHA SHALL reference a 3-parent stash (parent 3 = untracked files tree)
 - **AND** the system SHALL store this SHA as `working_tree_ref`
 
 #### Scenario: Working tree ref creation with tracked and untracked changes
 - **GIVEN** the working tree has both tracked modifications and untracked files
 - **WHEN** a run completes (success or failure)
-- **THEN** the system SHALL execute `git stash push --include-untracked` and immediately pop to restore
+- **THEN** the system SHALL capture a 3-parent stash-format commit without modifying the index, working tree, stash list, or in-progress merge/cherry-pick/revert state
 - **AND** the stash SHA SHALL reference a 3-parent stash
 - **AND** the `^3` parent tree SHALL contain the untracked files
 - **AND** the system SHALL store this SHA as `working_tree_ref`
@@ -502,11 +502,12 @@ The execution state file (`.execution_state`) MUST include a `working_tree_ref` 
 #### Scenario: Working tree ref creation with untracked-only changes
 - **GIVEN** the working tree has ONLY untracked files (no staged or modified tracked files)
 - **WHEN** a run completes (success or failure)
-- **THEN** the system SHALL execute `git stash push --include-untracked` and immediately pop to restore
-- **AND** if the stash push was a no-op (no stash created), the system SHALL fall back to storing the current HEAD SHA as `working_tree_ref`
+- **THEN** the system SHALL capture a 3-parent stash-format commit without modifying the index, working tree, stash list, or in-progress merge/cherry-pick/revert state
+- **AND** the `^3` parent tree SHALL contain the untracked files
+- **AND** the system SHALL store this SHA as `working_tree_ref`
 
 #### Scenario: Working tree ref creation with clean working tree
-- **GIVEN** the working tree has no uncommitted changes
+- **GIVEN** there are no working-tree changes
 - **WHEN** a run completes (success or failure)
 - **THEN** the system SHALL store the current HEAD SHA as `working_tree_ref`
 - **AND** no stash operation SHALL be attempted
@@ -515,7 +516,14 @@ The execution state file (`.execution_state`) MUST include a `working_tree_ref` 
 - **GIVEN** the working tree has uncommitted changes (staged or unstaged)
 - **WHEN** the system creates `working_tree_ref`
 - **THEN** the stash SHA SHALL include all tracked changes and untracked files
-- **AND** the working tree SHALL NOT be modified (stash create does not apply the stash)
+- **AND** the index, working tree, stash list, and in-progress merge/cherry-pick/revert state SHALL NOT be modified
+
+#### Scenario: Snapshot preserves a resolved and staged in-progress merge
+- **GIVEN** a merge is in progress and its resolved changes are staged
+- **WHEN** the system creates `working_tree_ref`
+- **THEN** `MERGE_HEAD` SHALL remain unchanged
+- **AND** the resolved changes SHALL remain staged
+- **AND** `git status --porcelain` output SHALL remain byte-identical
 
 ### Requirement: Post-Clean FixBase Resolution
 

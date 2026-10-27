@@ -368,311 +368,202 @@ describe("Execution State Git Operations (mocked)", () => {
 	});
 
 	describe("createWorkingTreeRef", () => {
-		// Helper: mock execFile callback-style
-		function mockExecFile(
-			handler: (
-				args: string[],
-				callback: (
-					err: null | Error,
+		const head = "head-sha";
+		let calls: string[][];
+		let failCommand: string | undefined;
+		let failMessage: string;
+		let untracked: string;
+		let clean: boolean;
+		let createLock: boolean;
+		let input: string | undefined;
+		let stdinErrorUnhandled: boolean;
+
+		beforeEach(async () => {
+			calls = [];
+			failCommand = undefined;
+			failMessage = "snapshot failed";
+			untracked = " new file.txt \0";
+			clean = false;
+			createLock = false;
+			input = undefined;
+			stdinErrorUnhandled = false;
+			await fs.writeFile(path.join(TEST_DIR, "index"), "user index");
+			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
+				(_cmd, args) =>
+					createMockSpawn(
+						(args as string[])[0] === "status"
+							? clean
+								? ""
+								: " M file\n"
+							: (args as string[]).includes("--abbrev-ref")
+								? "main\n"
+								: `${head}\n`,
+						0,
+					) as ReturnType<typeof childProcess.spawn>,
+			);
+			execFileSpy = spyOn(childProcess, "execFile").mockImplementation(((
+				_file: unknown,
+				rawArgs: unknown,
+				optionsOrCallback: unknown,
+				callback?: unknown,
+			) => {
+				const args = rawArgs as string[];
+				calls.push(args);
+				const cb = (callback ?? optionsOrCallback) as (
+					err: Error | null,
 					stdout: string,
 					stderr: string,
-				) => void,
-			) => void,
-		) {
-			return spyOn(childProcess, "execFile").mockImplementation(
-				((_file: unknown, args: unknown, callback: unknown) => {
-					const cb = callback as (
-						err: null | Error,
-						stdout: string,
-						stderr: string,
-					) => void;
-					handler(args as string[], cb);
-					return {} as ReturnType<typeof childProcess.execFile>;
-				}) as typeof childProcess.execFile,
+				) => void;
+				setImmediate(async () => {
+					if (args[0] === failCommand) {
+						if (createLock)
+							await fs.writeFile(path.join(TEST_DIR, "index.lock"), "");
+						cb(new Error(failMessage), "", failMessage);
+						return;
+					}
+					let output = "";
+					if (args.includes("--git-path")) output = path.join(TEST_DIR, args[2]);
+					else if (args.includes("--show-toplevel")) output = TEST_DIR;
+					else if (args[0] === "rev-parse") output = head;
+					else if (args[0] === "write-tree") output = "tree-sha";
+					else if (args[0] === "ls-files") {
+						output = untracked;
+						const options = optionsOrCallback as childProcess.ExecFileOptions;
+						if (Buffer.byteLength(output) > (options.maxBuffer ?? 1024 * 1024)) {
+							cb(new Error("stdout maxBuffer length exceeded"), "", "");
+							return;
+						}
+					} else if (args[0] === "commit-tree")
+						output = args.includes("On main: validator-snapshot")
+							? "snapshot-sha"
+							: args.includes("index on main: validator-snapshot")
+								? "index-sha"
+								: "untracked-sha";
+					cb(null, output, "");
+				});
+				const stdin = Object.assign(new EventEmitter(), {
+					end: (value: string) => {
+						input = value;
+						if (failCommand === "update-index") {
+							try {
+								stdin.emit("error", new Error("write EPIPE"));
+							} catch {
+								stdinErrorUnhandled = true;
+							}
+						}
+					},
+				});
+				return { stdin };
+			}) as typeof childProcess.execFile);
+		});
+
+		it("builds three stash parents without stash push, stash pop or reset", async () => {
+			expect(await createWorkingTreeRef()).toBe("snapshot-sha");
+			expect(calls.map((args) => args[0])).toEqual([
+				"rev-parse",
+				"rev-parse",
+				"rev-parse",
+				"rev-parse",
+				"write-tree",
+				"commit-tree",
+				"ls-files",
+				"read-tree",
+				"update-index",
+				"write-tree",
+				"commit-tree",
+				"add",
+				"write-tree",
+				"commit-tree",
+			]);
+			expect(calls.at(-1)).toEqual([
+				"commit-tree",
+				"tree-sha",
+				"-p",
+				head,
+				"-p",
+				"index-sha",
+				"-p",
+				"untracked-sha",
+				"-m",
+				"On main: validator-snapshot",
+			]);
+			expect(input).toBe(untracked);
+			expect(calls.some((args) => ["stash", "reset"].includes(args[0]))).toBe(
+				false,
 			);
+			expect(await fs.readdir(TEST_DIR)).toEqual(["index"]);
+			expect(await fs.readFile(path.join(TEST_DIR, "index"), "utf8")).toBe(
+				"user index",
+			);
+			const options = execFileSpy.mock.calls.find(
+				(call) => (call[1] as string[])[0] === "add",
+			)?.[2] as childProcess.ExecFileOptions;
+			expect(options.env?.GIT_INDEX_FILE).toContain("index.validator-");
+			expect(options.cwd).toBe(TEST_DIR);
+		});
+
+		it("captures untracked path lists exceeding the default 1 MiB output buffer", async () => {
+			untracked = "untracked-path.txt\0".repeat(65_536);
+			expect(Buffer.byteLength(untracked)).toBeGreaterThan(1024 * 1024);
+			expect(await createWorkingTreeRef()).toBe("snapshot-sha");
+			expect(input).toBe(untracked);
+		});
+
+		it("handles a broken stdin pipe through the snapshot failure path", async () => {
+			failCommand = "update-index";
+			expect(await createWorkingTreeRef()).toBe(head);
+			expect(stdinErrorUnhandled).toBe(false);
+		});
+
+		it("warns when snapshot failure falls back to HEAD", async () => {
+			failCommand = "write-tree";
+			const warning = spyOn(console, "error").mockImplementation(() => {});
+			expect(await createWorkingTreeRef()).toBe(head);
+			expect(warning).toHaveBeenCalledWith(
+				expect.stringContaining("snapshot failed"),
+			);
+			expect(warning).toHaveBeenCalledWith(expect.stringContaining("HEAD"));
+		});
+
+		it("includes an empty untracked parent for tracked-only changes", async () => {
+			untracked = "";
+			expect(await createWorkingTreeRef()).toBe("snapshot-sha");
+			expect(calls.some((args) => args[0] === "update-index")).toBe(false);
+			expect(calls.at(-1)).toContain("untracked-sha");
+		});
+
+		it("returns HEAD without snapshot commands when there are no working-tree changes", async () => {
+			clean = true;
+			expect(await createWorkingTreeRef()).toBe(head);
+			expect(execFileSpy).not.toHaveBeenCalled();
+		});
+
+		for (const command of ["write-tree", "update-index", "add", "commit-tree"]) {
+			it(`falls back to HEAD and cleans temporary indexes when ${command} fails`, async () => {
+				failCommand = command;
+				expect(await createWorkingTreeRef()).toBe(head);
+				expect(await fs.readdir(TEST_DIR)).toEqual(["index"]);
+			});
 		}
 
-		it("returns stash SHA when working tree is dirty", async () => {
-			const stashSha = "stash123456789012345678901234567890abcd";
-
-			// hasWorkingTreeChanges -> dirty
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() =>
-				createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
-					typeof childProcess.spawn
-				>,
-			);
-
-			// index lock check -> absent; pre-push rev-parse --verify -> no pre-existing stash
-			// stash push -> ok; post-push rev-parse stash@{0} -> stashSha; stash pop -> ok
-			execFileSpy = mockExecFile((args, cb) => {
-				setImmediate(() => {
-					if (args.includes("--git-path")) {
-						cb(null, ".git/index.lock\n", "");
-					} else if (args.includes("--verify")) {
-						cb(new Error("no stash"), "", "");
-					} else if (args.includes("rev-parse")) {
-						cb(null, `${stashSha}\n`, "");
-					} else {
-						cb(null, "", "");
-					}
-				});
-			});
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(stashSha);
+		it("does not report an index lock when no lock file exists", async () => {
+			failCommand = "write-tree";
+			failMessage = "Unable to create '.git/index.lock': File exists";
+			expect(await createWorkingTreeRef()).toBe(head);
 		});
 
-		it("returns HEAD SHA when stash push is a no-op", async () => {
-			const headSha = "head1234567890123456789012345678901234ab";
-			const prevStash = "prev567890123456789012345678901234567890";
-
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(_cmd, args) => {
-					const cmdArgs = args as string[];
-					if (cmdArgs.includes("--porcelain")) {
-						// dirty tree -> proceeds to stash
-						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
-							typeof childProcess.spawn
-						>;
-					}
-					// getCurrentCommit: rev-parse HEAD
-					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
-						typeof childProcess.spawn
-					>;
-				},
+		it("raises an actionable error if an index lock appears during snapshotting", async () => {
+			failCommand = "write-tree";
+			failMessage = "Unable to create '.git/index.lock': File exists";
+			createLock = true;
+			await expect(createWorkingTreeRef()).rejects.toThrow(
+				"remove the stale .git/index.lock file",
 			);
-
-			// index lock check -> absent; pre-push rev-parse --verify -> prevStash
-			// push -> ok no-op; post-push rev-parse stash@{0} -> still prevStash
-			execFileSpy = mockExecFile((args, cb) => {
-				setImmediate(() => {
-					if (args.includes("--git-path")) {
-						cb(null, ".git/index.lock\n", "");
-					} else if (args.includes("rev-parse")) {
-						cb(null, `${prevStash}\n`, "");
-					} else {
-						cb(null, "", "");
-					}
-				});
-			});
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(headSha);
+			expect((await fs.readdir(TEST_DIR)).sort()).toEqual([
+				"index",
+				"index.lock",
+			]);
 		});
-
-		it("returns HEAD SHA silently when push is a no-op with no pre-existing stash", async () => {
-			const headSha = "head1234567890123456789012345678901234ab";
-
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(_cmd, args) => {
-					const cmdArgs = args as string[];
-					if (cmdArgs.includes("--porcelain")) {
-						// dirty tree -> proceeds to stash
-						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
-							typeof childProcess.spawn
-						>;
-					}
-					// getCurrentCommit: rev-parse HEAD
-					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
-						typeof childProcess.spawn
-					>;
-				},
-			);
-
-			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
-
-			// index lock check -> absent; pre-push rev-parse --verify -> fail
-			// push -> ok no-op; post-push rev-parse stash@{0} -> fail
-			execFileSpy = mockExecFile((args, cb) => {
-				setImmediate(() => {
-					if (args.includes("--git-path")) {
-						cb(null, ".git/index.lock\n", "");
-					} else if (args.includes("push")) {
-						cb(null, "", "");
-					} else {
-						cb(new Error("no stash"), "", "");
-					}
-				});
-			});
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(headSha);
-			expect(errorSpy).not.toHaveBeenCalled();
-			errorSpy.mockRestore();
-		});
-
-		it("returns HEAD SHA and warns when post-push rev-parse fails with pre-existing stash", async () => {
-			const headSha = "head1234567890123456789012345678901234ab";
-			const prevStash = "prev567890123456789012345678901234567890";
-
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(_cmd, args) => {
-					const cmdArgs = args as string[];
-					if (cmdArgs.includes("--porcelain")) {
-						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
-							typeof childProcess.spawn
-						>;
-					}
-					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
-						typeof childProcess.spawn
-					>;
-				},
-			);
-
-			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
-
-			// index lock check -> absent; pre-push rev-parse --verify -> prevStash
-			// push -> ok; post-push rev-parse stash@{0} -> fails
-			execFileSpy = mockExecFile((args, cb) => {
-				setImmediate(() => {
-					if (args.includes("--git-path")) {
-						cb(null, ".git/index.lock\n", "");
-					} else if (args.includes("--verify")) {
-						cb(null, `${prevStash}\n`, "");
-					} else if (args.includes("push")) {
-						cb(null, "", "");
-					} else {
-						cb(new Error("no such ref"), "", "");
-					}
-				});
-			});
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(headSha);
-			expect(errorSpy).toHaveBeenCalledWith(
-				expect.stringContaining("leaving stash untouched"),
-			);
-			errorSpy.mockRestore();
-		});
-
-		it("returns HEAD SHA when working tree is clean", async () => {
-			const headSha = "head1234567890123456789012345678901234ab";
-
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(_cmd, args) => {
-					const cmdArgs = args as string[];
-					if (cmdArgs.includes("--porcelain")) {
-						// clean tree
-						return createMockSpawn("", 0) as ReturnType<
-							typeof childProcess.spawn
-						>;
-					}
-					// getCurrentCommit: rev-parse HEAD
-					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
-						typeof childProcess.spawn
-					>;
-				},
-			);
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(headSha);
-		});
-
-		it("does not report a stale lock when stash push mentions index.lock but no lock file exists", async () => {
-			const headSha = "head1234567890123456789012345678901234ab";
-
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(_cmd, args) => {
-					const cmdArgs = args as string[];
-					if (cmdArgs.includes("--porcelain")) {
-						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
-							typeof childProcess.spawn
-						>;
-					}
-					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
-						typeof childProcess.spawn
-					>;
-				},
-			);
-
-			execFileSpy = mockExecFile((args, cb) => {
-				setImmediate(() => {
-					if (args.includes("--git-path")) {
-						cb(null, ".git/index.lock\n", "");
-					} else if (args.includes("--verify")) {
-						cb(new Error("no stash"), "", "");
-					} else if (args.includes("push")) {
-						cb(
-							new Error("Unable to create '.git/index.lock': File exists"),
-							"",
-							"Unable to create '.git/index.lock': File exists",
-						);
-					} else {
-						cb(null, "", "");
-					}
-				});
-			});
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(headSha);
-		});
-
-		it("falls back to HEAD SHA when stash push fails for other reasons", async () => {
-			const headSha = "head1234567890123456789012345678901234ab";
-
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
-				(_cmd, args) => {
-					const cmdArgs = args as string[];
-					if (cmdArgs.includes("--porcelain")) {
-						return createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
-							typeof childProcess.spawn
-						>;
-					}
-					return createMockSpawn(`${headSha}\n`, 0) as ReturnType<
-						typeof childProcess.spawn
-					>;
-				},
-			);
-
-			execFileSpy = mockExecFile((args, cb) => {
-				setImmediate(() => {
-					if (args.includes("--git-path")) {
-						cb(null, ".git/index.lock\n", "");
-					} else {
-						cb(new Error("stash push failed"), "", "");
-					}
-				});
-			});
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(headSha);
-		});
-
-		it("returns stash SHA and warns when stash pop fails", async () => {
-			const stashSha = "stash123456789012345678901234567890abcd";
-
-			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(() =>
-				createMockSpawn("M src/foo.ts\n", 0) as ReturnType<
-					typeof childProcess.spawn
-				>,
-			);
-
-			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
-
-			execFileSpy = mockExecFile((args, cb) => {
-				setImmediate(() => {
-					if (args.includes("--git-path")) {
-						cb(null, ".git/index.lock\n", "");
-					} else if (args.includes("pop")) {
-						cb(new Error("stash pop failed"), "", "");
-					} else if (args.includes("--verify")) {
-						cb(new Error("no stash"), "", "");
-					} else if (args.includes("rev-parse")) {
-						cb(null, `${stashSha}\n`, "");
-					} else {
-						cb(null, "", "");
-					}
-				});
-			});
-
-			const ref = await createWorkingTreeRef();
-			expect(ref).toBe(stashSha);
-			expect(errorSpy).toHaveBeenCalledWith(
-				expect.stringContaining("stash pop"),
-			);
-			errorSpy.mockRestore();
-		});
-
 	});
 
 	describe("writeExecutionState", () => {
