@@ -376,6 +376,7 @@ describe("Execution State Git Operations (mocked)", () => {
 		let clean: boolean;
 		let createLock: boolean;
 		let input: string | undefined;
+		let stdinErrorUnhandled: boolean;
 
 		beforeEach(async () => {
 			calls = [];
@@ -385,6 +386,7 @@ describe("Execution State Git Operations (mocked)", () => {
 			clean = false;
 			createLock = false;
 			input = undefined;
+			stdinErrorUnhandled = false;
 			await fs.writeFile(path.join(TEST_DIR, "index"), "user index");
 			spawnSpy = spyOn(childProcess, "spawn").mockImplementation(
 				(_cmd, args) =>
@@ -424,8 +426,14 @@ describe("Execution State Git Operations (mocked)", () => {
 					else if (args.includes("--show-toplevel")) output = TEST_DIR;
 					else if (args[0] === "rev-parse") output = head;
 					else if (args[0] === "write-tree") output = "tree-sha";
-					else if (args[0] === "ls-files") output = untracked;
-					else if (args[0] === "commit-tree")
+					else if (args[0] === "ls-files") {
+						output = untracked;
+						const options = optionsOrCallback as childProcess.ExecFileOptions;
+						if (Buffer.byteLength(output) > (options.maxBuffer ?? 1024 * 1024)) {
+							cb(new Error("stdout maxBuffer length exceeded"), "", "");
+							return;
+						}
+					} else if (args[0] === "commit-tree")
 						output = args.includes("On main: validator-snapshot")
 							? "snapshot-sha"
 							: args.includes("index on main: validator-snapshot")
@@ -433,13 +441,19 @@ describe("Execution State Git Operations (mocked)", () => {
 								: "untracked-sha";
 					cb(null, output, "");
 				});
-				return {
-					stdin: {
-						end: (value: string) => {
-							input = value;
-						},
+				const stdin = Object.assign(new EventEmitter(), {
+					end: (value: string) => {
+						input = value;
+						if (failCommand === "update-index") {
+							try {
+								stdin.emit("error", new Error("write EPIPE"));
+							} catch {
+								stdinErrorUnhandled = true;
+							}
+						}
 					},
-				};
+				});
+				return { stdin };
 			}) as typeof childProcess.execFile);
 		});
 
@@ -486,6 +500,29 @@ describe("Execution State Git Operations (mocked)", () => {
 			)?.[2] as childProcess.ExecFileOptions;
 			expect(options.env?.GIT_INDEX_FILE).toContain("index.validator-");
 			expect(options.cwd).toBe(TEST_DIR);
+		});
+
+		it("captures untracked path lists exceeding the default 1 MiB output buffer", async () => {
+			untracked = "untracked-path.txt\0".repeat(65_536);
+			expect(Buffer.byteLength(untracked)).toBeGreaterThan(1024 * 1024);
+			expect(await createWorkingTreeRef()).toBe("snapshot-sha");
+			expect(input).toBe(untracked);
+		});
+
+		it("handles a broken stdin pipe through the snapshot failure path", async () => {
+			failCommand = "update-index";
+			expect(await createWorkingTreeRef()).toBe(head);
+			expect(stdinErrorUnhandled).toBe(false);
+		});
+
+		it("warns when snapshot failure falls back to HEAD", async () => {
+			failCommand = "write-tree";
+			const warning = spyOn(console, "error").mockImplementation(() => {});
+			expect(await createWorkingTreeRef()).toBe(head);
+			expect(warning).toHaveBeenCalledWith(
+				expect.stringContaining("snapshot failed"),
+			);
+			expect(warning).toHaveBeenCalledWith(expect.stringContaining("HEAD"));
 		});
 
 		it("includes an empty untracked parent for tracked-only changes", async () => {

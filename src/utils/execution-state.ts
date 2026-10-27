@@ -215,6 +215,9 @@ export async function createWorkingTreeRef(): Promise<string> {
     ) {
       throw new GitIndexLockError(lockPath);
     }
+    console.error(
+      `validator: unable to capture working-tree snapshot; falling back to HEAD: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return getCurrentCommit();
   }
 }

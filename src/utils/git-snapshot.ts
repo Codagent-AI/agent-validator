@@ -14,6 +14,7 @@ const runGit = (
       args,
       {
         cwd,
+        maxBuffer: 256 * 1024 * 1024,
         env: {
           ...process.env,
           GIT_OPTIONAL_LOCKS: '0',
@@ -26,8 +27,21 @@ const runGit = (
       },
     );
     // Preserve NUL-delimited filenames verbatim, including leading/trailing whitespace.
+    // Git can reject a path before consuming all input. Let its exit status and
+    // stderr report the failure instead of an unhandled stdin EPIPE event.
+    child.stdin?.on('error', () => {});
     if (input !== undefined) child.stdin?.end(input);
   });
+
+async function copyIndex(source: string, destination: string): Promise<void> {
+  try {
+    await fs.copyFile(source, destination);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    // A missing index represents an empty staging area; keep the real one absent.
+    await runGit(['read-tree', '--empty'], destination);
+  }
+}
 
 /** Build an unreachable stash-format commit without writing checkout state. */
 export async function captureWorkingTree(branch: string): Promise<string> {
@@ -43,7 +57,7 @@ export async function captureWorkingTree(branch: string): Promise<string> {
     const untrackedIndex = path.join(tempDir, 'untracked');
     // Even write-tree can update the index's cache-tree extension. Use a copy
     // for the index parent too, keeping the user's index byte-for-byte intact.
-    await fs.copyFile(indexPath, workingIndex);
+    await copyIndex(indexPath, workingIndex);
     const indexTree = (await runGit(['write-tree'], workingIndex)).trim();
     const indexCommit = (
       await runGit([

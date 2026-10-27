@@ -380,6 +380,28 @@ describe("non-mutating working-tree snapshots", () => {
 		});
 	}
 
+	it("captures changes with a missing real index without recreating it", async () => {
+		const dir = await createTestRepo();
+		tempDirs.push(dir);
+		await fs.rm(path.join(dir, ".git/index"));
+		const head = await git(["rev-parse", "HEAD"], dir);
+		const ref = await snapshot(dir);
+		expect(ref).not.toBe(head);
+		expect(
+			(await git(["rev-list", "--parents", "-n", "1", ref], dir)).split(" "),
+		).toHaveLength(4);
+		expect(await git(["ls-tree", "-r", "--name-only", `${ref}^2`], dir)).toBe("");
+		expect(await git(["show", `${ref}^3:hello.ts`], dir)).toBe(
+			"export const x = 0;",
+		);
+		expect(
+			await fs.access(path.join(dir, ".git/index")).then(
+				() => true,
+				() => false,
+			),
+		).toBe(false);
+	});
+
 	it("captures staged, unstaged and untracked content without changing the index or user stash", async () => {
 		const dir = await createTestRepo();
 		tempDirs.push(dir);
