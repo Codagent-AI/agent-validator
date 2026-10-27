@@ -100,6 +100,10 @@ export async function captureWorkingTree(branch: string): Promise<string> {
       ])
     ).trim();
 
+    // Copying/writing the temporary index advances its timestamp and can hide
+    // same-size edits behind cached stat data. An old, nonzero timestamp makes
+    // Git treat cached entries as racy and verify their contents before staging.
+    await fs.utimes(workingIndex, 1, 1);
     await runGit(['add', '-u'], workingIndex, undefined, root);
     const workingTree = (await runGit(['write-tree'], workingIndex)).trim();
     return (

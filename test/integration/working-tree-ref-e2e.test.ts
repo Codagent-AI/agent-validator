@@ -380,6 +380,27 @@ describe("non-mutating working-tree snapshots", () => {
 		});
 	}
 
+	it("captures same-size edits when file metadata matches the cached index entry", async () => {
+		const dir = await createTestRepo();
+		tempDirs.push(dir);
+		await git(["config", "core.trustctime", "false"], dir);
+		await git(["config", "core.checkStat", "minimal"], dir);
+		const file = path.join(dir, "hello.ts");
+		const index = path.join(dir, ".git/index");
+		const timestamp = new Date("2000-01-01T00:00:00Z");
+		await fs.utimes(file, timestamp, timestamp);
+		await git(["update-index", "--refresh"], dir);
+		// Model a racily clean index: Git must hash the file even when stat data matches.
+		await fs.utimes(index, timestamp, timestamp);
+		await fs.writeFile(file, "export const x = 9;\n");
+		await fs.utimes(file, timestamp, timestamp);
+		const indexBefore = await fs.readFile(index);
+		const ref = await snapshot(dir);
+		expect(await git(["show", `${ref}:hello.ts`], dir)).toBe("export const x = 9;");
+		expect(await git(["show", `${ref}^2:hello.ts`], dir)).toBe("export const x = 0;");
+		expect(await fs.readFile(index)).toEqual(indexBefore);
+	});
+
 	it("creates a three-parent snapshot without configured Git identity", async () => {
 		const dir = await createTestRepo();
 		tempDirs.push(dir);
