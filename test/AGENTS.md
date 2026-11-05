@@ -78,11 +78,13 @@ This document provides guidelines for writing tests that work reliably in both l
 
 | Module path | Mocked by | Pattern |
 |---|---|---|
-| `cli-adapters/index.js` | `init.test.ts`, `init-copilot.test.ts`, `review.test.ts` | init files use top-level mock (needed before static import of init.js); review.test.ts uses top-level mock with mutable delegates |
+| `cli-adapters/index.js` | `init.test.ts`, `init-copilot.test.ts`, `review.test.ts` | init files use top-level mock (needed before static import of init.js); review.test.ts uses top-level mock with mutable delegates and restores the real CLI tool list in `afterAll` |
 | `gates/review.js` | ~~`runner.test.ts`~~ | **Removed** — replaced with DI via Runner constructor |
 | `gates/check.js` | ~~`runner.test.ts`~~ | **Removed** — replaced with DI via Runner constructor |
 
 Before adding a new `mock.module()`, check this table. If the module is already mocked by another file, use DI or the delegate pattern instead.
+
+**Mocks write through re-exports.** If the real module is already loaded when `mock.module()` runs (because an earlier test file imported it), Bun patches it in place. A mocked name that the module re-exports from another file is overwritten in that source module too. For example, mocking `getValidCLITools` on `cli-adapters/index.js` also replaces it in `cli-adapters/tool-names.js`, which `config/cli-resolution.ts` imports directly. The mock then leaks into every later test file, and whether that breaks anything depends on test file order, which differs between machines and CI runner images. Leave mocked values in a realistic state when the file finishes (`afterAll`), and restore from plain values such as `VALID_CLI_TOOLS`, not from an imported function that may itself be the patched mock.
 
 ### 2. Shell Command and Git Operations
 

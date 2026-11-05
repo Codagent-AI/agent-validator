@@ -1,5 +1,24 @@
 # agent-validator
 
+## 1.16.0
+
+### Minor Changes
+
+- [#172](https://github.com/Codagent-AI/agent-validator/pull/172) Let projects that omit a `cli` block inherit CLI and model defaults from a user-level `~/.config/agent-validator/config.yml`, and make a review's own `model` take precedence over the adapter model from project or global `cli` settings (previously the adapter model silently won).
+- [#190](https://github.com/Codagent-AI/agent-validator/pull/190) Add an end-to-end eval that measures a reviewer setup by what a coding agent actually fixes and what the whole validator loop costs, and drop the Haiku 5.5 budget reviewer recommendation based on its results.
+
+### Patch Changes
+
+- [#170](https://github.com/Codagent-AI/agent-validator/pull/170) Have the `validator-run` skill record review decisions with `agent-validate update-review fix`/`skip` instead of hand-editing `validator_logs` JSON, which Claude Code's auto mode blocks as log tampering.
+- [#177](https://github.com/Codagent-AI/agent-validator/pull/177) Fix incomplete Claude review token usage by summing every thread and model series from the latest OTel export, so uncached input and subagent usage are no longer dropped and successful reviews report a complete total.
+- [#179](https://github.com/Codagent-AI/agent-validator/pull/179) Keep parallel reviews from losing their final metrics record on slow storage by queueing metrics writes within a process, retrying failed terminal writes with backoff, and warning if a write still fails.
+- [#184](https://github.com/Codagent-AI/agent-validator/pull/184) Retry a review once when the reviewer's reply contains no JSON object, and stop Claude reviewers from reporting findings through the `ReportFindings` tool instead of their final message.
+- [#185](https://github.com/Codagent-AI/agent-validator/pull/185) Pin this repository's factory routing to agent-factory `2445e6d`, so new Bug issues go to Backlog and reach the factory only when moved to Ready.
+- [#186](https://github.com/Codagent-AI/agent-validator/pull/186) Ignore the unpatched sprintf-js advisory (GHSA-hp3w-g68c-fv3c) in the `security-deps` check, since sprintf-js is only reached through a CLI binary the library never loads.
+- [#188](https://github.com/Codagent-AI/agent-validator/pull/188) Keep `update-review` fix/skip IDs stable while violations are resolved, so IDs printed by `run --report` or `update-review list` keep pointing to the same violation across review files.
+- [#189](https://github.com/Codagent-AI/agent-validator/pull/189) Publish a 2026-10-14 eval report comparing Haiku 5.5 with Sonnet 5.5 as a Claude Code reviewer, and list the recommended reviewer configurations in the README.
+- [#191](https://github.com/Codagent-AI/agent-validator/pull/191) Take validator snapshots with Git plumbing and temporary index files instead of `git stash push`/`pop`, so validation no longer resets the index, clears in-progress merge, cherry-pick, or revert state, or briefly empties the working tree; also update Zod to 4.6.7.
+
 ## 1.15.0
 
 ### Minor Changes
