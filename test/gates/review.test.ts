@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CLIAdapter } from "../../src/cli-adapters/index.js";
+import { VALID_CLI_TOOLS } from "../../src/cli-adapters/tool-names.js";
 import { loadConfig } from "../../src/config/loader.js";
 import type {
 	ReviewGateConfig,
@@ -62,6 +63,18 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 	processExitError: () => new Error("mock"),
 	finalizeProcessClose: async () => {},
 }));
+
+// The mock above stays registered for every test file that runs after this
+// one. When an earlier file has already loaded the real index.js, Bun patches
+// it in place, and that also overwrites the getValidCLITools binding that
+// index.js re-exports from tool-names.js. Config validation in later files
+// then sees this file's last list (["mock-adapter"]) and rejects "claude",
+// "codex", etc. Hand the real list back once this file is done. Build it from
+// the VALID_CLI_TOOLS value: the imported getValidCLITools function may itself
+// be the patched mock.
+afterAll(() => {
+	currentGetValidCLITools = () => [...VALID_CLI_TOOLS];
+});
 
 const { ReviewGateExecutor } = await import("../../src/gates/review.js");
 
