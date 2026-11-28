@@ -63,12 +63,23 @@ process.stdout.write(JSON.stringify({ status: 'pass' }) + '\\n');
     [undefined, null, null],
   ] as const)('launches budget %s with matching identity', async (budget, effort, tokens) => {
     const cp = require('node:child_process');
-    const sync = cp.spawnSync('claude', ['-p'], { env: process.env, input: 'x', encoding: 'utf8' });
-    console.log('DBGSYNC status=' + sync.status + ' err=' + String(sync.error) + ' out=' + sync.stdout + ' stderr=' + sync.stderr);
-    const before = (await fs.readFile(captureFile, 'utf8').catch(() => 'NOFILE'));
-    console.log('DBGBEFORE ' + before);
-    console.log('DBGEXEC ' + String(ClaudeAdapter.prototype.execute).slice(0, 300).replace(/\n/g, ' '));
-    const result = await run(budget);
+    const { runStreamingCommand } = await import('../../src/cli-adapters/shared.js');
+    const wrapped = async (o: any) => {
+      console.log('DBGWRAP command=' + o.command + ' pathHead=' + String(o.env?.PATH).slice(0, 60) + ' fake=' + o.env?.FAKE_CLAUDE_CAPTURE_FILE);
+      try { const r = await runStreamingCommand(o); console.log('DBGWRAPRES ' + JSON.stringify(r).slice(0, 300)); return r; } catch (e) { console.log('DBGWRAPERR ' + String(e)); throw e; }
+    };
+    const viaSpawn = await new Promise<string>((resolve) => {
+      const c = cp.spawn('claude', ['-p'], { stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
+      let out = '';
+      c.on('error', (e: Error) => resolve('ERROR ' + e));
+      c.stdout.on('data', (d: Buffer) => { out += d; });
+      c.on('close', (code: number) => resolve('close ' + code + ' out=' + out));
+      c.stdin.end('x');
+    });
+    console.log('DBGSPAWNDIRECT ' + viaSpawn);
+    console.log('DBGSPAWNSRC ' + String(runStreamingCommand).slice(0, 200).replace(/\n/g, ' ') + ' | ' + String(cp.spawn).slice(0, 60));
+    const result = await new ClaudeAdapter(wrapped as any).execute({ prompt: 'Review', diff: 'change', thinkingBudget: budget });
+
     console.log('DBGAFTER text=' + JSON.stringify(result.text) + ' file=' + (await fs.readFile(captureFile, 'utf8').catch(() => 'NOFILE')));
     const child = await capture();
     expect(child).toMatchObject({ effort, tokens });
