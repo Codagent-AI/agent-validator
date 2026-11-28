@@ -51,6 +51,14 @@ function resetDefaults() {
 
 resetDefaults();
 
+// Snapshot the real stream helpers before the mock below exists. When an
+// earlier file has already loaded the real index.js, Bun patches it in place,
+// and that overwrites these bindings in shared.js too, so every later file that
+// spawns a CLI (for example claude-effort.test.ts) would get the stubs. Passing
+// the real functions through keeps the patch harmless.
+const { collectStderr, finalizeProcessClose, processExitError, runStreamingCommand } =
+	await import("../../src/cli-adapters/shared.js");
+
 mock.module("../../src/cli-adapters/index.js", () => ({
 	getAdapter: (name: string) => currentGetAdapter(name),
 	getAllAdapters: () => currentGetAllAdapters(),
@@ -58,10 +66,10 @@ mock.module("../../src/cli-adapters/index.js", () => ({
 	getUserCommandAdapters: () => currentGetAllAdapters(),
 	getValidCLITools: () => currentGetValidCLITools(),
 	isUsageLimit: (output: string) => currentIsUsageLimit(output),
-	runStreamingCommand: async () => "",
-	collectStderr: () => () => "",
-	processExitError: () => new Error("mock"),
-	finalizeProcessClose: async () => {},
+	runStreamingCommand,
+	collectStderr,
+	processExitError,
+	finalizeProcessClose,
 }));
 
 // The mock above stays registered for every test file that runs after this
