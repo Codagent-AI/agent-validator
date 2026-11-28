@@ -63,9 +63,13 @@ process.stdout.write(JSON.stringify({ status: 'pass' }) + '\\n');
     [undefined, null, null],
   ] as const)('launches budget %s with matching identity', async (budget, effort, tokens) => {
     const cp = require('node:child_process');
-    console.log('DBGSPAWN mock=' + String(Boolean((cp.spawn as any).mock)) + ' src=' + String(cp.spawn).slice(0, 400).replace(/\n/g, ' '));
-    console.log('DBGSTACK ' + JSON.stringify(((cp.spawn as any).mock?.calls ?? []).slice(0, 3)).slice(0, 600));
+    const sync = cp.spawnSync('claude', ['-p'], { env: process.env, input: 'x', encoding: 'utf8' });
+    console.log('DBGSYNC status=' + sync.status + ' err=' + String(sync.error) + ' out=' + sync.stdout + ' stderr=' + sync.stderr);
+    const before = (await fs.readFile(captureFile, 'utf8').catch(() => 'NOFILE'));
+    console.log('DBGBEFORE ' + before);
+    console.log('DBGEXEC ' + String(ClaudeAdapter.prototype.execute).slice(0, 300).replace(/\n/g, ' '));
     const result = await run(budget);
+    console.log('DBGAFTER text=' + JSON.stringify(result.text) + ' file=' + (await fs.readFile(captureFile, 'utf8').catch(() => 'NOFILE')));
     const child = await capture();
     expect(child).toMatchObject({ effort, tokens });
     expect(child.argv).not.toContain('--effort');
