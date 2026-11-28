@@ -62,7 +62,12 @@ process.stdout.write(JSON.stringify({ status: 'pass' }) + '\\n');
     ['off', null, '0'],
     [undefined, null, null],
   ] as const)('launches budget %s with matching identity', async (budget, effort, tokens) => {
+    const { execSync } = require('node:child_process');
+    let dbg = '';
+    try { dbg = execSync('which -a claude; which node; node -v; ls -la ' + dir + '; ' + path.join(dir,'claude') + ' -p </dev/null; echo exit=$?; ls ' + dir, { env: process.env, encoding: 'utf8', stdio: ['ignore','pipe','pipe'], shell: '/bin/bash' }); } catch (e) { dbg = 'ERR ' + String((e as any).stdout) + String((e as any).stderr); }
+    console.log('DBGINFO\n' + dbg + '\nPATH=' + process.env.PATH);
     const result = await run(budget);
+    console.log('DBGRESULT ' + JSON.stringify(result).slice(0, 600) + ' ' + await fs.readdir(dir));
     const child = await capture();
     expect(child).toMatchObject({ effort, tokens });
     expect(child.argv).not.toContain('--effort');
